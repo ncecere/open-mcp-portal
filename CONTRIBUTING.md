@@ -20,6 +20,50 @@ with a proposed implementation and acceptance criteria. Good places to start:
 
 Please comment on an issue before starting a large one, so the design is agreed first.
 
+## Issue triage and support
+
+Open MCP Portal is a one-maintainer project. Issue triage and support are best-effort, with a goal of a first response
+within five business days; this is a target, not a guarantee. Use the issue forms for bugs, feature requests and client
+compatibility reports. Use [Discussions](https://github.com/ncecere/open-mcp-portal/discussions) for questions and
+early ideas. Report security vulnerabilities privately as described in [`SECURITY.md`](SECURITY.md), never in a public
+issue or pull request.
+
+### Issue labels
+
+Labels describe the issue's status or scope; they are not commitments to a delivery date.
+
+| Label | Meaning |
+|---|---|
+| `bug` | Something isn't working as expected. |
+| `enhancement` | A feature request or other proposed improvement. |
+| `compatibility` | A report about how an MCP client works with a gateway. |
+| `decision needed` | Work is waiting for an owner decision; the issue should give the options and a recommendation. |
+| `needs real-world testing` | Verification needs a person, account or real client that CI cannot provide. |
+| `help wanted` | Extra contributor attention is useful. |
+| `good first issue` | A small, self-contained contribution suitable for a first change. |
+| `security` | Security hardening or other security-relevant work. Vulnerabilities must still be reported privately. |
+| `size: S` | A few days of work. |
+| `size: M` | A week or two of work. |
+| `size: L` | Several weeks of work. |
+
+Milestones follow release lines: `v0.2.x` groups patch follow-ups, while `v0.3`, `v0.4` and later milestones track
+minor releases. They order planned work; they are not release dates. Patch releases are made when a fix or small
+improvement is ready, and minor releases follow the [roadmap](docs/roadmap.md). Each release has notes in
+[`docs/releases/`](docs/releases/), with notable changes summarized in [`CHANGELOG.md`](CHANGELOG.md).
+
+Before 1.0, only `main` and the latest minor release are supported; older minor releases do not receive fixes. Fixes
+land on `main` and are released as patches of the latest minor version. Security fixes follow the same policy in
+[`SECURITY.md`](SECURITY.md).
+
+Product questions that need an owner decision are recorded in [`docs/decisions.md`](docs/decisions.md) and should use
+the `decision needed` label. A good pull request focuses on one change, links the issue or decision, explains what
+changed and why, and describes how it was checked. Behavior changes need a regression test; update documentation when
+it changes, and add a line under `Unreleased` in [`CHANGELOG.md`](CHANGELOG.md) for user-visible behavior. Internal
+changes and documentation-only changes do not need a changelog entry. CI must pass before merge: it runs `make lint`,
+`make actionlint`, `make check-generated`, `make test-ci` against PostgreSQL, the web type-check, tests, build, styling
+and size checks, `make k8s-validate`, and both Docker targets. The local commands and optional Kubernetes smoke test
+are listed above.
+
 ## Development setup
 
 Requires Go 1.26+, Node 22+, Docker and Python 3. `make generate` also needs [sqlc](https://sqlc.dev) (CI uses 1.31.1) on your `PATH` or in `~/go/bin`.

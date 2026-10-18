@@ -9,3 +9,6 @@ contact_links:
   - name: Documentation
     url: https://docs.omp.bitop.dev
     about: Guides for people, teams, administrators, operators and server authors.
+  - name: Issue triage and support policy
+    url: https://github.com/ncecere/open-mcp-portal/blob/main/CONTRIBUTING.md#issue-triage-and-support
+    about: How issues are labelled and triaged, response expectations, supported versions and contribution guidance.

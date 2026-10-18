@@ -110,6 +110,8 @@ generate your own `ENCRYPTION_KEY` and `API_KEY_PEPPER` (`openssl rand -base64 3
 
 - **Questions and ideas:** [GitHub Discussions](https://github.com/ncecere/open-mcp-portal/discussions).
 - **Bugs and feature requests:** [issues](https://github.com/ncecere/open-mcp-portal/issues/new/choose), with a form for each.
+- **Issue triage and support:** see [CONTRIBUTING.md](CONTRIBUTING.md#issue-triage-and-support) for labels, response expectations,
+  supported versions and pull request guidance.
 - **Does your MCP client work?** Claude Code and pi have been run against the portal; VS Code, Cursor and others haven't yet. The
   [client compatibility page](https://docs.omp.bitop.dev/docs/use/client-compatibility) has a ten-minute checklist and a report form.
 
