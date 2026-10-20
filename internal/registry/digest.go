@@ -15,18 +15,34 @@ import (
 
 // The review digest binds an approval to what the reviewer saw (docs/
 // threat-model.md, F-2): a SHA-256 over the server's URL, auth mode and
-// requirement (and its requires-a-present-person switch when on) and over every listed (not gone) capability's kind, name and
-// fingerprint, sorted. A refresh that adds, drops or changes a definition, a
-// new URL, another auth mode or another requirement changes it, so an
-// approval made on the digest of an earlier look is refused (409
-// changed_since_review) and approves nothing.
+// requirement (and its requires-a-present-person switch when on) and over
+// every listed (not gone) capability's kind, name and fingerprint (and its
+// effective requires-a-present-person, when true), sorted. A refresh that
+// adds, drops or changes a definition, a new URL, another auth mode or another
+// requirement changes it, and so does relaxing (or adding) a present-person
+// requirement on the server or on a capability (L-4), so an approval made on
+// the digest of an earlier look is refused (409 changed_since_review) and
+// approves nothing.
 
 // digestVersion is hashed first so a future change of what is covered can't
 // collide with this one.
 const digestVersion = "omp-review-v1"
 
 // CapabilityRef is one listed capability as the digest covers it.
-type CapabilityRef struct{ Kind, Name, Fingerprint string }
+// PresentPerson is whether calls relayed for a person need that person
+// present, as it applies to the capability: its own override, else the
+// server's switch (PresentPersonRequired).
+type CapabilityRef struct {
+	Kind, Name, Fingerprint string
+	PresentPerson           bool
+}
+
+// CapabilityRefOf is the digest's view of a capability of server sv with the
+// given own present-person override (nil: follow the server).
+func CapabilityRefOf(sv dbgen.McpServer, kind, name, fingerprint string, presentOverride *bool) CapabilityRef {
+	return CapabilityRef{Kind: kind, Name: name, Fingerprint: fingerprint,
+		PresentPerson: PresentPersonRequired(sv, dbgen.McpCapability{RequiresPresentPerson: presentOverride})}
+}
 
 // ReviewDigest is the digest of a server and its listed capabilities.
 func ReviewDigest(sv dbgen.McpServer, caps []CapabilityRef) string {
@@ -65,6 +81,11 @@ func ReviewDigest(sv dbgen.McpServer, caps []CapabilityRef) string {
 		put(c.Kind)
 		put(c.Name)
 		put(c.Fingerprint)
+		if c.PresentPerson {
+			// Only when on, as for the server's switch: the digest of every
+			// capability without the requirement is what it was before.
+			put("requires-present-person")
+		}
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
@@ -79,13 +100,17 @@ func digests(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServer) (
 	if err != nil {
 		return nil, err
 	}
-	byServer := make(map[uuid.UUID][]CapabilityRef, len(servers))
+	byServer := make(map[uuid.UUID][]dbgen.ListMCPCapabilityFingerprintsRow, len(servers))
 	for _, r := range rows {
-		byServer[r.ServerID] = append(byServer[r.ServerID], CapabilityRef{Kind: r.Kind, Name: r.Name, Fingerprint: r.Fingerprint})
+		byServer[r.ServerID] = append(byServer[r.ServerID], r)
 	}
 	out := make(map[uuid.UUID]string, len(servers))
 	for _, sv := range servers {
-		out[sv.ID] = ReviewDigest(sv, byServer[sv.ID])
+		refs := make([]CapabilityRef, len(byServer[sv.ID]))
+		for i, r := range byServer[sv.ID] {
+			refs[i] = CapabilityRefOf(sv, r.Kind, r.Name, r.Fingerprint, r.RequiresPresentPerson)
+		}
+		out[sv.ID] = ReviewDigest(sv, refs)
 	}
 	return out, nil
 }

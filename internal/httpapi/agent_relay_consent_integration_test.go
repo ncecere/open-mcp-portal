@@ -449,6 +449,51 @@ func TestPresentPersonRelaxationGoesBackToReview(t *testing.T) {
 	if before.ReviewDigest == after.ReviewDigest {
 		t.Fatal("the review digest doesn't cover the present-person switch")
 	}
+
+	// L-4: it covers each capability's effective requirement too, so an
+	// override changed after a reviewer read the server (including on a server
+	// that is already pending, which is not sent back again) makes the
+	// reviewer's approval stale.
+	digest := func() string { return reviewDigestOf(t, e.admin, e.server.Id.String()) }
+	stale := func(what, read string) {
+		t.Helper()
+		code, raw := e.admin.raw("POST", "/v1/admin/mcp-servers/"+e.server.Id.String()+"/review", map[string]any{"decision": "approve", "expectedDigest": read}, nil)
+		if code != 409 || errorCode(raw) != "changed_since_review" || errorDetail(raw, "currentDigest") != digest() {
+			t.Fatalf("%s: approving the digest read before = %d %s", what, code, raw)
+		}
+		if state() == "published" {
+			t.Fatalf("%s: a stale approval published the server", what)
+		}
+	}
+	setMode("echo", "required")
+	setMode("whoami", "required")
+	d1 := digest()
+	setMode("echo", "not_required") // relaxed: the server goes back to review
+	if state() != "pending" {
+		t.Fatalf("relaxing a capability: state = %s, want pending", state())
+	}
+	d2 := digest()
+	if d1 == d2 {
+		t.Fatal("relaxing a capability's requirement doesn't change the review digest")
+	}
+	stale("relaxed on a published server", d1)
+	// Relaxing again while the server is pending: nothing sends it back (it
+	// is already there), but a reviewer who read d2 can't approve.
+	setMode("whoami", "not_required")
+	d3 := digest()
+	if state() != "pending" || d3 == d2 {
+		t.Fatalf("relaxed while pending: state %s, digest changed %v", state(), d3 != d2)
+	}
+	stale("relaxed while pending", d2)
+	// Setting the same mode again changes nothing; the current digest approves.
+	setMode("whoami", "not_required")
+	if digest() != d3 {
+		t.Fatal("setting the same override changed the digest")
+	}
+	reviewed()
+	if state() != "published" {
+		t.Fatalf("approving the current digest: state = %s", state())
+	}
 }
 
 // An automation token can't change the present-person switch.

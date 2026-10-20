@@ -609,21 +609,23 @@ func (q *Queries) ListMCPCapabilities(ctx context.Context, arg ListMCPCapabiliti
 }
 
 const listMCPCapabilityFingerprints = `-- name: ListMCPCapabilityFingerprints :many
-SELECT c.server_id, c.kind, c.name, c.fingerprint
+SELECT c.server_id, c.kind, c.name, c.fingerprint, c.requires_present_person
 FROM mcp_capabilities c
 WHERE c.server_id = ANY($1::uuid[]) AND c.gone_at IS NULL
 ORDER BY c.server_id, c.kind, c.name
 `
 
 type ListMCPCapabilityFingerprintsRow struct {
-	ServerID    uuid.UUID
-	Kind        string
-	Name        string
-	Fingerprint string
+	ServerID              uuid.UUID
+	Kind                  string
+	Name                  string
+	Fingerprint           string
+	RequiresPresentPerson *bool
 }
 
 // What a reviewer's digest covers: the listed (not gone) capabilities of
-// servers, as (kind, name, fingerprint).
+// servers, as (kind, name, fingerprint) and the capability's own present-person
+// override (NULL: the server's switch decides).
 func (q *Queries) ListMCPCapabilityFingerprints(ctx context.Context, serverIds []uuid.UUID) ([]ListMCPCapabilityFingerprintsRow, error) {
 	rows, err := q.db.Query(ctx, listMCPCapabilityFingerprints, serverIds)
 	if err != nil {
@@ -638,6 +640,7 @@ func (q *Queries) ListMCPCapabilityFingerprints(ctx context.Context, serverIds [
 			&i.Kind,
 			&i.Name,
 			&i.Fingerprint,
+			&i.RequiresPresentPerson,
 		); err != nil {
 			return nil, err
 		}

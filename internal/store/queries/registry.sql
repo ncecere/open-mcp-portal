@@ -171,8 +171,9 @@ GROUP BY c.server_id, c.kind;
 
 -- name: ListMCPCapabilityFingerprints :many
 -- What a reviewer's digest covers: the listed (not gone) capabilities of
--- servers, as (kind, name, fingerprint).
-SELECT c.server_id, c.kind, c.name, c.fingerprint
+-- servers, as (kind, name, fingerprint) and the capability's own present-person
+-- override (NULL: the server's switch decides).
+SELECT c.server_id, c.kind, c.name, c.fingerprint, c.requires_present_person
 FROM mcp_capabilities c
 WHERE c.server_id = ANY(@server_ids::uuid[]) AND c.gone_at IS NULL
 ORDER BY c.server_id, c.kind, c.name;
