@@ -358,6 +358,22 @@ type McpServerCredential struct {
 	CreatedAt       time.Time
 }
 
+type McpServerMachineOauth struct {
+	ServerID           uuid.UUID
+	TokenUrl           string
+	ClientID           string
+	ClientSecretCipher []byte
+	ClientSecretHint   string
+	TokenAuthMethod    string
+	Scopes             []string
+	Audience           *string
+	Resource           *string
+	CreatedBy          uuid.NullUUID
+	UpdatedBy          uuid.NullUUID
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
 type NetworkSetting struct {
 	ID        int16
 	Entries   json.RawMessage

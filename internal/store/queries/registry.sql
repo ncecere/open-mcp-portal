@@ -286,3 +286,24 @@ RETURNING *;
 
 -- name: DeleteMCPServerCredentials :exec
 DELETE FROM mcp_server_credentials WHERE server_id = $1;
+
+-- name: GetMachineOAuth :one
+-- A server's machine OAuth client (auth_mode machine_oauth; decision 73).
+SELECT * FROM mcp_server_machine_oauth WHERE server_id = $1;
+
+-- name: ListMachineOAuthFor :many
+SELECT * FROM mcp_server_machine_oauth WHERE server_id = ANY(@ids::uuid[]);
+
+-- name: UpsertMachineOAuth :one
+INSERT INTO mcp_server_machine_oauth (server_id, token_url, client_id, client_secret_cipher, client_secret_hint, token_auth_method,
+    scopes, audience, resource, created_by, updated_by)
+VALUES (@server_id, @token_url, @client_id, @client_secret_cipher, @client_secret_hint, @token_auth_method,
+    @scopes, @audience, @resource, @by, @by)
+ON CONFLICT (server_id) DO UPDATE SET token_url = EXCLUDED.token_url, client_id = EXCLUDED.client_id,
+    client_secret_cipher = EXCLUDED.client_secret_cipher, client_secret_hint = EXCLUDED.client_secret_hint,
+    token_auth_method = EXCLUDED.token_auth_method, scopes = EXCLUDED.scopes, audience = EXCLUDED.audience,
+    resource = EXCLUDED.resource, updated_by = EXCLUDED.updated_by, updated_at = now()
+RETURNING *;
+
+-- name: DeleteMachineOAuth :exec
+DELETE FROM mcp_server_machine_oauth WHERE server_id = $1;
