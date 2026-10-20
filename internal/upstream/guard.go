@@ -416,6 +416,13 @@ func (c *Client) httpClient(t Target, ex *exchange) (client *http.Client, done f
 		ResponseHeaderTimeout: t.Timeout,
 		MaxIdleConns:          4,
 		IdleConnTimeout:       30 * time.Second,
+		// TLS 1.2 at least, the host name verified, and, for a server that has
+		// them, its own CA bundle in place of the system roots and its client
+		// certificate (tls.go). Every exchange builds its own transport, so no
+		// connection, HTTP/2 stream or TLS session is shared between servers
+		// (or between two TLS identities of one server): the identity is part
+		// of what the connection is.
+		TLSClientConfig: tlsConfig(t.TLS),
 	}
 	return &http.Client{
 		Transport: &headerTransport{next: tr, creds: t.Credentials, identity: t.IdentityHeader,

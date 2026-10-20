@@ -157,6 +157,15 @@ func (q *Queries) DeleteMCPServerCredentials(ctx context.Context, serverID uuid.
 	return err
 }
 
+const deleteMCPServerTLS = `-- name: DeleteMCPServerTLS :exec
+DELETE FROM mcp_server_tls WHERE server_id = $1
+`
+
+func (q *Queries) DeleteMCPServerTLS(ctx context.Context, serverID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteMCPServerTLS, serverID)
+	return err
+}
+
 const forgetMCPHealthChecks = `-- name: ForgetMCPHealthChecks :exec
 DELETE FROM mcp_health_checks WHERE server_id = $1
 `
@@ -212,6 +221,29 @@ func (q *Queries) GetMCPServer(ctx context.Context, id uuid.UUID) (McpServer, er
 		&i.ProtocolVersion,
 		&i.ProtocolNegotiatedAt,
 		&i.RequiresPresentPerson,
+	)
+	return i, err
+}
+
+const getMCPServerTLS = `-- name: GetMCPServerTLS :one
+SELECT server_id, ca_pem, ca_sha256, client_cert_pem, client_key_cipher, client_cert_sha256, client_not_after, created_at, updated_at FROM mcp_server_tls WHERE server_id = $1
+`
+
+// A server's TLS settings (docs/registry.md "TLS to the server"); no row: the
+// system roots and no client certificate.
+func (q *Queries) GetMCPServerTLS(ctx context.Context, serverID uuid.UUID) (McpServerTl, error) {
+	row := q.db.QueryRow(ctx, getMCPServerTLS, serverID)
+	var i McpServerTl
+	err := row.Scan(
+		&i.ServerID,
+		&i.CaPem,
+		&i.CaSha256,
+		&i.ClientCertPem,
+		&i.ClientKeyCipher,
+		&i.ClientCertSha256,
+		&i.ClientNotAfter,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -807,6 +839,40 @@ func (q *Queries) ListMCPServerCredentialsFor(ctx context.Context, ids []uuid.UU
 			&i.SecondaryCipher,
 			&i.Hint,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPServerTLSFor = `-- name: ListMCPServerTLSFor :many
+SELECT server_id, ca_pem, ca_sha256, client_cert_pem, client_key_cipher, client_cert_sha256, client_not_after, created_at, updated_at FROM mcp_server_tls WHERE server_id = ANY($1::uuid[])
+`
+
+func (q *Queries) ListMCPServerTLSFor(ctx context.Context, serverIds []uuid.UUID) ([]McpServerTl, error) {
+	rows, err := q.db.Query(ctx, listMCPServerTLSFor, serverIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []McpServerTl{}
+	for rows.Next() {
+		var i McpServerTl
+		if err := rows.Scan(
+			&i.ServerID,
+			&i.CaPem,
+			&i.CaSha256,
+			&i.ClientCertPem,
+			&i.ClientKeyCipher,
+			&i.ClientCertSha256,
+			&i.ClientNotAfter,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1687,4 +1753,49 @@ func (q *Queries) UpsertMCPCapability(ctx context.Context, arg UpsertMCPCapabili
 		arg.Fingerprint,
 	)
 	return err
+}
+
+const upsertMCPServerTLS = `-- name: UpsertMCPServerTLS :one
+INSERT INTO mcp_server_tls (server_id, ca_pem, ca_sha256, client_cert_pem, client_key_cipher, client_cert_sha256, client_not_after)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (server_id) DO UPDATE
+SET ca_pem = EXCLUDED.ca_pem, ca_sha256 = EXCLUDED.ca_sha256, client_cert_pem = EXCLUDED.client_cert_pem,
+    client_key_cipher = EXCLUDED.client_key_cipher, client_cert_sha256 = EXCLUDED.client_cert_sha256,
+    client_not_after = EXCLUDED.client_not_after, updated_at = now()
+RETURNING server_id, ca_pem, ca_sha256, client_cert_pem, client_key_cipher, client_cert_sha256, client_not_after, created_at, updated_at
+`
+
+type UpsertMCPServerTLSParams struct {
+	ServerID         uuid.UUID
+	CaPem            *string
+	CaSha256         *string
+	ClientCertPem    *string
+	ClientKeyCipher  []byte
+	ClientCertSha256 *string
+	ClientNotAfter   *time.Time
+}
+
+func (q *Queries) UpsertMCPServerTLS(ctx context.Context, arg UpsertMCPServerTLSParams) (McpServerTl, error) {
+	row := q.db.QueryRow(ctx, upsertMCPServerTLS,
+		arg.ServerID,
+		arg.CaPem,
+		arg.CaSha256,
+		arg.ClientCertPem,
+		arg.ClientKeyCipher,
+		arg.ClientCertSha256,
+		arg.ClientNotAfter,
+	)
+	var i McpServerTl
+	err := row.Scan(
+		&i.ServerID,
+		&i.CaPem,
+		&i.CaSha256,
+		&i.ClientCertPem,
+		&i.ClientKeyCipher,
+		&i.ClientCertSha256,
+		&i.ClientNotAfter,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

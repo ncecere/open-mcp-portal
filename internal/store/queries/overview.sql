@@ -149,3 +149,18 @@ WHERE (d.disabled_reason = 'failures' OR d.consecutive_failures >= 3)
 -- The latest failed email delivery within 24 hours (the epoch when none).
 SELECT COALESCE(max(last_attempt_at), 'epoch'::timestamptz)::timestamptz AS latest FROM notification_outbox
 WHERE channel = 'email' AND state = 'failed' AND last_attempt_at > now() - interval '24 hours';
+
+-- name: AttentionExpiringCertificates :many
+-- Enabled servers of active teams whose client certificate (mTLS) has expired
+-- or expires within 14 days; at is the expiry. published_only: the platform's
+-- view (published servers only); otherwise one team's (team_id), any state.
+SELECT s.id, s.slug, s.name, t.id AS team_id, t.slug AS team_slug, t.name AS team_name, c.client_not_after,
+       (count(*) OVER ())::bigint AS total
+FROM mcp_server_tls c
+JOIN mcp_servers s ON s.id = c.server_id AND s.enabled
+JOIN teams t ON t.id = s.team_id AND t.status = 'active'
+WHERE c.client_not_after IS NOT NULL AND c.client_not_after <= now() + interval '14 days'
+  AND (NOT @published_only::bool OR s.publish_state = 'published')
+  AND (sqlc.narg(team_id)::uuid IS NULL OR s.team_id = sqlc.narg(team_id)::uuid)
+ORDER BY c.client_not_after, s.name, s.id
+LIMIT @page_size;

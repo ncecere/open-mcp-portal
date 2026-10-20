@@ -118,6 +118,11 @@ type Target struct {
 	// MaxBody overrides the cap on one HTTP response body (0: the client's
 	// MaxResponseBytes); streamed calls get more room for progress events.
 	MaxBody int64
+	// TLS is the server's own TLS settings: a CA bundle that replaces the
+	// system roots for it and a client certificate for mTLS (tls.go; nil: the
+	// system roots and no client certificate). Host name verification and TLS
+	// 1.2 as the minimum apply either way.
+	TLS *TLSIdentity
 }
 
 // session is one connection to a server.
@@ -438,6 +443,7 @@ const (
 	ClassTimeout     = "timeout"
 	ClassTooLarge    = "too_large"
 	ClassNotAllowed  = "not_allowed"
+	// ClassTLS is declared in tlsfail.go.
 )
 
 // Error is a failed exchange with a server: a class and a message safe to
@@ -470,6 +476,7 @@ func (c *Client) classify(ctx context.Context, t Target, ex *exchange, err error
 	}
 	var rpc *jsonrpc.Error
 	var netErr *url.Error
+	tlsErr := tlsFailure(t, err)
 	switch {
 	case errors.Is(err, ErrBlockedAddress) || strings.Contains(err.Error(), ErrBlockedAddress.Error()):
 		return &Error{Class: ClassNotAllowed, Message: messageNotAllowed}
@@ -479,6 +486,9 @@ func (c *Client) classify(ctx context.Context, t Target, ex *exchange, err error
 		return &Error{Class: ClassTimeout, Message: "The server didn't answer in time."}
 	case errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled):
 		return &Error{Class: ClassUnavailable, Message: "The call was cancelled."}
+	case tlsErr != nil && status == 0:
+		c.log().InfoContext(ctx, "mcp server TLS failure", "class", tlsErr.Class)
+		return tlsErr
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
 		return &Error{Class: ClassAuth, HTTPStatus: status, Message: clipMessage(fmt.Sprintf("The server refused the credentials (HTTP %d).", status) + why),
 			Challenge: ex.lastChallenge()}
