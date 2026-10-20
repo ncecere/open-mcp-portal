@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type ApiKey struct {
@@ -203,6 +204,7 @@ type McpCall struct {
 	KeyName              *string
 	OauthClientKind      *string
 	ProviderSlug         *string
+	IdentitySent         pgtype.Bool
 }
 
 type McpCallPayload struct {

@@ -191,6 +191,9 @@ var matrixPolicies = map[string]policy{
 	"detectTeamMcpServerAuth": {scope: scopeTeam, own: editors, build: func(c *mctx) request {
 		return post(c.team("/mcp-servers/detect-auth"), map[string]any{"url": c.e.fakeURL})
 	}},
+	"getTeamMcpServerIdentityDefault": {scope: scopeTeam, own: editors, build: func(c *mctx) request {
+		return post(c.team("/mcp-servers/identity-default"), map[string]any{"url": c.e.fakeURL})
+	}},
 	"authorizeTeamMcpServerSetup": {scope: scopeTeam, own: editors, build: func(c *mctx) request {
 		return post(c.team("/mcp-servers/"+c.tf.oauthServer+"/oauth/authorize-setup"), map[string]any{"returnTo": "/settings"})
 	}},

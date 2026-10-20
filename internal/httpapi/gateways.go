@@ -560,7 +560,7 @@ func (a *api) revokeMyApiKey(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, r, a.APIKeys.Revoke(r.Context(), a.actor(r), id))
 }
 
-// callFilter reads ?gateway=, ?server=, ?user=, ?serviceAccount=, ?outcome=, ?from=, ?to=,
+// callFilter reads ?gateway=, ?server=, ?user=, ?serviceAccount=, ?outcome=, ?identitySent=, ?from=, ?to=,
 // ?cursor= and ?limit=.
 func callFilter(w http.ResponseWriter, r *http.Request) (calls.Filter, int32, bool) {
 	limit, ok := pageLimit(w, r)
@@ -589,6 +589,14 @@ func callFilter(w http.ResponseWriter, r *http.Request) (calls.Filter, int32, bo
 			return f, 0, false
 		}
 		f.Outcome = &v
+	}
+	if v := q.Get("identitySent"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil || (v != "true" && v != "false") {
+			httpx.Error(w, http.StatusBadRequest, "invalid_identity_sent", "identitySent must be true or false")
+			return f, 0, false
+		}
+		f.IdentitySent = &b
 	}
 	for _, p := range []struct {
 		name string

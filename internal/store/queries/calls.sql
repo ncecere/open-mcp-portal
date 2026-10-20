@@ -5,12 +5,12 @@ INSERT INTO mcp_calls (
     request_id, method, exposed_name, gateway_id, gateway_slug, gateway_name, gateway_team_id,
     server_id, server_slug, server_name, server_team_id, capability_id, principal_kind, user_id, api_key_id,
     key_name, service_account_id, service_account_name, service_account_team_id, oauth_grant_id, oauth_client_name,
-    oauth_client_kind, client_name, outcome, error_class, latency_ms, request_bytes, response_bytes, provider_slug
+    oauth_client_kind, client_name, outcome, error_class, latency_ms, request_bytes, response_bytes, provider_slug, identity_sent
 ) VALUES (
     @request_id, @method, @exposed_name, @gateway_id, @gateway_slug, @gateway_name, @gateway_team_id,
     @server_id, @server_slug, @server_name, @server_team_id, @capability_id, @principal_kind, @user_id, @api_key_id,
     @key_name, @service_account_id, @service_account_name, @service_account_team_id, @oauth_grant_id, @oauth_client_name,
-    @oauth_client_kind, @client_name, @outcome, @error_class, @latency_ms, @request_bytes, @response_bytes, @provider_slug
+    @oauth_client_kind, @client_name, @outcome, @error_class, @latency_ms, @request_bytes, @response_bytes, @provider_slug, @identity_sent
 )
 RETURNING id, occurred_at;
 
@@ -23,7 +23,7 @@ RETURNING id, occurred_at;
 -- call; older records: read from the grant while it exists).
 SELECT c.id, c.occurred_at, c.request_id, c.method, c.exposed_name, c.gateway_id, c.server_id,
        c.principal_kind, c.user_id, c.client_name, c.outcome, c.error_class, c.latency_ms,
-       c.request_bytes, c.response_bytes, c.service_account_id, c.oauth_client_name, c.provider_slug,
+       c.request_bytes, c.response_bytes, c.service_account_id, c.oauth_client_name, c.provider_slug, c.identity_sent,
        (g.id IS NOT NULL)::bool AS gateway_exists,
        COALESCE(g.slug, c.gateway_slug)::text AS gateway_slug, COALESCE(g.name, c.gateway_name)::text AS gateway_name,
        (s.id IS NOT NULL)::bool AS server_exists,
@@ -54,6 +54,7 @@ WHERE (sqlc.narg(team_id)::uuid IS NULL
   AND (sqlc.narg(user_id)::uuid IS NULL OR c.user_id = sqlc.narg(user_id)::uuid)
   AND (sqlc.narg(service_account_id)::uuid IS NULL OR c.service_account_id = sqlc.narg(service_account_id)::uuid)
   AND (sqlc.narg(outcome)::text IS NULL OR c.outcome = sqlc.narg(outcome)::text)
+  AND (sqlc.narg(identity_sent)::bool IS NULL OR c.identity_sent = sqlc.narg(identity_sent)::bool)
   AND (sqlc.narg(occurred_from)::timestamptz IS NULL OR c.occurred_at >= sqlc.narg(occurred_from)::timestamptz)
   AND (sqlc.narg(occurred_to)::timestamptz IS NULL OR c.occurred_at < sqlc.narg(occurred_to)::timestamptz)
   AND (sqlc.narg(before_id)::bigint IS NULL OR c.id < sqlc.narg(before_id)::bigint)

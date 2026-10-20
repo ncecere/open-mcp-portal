@@ -129,7 +129,7 @@ func toAPICall(c calls.Row) apitypes.McpCall {
 		Gateway:    apitypes.CallRef{Id: r.GatewayID, Slug: r.GatewaySlug, Name: r.GatewayName, Exists: r.GatewayExists},
 		Principal:  toAPICallPrincipal(r),
 		ClientName: r.ClientName, Outcome: apitypes.McpCallOutcome(r.Outcome), ErrorClass: r.ErrorClass, LatencyMs: r.LatencyMs,
-		RequestBytes: r.RequestBytes, ResponseBytes: r.ResponseBytes, RequestId: r.RequestID, ProviderSlug: r.ProviderSlug,
+		RequestBytes: r.RequestBytes, ResponseBytes: r.ResponseBytes, RequestId: r.RequestID, ProviderSlug: r.ProviderSlug, IdentitySent: calls.IdentitySentOf(r.IdentitySent),
 	}
 	if r.ServerID.Valid {
 		out.Server = &apitypes.CallRef{Id: r.ServerID.UUID, Slug: r.ServerSlug, Name: r.ServerName, Exists: r.ServerExists}

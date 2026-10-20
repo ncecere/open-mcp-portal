@@ -237,6 +237,45 @@ func (s *Service) DetectAuth(ctx context.Context, a authz.Actor, ref, rawURL str
 	return out, nil
 }
 
+// IdentityDefault is the default of "Send identity token" for a URL when
+// the server has no authentication (decision 64), and why.
+type IdentityDefault struct {
+	// Basis is upstream.BasisPublicHost, BasisInternalHost or
+	// BasisUnresolvedHost.
+	Basis string
+	// SendIdentity is the default: false for a public or unresolved host.
+	SendIdentity bool
+}
+
+// defaultSendIdentity is the default of Send identity token when the form
+// does not say: off only for authMode none on a public (or unresolvable)
+// host; on for every other mode and for internal hosts.
+func (s *Service) defaultSendIdentity(ctx context.Context, mode, rawURL string) IdentityDefault {
+	if mode != AuthNone {
+		return IdentityDefault{SendIdentity: true}
+	}
+	b := s.client.HostBasis(ctx, rawURL)
+	return IdentityDefault{Basis: b, SendIdentity: b == upstream.BasisInternalHost}
+}
+
+// IdentityDefault reports the default of Send identity token for a server
+// with no authentication at url, so the add form can show it before saving
+// (editors and above; changes nothing; decision 64).
+func (s *Service) IdentityDefault(ctx context.Context, a authz.Actor, ref, rawURL string) (IdentityDefault, error) {
+	ta, err := access(ctx, s.q, a, ref)
+	if err != nil {
+		return IdentityDefault{}, err
+	}
+	if err := ta.writable(authz.CheckServerEdit); err != nil {
+		return IdentityDefault{}, err
+	}
+	u, err := s.client.NormalizeURL(ctx, rawURL)
+	if err != nil {
+		return IdentityDefault{}, err
+	}
+	return s.defaultSendIdentity(ctx, AuthNone, u), nil
+}
+
 // OAuthInput configures a server's sign-in; nil fields keep their stored
 // values (update) or take their defaults.
 type OAuthInput struct {
