@@ -636,8 +636,18 @@ func TestPersonSecretSuspensionBlocksAndKeepsTheKey(t *testing.T) {
 		t.Fatalf("a revoked key was used: %v", out)
 	}
 	meta := e.scalar(`SELECT metadata::text FROM audit_log WHERE action = 'person_secret.revoke' ORDER BY id DESC LIMIT 1`)
-	if !strings.Contains(meta, `"reason": "admin"`) || !strings.Contains(meta, "blair") {
+	if !strings.Contains(meta, `"reason": "admin"`) || !strings.Contains(meta, "Blair") {
 		t.Fatalf("audit = %s", meta)
+	}
+	// The audit log names the key by whose it is and for which server, and says it is gone once removed.
+	var entries struct {
+		Items []apitypes.AuditEntry `json:"items"`
+	}
+	if code, _ := e.admin.call("GET", "/v1/admin/audit?action=person_secret.create&limit=50", nil, &entries, nil); code != 200 || len(entries.Items) == 0 {
+		t.Fatalf("audit = %d %+v", code, entries)
+	}
+	if got := entries.Items[0]; got.TargetLabel == nil || *got.TargetLabel != "Blair Dev · KEYED" || got.TargetExists {
+		t.Errorf("a removed key's audit entry = label %v, exists %v", got.TargetLabel, got.TargetExists)
 	}
 	// People revoke their own.
 	e.putKey(e.member, blairKey, nil, 200)

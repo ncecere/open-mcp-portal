@@ -135,6 +135,9 @@ CROSS JOIN LATERAL (
         WHEN 'provider_connection' THEN (SELECT COALESCE(NULLIF(cu.display_name, ''), cu.email::text) || ' · ' || cp.name
                                          FROM provider_connections pc JOIN users cu ON cu.id = pc.user_id
                                          JOIN auth_providers cp ON cp.id = pc.provider_id WHERE pc.id = ids.target_uuid)
+        WHEN 'person_secret' THEN (SELECT COALESCE(NULLIF(pu.display_name, ''), pu.email::text) || ' · ' || ps2.name
+                                   FROM person_secrets ps JOIN users pu ON pu.id = ps.user_id
+                                   JOIN mcp_servers ps2 ON ps2.id = ps.server_id WHERE ps.id = ids.target_uuid)
         WHEN 'platform_settings' THEN (CASE a.target_id WHEN 'publishing' THEN 'Publishing settings' WHEN 'network' THEN 'Internal networks'
                                        WHEN 'oauth_clients' THEN 'Trusted clients' WHEN 'limits' THEN 'Rate limits'
                                        WHEN 'capture' THEN 'Payload capture' WHEN 'retention' THEN 'Retention'
