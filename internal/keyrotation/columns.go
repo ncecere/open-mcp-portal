@@ -24,6 +24,7 @@ import (
 
 	"github.com/ncecere/open-mcp-portal/internal/capture"
 	"github.com/ncecere/open-mcp-portal/internal/notify"
+	"github.com/ncecere/open-mcp-portal/internal/personsecrets"
 	"github.com/ncecere/open-mcp-portal/internal/providers"
 	"github.com/ncecere/open-mcp-portal/internal/registry"
 )
@@ -77,6 +78,12 @@ var Columns = []Column{
 	// Basic user name) and the Basic password.
 	{Table: "mcp_server_credentials", Column: "value_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(registry.CredentialAAD)},
 	{Table: "mcp_server_credentials", Column: "secondary_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(registry.CredentialSecondaryAAD)},
+	// A person's own secret for a server in person_secret mode (decision 72;
+	// registry.PersonSecretAAD), and the link a call returns for entering one
+	// (personsecrets.RequestAAD).
+	{Table: "person_secrets", Column: "secret_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(registry.PersonSecretAAD)},
+	{Table: "secret_requests", Column: "id_cipher", Key: "id_digest", KeyType: "text",
+		AAD: func(k string) []byte { return personsecrets.RequestAAD(k) }},
 	// identity.keyAAD
 	{Table: "signing_keys", Column: "private_key_cipher", Key: "kid", KeyType: "text",
 		AAD: func(k string) []byte { return []byte("signing_key:" + k) }},
