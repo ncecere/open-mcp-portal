@@ -15,7 +15,12 @@ import (
 // their stored "Send identity token" value, calls recorded before it have no
 // value (not a guess), and the previous release's inserts, which do not name
 // the column, still work. Down removes the column and nothing else.
+//
+// It names migration 19 explicitly (down to 18, up to 19), so later
+// migrations don't change what it checks; it then runs the newer ones over the
+// same data.
 func TestIdentitySentMigrationKeepsWhatExists(t *testing.T) {
+	const identitySent = 19      // 00019_call_identity_sent.sql
 	pool, _ := testutil.NewDB(t) // at the newest schema
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
@@ -45,10 +50,14 @@ func TestIdentitySentMigrationKeepsWhatExists(t *testing.T) {
 		t.Fatal("the newest schema has no mcp_calls.identity_sent")
 	}
 
-	// Back to the schema of the previous release (this runs the Down), and make
-	// the data look like an installation of it.
-	if _, err := provider.Down(ctx); err != nil {
+	// Back to the schema of the previous release (this runs the Down of 19 and
+	// of every later migration), and make the data look like an installation of
+	// it.
+	if _, err := provider.DownTo(ctx, identitySent-1); err != nil {
 		t.Fatalf("down: %v", err)
+	}
+	if v, err := provider.GetDBVersion(ctx); err != nil || v != identitySent-1 {
+		t.Fatalf("schema version after down = %d %v, want %d", v, err, identitySent-1)
 	}
 	if hasColumn() {
 		t.Fatal("Down left the column")
@@ -62,8 +71,11 @@ func TestIdentitySentMigrationKeepsWhatExists(t *testing.T) {
 	exec(`INSERT INTO mcp_calls (method, gateway_id, gateway_slug, gateway_name, user_id, outcome)
 		SELECT 'tools/call', gen_random_uuid(), 'g', 'G', id, 'ok' FROM users`)
 
-	if _, err := provider.Up(ctx); err != nil {
+	if _, err := provider.UpTo(ctx, identitySent); err != nil {
 		t.Fatalf("up: %v", err)
+	}
+	if v, err := provider.GetDBVersion(ctx); err != nil || v != identitySent {
+		t.Fatalf("schema version after up = %d %v, want %d", v, err, identitySent)
 	}
 	if !hasColumn() {
 		t.Fatal("Up did not add the column")
@@ -81,5 +93,12 @@ func TestIdentitySentMigrationKeepsWhatExists(t *testing.T) {
 		SELECT 'tools/call', gen_random_uuid(), 'g', 'G', id, 'ok', false FROM users`)
 	if got := scalar(`SELECT string_agg(coalesce(identity_sent::text, 'null'), ',' ORDER BY id) FROM mcp_calls`); got != "null,null,false" {
 		t.Errorf("identity_sent = %s", got)
+	}
+	// The newer migrations apply over the same data and keep it.
+	if _, err := provider.Up(ctx); err != nil {
+		t.Fatalf("up to the newest: %v", err)
+	}
+	if got := scalar(`SELECT string_agg(coalesce(identity_sent::text, 'null'), ',' ORDER BY id) FROM mcp_calls`); got != "null,null,false" {
+		t.Errorf("identity_sent after the newer migrations = %s", got)
 	}
 }
