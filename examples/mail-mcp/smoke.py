@@ -197,6 +197,12 @@ def main():
         ok(f"created auth provider {PROVIDER} -> {args.oauth}")
     else:
         ok(f"auth provider {PROVIDER} exists")
+    if provider.get("accessMode") != "open":
+        # A provider made through the API starts restricted with nobody listed (decision 69); this dev one is open to every team.
+        s.must("PUT", f"/v1/admin/auth-providers/{provider['id']}/access", {"accessMode": "open", "teamIds": [], "serverIds": []},
+               {"If-Match": f'"{provider["revision"]}"'})
+        provider = s.must("GET", f"/v1/admin/auth-providers/{provider['id']}")
+        ok(f"opened auth provider {PROVIDER} to every team")
 
     requirement = {"providerId": provider["id"], "scopes": [READONLY]}
     server = find(s.must("GET", f"/v1/teams/{TEAM}/mcp-servers?q={SERVER}")["items"], "slug", SERVER)
