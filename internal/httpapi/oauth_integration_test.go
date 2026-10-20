@@ -538,19 +538,21 @@ func TestOAuthFlowWithMetadataDocument(t *testing.T) {
 	}
 
 	// Refresh rotates. The old refresh token again within the grace period
-	// (two refreshes in flight) gets another pair; after it, reuse revokes
-	// the connection.
+	// (two refreshes in flight) gets the same pair, not another; after it,
+	// reuse revokes the connection.
 	status, out, _ = tokenCall(t, app, "/oauth/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {clientID}, "refresh_token": {refresh}})
 	if status != 200 || out["refresh_token"] == refresh || out["access_token"] == access {
 		t.Fatalf("refresh = %d %v", status, out)
 	}
+	first := out
 	access2 := out["access_token"].(string)
 	status, out, _ = tokenCall(t, app, "/oauth/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"https://other.example/c.json"},
 		"refresh_token": {refresh}})
 	wantOAuthError(t, "refresh by another client", status, out, 400, "invalid_grant")
+	refresh2 := first["refresh_token"].(string)
 	status, out, _ = tokenCall(t, app, "/oauth/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {clientID}, "refresh_token": {refresh}})
-	if status != 200 || out["access_token"] == access2 {
-		t.Fatalf("refresh within the grace period = %d %v", status, out)
+	if status != 200 || out["access_token"] != access2 || out["refresh_token"] != refresh2 {
+		t.Fatalf("refresh within the grace period = %d %v, want the pair the rotation issued", status, out)
 	}
 	if code, _, _ := rawMCP(t, app, "POST", "support", access2, rpc(1, "tools/list", nil), nil); code != 200 {
 		t.Fatalf("refreshed token = %d", code)
@@ -584,7 +586,7 @@ func TestOAuthFlowWithMetadataDocument(t *testing.T) {
 		"mcp_calls":    e.scalar(`SELECT string_agg(row_to_json(c)::text, '') FROM mcp_calls c`),
 		"logs":         e.logs.String(),
 	} {
-		for _, secret := range []string{access, refresh, access2, code} {
+		for _, secret := range []string{access, refresh, access2, first["refresh_token"].(string), code} {
 			if strings.Contains(text, secret) {
 				t.Errorf("%s contains a token", what)
 			}
@@ -598,7 +600,8 @@ func TestOAuthFlowWithMetadataDocument(t *testing.T) {
 func TestOAuthTrustedRegisteredAndConnectedApps(t *testing.T) {
 	e := newOAuthEnv(t)
 	app := e.app
-	cimd := e.docs.client("/trusted.json", "Trusted Assistant", testRedirect)
+	const trustedHTTPS = "https://assistant.example.com/cb"
+	cimd := e.docs.client("/trusted.json", "Trusted Assistant", testRedirect, trustedHTTPS)
 
 	// Dynamic registration: public clients only; audited as the system.
 	status, out, _ := jsonPost(t, app, "/oauth/register", map[string]any{"client_name": "Old Client", "redirect_uris": []string{testRedirect},
@@ -643,19 +646,23 @@ func TestOAuthTrustedRegisteredAndConnectedApps(t *testing.T) {
 
 	// A trusted client skips consent (sign-in is still needed) ...
 	p := newPKCE()
-	q := authQuery(app, cimd, "support", p, nil)
+	q := authQuery(app, cimd, "support", p, map[string]string{"redirect_uri": trustedHTTPS})
 	res, _ := authorize(t, app, nil, q)
 	if !strings.HasPrefix(res.Header.Get("Location"), "/?next=") {
 		t.Fatalf("trusted, signed out = %q", res.Header.Get("Location"))
 	}
 	res, _ = authorize(t, app, e.member, q)
-	access, _ := exchange(t, app, cimd, codeFrom(t, app, "trusted", res.Header.Get("Location")), p, nil)
+	loc, _ := url.Parse(res.Header.Get("Location"))
+	if res.StatusCode != 302 || loc.Scheme+"://"+loc.Host+loc.Path != trustedHTTPS || loc.Query().Get("code") == "" {
+		t.Fatalf("trusted client with an https redirect = %d %q", res.StatusCode, res.Header.Get("Location"))
+	}
+	access, _ := exchange(t, app, cimd, loc.Query().Get("code"), p, url.Values{"redirect_uri": {trustedHTTPS}})
 	if n := e.scalar(`SELECT count(*)::text FROM audit_log WHERE action = 'oauth.consent' AND metadata->>'how' = 'trusted'`); n != "1" {
 		t.Errorf("trusted consent audit = %s", n)
 	}
 	var view apitypes.OAuthConsent
-	if e.member.get("/v1/oauth/consent?"+q.Encode(), &view); !view.Client.Trusted {
-		t.Errorf("trusted view = %+v", view.Client)
+	if e.member.get("/v1/oauth/consent?"+q.Encode(), &view); !view.Client.Trusted || view.Notice {
+		t.Errorf("trusted view = %+v", view)
 	}
 	// ... a registered client never does, and is marked as registered.
 	p2 := newPKCE()
@@ -934,7 +941,7 @@ func TestOAuthRateLimits(t *testing.T) {
 	}
 	for i := 1; i <= 61; i++ {
 		res, _ := authorize(t, app, nil, url.Values{"client_id": {"x"}})
-		if want := map[bool]int{true: 400, false: 429}[i <= 60]; res.StatusCode != want {
+		if want := map[bool]int{true: 302, false: 429}[i <= 60]; res.StatusCode != want {
 			t.Fatalf("authorize %d = %d, want %d", i, res.StatusCode, want)
 		}
 	}
