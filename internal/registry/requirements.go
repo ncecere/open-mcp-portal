@@ -455,7 +455,8 @@ func (s *Service) SetCapabilityRequirement(ctx context.Context, a authz.Actor, r
 				}
 			}
 		}
-		out = CapabilityView{Capability: row, ApprovedByName: name, Published: bumped.PublishState == StatePublished, Requires: after}
+		out = CapabilityView{Capability: row, ApprovedByName: name, Published: bumped.PublishState == StatePublished, Requires: after,
+			EffectivePresentPerson: PresentPersonRequired(bumped, row)}
 		return nil
 	})
 	return out, revision, err

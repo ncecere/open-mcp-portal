@@ -424,6 +424,10 @@ type UpdateInput struct {
 	OAuth    *OAuthInput
 	// SendIdentity changes whether the identity token is sent (nil keeps it).
 	SendIdentity *bool
+	// RequiresPresentPerson changes whether relayed calls need the person
+	// present (nil keeps it; presence.go). Relaxing it can send a published
+	// server back to review.
+	RequiresPresentPerson *bool
 }
 
 // errCaptureRole: only the server team's owners and admins switch capture.
@@ -484,7 +488,7 @@ func snapshot(s dbgen.McpServer) map[string]any {
 	out := map[string]any{"slug": s.Slug, "name": s.Name, "description": s.Description, "url": s.URL,
 		"timeoutSeconds": s.TimeoutSeconds, "enabled": s.Enabled, "hasAuth": s.AuthValueCipher != nil,
 		"publishState": s.PublishState, "requirement": requirementSnapshot(s), "capturePayloads": s.CapturePayloads,
-		"authMode": AuthModeOf(s), "sendIdentity": s.SendIdentity}
+		"authMode": AuthModeOf(s), "sendIdentity": s.SendIdentity, "requiresPresentPerson": s.RequiresPresentPerson}
 	if s.AuthHeaderName != nil {
 		out["authHeaderName"] = *s.AuthHeaderName
 	}
@@ -688,6 +692,7 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 		if in.SendIdentity != nil {
 			p.SendIdentity = *in.SendIdentity
 		}
+		setIf(&p.RequiresPresentPerson, in.RequiresPresentPerson)
 		curProv := pre.provider
 		planChanged := pre.plan != nil && (curProv == nil || !planUnchanged(*curProv, pre.plan))
 		if unchanged(cur, p, valueChanged, in.CapturePayloads) && !planChanged && pre.mode == AuthModeOf(cur) {
@@ -698,6 +703,10 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 			return err
 		}
 		before, err := effectiveAll(ctx, q, cur, ps)
+		if err != nil {
+			return err
+		}
+		presenceBefore, err := presenceAll(ctx, q, cur)
 		if err != nil {
 			return err
 		}
@@ -730,6 +739,10 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 		if err != nil {
 			return err
 		}
+		presenceAfter, err := presenceAll(ctx, q, row)
+		if err != nil {
+			return err
+		}
 		e := a.Audit("mcp_server.update", "mcp_server", id.String())
 		e.TeamID, e.Before, e.After = ta.team.ID, snapshot(cur), snapshot(row)
 		e.Metadata = map[string]any{"authValueChanged": valueChanged}
@@ -753,6 +766,8 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 			err = s.resubmit(ctx, q, a, ta.team, cur, "upstream_auth_changed", noteUpstreamAuthChanged)
 		case widened(before, after):
 			err = s.resubmit(ctx, q, a, ta.team, cur, "requirement_changed", noteRequirementChanged)
+		case relaxed(presenceBefore, presenceAfter):
+			err = s.resubmit(ctx, q, a, ta.team, cur, "requirement_changed", notePresenceRelaxed)
 		}
 		if err != nil {
 			return err
@@ -965,7 +980,7 @@ func (s *Service) applyUpdate(ctx context.Context, cur dbgen.McpServer, in Updat
 	p := dbgen.UpdateMCPServerParams{ID: cur.ID, Name: cur.Name, Description: cur.Description, URL: cur.URL,
 		AuthHeaderName: cur.AuthHeaderName, AuthValueCipher: cur.AuthValueCipher, AuthValueHint: cur.AuthValueHint,
 		TimeoutSeconds: cur.TimeoutSeconds, Enabled: cur.Enabled, AuthProviderID: cur.AuthProviderID, AuthScopes: nonNil(cur.AuthScopes),
-		AuthMode: mode, SendIdentity: cur.SendIdentity}
+		AuthMode: mode, SendIdentity: cur.SendIdentity, RequiresPresentPerson: cur.RequiresPresentPerson}
 	setIf(&p.Name, in.Name)
 	p.Name = strings.TrimSpace(p.Name)
 	setIf(&p.Description, in.Description)
@@ -1048,7 +1063,7 @@ func unchanged(cur dbgen.McpServer, p dbgen.UpdateMCPServerParams, valueChanged 
 	return !valueChanged && p.Name == cur.Name && p.Description == cur.Description && p.URL == cur.URL &&
 		p.TimeoutSeconds == cur.TimeoutSeconds && p.Enabled == cur.Enabled && equalPtr(p.AuthHeaderName, cur.AuthHeaderName) &&
 		p.AuthProviderID == cur.AuthProviderID && slices.Equal(p.AuthScopes, cur.AuthScopes) && p.SendIdentity == cur.SendIdentity &&
-		p.AuthMode == AuthModeOf(cur) &&
+		p.AuthMode == AuthModeOf(cur) && p.RequiresPresentPerson == cur.RequiresPresentPerson &&
 		(capture == nil || *capture == cur.CapturePayloads)
 }
 

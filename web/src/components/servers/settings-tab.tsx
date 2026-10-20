@@ -33,6 +33,7 @@ import { Field } from "@/components/ui/field/field";
 import { Input, Textarea } from "@/components/ui/input/input";
 import { toast } from "@/components/ui/toast/toast";
 import { describeAuthError } from "./auth-errors";
+import { PresentPersonSwitch, relaxesServerSwitch } from "./presence";
 import { AuthModeFields } from "./auth-mode-fields";
 import type { McpServer } from "./labels";
 import { type RequirementForm, requirementBody, requirementFormOf, reviewedAgain, serverChangeWidens } from "./requirement";
@@ -42,7 +43,7 @@ import { type AuthEdit, AuthFields, EnabledSwitch, type ServerForm, serverFieldE
 import { AuthChangeNotes, settingsAuthBody } from "./settings-auth";
 import { applyDetection, authChange, authModeOf, type DetectResult, oauthProblems, upstreamFormOf, type UpstreamForm } from "./upstream-auth";
 
-type SettingsForm = ServerForm & { requirement: RequirementForm; capturePayloads: boolean; upstream: UpstreamForm };
+type SettingsForm = ServerForm & { requirement: RequirementForm; capturePayloads: boolean; upstream: UpstreamForm; requiresPresentPerson: boolean };
 
 const formOf = (x: McpServer): SettingsForm => ({
   name: x.name,
@@ -54,6 +55,7 @@ const formOf = (x: McpServer): SettingsForm => ({
   requirement: requirementFormOf(x),
   capturePayloads: x.capturePayloads ?? false,
   upstream: upstreamFormOf(x),
+  requiresPresentPerson: x.requiresPresentPerson ?? false,
 });
 const labels = {
   name: "Name",
@@ -65,6 +67,7 @@ const labels = {
   requirement: "User authorization",
   capturePayloads: "Record call contents",
   upstream: "Authentication",
+  requiresPresentPerson: "Require a present person",
 };
 const noAuthEdit: AuthEdit = { value: "", remove: false };
 
@@ -122,6 +125,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
             ...authBody,
             ...(requirement === undefined ? {} : { requirement }),
             ...(form.capturePayloads !== saved.capturePayloads ? { capturePayloads: form.capturePayloads } : {}),
+            ...(form.requiresPresentPerson !== saved.requiresPresentPerson ? { requiresPresentPerson: form.requiresPresentPerson } : {}),
           },
         }),
       );
@@ -170,7 +174,8 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   }, [save.error]);
   const change = authChange(server, form.upstream, { urlChanged, detected });
   const oauthMode = form.upstream.mode === "oauth";
-  const leavesCatalog = canEdit && reviewedAgain(server) && (urlChanged || (!oauthMode && requirementWidens) || Boolean(change.review));
+  const relaxesPresence = relaxesServerSwitch(saved.requiresPresentPerson, form.requiresPresentPerson, caps.data);
+  const leavesCatalog = canEdit && reviewedAgain(server) && (urlChanged || (!oauthMode && requirementWidens) || Boolean(change.review) || relaxesPresence);
   const providerChanges = Boolean(server.requirement) && (!form.requirement.on || form.requirement.providerId !== server.requirement?.providerId);
   const resetsOverrides = providerChanges ? (caps.data ?? []).filter((c) => !c.goneAt && c.requirementOverride.mode === "scopes").length : 0;
 
@@ -274,6 +279,15 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
             review.
           </Alert>
         )}
+      </SettingsSection>
+      <SettingsSection title="Calls from agents" description="Agent platforms the portal trusts can call this server's tools for a person. The call is the person's, and the platform says whether they are present.">
+        <PresentPersonSwitch
+          checked={form.requiresPresentPerson}
+          onChange={(requiresPresentPerson) => set({ requiresPresentPerson })}
+          disabled={!canEdit}
+          leaves={relaxesPresence}
+          server={server}
+        />
       </SettingsSection>
       <SettingsSection
         title="Record call contents"

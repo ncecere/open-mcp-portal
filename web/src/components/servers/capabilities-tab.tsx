@@ -11,7 +11,7 @@
  * capability (override-dialog.tsx): the server's, none, or other scopes.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, KeyRound, ListTree } from "lucide-react";
+import { Check, KeyRound, ListTree, UserCheck } from "lucide-react";
 import { useState } from "react";
 import { ApiError, api, unwrap } from "../../api/client";
 import { ConfirmMutationDialog } from "../confirm-dialog";
@@ -34,6 +34,7 @@ import { changedSinceReviewText } from "./publish-dialogs";
 import { kindOrder, kindTitle, type McpCapability, type McpServer, untrustedApproverText, untrustedText } from "./labels";
 import { capabilitiesQuery, invalidateServer, type ServerAbilities, type ServerScope } from "./scope";
 import { OverrideDialog } from "./override-dialog";
+import { PresenceDialog, presenceLabels, presenceOf } from "./presence";
 import { overrideLabels } from "./requirement";
 import m from "./servers.module.css";
 
@@ -123,6 +124,7 @@ function CapabilityRow({ cap, server, scope, abilities, inCatalog }: { cap: McpC
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState<McpCapability | null>(null);
   const [overriding, setOverriding] = useState(false);
+  const [presence, setPresence] = useState(false);
   // The approval names the fingerprint of the definition the approver confirmed (the one in `confirming`), so a
   // refresh in between fails with 409 changed_since_review instead of approving text nobody read.
   const send = async (expectedFingerprint: string) =>
@@ -166,6 +168,8 @@ function CapabilityRow({ cap, server, scope, abilities, inCatalog }: { cap: McpC
   const canApprove = abilities.canApproveChanges && cap.changed && !cap.goneAt;
   const canOverride = scope.kind === "team" && abilities.canEdit && Boolean(server.requirement) && !cap.goneAt;
   const mode = cap.requirementOverride.mode;
+  const canPresence = scope.kind === "team" && abilities.canEdit && !cap.goneAt;
+  const present = presenceOf(cap);
   return (
     <CapabilityItem
       cap={cap}
@@ -177,6 +181,11 @@ function CapabilityRow({ cap, server, scope, abilities, inCatalog }: { cap: McpC
           {mode !== "inherit" && (
             <Badge size="sm" variant="outline" title="Set on this capability; the server's requirement doesn't apply.">
               {overrideLabels[mode]}
+            </Badge>
+          )}
+          {present.effective && (
+            <Badge size="sm" variant="outline" tone="info" title="A call an agent platform relays for a person is refused when the platform says the person isn't present.">
+              Needs a present person
             </Badge>
           )}
         </>
@@ -202,13 +211,19 @@ function CapabilityRow({ cap, server, scope, abilities, inCatalog }: { cap: McpC
         </p>
       }
       action={
-        canApprove || canOverride ? (
+        canApprove || canOverride || canPresence ? (
           <div className={m.actions}>
             {canOverride && (
               <Button size="sm" variant="secondary" onClick={() => setOverriding(true)} aria-label={`Change the account ${cap.name} needs`}>
                 <KeyRound aria-hidden /> Account…
               </Button>
             )}
+            {canPresence && (
+              <Button size="sm" variant="secondary" onClick={() => setPresence(true)} aria-label={`Change whether ${cap.name} needs a present person (now: ${presenceLabels[present.mode].toLowerCase()})`}>
+                <UserCheck aria-hidden /> Present person…
+              </Button>
+            )}
+            {presence && scope.kind === "team" && <PresenceDialog cap={cap} server={server} scope={scope} onClose={() => setPresence(false)} />}
             {overriding && scope.kind === "team" && <OverrideDialog cap={cap} server={server} scope={scope} onClose={() => setOverriding(false)} />}
             {canApprove && (
               <>

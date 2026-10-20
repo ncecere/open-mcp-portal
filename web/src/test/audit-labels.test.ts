@@ -44,4 +44,23 @@ describe("audit labels", () => {
     expect(changedRows(auditChange(e))).toEqual([{ field: "Allowed networks and hosts", before: [], after: ["10.20.0.0/16", "*.corp.example.com (http) · Wiki"] }]);
     expect(valueText(changedRows(auditChange(e))[0]?.after)).toBe("10.20.0.0/16, *.corp.example.com (http) · Wiki");
   });
+
+  it("names the agent platform actions (decisions 65 and 66) and their changes", () => {
+    expect(actionLabel("agent_platform.create")).toBe("Trusted an agent platform");
+    expect(actionLabel("agent_platform.delete")).toBe("Stopped trusting an agent platform");
+    expect(areaOf("agent_platform.update")).toBe("Agent platforms");
+    expect(targetTypeLabel("agent_platform")).toBe("Agent platform");
+    expect(actionLabel("service_account.relay_set")).toBe("Marked service account as an agent platform relay");
+    expect(areaOf("service_account.relay_clear")).toBe("Service accounts");
+    expect(actionLabel("mcp_capability.presence_set")).toBe("Changed whether a capability needs a present person");
+    const e = { action: "mcp_capability.presence_set", before: { mode: "inherit", effective: true }, after: { mode: "not_required", effective: false } };
+    expect(changedRows(auditChange(e))).toEqual([
+      { field: "Present person", before: "Same as the server", after: "Doesn't need a present person" },
+      { field: "Needs a present person", before: "Yes", after: "No" },
+    ]);
+    const s = { action: "mcp_server.update", before: { requiresPresentPerson: false }, after: { requiresPresentPerson: true } };
+    expect(changedRows(auditChange(s))).toEqual([{ field: "Require a present person", before: "Off", after: "On" }]);
+    const p = { action: "agent_platform.update", before: { enabled: true, audience: "a" }, after: { enabled: false, audience: "a" } };
+    expect(changedRows(auditChange(p))).toEqual([{ field: "Enabled", before: "On", after: "Off" }]);
+  });
 });

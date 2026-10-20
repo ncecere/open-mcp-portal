@@ -233,6 +233,7 @@ func (a *api) updateTeamMcpServer(w http.ResponseWriter, r *http.Request) {
 		Name: in.Name, Description: in.Description, URL: in.Url, AuthHeaderName: in.AuthHeaderName, AuthValue: in.AuthValue,
 		TimeoutSeconds: in.TimeoutSeconds, Enabled: in.Enabled, SetRequirement: setRequirement, Requirement: fromAPIRequirement(in.Requirement),
 		CapturePayloads: in.CapturePayloads, AuthMode: strPtr(in.AuthMode), OAuth: fromAPIOAuthInput(in.Oauth), SendIdentity: in.SendIdentity,
+		RequiresPresentPerson: in.RequiresPresentPerson,
 	}, rev)
 	if failed(w, r, err) {
 		return

@@ -575,6 +575,9 @@ func (a *api) tokenMayUpdateServer(w http.ResponseWriter, r *http.Request, actor
 	if in.CapturePayloads != nil && *in.CapturePayloads != sv.CapturePayloads {
 		return refuse("capturePayloads")
 	}
+	if in.RequiresPresentPerson != nil && *in.RequiresPresentPerson != sv.RequiresPresentPerson {
+		return refuse("requiresPresentPerson")
+	}
 	if len(sv.AuthValueCipher) == 0 && sv.AuthMode == "none" && !sv.AuthProviderID.Valid {
 		return true // no credentials yet: nothing to steal or redirect
 	}

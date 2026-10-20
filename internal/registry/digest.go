@@ -15,7 +15,7 @@ import (
 
 // The review digest binds an approval to what the reviewer saw (docs/
 // threat-model.md, F-2): a SHA-256 over the server's URL, auth mode and
-// requirement and over every listed (not gone) capability's kind, name and
+// requirement (and its requires-a-present-person switch when on) and over every listed (not gone) capability's kind, name and
 // fingerprint, sorted. A refresh that adds, drops or changes a definition, a
 // new URL, another auth mode or another requirement changes it, so an
 // approval made on the digest of an earlier look is refused (409
@@ -47,6 +47,11 @@ func ReviewDigest(sv dbgen.McpServer, caps []CapabilityRef) string {
 		}
 	} else {
 		put("")
+	}
+	if sv.RequiresPresentPerson {
+		// Only when on, so the digest of every server without the switch is
+		// what it was before the switch existed.
+		put("requires-present-person")
 	}
 	list := slices.Clone(caps)
 	slices.SortFunc(list, func(a, b CapabilityRef) int {
