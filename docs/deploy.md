@@ -423,6 +423,24 @@ release can't list audit entries written by tokens. Revoked and expired tokens a
 `omp_notification_deliveries_total{channel,event,outcome}`, `omp_notification_emit_errors_total`.
 See [automation-tokens.md](automation-tokens.md).
 
+## Agent platforms
+
+Trusted agent platforms are configured in the UI (Admin › Trusted agent platforms), not in the environment; the
+administrator's guide is [agent-platforms.md](agent-platforms.md). Deployment notes:
+
+- **Migration `00020`** adds `agent_platforms`, `agent_token_jtis` and columns on `service_accounts`, `mcp_calls`,
+  `mcp_servers` and `mcp_capabilities`. It is expand-only: the previous release keeps working on the new schema (it
+  ignores them), so a rolling update is safe. Nothing changes until a platform admin trusts a platform.
+- **Outbound:** a platform's JWKS URL (default `<issuer>/.well-known/mcp-identity-jwks.json`) is fetched through the
+  same address guard as MCP servers: https, public addresses, and internal ones only under Admin › Internal networks (or
+  `UPSTREAM_ALLOWED_NETWORKS`). If the portal runs behind a NetworkPolicy or egress firewall, allow it to reach the
+  platform. A fetch is 5 seconds, 64 KiB, no redirects, no proxy.
+- **Sign-in issuer:** a token's `person.iss` must equal `OIDC_ISSUER` exactly. People must have signed in to the portal
+  once (the portal finds them by `(issuer, subject)`).
+- **Accepted token IDs** are kept in `agent_token_jtis` until each token can no longer be valid, and deleted by the
+  retention loop. Metric: `omp_agent_token_total{result}` (accepted, ignored, rejected by reason).
+- **Clocks:** replicas and the platform need clocks within 30 seconds of each other.
+
 ## Key rotation
 
 **`ENCRYPTION_KEY`** seals MCP server header values, signing keys' private keys, auth provider client secrets,

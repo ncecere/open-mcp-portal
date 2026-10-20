@@ -27,6 +27,11 @@ type WhoamiResult struct {
 	// BearerSHA256 is TokenDigest of the bearer token a protected fake
 	// received (an oauth server's person token; never the token).
 	BearerSHA256 string `json:"bearerSha256,omitempty"`
+	// Act is the token's act claim: the agent that called for the person
+	// (docs/upstream-identity.md "Calls from agents"); nil when the token has
+	// none. ActedBy says it in words, for a person reading the tool's output.
+	Act     map[string]any `json:"act,omitempty"`
+	ActedBy string         `json:"actedBy,omitempty"`
 }
 
 // IdentityToken finds the gateway's identity token in a request's headers:
@@ -58,6 +63,9 @@ func Whoami(ctx context.Context, h http.Header, jwksURL, audience string) Whoami
 	if err := tok.UnsafeClaimsWithoutVerification(&out.Claims); err != nil {
 		out.Error = err.Error()
 		return out
+	}
+	if act, ok := out.Claims["act"].(map[string]any); ok {
+		out.Act, out.ActedBy = act, actedBy(act)
 	}
 	if jwksURL == "" {
 		return out
@@ -153,4 +161,21 @@ func ProviderTokenReport(ctx context.Context, h http.Header, jwksURL, audience s
 	out.Claim, _ = who.Claims["provider"].(string)
 	out.ClaimMatches = out.Claim != "" && out.Claim == out.Provider
 	return out
+}
+
+// actedBy describes an act claim: the agent, its platform and whether the
+// person was present.
+func actedBy(act map[string]any) string {
+	name, _ := act["name"].(string)
+	sub, _ := act["sub"].(string)
+	iss, _ := act["iss"].(string)
+	present, _ := act["person_present"].(bool)
+	if name == "" {
+		name = sub
+	}
+	when := "while the person was present"
+	if !present {
+		when = "while the person was not present"
+	}
+	return fmt.Sprintf("agent %q (%s) of %s, %s", name, sub, iss, when)
 }

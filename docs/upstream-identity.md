@@ -2,7 +2,7 @@
 
 When someone calls a tool, gets a prompt or reads a resource through a gateway, Open MCP Portal forwards the request to your MCP server with a short-lived **identity token**: a JWT signed by the portal that says who is calling, through which gateway and for which tool ([decisions](decisions.md) 7 and 19). Verify it before you trust it. The token is the only credential from the caller that reaches your server. The portal never forwards the client's own API key, service account key or OAuth token.
 
-The caller is either a **person** (with a personal API key, or through an MCP client they connected with OAuth sign-in) or a team **service account** (a headless agent, CI job or script; decisions 22 and 23). The `principal_type` claim says which.
+The caller is either a **person** (with a personal API key, or through an MCP client they connected with OAuth sign-in) or a team **service account** (a headless agent, CI job or script; decisions 22 and 23). The `principal_type` claim says which. A call made by an **agent for a person** through a trusted agent platform is the person's call with an `act` claim naming the agent ([Calls from agents](#calls-from-agents)).
 
 Lists (`tools/list`, `prompts/list`, `resources/list`, `resources/templates/list`) are served from the definitions approved in the portal, so your server only receives calls (`tools/call`, `prompts/get`, `resources/read`), plus the handshake and lists of an editor's **Test connection** (below). A read arrives with your own URI (the portal strips its `omp://{server-slug}/` prefix). Each call also performs the MCP handshake again, because the portal is stateless.
 
@@ -59,7 +59,7 @@ The claims:
 
 | Claim | Meaning |
 |---|---|
-| `principal_type` | `user` for a person, `service_account` for a team service account. Always present |
+| `principal_type` | `user` for a person, `service_account` for a team service account. Always present. It is `user` for an agent's call for a person too: look for `act` |
 | `sub` | A person's user ID, or the service account's ID (UUIDs, stable). Check `principal_type` before treating `sub` as a person |
 | `email` | A person's email at the time of the call. **Absent for service accounts** |
 | `name` | A person's display name, or the service account's name (such as `ci-release-bot`) |
@@ -70,6 +70,7 @@ The claims:
 | `client` | For a client connected with OAuth, the client's name as it signed in (such as `Claude Code`), with `client_verified`. Otherwise the MCP client's `clientInfo.name` when the request carried it, else the name of the API key or service account key |
 | `client_verified` | Present whenever `client` comes from an OAuth client. `true`: the client is identified by a Client ID Metadata Document, so its name is vouched for by the host that publishes it. `false`: the client registered itself (Dynamic Client Registration) and its name is **self-asserted**: anyone can register any name, so don't trust `client` for decisions in that case. Absent for API keys and service account keys (then `client` is the MCP client's or the key's own label, never verified) |
 | `provider` | The slug of the auth provider whose user token came with this call in `MCP-Gateway-Provider-Token` (see [Provider tokens](#provider-tokens)). **Absent** when the call carries no provider token |
+| `act` | Present **only** on a call an agent made for a person through a trusted agent platform: `{"sub", "name", "iss", "principal_type": "agent", "person_present"}` ([Calls from agents](#calls-from-agents)). **Absent** on every other call |
 | `jti` | A unique ID for the token (useful in your logs) |
 
 `client` is informational: decide on `principal_type`, `sub`, `email` and `teams`, which the portal checked. Treat `client` as a hint, and as plain self-asserted text unless `client_verified` is `true`.
@@ -83,6 +84,33 @@ A service account's token, for example:
  "sub": "2f2e1390-9eca-4c8e-ac70-701505d92272", "name": "ci-bot", "teams": ["platform-tools"],
  "gateway": "support", "tool": "status__check_outage", "client": "deploy", "jti": "…", "iat": 1760650000, "nbf": 1760649970, "exp": 1760650300}
 ```
+
+## Calls from agents
+
+An agent platform the portal trusts (Admin › Trusted agent platforms, [agent-platforms.md](agent-platforms.md); decisions 65 to 67) can relay its agents' calls through a team service account and name the person each agent acts for. When it does, the portal runs the call as that person and the token it signs for your server says so:
+
+```json
+{"iss": "https://mcp.example.com", "aud": "https://mail.example.com/mcp", "principal_type": "user",
+ "sub": "10101010-1010-4101-8101-101010101010", "email": "ada@example.com", "name": "Ada Lovelace", "teams": ["platform-tools"],
+ "gateway": "support", "tool": "mail__search", "client": "pdp-relay",
+ "act": {"sub": "0e6a3d4c-5f1b-4f0e-9b8e-2d7c1a9f3b21", "name": "Mail assistant", "iss": "https://agents.example.com",
+         "principal_type": "agent", "person_present": true},
+ "jti": "…", "iat": 1792500000, "nbf": 1792499970, "exp": 1792500300}
+```
+
+- `principal_type`, `sub`, `email`, `name` and `teams` are **the person's**, exactly as for a call from them with their own key. The portal has checked that they may use this tool, **and** that the relay service account may (the call can reach no more than either could alone).
+- `client` is the name of the relay service account.
+- `act` is the actor (RFC 8693 style): `sub` and `name` are the agent's ID and name **at the platform** (`name` is chosen by the agent's team: informational), `iss` is the platform's issuer, `principal_type` is always `agent`, and `person_present` is the platform's statement that the call belongs to a conversation the person is in. `false` means scheduled or background work that nobody watches.
+- **`act` appears exactly on relayed person calls.** A call with the person's own key or app never has it; a call by a service account (including the relay account itself, when the platform names no person) has `principal_type` `service_account` and no `act`.
+- Provider tokens work as for the person (`MCP-Gateway-Provider-Token` is *their* token). An agent has no browser, so the portal never sends an agent's caller a consent link: a person who hasn't connected the provider gets an error naming where to connect, and your server isn't called.
+
+**Telling "Ada" from "Ada's agent".** Check `act` before treating the call as a person at the keyboard:
+
+- refuse agent calls for a tool that must never run unattended: `if claims.act: refuse`;
+- require the person for actions that need them there (sending mail, spending): `if claims.act and not claims.act.person_present: refuse`. A server's team can also make the portal refuse such calls before they reach you (**Require a present person for calls from agents**, per server or per capability): use that for a rule that is the same for every caller, and check `act` yourself for a rule that depends on the call;
+- log `act.sub` and `act.name` next to `sub` so an audit says which agent did what. Don't base decisions on `act.name`, and treat `act.iss` as the platform the portal trusts, not as a login.
+
+The token you receive is the portal's own, signed with its keys: the platform's token stops at the portal and is never forwarded.
 
 ## Provider tokens
 
@@ -154,6 +182,13 @@ type Identity struct {
 	Client  string   `json:"client"`
 	// ClientVerified is set only for OAuth clients; nil otherwise.
 	ClientVerified *bool `json:"client_verified"`
+	// Act is set only on a call an agent made for a person (nil otherwise).
+	Act *struct {
+		Sub           string `json:"sub"`
+		Name          string `json:"name"`
+		Iss           string `json:"iss"`
+		PersonPresent bool   `json:"person_present"`
+	} `json:"act"`
 }
 
 // Fetch the JWKS (cache it for up to 5 minutes, and fetch again for an
@@ -187,11 +222,11 @@ func verify(r *http.Request, keys jose.JSONWebKeySet) (jwt.Claims, Identity, err
 		return std, id, err
 	}
 	err = std.ValidateWithLeeway(jwt.Expected{Issuer: gatewayURL, AnyAudience: jwt.Audience{myURL}, Time: time.Now()}, 30*time.Second)
-	return std, id, err // std.Subject is the person's user ID
+	return std, id, err // std.Subject is the person's user ID; id.Act != nil: an agent called for them
 }
 ```
 
-`cmd/fakemcp` has a working version of this check (`testutil.VerifyIdentity`), and its `whoami` tool reports the token it received. Its `provider_token` tool reports the provider header, a SHA-256 prefix of the provider token (never the token) and whether the identity token's `provider` claim matches (`testutil.ProviderTokenReport`).
+`cmd/fakemcp` has a working version of this check (`testutil.VerifyIdentity`), and its `whoami` tool reports the token it received, including the `act` claim of a call an agent made for a person (as `act`, and in words as `actedBy`). Its `provider_token` tool reports the provider header, a SHA-256 prefix of the provider token (never the token) and whether the identity token's `provider` claim matches (`testutil.ProviderTokenReport`).
 
 ## Python (PyJWT)
 
@@ -210,7 +245,7 @@ def identity(headers) -> dict:
     return jwt.decode(
         token, key.key, algorithms=["ES256"], issuer=GATEWAY, audience=MY_URL, leeway=30,
         options={"require": ["exp", "iat", "iss", "aud", "sub"]},
-    )  # claims["principal_type"], claims["sub"], claims.get("email"), claims["teams"], claims["tool"]
+    )  # claims["principal_type"], claims["sub"], claims.get("email"), claims["teams"], claims["tool"]; claims.get("act") is set only when an agent called for the person
 ```
 
 ## TypeScript (jose)
@@ -229,7 +264,7 @@ export async function identity(headers: Headers) {
   const { payload } = await jwtVerify(token, jwks, {
     algorithms: ["ES256"], issuer: GATEWAY, audience: MY_URL, clockTolerance: 30,
   });
-  return payload; // payload.principal_type, payload.sub, payload.email (people only), payload.teams, payload.tool
+  return payload; // payload.principal_type, payload.sub, payload.email (people only), payload.teams, payload.tool, payload.act (an agent called for the person)
 }
 ```
 

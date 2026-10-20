@@ -15,7 +15,8 @@
 // addresses.
 //
 // For gateways it also has the tools whoami (the identity token the gateway
-// sent, its claims and whether it verifies), provider_token (whether the
+// sent, its claims, whether it verifies and, for a call an agent platform
+// relayed for a person, the act claim: "act" and a sentence in "actedBy"), provider_token (whether the
 // call carried a delegated provider token: the provider, a SHA-256 prefix of
 // the token, never the token, and whether the identity token's provider
 // claim matches) and echo {text} (-gateway-tools, on by default), and logs
