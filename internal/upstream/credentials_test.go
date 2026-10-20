@@ -1,12 +1,16 @@
 package upstream
 
 import (
+	"context"
 	"encoding/base64"
+	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestMergeQuery(t *testing.T) {
@@ -154,5 +158,48 @@ func TestSafeMessageRedactsEveryPart(t *testing.T) {
 	// left to the base64 string.
 	if s := (Target{Credentials: []Credential{{Kind: CredBasic, Value: "bo", Secondary: "longpassword"}}}).Secrets(); strings.Contains(strings.Join(s, "|"), "|bo|") {
 		t.Errorf("secrets = %v", s)
+	}
+}
+
+// Whatever goes wrong, the error and the log line built from it show no query
+// value: the request the SDK and net/http know carries no query (the part is
+// added on a copy), a dial error names only an address, and a server that
+// repeats its request line is redacted.
+func TestQueryPartNeverInErrorsOrLogs(t *testing.T) {
+	const value = "qv-sentinel-0042"
+	creds := []Credential{{Kind: CredQuery, Name: "sig", Value: value}}
+	var logs strings.Builder
+	client := &Client{AllowPrivate: true, Log: slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))}
+	ctx := context.Background()
+
+	// Nothing listens.
+	_, err := client.Discover(ctx, Target{URL: "http://127.0.0.1:1/mcp", Credentials: creds, Timeout: 3 * time.Second})
+	if err == nil || strings.Contains(err.Error(), value) {
+		t.Fatalf("dial error = %v", err)
+	}
+	// A server that fails and repeats the request line, in a few shapes.
+	for name, body := range map[string]func(r *http.Request) string{
+		"plain":   func(r *http.Request) string { return "failed: " + r.URL.RequestURI() },
+		"json":    func(r *http.Request) string { return `{"error":"bad request ` + r.URL.String() + `"}` },
+		"escaped": func(r *http.Request) string { return "failed: " + url.QueryEscape(r.URL.Query().Get("sig")) },
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, body(r), http.StatusInternalServerError)
+		}))
+		_, err := client.Discover(ctx, Target{URL: srv.URL + "/mcp", Credentials: creds, Timeout: 3 * time.Second})
+		srv.Close()
+		if err == nil {
+			t.Fatalf("%s: no error", name)
+		}
+		if strings.Contains(err.Error(), value) {
+			t.Errorf("%s: the error shows the query value: %v", name, err)
+		}
+		var ue *Error
+		if errors.As(err, &ue) && strings.Contains(ue.Message, value) {
+			t.Errorf("%s: the message shows the query value: %s", name, ue.Message)
+		}
+	}
+	if strings.Contains(logs.String(), value) {
+		t.Errorf("the log shows the query value: %s", logs.String())
 	}
 }

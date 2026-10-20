@@ -550,3 +550,60 @@ func TestStaticCredentialAuthorizationRules(t *testing.T) {
 		t.Errorf("create oauth with a basic part = %d %s", code, raw)
 	}
 }
+
+// A server whose credential has an Authorization part (Basic, a bearer or an
+// Authorization header) gets the caller's identity token in MCP-Gateway-Identity
+// instead, on a person's own call and on a call an agent relays for the person
+// (decisions 65 to 68); a server with no Authorization part gets it as
+// Authorization: Bearer, next to a header and a query part.
+func TestStaticCredentialPartsAndTheIdentityToken(t *testing.T) {
+	e, fx := newAgentEnv(t)
+	basic := "Basic " + base64.StdEncoding.EncodeToString([]byte("alice:pw-1234567890"))
+	for name, c := range map[string]struct {
+		parts  []any
+		header string // where the identity token arrives
+		auth   string // what Authorization is ("": the identity token as Bearer)
+	}{
+		"basic":  {[]any{map[string]any{"kind": "basic", "value": "alice", "secondary": "pw-1234567890"}}, "MCP-Gateway-Identity", basic},
+		"bearer": {[]any{map[string]any{"kind": "bearer", "value": "tok-1234567890"}}, "MCP-Gateway-Identity", "Bearer tok-1234567890"},
+		"header": {[]any{map[string]any{"kind": "header", "name": "authorization", "value": "Token tok-1234567890"}}, "MCP-Gateway-Identity", "Token tok-1234567890"},
+		"others": {[]any{map[string]any{"kind": "header", "name": "X-Tenant", "value": "acme-1234567890"},
+			map[string]any{"kind": "query", "name": "sig", "value": "s-1234567890"}}, "Authorization", ""},
+	} {
+		e.patchServer(e.owner, e.server, map[string]any{"credentials": c.parts})
+		for _, relayed := range []bool{false, true} {
+			var out map[string]any
+			if relayed {
+				var code int
+				if code, out = fx.callTool(agentSpec{Email: "blair@localhost"}, "status__whoami", nil); code != 200 {
+					t.Fatalf("%s relayed = %d %v", name, code, out)
+				}
+			} else {
+				var code int
+				if code, _, out = rawMCP(t, e.app, "POST", "support", e.key, rpc(1, "tools/call",
+					map[string]any{"name": "status__whoami", "arguments": map[string]any{}}), nil); code != 200 {
+					t.Fatalf("%s own call = %d %v", name, code, out)
+				}
+			}
+			who := whoamiClaims(t, out)
+			if !who.Verified || who.Header != c.header {
+				t.Errorf("%s (relayed %v): the identity arrived in %q (verified %v), want %s", name, relayed, who.Header, who.Verified, c.header)
+			}
+			if relayed && (who.Act == nil || who.Claims["act"] == nil) {
+				t.Errorf("%s: a relayed call has no act claim: %+v", name, who)
+			}
+			calls := e.fake.ToolCalls()
+			last := calls[len(calls)-1]
+			if c.auth != "" {
+				if last.Authorization != c.auth || last.Identity == "" {
+					t.Errorf("%s (relayed %v): Authorization = %q, MCP-Gateway-Identity set = %v", name, relayed, last.Authorization, last.Identity != "")
+				}
+				continue
+			}
+			if !strings.HasPrefix(last.Authorization, "Bearer ") || last.Identity != "" || last.Header.Get("X-Tenant") != "acme-1234567890" ||
+				!strings.Contains(last.Header.Get(testutil.QueryHeader), "sig=s-1234567890") {
+				t.Errorf("%s (relayed %v): the call arrived as %+v", name, relayed, last)
+			}
+		}
+	}
+}
