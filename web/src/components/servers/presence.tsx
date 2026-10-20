@@ -1,6 +1,7 @@
 /*
  * "Requires a present person" (decision 66): a server, and each of its capabilities, can refuse calls an agent
  * platform relays for a person when the platform says the person isn't present (scheduled or background work).
+ * A call on a relay account that names nobody (a token without a person, or no token) is refused too (M-2).
  * The server's switch applies to every capability that doesn't override it; the override is required, not
  * required or the server's. Requiring never needs review; relaxing a requirement sends a published server back
  * to review under approval_required, like widening what a capability receives.
@@ -20,7 +21,7 @@ import { capabilitiesQuery, invalidateServer, type ServerScope } from "./scope";
 export type PresenceMode = "inherit" | "required" | "not_required";
 
 export const presenceHelp =
-  "When on, a call an agent platform relays for a person is refused with a tool error if the platform says the person isn't present (scheduled or background work). Recommended for tools that send mail, post or spend. Calls from people's own keys and apps are never affected.";
+  "When on, a call that comes through an agent platform's relay account is refused with a tool error unless it is for a person who is present. That includes a person the platform says isn't present (scheduled or background work) and a call that names nobody (a team agent's shared thread, a background run, or no identity token). Recommended for tools that send mail, post or spend. Calls from people's own keys and apps, and from ordinary service accounts, are never affected.";
 
 export const presenceLabels: Record<PresenceMode, string> = {
   inherit: "Same as the server",
@@ -75,7 +76,7 @@ export function PresenceDialog({ cap, server, scope, onClose }: Props) {
   return (
     <FormDialog
       title={`Present person for ${cap.name}`}
-      description={`Whether calls to ${cap.name} that an agent platform relays for a person need that person to be present.`}
+      description={`Whether calls to ${cap.name} that come through an agent platform's relay account need a person who is present. A call that names nobody doesn't have one.`}
       onClose={onClose}
       onSubmit={() => save.mutate()}
       submitLabel="Save"

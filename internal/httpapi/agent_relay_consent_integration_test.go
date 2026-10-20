@@ -233,22 +233,60 @@ func TestRequiresPresentPerson(t *testing.T) {
 		t.Fatalf("record = %+v", r)
 	}
 	served := e.toolCalls("whoami")
-	// A present person, the relay's own call, a personal key and a person
-	// whose token names nobody are not affected.
+	// A present person, and calls that are not on a relay account (a personal
+	// key, an ordinary service account, with or without a token the account
+	// can't use), are served.
 	if code, out := whoami(blair); code != 200 || whoamiClaims(t, out).Claims["sub"] != e.userID("blair@localhost") {
 		t.Fatalf("present person = %d %v", code, out)
-	}
-	if code, out := whoami(agentSpec{}); code != 200 || whoamiClaims(t, out).Claims["principal_type"] != "service_account" {
-		t.Fatalf("a token without a person = %d %v", code, out)
-	}
-	if code, out := fx.callTool("", "status__whoami", nil); code != 200 || whoamiClaims(t, out).Claims["principal_type"] != "service_account" {
-		t.Fatalf("relay key alone = %d %v", code, out)
 	}
 	if _, out := fx.post(e.key, "", "support", whoamiCall()); whoamiClaims(t, out).Claims["principal_type"] != "user" {
 		t.Fatalf("personal key = %v", out)
 	}
+	plain := createSA(t, e.owner, map[string]any{"name": "plain-bot", "role": "editor"})
+	plainKey := createSAKey(t, e.owner, plain.Id.String(), map[string]any{"name": "k", "expiresInDays": 30}).Secret
+	if _, out := fx.post(plainKey, "", "support", whoamiCall()); whoamiClaims(t, out).Claims["principal_type"] != "service_account" {
+		t.Fatalf("an ordinary service account = %v", out)
+	}
+	if _, out := fx.post(plainKey, fx.toolToken(agentSpec{Email: "blair@localhost", Absent: true}, "status__whoami"), "support", whoamiCall()); whoamiClaims(t, out).Claims["principal_type"] != "service_account" {
+		t.Fatalf("an ordinary service account with a token it can't use = %v", out)
+	}
 	if e.toolCalls("whoami") != served+4 {
 		t.Fatalf("whoami served %d times, want 4", e.toolCalls("whoami")-served)
+	}
+	// M-2: on the relay account, a call that names nobody is refused too: a
+	// valid token with no person (a team agent's shared thread or background
+	// run) and the relay's key with no token at all. Recorded as denied,
+	// person_not_present, and nothing reaches the server.
+	for _, c := range []struct {
+		what  string
+		who   any
+		agent bool
+	}{
+		{"a valid token that names nobody", agentSpec{}, true},
+		{"the relay key with no token", "", false},
+	} {
+		id := fx.lastCallID()
+		_, out := fx.callTool(c.who, "status__whoami", nil)
+		notPresent(out, c.what)
+		if text, _ := toolText(t, out); !strings.Contains(text, "names nobody") {
+			t.Errorf("%s: the message doesn't say the call names nobody: %q", c.what, text)
+		}
+		r := fx.recordAfter(id)
+		if r.Outcome != "denied" || r.Class != "person_not_present" || r.User != "" || (r.Agent != "") != c.agent || r.ServiceAccount != fx.account.Id.String() {
+			t.Errorf("%s: record = %+v", c.what, r)
+		}
+	}
+	// A resource read and a modern client are held to it as well.
+	_, out = fx.post(fx.key, fx.token(agentSpec{}), "support", rpc(5, "resources/read", map[string]any{"uri": "omp://status/status://services"}))
+	if c, _, data := rpcErr(out); c != -32010 || data["reason"] != "person_not_present" {
+		t.Fatalf("a personless resource read = %v", out)
+	}
+	_, out = fx.post(fx.key, "", "support", rpc(5, "resources/read", map[string]any{"uri": "omp://status/status://services"}))
+	if c, _, data := rpcErr(out); c != -32010 || data["reason"] != "person_not_present" {
+		t.Fatalf("a resource read with no token = %v", out)
+	}
+	if e.toolCalls("whoami") != served+4 {
+		t.Fatalf("a refused call reached the server: whoami served %d times, want 4", e.toolCalls("whoami")-served)
 	}
 	// A resource read of an absent person is refused with -32010.
 	_, out = fx.post(fx.key, fx.token(absent), "support", rpc(5, "resources/read", map[string]any{"uri": "omp://status/status://services"}))
@@ -278,6 +316,14 @@ func TestRequiresPresentPerson(t *testing.T) {
 	if code, out := whoami(absent); code != 200 || whoamiClaims(t, out).Claims["act"] == nil {
 		t.Fatalf("not_required override = %d %v", code, out)
 	}
+	// ... and a capability that doesn't need a present person serves calls that
+	// name nobody, with or without a token.
+	if code, out := whoami(agentSpec{}); code != 200 || whoamiClaims(t, out).Claims["principal_type"] != "service_account" {
+		t.Fatalf("not_required, a token naming nobody = %d %v", code, out)
+	}
+	if code, out := fx.callTool("", "status__whoami", nil); code != 200 || whoamiClaims(t, out).Claims["principal_type"] != "service_account" {
+		t.Fatalf("not_required, no token = %d %v", code, out)
+	}
 	if _, out := echo(absent); out["result"] == nil {
 		_ = out
 	}
@@ -295,6 +341,11 @@ func TestRequiresPresentPerson(t *testing.T) {
 	code, ec = setMode(e.editor, "echo", "required")
 	mustCode(t, "echo required", code, ec, 200, "")
 	notPresent(second(echo(absent)), "echo required")
+	notPresent(second(echo(agentSpec{})), "echo required, a token naming nobody")
+	notPresent(second(fx.callTool("", "status__echo", map[string]any{"text": "hi"})), "echo required, no token")
+	if code, out := whoami(agentSpec{}); code != 200 || out["result"] == nil {
+		t.Fatalf("whoami is not required, a token naming nobody: %d %v", code, out)
+	}
 	if code, out := whoami(absent); code != 200 || out["result"] == nil {
 		t.Fatalf("whoami is not required: %d %v", code, out)
 	}

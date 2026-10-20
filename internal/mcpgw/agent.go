@@ -43,6 +43,10 @@ import (
 //     refused when its capability requires a present person and the token says
 //     the person isn't (presenceOK), and carries the act claim downstream.
 //
+// A capability that requires a present person is also refused on a relay
+// account when the call names nobody (a valid token with no person, or no
+// token at all): presenceOK.
+//
 // A token on any other credential (a personal key, a connected client, a
 // service account that is not a relay) is ignored: the call is that
 // credential's own. It is counted and logged so a misconfiguration or a
@@ -276,19 +280,33 @@ func (rc *request) intersect(g dbgen.Gateway, personCaller gateways.Caller) (gat
 	return gateways.Intersect(personCaller, relay), nil
 }
 
-// presenceOK refuses a relayed call whose capability requires a present
-// person when the token says the person isn't (recorded denied,
-// person_not_present). true: the call may go on.
+// presenceOK refuses a call whose capability requires a present person
+// unless the person is present (recorded denied, person_not_present). It
+// applies to every call on a relay-marked service account (M-2 of the
+// security review): the call must be relayed for a person and the token must
+// say that person is present. A valid token that names nobody (a team
+// agent's shared thread or background run), a relay key with no token at all
+// and a person who isn't present are all refused, because a call nobody
+// watches is what the setting is for. Calls that don't arrive on a relay
+// account (a person's own key or app, an ordinary service account, a token
+// ignored on such a credential) are never affected. true: the call may go on.
 func (rc *request) presenceOK(o gateways.Offer, rec *calls.Call) bool {
-	rl := rc.principal.relay
-	if rl == nil || rl.person == nil || rl.agent.PersonPresent || !registry.PresentPersonRequired(o.Server, o.Capability) {
+	acct := rc.principal.account
+	if acct == nil || !acct.Account.RelayPlatformID.Valid || !registry.PresentPersonRequired(o.Server, o.Capability) {
 		return true
 	}
-	noun := kindNoun(o.Capability.Kind)
-	msg := fmt.Sprintf("This %s needs the person to be present: it can't run in scheduled or background work. Run it in a conversation with them.", noun)
-	if rec.ExposedName != "" {
-		msg = fmt.Sprintf("%s needs the person to be present: it can't run in scheduled or background work. Run it in a conversation with them.", rec.ExposedName)
+	if rl := rc.principal.relay; rl != nil && rl.person != nil && rl.agent.PersonPresent {
+		return true
 	}
+	why := "it can't run in scheduled or background work. Run it in a conversation with them."
+	if rl := rc.principal.relay; rl == nil || rl.person == nil {
+		why = "this call names nobody (a shared thread, background work, or no identity token). Run it in a conversation with a person."
+	}
+	subject := fmt.Sprintf("This %s", kindNoun(o.Capability.Kind))
+	if rec.ExposedName != "" {
+		subject = rec.ExposedName
+	}
+	msg := fmt.Sprintf("%s needs the person to be present: %s", subject, why)
 	n := rc.refuseText(o.Capability.Kind == upstream.KindTool, msg, calls.ClassPersonNotPresent, "")
 	rec.Outcome, rec.ErrorClass = calls.OutcomeDenied, calls.ClassPersonNotPresent
 	rc.record(*rec, n)

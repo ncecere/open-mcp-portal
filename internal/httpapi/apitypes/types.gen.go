@@ -3872,7 +3872,7 @@ type McpServer struct {
 	// Requirement The auth provider and scopes whose user token the portal sends with calls to this server's capabilities (null; none). Capabilities can override it (McpCapability.requirementOverride).
 	Requirement *McpServerRequirement `json:"requirement,omitempty"`
 
-	// RequiresPresentPerson Refuse calls an agent platform relays for a person who is not present (the token's person_present is false: scheduled or background work), for every capability without its own override (McpCapability.presentPerson). Default false. Calls not relayed for a person are never affected. Absent from servers before v0.3 (false)
+	// RequiresPresentPerson Refuse calls on a relay service account unless they are for a person the platform says is present (person_present true), for every capability without its own override (McpCapability.presentPerson): scheduled or background work, a token that names nobody and a relay key with no token are refused too. Default false. Calls that don't arrive on a relay service account are never affected. Absent from servers before v0.3 (false)
 	RequiresPresentPerson *bool `json:"requiresPresentPerson,omitempty"`
 
 	// ReviewDigest SHA-256 (hex) over the server's URL, auth mode and requirement and over every listed capability's kind, name and fingerprint, sorted. It changes when any of them does (a refresh, a new URL ...). Send it back as expectedDigest when reviewing (adminReviewMcpServer) or publishing, so what is approved is what was read

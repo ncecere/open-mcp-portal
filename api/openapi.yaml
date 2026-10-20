@@ -1328,10 +1328,11 @@ paths:
       - agent-platforms
       operationId: setTeamMcpCapabilityPresentPerson
       summary: Require, or stop requiring, a present person for one capability's calls from agents (editors and above)
-      description: 'inherit: follow the server''s McpServer.requiresPresentPerson. required: a call relayed by an agent
-        platform whose token says the person is not present (scheduled or background work) is refused with a tool
-        error, recorded as denied with error class person_not_present. not_required: allowed even when the server
-        requires it. Calls that are not relayed for a person are never affected. If-Match is the server''s revision,
+      description: 'inherit: follow the server''s McpServer.requiresPresentPerson. required: a call on a relay service account
+        is refused with a tool error, recorded as denied with error class person_not_present, unless its token
+        names a person the platform says is present (so also when the token says the person is not present, names
+        nobody, or there is no token). not_required: allowed even when the server requires it. Calls that don''t
+        arrive on a relay service account are never affected. If-Match is the server''s revision,
         which this bumps (ETag). Requiring never needs review; relaxing a requirement (a capability that required a
         present person no longer does) sends a published server back to pending under approval_required (audited
         mcp_server.publish_request, reason requirement_changed). Audited as mcp_capability.presence_set. 400
@@ -6895,10 +6896,11 @@ components:
             before Phase 7
         requiresPresentPerson:
           type: boolean
-          description: 'Refuse calls an agent platform relays for a person who is not present (the token''s
-            person_present is false: scheduled or background work), for every capability without its own override
-            (McpCapability.presentPerson). Default false. Calls not relayed for a person are never affected.
-            Absent from servers before v0.3 (false)'
+          description: 'Refuse calls on a relay service account unless they are for a person the platform says is
+            present (person_present true), for every capability without its own override (McpCapability.presentPerson):
+            scheduled or background work, a token that names nobody and a relay key with no token are refused too.
+            Default false. Calls that don''t arrive on a relay service account are never affected. Absent from
+            servers before v0.3 (false)'
         sendIdentity:
           type: boolean
           description: 'Send the identity token (decision 45). true (the default) keeps decision 7: every forwarded

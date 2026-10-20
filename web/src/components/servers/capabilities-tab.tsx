@@ -184,7 +184,7 @@ function CapabilityRow({ cap, server, scope, abilities, inCatalog }: { cap: McpC
             </Badge>
           )}
           {present.effective && (
-            <Badge size="sm" variant="outline" tone="info" title="A call an agent platform relays for a person is refused when the platform says the person isn't present.">
+            <Badge size="sm" variant="outline" tone="info" title="A call through an agent platform's relay account is refused unless it is for a person who is present (not for scheduled or background work, and not when it names nobody).">
               Needs a present person
             </Badge>
           )}
