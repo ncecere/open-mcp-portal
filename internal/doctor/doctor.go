@@ -135,6 +135,39 @@ func (r *runner) configuration() {
 		r.add(Check{Group: "configuration", Name: r.opts.Mode, Status: OK, Detail: "valid for open-mcp-portal " + r.opts.Mode})
 	}
 	r.proxies()
+	r.tracing()
+}
+
+// tracing reports the span exporter (group configuration, check tracing):
+// off is info; on, the collector's host (never its path, headers or
+// credentials) and the sampler. The collector is not contacted: spans are
+// exported in the background and a collector that is down loses spans, not
+// requests.
+func (r *runner) tracing() {
+	if r.opts.Mode != "serve" {
+		return
+	}
+	t := r.cfg.Tracing
+	if !t.Enabled() {
+		r.add(Check{Group: "configuration", Name: "tracing", Status: Info,
+			Detail: "tracing is off (no OTEL_EXPORTER_OTLP_ENDPOINT): no spans are created or sent"})
+		return
+	}
+	sampler := t.Sampler
+	if sampler == "" {
+		sampler = config.DefaultTracesSampler
+	}
+	detail := fmt.Sprintf("OTLP/HTTP to %s, sampler %s", t.Host(), sampler)
+	if strings.Contains(sampler, "ratio") {
+		detail += fmt.Sprintf(" (%g)", t.SamplerArg)
+	}
+	if sampler == "always_on" || sampler == "parentbased_always_on" {
+		detail += ": every request is traced"
+	}
+	if t.Headers != "" {
+		detail += ", with export headers"
+	}
+	r.add(Check{Group: "configuration", Name: "tracing", Status: OK, Detail: detail})
 }
 
 // proxies hints at TRUSTED_PROXIES. The portal serves plain http and an https

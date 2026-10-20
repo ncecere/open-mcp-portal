@@ -2,6 +2,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -87,6 +88,10 @@ func Run(ctx context.Context, mode string, cfg config.Config, log *slog.Logger) 
 		return fmt.Errorf("the database is at migration %d but this binary needs %d: run `open-mcp-portal migrate` (or set MIGRATE_ON_START=true)", st.Current, st.Latest)
 	}
 
+	stopTracing, err := startTracing(ctx, mode, cfg, log)
+	if err != nil {
+		return err
+	}
 	health := httpapi.NewHealth(map[string]func(context.Context) error{"postgres": pool.Ping})
 	deps, err := NewDeps(cfg, pool, log)
 	if err != nil {
@@ -131,7 +136,39 @@ func Run(ctx context.Context, mode string, cfg config.Config, log *slog.Logger) 
 		return err
 	}
 	stopLoops()
-	return shutdown(cfg, log, health, servers...)
+	err = shutdown(cfg, log, health, servers...)
+	// Spans of the requests just drained are flushed last, within the same
+	// bound as the drain.
+	fctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	defer cancel()
+	if terr := stopTracing(fctx); terr != nil {
+		log.Warn("tracing: spans could not be flushed", "err", terr)
+	}
+	return err
+}
+
+// startTracing turns tracing on when an OTLP endpoint is configured (serve
+// mode only) and returns the function that flushes and stops it. Nothing is
+// started, read or sent otherwise.
+func startTracing(ctx context.Context, mode string, cfg config.Config, log *slog.Logger) (func(context.Context) error, error) {
+	if mode != ModeServe || !cfg.Tracing.Enabled() {
+		return func(context.Context) error { return nil }, nil
+	}
+	headers, err := cfg.Tracing.HeaderMap()
+	if err != nil {
+		return nil, err
+	}
+	stop, err := observability.InitTracing(ctx, observability.TracingOptions{
+		Endpoint: cfg.Tracing.URL(), Headers: headers, ServiceName: cmp.Or(cfg.Tracing.ServiceName, config.DefaultTraceServiceName),
+		Version: buildinfo.Version, Sampler: cfg.Tracing.Sampler, Arg: cfg.Tracing.SamplerArg,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("tracing: %w", err)
+	}
+	// The collector's host only: never its path, headers or credentials.
+	log.Info("tracing on", "collector", cfg.Tracing.Host(), "sampler", cmp.Or(cfg.Tracing.Sampler, config.DefaultTracesSampler),
+		"sampler_arg", cfg.Tracing.SamplerArg)
+	return stop, nil
 }
 
 // Timeouts of the main listener. Slow request headers are cut after

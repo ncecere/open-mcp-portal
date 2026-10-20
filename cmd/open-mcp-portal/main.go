@@ -25,6 +25,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/config"
 	"github.com/ncecere/open-mcp-portal/internal/doctor"
 	"github.com/ncecere/open-mcp-portal/internal/keyrotation"
+	"github.com/ncecere/open-mcp-portal/internal/observability"
 	"github.com/ncecere/open-mcp-portal/internal/secrets"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 )
@@ -95,10 +96,12 @@ func newLogger(w io.Writer, level, format string) *slog.Logger {
 	var lvl slog.Level
 	_ = lvl.UnmarshalText([]byte(level))
 	opts := &slog.HandlerOptions{Level: lvl}
+	// Records logged with a traced request's context also carry trace_id and
+	// span_id (beside request_id).
 	if format == "text" {
-		return slog.New(slog.NewTextHandler(w, opts))
+		return slog.New(observability.NewTraceLogHandler(slog.NewTextHandler(w, opts)))
 	}
-	return slog.New(slog.NewJSONHandler(w, opts))
+	return slog.New(observability.NewTraceLogHandler(slog.NewJSONHandler(w, opts)))
 }
 
 // runDoctor implements `open-mcp-portal doctor [flags]`. It uses the same

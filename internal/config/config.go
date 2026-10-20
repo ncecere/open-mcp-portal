@@ -82,6 +82,10 @@ type Config struct {
 	// (0: never; one replica at a time).
 	HealthCheckInterval time.Duration
 
+	// Tracing is OpenTelemetry tracing, off unless an OTLP endpoint is set
+	// (tracing.go; docs/deploy.md "Tracing").
+	Tracing Tracing
+
 	// SMTP is the operator's mail server for notification email (off
 	// without SMTP_HOST); NotificationInterval is the dispatcher's tick
 	// (docs/notifications.md).
@@ -172,6 +176,7 @@ func Defaults() Config {
 		NotificationInterval:            15 * time.Second,
 		SigningKeyPrepublish:            24 * time.Hour,
 		MetricsMaxObjects:               200,
+		Tracing:                         Tracing{Sampler: DefaultTracesSampler, SamplerArg: DefaultSamplerArg, ServiceName: DefaultTraceServiceName},
 		RetentionInterval:               15 * time.Minute,
 		RetentionBatchSize:              1000,
 		OAuthMaxRegisteredClients:       1000,
