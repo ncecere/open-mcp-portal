@@ -17,6 +17,7 @@ import s from "../../pages/shared.module.css";
 import type { McpServer } from "./labels";
 import type { ServerAbilities, ServerScope } from "./scope";
 import { AuthorizeButton, canAuthorize } from "./setup";
+import { partsOf, setsAuthorization } from "./credentials";
 import { authModeLabels, authModeOf, type OAuthConfig, otherHost, readAsText, registrationLabels, sendsIdentity } from "./upstream-auth";
 import m from "./servers.module.css";
 
@@ -32,8 +33,10 @@ function sentText(server: McpServer) {
   const mode = authModeOf(server);
   if (mode === "oauth") return `The caller's own token in Authorization: Bearer${identity ? ", and the portal's identity token in MCP-Gateway-Identity" : ""}.`;
   if (mode === "static_header") {
-    const where = server.authHeaderName?.toLowerCase() === "authorization" ? "MCP-Gateway-Identity" : "Authorization: Bearer";
-    return `The static ${server.authHeaderName ?? ""} header${identity ? `, and the portal's identity token in ${where}` : ""}.`;
+    const parts = partsOf(server);
+    const where = parts.some(setsAuthorization) ? "MCP-Gateway-Identity" : "Authorization: Bearer";
+    const names = parts.map((p) => (p.kind === "header" ? `${p.name} header` : p.kind === "query" ? `${p.name} query parameter` : p.kind === "bearer" ? "bearer token" : "Basic login"));
+    return `The static credential (${names.join(", ")})${identity ? `, and the portal's identity token in ${where}` : ""}.`;
   }
   return identity ? "The portal's identity token in Authorization: Bearer." : "Nothing: no credentials and no identity token.";
 }

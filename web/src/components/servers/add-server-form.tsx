@@ -23,24 +23,25 @@ import { AuthModeFields } from "./auth-mode-fields";
 import { defaultIdentity, identityBasisText, useIdentityDefault } from "./identity-default";
 import { serverSlug, slugPattern } from "./labels";
 import { firstDiscoveryKey } from "./scope";
-import { type AuthEdit, AuthFields, EnabledSwitch, type ServerForm, serverFieldErrors, serverProblems, TimeoutField, UrlField, urlProblem } from "./server-fields";
+import { CredentialFields } from "./credential-fields";
+import { credentialsBody, newPart, partProblems, type PartForm } from "./credentials";
+import { EnabledSwitch, type ServerForm, serverFieldErrors, serverProblems, TimeoutField, UrlField, urlProblem } from "./server-fields";
 import { applyDetection, type DetectResult, oauthInput, oauthProblems, upstreamFormOf, type UpstreamForm } from "./upstream-auth";
 import m from "./servers.module.css";
 
-const empty: ServerForm = { name: "", description: "", url: "", authHeaderName: "", timeoutSeconds: 30, enabled: true };
-const noHeader: AuthEdit = { value: "", remove: false };
+const empty: ServerForm = { name: "", description: "", url: "", timeoutSeconds: 30, enabled: true };
 
 const slugProblem = (slug: string) =>
   !slug ? "Enter a slug." : slugPattern.test(slug) ? undefined : "Use 1 to 48 lowercase letters, digits and hyphens, starting and ending with a letter or digit.";
 
 /**
- * The request body's authentication: the mode, its header or OAuth settings, and the identity switch (left out
- * while the default for the address isn't known: the server then decides the same way).
+ * The request body's authentication: the mode, its credential parts or OAuth settings, and the identity switch (left
+ * out while the default for the address isn't known: the server then decides the same way).
  */
-function authBody(form: ServerForm, auth: AuthEdit, u: UpstreamForm, secret: string, sendIdentity: boolean | undefined, detected?: DetectResult) {
-  const header = u.mode === "static_header" && form.authHeaderName.trim() ? { authHeaderName: form.authHeaderName.trim(), authValue: auth.value } : {};
-  const mode = u.mode === "static_header" && !form.authHeaderName.trim() ? "none" : u.mode;
-  return { authMode: mode, ...header, ...(mode === "oauth" ? { oauth: oauthInput(u.oauth, secret, detected) } : {}), ...(sendIdentity === undefined ? {} : { sendIdentity }) };
+function authBody(parts: PartForm[], u: UpstreamForm, secret: string, sendIdentity: boolean | undefined, detected?: DetectResult) {
+  const credentials = u.mode === "static_header" ? credentialsBody(parts) : undefined;
+  const mode = u.mode === "static_header" && !credentials?.length ? "none" : u.mode;
+  return { authMode: mode, ...(credentials?.length ? { credentials } : {}), ...(mode === "oauth" ? { oauth: oauthInput(u.oauth, secret, detected) } : {}), ...(sendIdentity === undefined ? {} : { sendIdentity }) };
 }
 
 export function AddServerForm({ team, onClose }: { team: string; onClose: () => void }) {
@@ -51,7 +52,7 @@ export function AddServerForm({ team, onClose }: { team: string; onClose: () => 
   const [form, setForm] = useState(empty);
   const [slug, setSlug] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
-  const [auth, setAuth] = useState<AuthEdit>(noHeader);
+  const [parts, setParts] = useState<PartForm[]>(() => [newPart()]);
   const [upstream, setUpstream] = useState<UpstreamForm>(() => upstreamFormOf());
   // The identity switch follows the address until someone moves it (decision 64).
   const [identityTouched, setIdentityTouched] = useState(false);
@@ -72,7 +73,7 @@ export function AddServerForm({ team, onClose }: { team: string; onClose: () => 
             name: form.name.trim(),
             description: form.description.trim() || undefined,
             url: form.url.trim(),
-            ...authBody(form, auth, upstream, secret, identityTouched ? upstream.sendIdentity : followed, detected),
+            ...authBody(parts, upstream, secret, identityTouched ? upstream.sendIdentity : followed, detected),
             timeoutSeconds: form.timeoutSeconds,
             enabled: form.enabled,
             // Recording call contents starts off: owners and admins turn it on in Settings, after a confirmation.
@@ -98,9 +99,10 @@ export function AddServerForm({ team, onClose }: { team: string; onClose: () => 
     if (created) void navigate({ to: "/teams/$team/servers/$serverId", params: { team, serverId: created.server.id }, replace: true });
   }, [created, navigate, team]);
   // Only the chosen mode's fields count.
-  const headerForm = upstream.mode === "static_header" ? form : { ...form, authHeaderName: "" };
-  const headerAuth = upstream.mode === "static_header" ? auth : noHeader;
-  const allProblems = () => ({ ...serverProblems(headerForm, headerAuth, { dev, hasAuth: false }), ...oauthProblems(upstream, { detected, secret }) });
+  const staticMode = upstream.mode === "static_header";
+  const partErrors = staticMode ? partProblems(parts) : {};
+  const noParts = staticMode && parts.length === 0;
+  const allProblems = () => ({ ...serverProblems(form, { dev }), ...oauthProblems(upstream, { detected, secret }) });
   const problems = submitted ? allProblems() : {};
   const fromServer = serverFieldErrors(create.error);
   // A refusal belongs to the value that was sent: editing that field clears it, so the form can be sent again.
@@ -114,7 +116,7 @@ export function AddServerForm({ team, onClose }: { team: string; onClose: () => 
 
   const submit = () => {
     setSubmitted(true);
-    if (Object.keys(allProblems()).length > 0 || slugProblem(slug)) {
+    if (Object.keys(allProblems()).length > 0 || Object.keys(partErrors).length > 0 || noParts || slugProblem(slug)) {
       requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
       return;
     }
@@ -190,7 +192,7 @@ export function AddServerForm({ team, onClose }: { team: string; onClose: () => 
           secret={secret}
           setSecret={setSecret}
           errors={problems}
-          headerFields={<AuthFields {...fields} auth={auth} setAuth={setAuth} hasAuth={false} />}
+          headerFields={<CredentialFields parts={parts} setParts={setParts} errors={submitted ? partErrors : {}} noParts={submitted && noParts} />}
         />
       </FormSection>
       <ErrorAlert error={shownError} title={describeAuthError(shownError)?.title ?? "Couldn't add the server"} describe={describeAuthError} />

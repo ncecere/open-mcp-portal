@@ -156,7 +156,7 @@ describe("Add server › Detect sign-in", () => {
     answer = { ...answer, outcome: "other_auth", httpStatus: 401 };
     await u.click(screen.getByRole("button", { name: "Detect sign-in" }));
     expect(await screen.findByText("Needs credentials, but doesn't offer OAuth sign-in")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /^Static header/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /^Static credential/ })).toBeChecked();
     expect(screen.getByRole("textbox", { name: /Header name/ })).toBeInTheDocument();
   });
 

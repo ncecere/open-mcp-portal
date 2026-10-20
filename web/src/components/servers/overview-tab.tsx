@@ -26,6 +26,7 @@ import { ProtocolText } from "./protocol";
 import { RequirementCard } from "./requirement-card";
 import { SetupConnectedNotice, SetupNotice } from "./setup";
 import { SignInCard } from "./sign-in-card";
+import { partsOf, partSummary } from "./credentials";
 import { authModeLabels, authModeOf } from "./upstream-auth";
 import { type CapabilityKind, countOf, kindTitle, type McpServer } from "./labels";
 import { FailureLine, FirstDiscovery, RefreshError, refreshChanges, RefreshSummary, TestResultAlert } from "./results";
@@ -100,9 +101,7 @@ function ConnectionCard({ server, scope, abilities, onRun }: Props & { onRun: ()
   const mode = authModeOf(server);
   const auth =
     mode === "static_header" && server.hasAuth ? (
-      <code className={s.mono}>
-        {server.authHeaderName}: ••••{server.authValueHint}
-      </code>
+      <code className={s.mono}>{partsOf(server).map(partSummary).join(", ")}</code>
     ) : (
       authModeLabels[mode]
     );

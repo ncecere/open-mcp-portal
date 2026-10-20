@@ -159,6 +159,37 @@
   color: var(--color-text-muted);
 }
 
+/* Muted help text under a group of fields. */
+.muted {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* One part of a server's own credential (credential-fields.tsx). */
+.part {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+
+.partHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.partKind {
+  min-width: 14rem;
+}
+
 /* ---------------- forms ---------------- */
 
 /* A field across both columns of a FormSection. */

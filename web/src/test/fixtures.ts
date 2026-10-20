@@ -138,6 +138,7 @@ export const mcpServer = (extra: Partial<Schemas["McpServer"]> = {}): Schemas["M
   authHeaderName: "Authorization",
   hasAuth: true,
   authValueHint: "x9Kz",
+  credentials: [{ kind: "header", name: "Authorization", hint: "x9Kz" }],
   timeoutSeconds: 30,
   enabled: true,
   publishState: "private",
