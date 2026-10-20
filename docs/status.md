@@ -1,7 +1,11 @@
 # Status and handoff
 
-Last updated: 2026-10-18. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.2.2, **cut on 2026-10-20**
-(release notes: [releases/v0.2.2.md](releases/v0.2.2.md); earlier: [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+Last updated: 2026-10-18. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.3.0, **cut on 2026-10-20**
+(release notes: [releases/v0.3.0.md](releases/v0.3.0.md); earlier: [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+
+## v0.3.0 (2026-10-20)
+
+Agent-platform trust (migration `00020`): see the [release notes](releases/v0.3.0.md) and [agent-platforms.md](agent-platforms.md). Verified by tests, a contract check against tokens signed by Pi Durable Platform v0.4.0's real signer (19 tokens, 5 key sets) and an independent security review (0 Critical or High). **Not** verified: a live Pi Durable Platform instance end to end.
 
 ## v0.2.2 (2026-10-20)
 
