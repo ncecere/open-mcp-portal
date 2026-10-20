@@ -351,3 +351,11 @@ func TestOAuthMaxUnusedClientsPerAddress(t *testing.T) {
 		t.Fatal("a negative value was accepted")
 	}
 }
+
+// The background refresh of connected accounts' tokens is off unless an
+// operator sets PROVIDER_REFRESH_INTERVAL (decision 69).
+func TestProviderRefreshIsOffByDefault(t *testing.T) {
+	if got := Defaults().ProviderRefreshInterval; got != 0 {
+		t.Fatalf("ProviderRefreshInterval = %v, want 0 (off)", got)
+	}
+}
