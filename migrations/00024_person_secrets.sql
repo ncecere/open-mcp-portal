@@ -68,8 +68,7 @@ ALTER TABLE mcp_servers
     ADD COLUMN secret_help         text NOT NULL DEFAULT '' CHECK (char_length(secret_help) <= 2000),
     ADD COLUMN secret_setup_user_id uuid REFERENCES users (id) ON DELETE SET NULL,
     ADD COLUMN secret_setup_at     timestamptz,
-    ADD CONSTRAINT mcp_servers_secret_shape CHECK ((secret_placement = 'bearer') = (secret_name IS NULL) OR secret_placement IS NULL),
-    ADD CONSTRAINT mcp_servers_person_secret_config CHECK (auth_mode <> 'person_secret' OR secret_placement IS NOT NULL);
+    ADD CONSTRAINT mcp_servers_secret_shape CHECK ((secret_placement = 'bearer') = (secret_name IS NULL) OR secret_placement IS NULL);
 
 CREATE TABLE person_secrets (
     id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -119,7 +118,6 @@ CREATE INDEX secret_requests_server_idx ON secret_requests (server_id);
 DROP TABLE secret_requests;
 DROP TABLE person_secrets;
 ALTER TABLE mcp_servers
-    DROP CONSTRAINT mcp_servers_person_secret_config,
     DROP CONSTRAINT mcp_servers_secret_shape,
     DROP COLUMN secret_setup_at,
     DROP COLUMN secret_setup_user_id,

@@ -121,9 +121,16 @@ func (rc *request) forwardRead(exposed string, t readTarget, again retry) {
 	if !ok {
 		return
 	}
+	secret, ok := rc.personSecret(o, &rec)
+	if !ok {
+		return
+	}
 	target, err := rc.h.Registry.Target(ctx, o.Server)
 	if err != nil {
 		rc.upstreamFailed(rec, err)
+		return
+	}
+	if !rc.withPersonSecret(&target, secret) {
 		return
 	}
 	token, ok := rc.prepareTarget(&target, identityFor{resource: exposed}, o, cred, &rec)

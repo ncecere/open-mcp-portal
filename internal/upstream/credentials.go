@@ -51,6 +51,37 @@ func (c Credential) occupies(header string) bool {
 	return false
 }
 
+// A person's own secret (a person_secret server, decision 72) travels as one
+// more credential part, in the placement the server's team chose.
+const (
+	PlaceHeader = "header"
+	PlaceBearer = "bearer"
+	PlaceQuery  = "query"
+)
+
+// WithPersonSecret adds a person's own secret to the target as a credential
+// part: a header (name, prefix and secret as the value), a bearer token or a
+// query parameter. The identity token then follows AuthorizationHeader as for
+// any other part, so a bearer or an Authorization header moves it to
+// MCP-Gateway-Identity. A secret that is not valid in its placement (an
+// unknown placement) is not added and false is returned: nothing is sent.
+func (t *Target) WithPersonSecret(placement, name, prefix, secret string) bool {
+	var c Credential
+	switch placement {
+	case PlaceHeader:
+		c = Credential{Kind: CredHeader, Name: name, Value: prefix + secret}
+	case PlaceBearer:
+		c = Credential{Kind: CredBearer, Value: secret}
+	case PlaceQuery:
+		c = Credential{Kind: CredQuery, Name: name, Value: prefix + secret}
+	default:
+		return false
+	}
+	t.Credentials = append(slices.Clone(t.Credentials), c)
+	t.PersonSecret = secret
+	return true
+}
+
 // Secrets lists every secret value a message or a recorded payload about
 // this target must not contain: the credential parts' values, the Basic
 // password and the base64 form a Basic header carries, the identity token,
@@ -73,6 +104,7 @@ func (t Target) Secrets() []string {
 			add(base64.RawStdEncoding.EncodeToString([]byte(c.Value + ":" + c.Secondary)))
 		}
 	}
+	add(t.PersonSecret)
 	add(t.IdentityValue)
 	add(t.ProviderToken)
 	add(t.BearerToken)

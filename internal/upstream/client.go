@@ -93,6 +93,11 @@ type Target struct {
 	// Credentials are the server's own static credential parts (header,
 	// bearer, basic and query; credentials.go), sent on every request to it.
 	Credentials []Credential
+	// PersonSecret is the bare value of a person's own secret when
+	// Credentials carries it (a person_secret server, decision 72): the part
+	// in Credentials holds the prefix too, so the bare value is named here for
+	// Secrets and for redaction.
+	PersonSecret string
 	// IdentityHeader and IdentityValue carry the caller's signed identity
 	// on forwarded calls (empty for discovery and health checks). The
 	// gateway never forwards a client's own credential.
