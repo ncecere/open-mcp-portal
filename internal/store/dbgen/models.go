@@ -381,6 +381,18 @@ type McpServerMachineOauth struct {
 	UpdatedAt          time.Time
 }
 
+type McpServerTl struct {
+	ServerID         uuid.UUID
+	CaPem            *string
+	CaSha256         *string
+	ClientCertPem    *string
+	ClientKeyCipher  []byte
+	ClientCertSha256 *string
+	ClientNotAfter   *time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
 type NetworkSetting struct {
 	ID        int16
 	Entries   json.RawMessage

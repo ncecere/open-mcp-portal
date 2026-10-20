@@ -15,6 +15,8 @@
  * credential, each person's own key (person-secret.ts), the portal's own
  * OAuth client (machine-auth.ts) and each person's OAuth sign-in, with the
  * same review warnings.
+ * TLS to the server (tls-section.tsx) is saved with the rest, in any mode: a
+ * changed CA is a trust change and reviewed again.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -47,6 +49,8 @@ import { EnabledSwitch, type ServerForm, serverFieldErrors, serverProblems, Time
 import { sameOrigin } from "./origin";
 import { machineProblems } from "./machine-auth";
 import { deletesText, keysDeleted, secretProblems } from "./person-secret";
+import { TlsSection } from "./tls-section";
+import { changesCa, emptyTlsForm, tlsBody, tlsDirty, tlsProblems, tlsRefusal, type TlsForm } from "./tls";
 import { AuthChangeNotes, settingsAuthBody } from "./settings-auth";
 import { applyDetection, authChange, authModeOf, countedUpstream, type DetectResult, oauthProblems, upstreamFormOf, type UpstreamForm } from "./upstream-auth";
 
@@ -102,9 +106,9 @@ function requirementErrors(r: RequirementForm, err: unknown, shown: boolean) {
 type Props = { server: McpServer; scope: ServerScope; abilities: ServerAbilities };
 
 /** The saved message: what a new URL did (read again; back to review), or a wider requirement (back to review). */
-function savedMessage(before: McpServer, after: McpServer, urlChanged: boolean) {
+function savedMessage(before: McpServer, after: McpServer, urlChanged: boolean, caChanged = false) {
   if (before.publishState === "published" && after.publishState === "pending") {
-    toast.success("Server settings saved", `${after.name} left the catalog until a platform admin reviews ${urlChanged ? "its new URL" : "what it now receives"}.`);
+    toast.success("Server settings saved", `${after.name} left the catalog until a platform admin reviews ${urlChanged ? "its new URL" : caChanged ? "its new CA" : "what it now receives"}.`);
   } else if (urlChanged && after.lastRefreshError) {
     toast.warning("Server settings saved", "Its capabilities couldn't be read from the new URL. See the Overview tab.");
   } else {
@@ -127,6 +131,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   const [detected, setDetected] = useState<DetectResult>();
   const [submitted, setSubmitted] = useState(false);
   const [confirmingCapture, setConfirmingCapture] = useState<true | null>(null);
+  const [tlsForm, setTlsForm] = useState<TlsForm>(emptyTlsForm);
   const kept = useCaptureRetention(server.teamSlug, false);
   const save = useMutation({
     mutationFn: async (_: { before: McpServer; urlChanged: boolean }) => {
@@ -144,6 +149,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
             enabled: form.enabled,
             ...authBody,
             ...(requirement === undefined ? {} : { requirement }),
+            ...(tlsBody(tlsForm) ? { tls: tlsBody(tlsForm) } : {}),
             ...(form.capturePayloads !== saved.capturePayloads ? { capturePayloads: form.capturePayloads } : {}),
             ...(form.requiresPresentPerson !== saved.requiresPresentPerson ? { requiresPresentPerson: form.requiresPresentPerson } : {}),
           },
@@ -154,11 +160,12 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
       setConfirmingCapture(null);
       setParts(partsOf(updated));
       setSecret("");
+      setTlsForm(emptyTlsForm);
       setSubmitted(false);
       storeServer(qc, updated);
       // Overrides may have gone back to inherit, and every capability's requirement may differ.
       void qc.invalidateQueries({ queryKey: capabilitiesQuery(scope, server.id).queryKey });
-      savedMessage(before, updated, urlChanged);
+      savedMessage(before, updated, urlChanged, caChanged);
     },
   });
   const canEdit = abilities.canEdit && scope.kind === "team";
@@ -169,7 +176,8 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   const dirty =
     JSON.stringify({ ...form, name: form.name.trim(), url: form.url.trim(), requirement, upstream }) !== JSON.stringify(saved) ||
     ((form.upstream.mode === "static_header" || form.upstream.mode === "person_secret") && credentialsBody(parts, server) !== undefined) ||
-    Boolean(secret);
+    Boolean(secret) ||
+    tlsDirty(tlsForm);
   // Parts of the server's own credential: required in static mode, optional (and only shown while some are stored) next to each person's key.
   const staticMode = form.upstream.mode === "static_header" || (ownKeys && parts.length > 0);
   // Another origin never keeps a stored value (F-1): every part is entered again.
@@ -183,7 +191,14 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   };
   const reqErrors = requirementErrors(form.requirement, save.error, submitted);
   const secretErrors = ownKeys ? secretProblems(form.upstream.secret) : {};
-  const invalid = Object.keys(problems).length > 0 || Object.keys(secretErrors).length > 0 || Object.keys(partErrors).length > 0 || noParts || Object.keys(requirementErrors(form.requirement, null, true)).length > 0;
+  const tlsErrors = { ...(submitted ? tlsProblems(tlsForm, server) : {}), ...tlsRefusal(save.error) };
+  const invalid =
+    Object.keys(tlsProblems(tlsForm, server)).length > 0 ||
+    Object.keys(problems).length > 0 ||
+    Object.keys(secretErrors).length > 0 ||
+    Object.keys(partErrors).length > 0 ||
+    noParts ||
+    Object.keys(requirementErrors(form.requirement, null, true)).length > 0;
   const shown = submitted ? problems : {};
   const refused = serverFieldErrors(save.error).url;
   const errors = { ...shown, url: shown.url ?? refused };
@@ -203,7 +218,8 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   }, [save.error]);
   const change = authChange(server, form.upstream, { urlChanged, detected });
   const relaxesPresence = relaxesServerSwitch(saved.requiresPresentPerson, form.requiresPresentPerson, caps.data);
-  const leavesCatalog = canEdit && reviewedAgain(server) && (urlChanged || (!noRequirement && requirementWidens) || Boolean(change.review) || relaxesPresence);
+  const caChanged = changesCa(tlsForm, server);
+  const leavesCatalog = canEdit && reviewedAgain(server) && (urlChanged || (!noRequirement && requirementWidens) || Boolean(change.review) || relaxesPresence || caChanged);
   const providerChanges = Boolean(server.requirement) && (!form.requirement.on || form.requirement.providerId !== server.requirement?.providerId);
   const resetsOverrides = providerChanges ? (caps.data ?? []).filter((c) => !c.goneAt && c.requirementOverride.mode === "scopes").length : 0;
 
@@ -218,7 +234,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
       }
       dirty={dirty}
       saving={save.isPending}
-      error={errors.url || reqRefused ? undefined : (authError ?? save.error)}
+      error={errors.url || reqRefused || Object.keys(tlsRefusal(save.error)).length > 0 ? undefined : (authError ?? save.error)}
       onSave={() => {
         setSubmitted(true);
         if (invalid) return;
@@ -229,6 +245,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
         setForm(saved);
         setParts(partsOf(server));
         setSecret("");
+        setTlsForm(emptyTlsForm);
         setDetected(undefined);
         setSubmitted(false);
       }}
@@ -281,6 +298,15 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
           notes={canEdit && <AuthChangeNotes server={server} change={change} leavesCatalog={leavesCatalog} />}
         />
       </SettingsSection>
+      <TlsSection
+        server={server}
+        form={tlsForm}
+        setForm={(patch) => setTlsForm((f) => ({ ...f, ...patch }))}
+        errors={tlsErrors}
+        disabled={!canEdit}
+        originMoved={originMoved}
+        reviewsCa={canEdit && reviewedAgain(server) && caChanged}
+      />
       <SettingsSection
         title="User authorization"
         description="Whether calls to this server carry each caller's own token for another service, such as GitHub. Each capability can override it on the Capabilities tab."

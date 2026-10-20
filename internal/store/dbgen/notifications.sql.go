@@ -814,6 +814,55 @@ func (q *Queries) ListExpiringPersonalKeys(ctx context.Context) ([]ListExpiringP
 	return items, nil
 }
 
+const listExpiringServerCertificates = `-- name: ListExpiringServerCertificates :many
+SELECT s.id, s.slug, s.name, s.team_id, c.client_not_after, c.client_cert_sha256
+FROM mcp_server_tls c
+JOIN mcp_servers s ON s.id = c.server_id AND s.enabled
+JOIN teams t ON t.id = s.team_id AND t.status = 'active'
+WHERE c.client_not_after IS NOT NULL AND c.client_not_after > now() AND c.client_not_after <= now() + interval '14 days'
+ORDER BY c.client_not_after, s.id
+LIMIT 500
+`
+
+type ListExpiringServerCertificatesRow struct {
+	ID               uuid.UUID
+	Slug             string
+	Name             string
+	TeamID           uuid.UUID
+	ClientNotAfter   *time.Time
+	ClientCertSha256 *string
+}
+
+// Enabled servers of active teams whose client certificate (mTLS) expires
+// within 14 days and has not expired yet (decision 74); the fingerprint makes
+// a renewed certificate a new subject for its own warning.
+func (q *Queries) ListExpiringServerCertificates(ctx context.Context) ([]ListExpiringServerCertificatesRow, error) {
+	rows, err := q.db.Query(ctx, listExpiringServerCertificates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListExpiringServerCertificatesRow{}
+	for rows.Next() {
+		var i ListExpiringServerCertificatesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.TeamID,
+			&i.ClientNotAfter,
+			&i.ClientCertSha256,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listExpiringServiceAccountKeys = `-- name: ListExpiringServiceAccountKeys :many
 SELECT k.id, k.name, k.expires_at, sa.id AS service_account_id, sa.name AS service_account_name, sa.team_id
 FROM service_account_keys k

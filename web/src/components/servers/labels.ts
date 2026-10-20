@@ -89,6 +89,7 @@ export const errorClassLabels: Record<ErrorClass, string> = {
   timeout: "No answer in time",
   too_large: "Response too large",
   not_allowed: "Address not allowed: private, loopback or a redirect",
+  tls: "TLS problem: certificate or client certificate",
 };
 
 export const healthLabels: Record<ServerHealth["status"], string> = { healthy: "Healthy", failing: "Failing", unknown: "Not checked yet" };

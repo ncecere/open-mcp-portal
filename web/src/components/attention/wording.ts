@@ -42,6 +42,11 @@ const wording: Record<AttentionKind, (item: AttentionItem) => Wording> = {
   connections_reconsent: (i) => ({ title: `${plural(n(i), "connected account")} need${n(i) === 1 ? "s" : ""} to be connected again`, action: "Open auth providers" }),
   gateways_disabled: (i) => ({ title: `${plural(n(i), "gateway")} switched off`, action: "Open gateways" }),
   rate_limited: (i) => ({ title: `${plural(n(i), "call")} refused by a rate limit in the last 24 hours`, action: "Open usage" }),
+  server_certificate_expiring: (i) => ({
+    title: `The client certificate of ${server(i)} ${i.severity === "critical" ? "has expired" : "expires within 14 days"}`,
+    atLabel: i.severity === "critical" ? "Expired" : "Expires",
+    action: "Open server",
+  }),
   notification_failures: (i) => ({ title: `${plural(n(i), "notification destination")}${ofTeam(i)} failing or stopped`, atLabel: "Latest failure", action: "Open notification settings" }),
 };
 
@@ -52,6 +57,7 @@ export const moreNouns: Partial<Record<AttentionKind, string>> = {
   server_failing: "failing servers",
   upstream_signin_lapsed: "servers with a lapsed sign-in",
   capabilities_changed: "servers with held-back changes",
+  server_certificate_expiring: "servers with an expiring client certificate",
   service_account_keys_expiring: "teams with expiring service account keys",
   automation_tokens_expiring: "teams with expiring tokens",
 };

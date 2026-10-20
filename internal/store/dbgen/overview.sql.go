@@ -179,6 +179,68 @@ func (q *Queries) AttentionEmailFailure(ctx context.Context) (time.Time, error) 
 	return latest, err
 }
 
+const attentionExpiringCertificates = `-- name: AttentionExpiringCertificates :many
+SELECT s.id, s.slug, s.name, t.id AS team_id, t.slug AS team_slug, t.name AS team_name, c.client_not_after,
+       (count(*) OVER ())::bigint AS total
+FROM mcp_server_tls c
+JOIN mcp_servers s ON s.id = c.server_id AND s.enabled
+JOIN teams t ON t.id = s.team_id AND t.status = 'active'
+WHERE c.client_not_after IS NOT NULL AND c.client_not_after <= now() + interval '14 days'
+  AND (NOT $1::bool OR s.publish_state = 'published')
+  AND ($2::uuid IS NULL OR s.team_id = $2::uuid)
+ORDER BY c.client_not_after, s.name, s.id
+LIMIT $3
+`
+
+type AttentionExpiringCertificatesParams struct {
+	PublishedOnly bool
+	TeamID        uuid.NullUUID
+	PageSize      int32
+}
+
+type AttentionExpiringCertificatesRow struct {
+	ID             uuid.UUID
+	Slug           string
+	Name           string
+	TeamID         uuid.UUID
+	TeamSlug       string
+	TeamName       string
+	ClientNotAfter *time.Time
+	Total          int64
+}
+
+// Enabled servers of active teams whose client certificate (mTLS) has expired
+// or expires within 14 days; at is the expiry. published_only: the platform's
+// view (published servers only); otherwise one team's (team_id), any state.
+func (q *Queries) AttentionExpiringCertificates(ctx context.Context, arg AttentionExpiringCertificatesParams) ([]AttentionExpiringCertificatesRow, error) {
+	rows, err := q.db.Query(ctx, attentionExpiringCertificates, arg.PublishedOnly, arg.TeamID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AttentionExpiringCertificatesRow{}
+	for rows.Next() {
+		var i AttentionExpiringCertificatesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.TeamID,
+			&i.TeamSlug,
+			&i.TeamName,
+			&i.ClientNotAfter,
+			&i.Total,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const attentionFailingDestinations = `-- name: AttentionFailingDestinations :one
 SELECT count(*)::bigint AS destinations, COALESCE(max(d.last_failure_at), 'epoch'::timestamptz)::timestamptz AS latest
 FROM notification_destinations d LEFT JOIN teams t ON t.id = d.team_id

@@ -86,6 +86,8 @@ var Columns = []Column{
 		AAD: func(k string) []byte { return personsecrets.RequestAAD(k) }},
 	// A machine OAuth client's secret (registry.MachineSecretAAD; decision 73).
 	{Table: "mcp_server_machine_oauth", Column: "client_secret_cipher", Key: "server_id", KeyType: "uuid", AAD: uuidAAD(registry.MachineSecretAAD)},
+	// A server's mTLS client key (registry.TLSKeyAAD: bound to the server and the field).
+	{Table: "mcp_server_tls", Column: "client_key_cipher", Key: "server_id", KeyType: "uuid", AAD: uuidAAD(registry.TLSKeyAAD)},
 	// identity.keyAAD
 	{Table: "signing_keys", Column: "private_key_cipher", Key: "kid", KeyType: "text",
 		AAD: func(k string) []byte { return []byte("signing_key:" + k) }},

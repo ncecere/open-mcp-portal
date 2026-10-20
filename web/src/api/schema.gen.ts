@@ -460,6 +460,7 @@ export interface paths {
          * Register a remote MCP server (editors and above); reads its capabilities at once
          * @description 409 slug_taken when another server uses the slug. 422 url_not_allowed when the URL is refused (details.reason invalid, too_long, userinfo, query, fragment, scheme, private_address or blocked_address; private_address can be allowed by a platform admin in Internal networks). The server is created even when discovery fails; refresh then says why. requirement (optional) names an enabled auth provider (422 provider_not_found otherwise) that is open to the team (422 provider_not_allowed when the provider is restricted and lists neither the team nor, for a server that exists, the server) and its scopes (400 invalid_scope, details.scope). 400 invalid_auth_header also for the reserved MCP-Gateway-Identity, MCP-Gateway-Provider and MCP-Gateway-Provider-Token.
          *     credentials (decision 70) is the server's own credential as up to eight parts (header, bearer, basic, query), instead of authHeaderName and authValue (400 invalid_auth_header when both are sent). 400 too_many_credentials, invalid_credential_kind, invalid_auth_header (a header part's name), invalid_auth_query (a query part's name: 1-64 of letters, digits, dot, hyphen and underscore, never mcp-*), invalid_auth_value and invalid_credential (a duplicate kind and name, or a name on a bearer or basic part), each with details.field credentials[i]. 422 auth_conflict when two parts set Authorization (a header named Authorization, a bearer, a basic part; details.reason authorization_twice) or one does on a server in oauth mode (static_authorization). The values are sealed and never returned; the saved URL is still refused when it has a query (a query part is added to each request to the server, never to the URL).
+         *     tls (decision 74) is the server''s CA bundle and mTLS client certificate with its key (McpServerTlsInput); 422 invalid_tls with details.field and details.reason when it is refused. An automation token can''t send it (403 token_not_allowed, details.field tls).
          *     authMode oauth (docs/phase7-upstream-oauth.md) needs oauth. The portal runs the sign-in discovery again itself (it never trusts endpoints sent by the browser) and, for registration dcr (or auto resolving to it), registers its client before saving: 422 oauth_discovery_failed (details.problems as in DetectAuthResult) or 502 oauth_registration_failed, and nothing is saved. 422 auth_conflict when oauth is combined with a static Authorization header or a requirement (details.reason static_authorization or requirement). 422 registration_unavailable (the chosen or auto registration isn't offered; details.options). 422 client_required (manual without clientId, or without clientSecret unless tokenAuthMethod none). 422 provider_mismatch (platform_provider whose authorization and token endpoints differ from the discovered ones, or turned off). In oauth mode the first capability discovery is skipped (refresh and refreshError null, setupRequired true): someone signs in with authorizeTeamMcpServerSetup first. Audited as mcp_server.create and mcp_server.auth_update (never a secret).
          *     authMode machine_oauth (decision 73, docs/machine-oauth.md) needs machineOAuth: tokenUrl, clientId and clientSecret (400 invalid_machine_oauth; 422 client_secret_required without the secret), and optionally scopes, tokenAuthMethod, audience and resource. The portal gets a token with the client credentials grant and sends it as Authorization: Bearer on every request to the server (discovery, tests, health checks and calls, from everyone alike); the first discovery runs at once with it. 422 auth_conflict (details.reason static_authorization or requirement) as for oauth. 422 url_not_allowed (details.field machineOAuth.tokenUrl) when the token endpoint is refused by the address rules. Audited as mcp_server.create and mcp_server.auth_update (token endpoint, scopes, clientSecretChanged; never a secret or a token). An automation token can't create a server in this mode (403 token_not_allowed).
          */
@@ -543,6 +544,8 @@ export interface paths {
          *     machineOAuth (decision 73): see create. Under approval_required a published server goes back to pending (reason upstream_auth_changed) when it switches to machine_oauth, or its token endpoint, client ID, audience or resource changes, or a scope is added; a new secret alone does not. Any change drops the token the portal had for the server. Audited as mcp_server.auth_update (tokenUrlChanged, clientIdChanged, clientSecretChanged; never a secret or a token). A publisher automation token can't send machineOAuth, or switch a server to this mode (403 token_not_allowed, details.field).
          *
          *     A URL with another origin (scheme, host or port; case, a trailing slash and the path don't count) never keeps the stored static header value, which nobody but its author can read: 422 auth_value_required (details.field authValue) unless the same request sends a new authValue, removes the header (authHeaderName "") or sets authMode none. The same holds for every part of credentials (a header, a bearer, a basic user and password, a query value): a request that moves the URL to another origin must send credentials with every part's value entered again (no keep), or an empty list, or authMode none; otherwise 422 auth_value_required with details.field credentials[i] and details.kind and details.name of the part (the first stored part when the request doesn't send credentials). Nothing changes and nothing is sent to the new host. In oauth mode another origin also erases every connection's tokens and sends the server back to the setup sign-in (as above). The audit entry names oldOrigin and newOrigin.
+         *
+         *     tls (decision 74) sets the server's CA bundle (which replaces the system roots for this server only) and its mTLS client certificate and key: see McpServerTlsInput for the validation (422 invalid_tls) and the origin rule (422 tls_key_required: the stored key and CA never follow a URL to another origin). A changed CA is a review trigger under approval_required (mcp_server.publish_request, reason upstream_tls_changed); a new client certificate is not. An automation token can't send tls (403 token_not_allowed, details.field tls), and on a server that holds a client key it can't change the URL.
          */
         patch: operations["updateTeamMcpServer"];
         trace?: never;
@@ -3397,10 +3400,10 @@ export interface components {
         /** @enum {string} */
         CapabilityKind: "tool" | "resource" | "resource_template" | "prompt";
         /**
-         * @description not_allowed: the URL or an address it resolves to is refused (blocked, or internal and not allowlisted), or the server redirected
+         * @description not_allowed: the URL or an address it resolves to is refused (blocked, or internal and not allowlisted), or the server redirected. tls: the TLS handshake failed (the server's certificate isn't trusted or isn't valid for the host name, or the server refused the portal's client certificate); the message says which and what to do. See McpServerTls.
          * @enum {string}
          */
-        McpErrorClass: "unavailable" | "auth" | "not_found" | "rate_limited" | "bad_request" | "bad_response" | "config" | "timeout" | "too_large" | "not_allowed";
+        McpErrorClass: "unavailable" | "auth" | "not_found" | "rate_limited" | "bad_request" | "bad_response" | "config" | "timeout" | "too_large" | "not_allowed" | "tls";
         CapabilityCounts: {
             /** Format: int64 */
             tools: number;
@@ -3428,6 +3431,8 @@ export interface components {
             message?: string;
             /** @description The latest check was an oauth server's unauthenticated probe that got the expected sign-in challenge (status healthy, shown as "requires sign-in") */
             signInRequired?: boolean;
+            /** @description Things that aren't failures yet, such as a client certificate that expires within 14 days (or has expired) */
+            warnings?: components["schemas"]["ServerWarning"][];
         };
         /** @description A remote MCP server a team registered. The auth header value is never returned. */
         McpServer: {
@@ -3457,6 +3462,8 @@ export interface components {
             authValueHint: string;
             /** @description The parts of the server's own credential, in order, with no values. The single header of a server that has not been saved with the list shows here as one header part */
             credentials?: components["schemas"]["McpServerCredential"][];
+            /** @description The server's TLS settings (decision 74); null when it has none */
+            tls?: components["schemas"]["McpServerTls"] | null;
             /** Format: int32 */
             timeoutSeconds: number;
             enabled: boolean;
@@ -3536,6 +3543,71 @@ export interface components {
             /** @description Keep the stored part of this kind and name with its values (update only; sends no value; not allowed when the URL moves to another origin) */
             keep?: boolean;
         };
+        /** @description A server's TLS settings in a request (decision 74): a CA bundle that replaces the system roots for this server only (a stolen public CA can't impersonate an internal server, and the private CA vouches for nothing else), and a client certificate with its private key for mTLS. Host name verification and TLS 1.2 as the minimum always apply; there is no setting that turns verification off. The private key is sealed with ENCRYPTION_KEY and never returned, logged or audited. A new or changed CA (or removing it) sends a published server back to pending under approval_required (reason upstream_tls_changed); a new client certificate does not. Input is validated when saved (422 invalid_tls, details.field tls.caPem, tls.clientCertPem or tls.clientKeyPem and details.reason: empty, too_large, not_pem, too_many_certificates, private_key_in_certificate_field, not_a_certificate, invalid_certificate, expired, not_yet_valid, not_for_client_authentication, weak_key, weak_signature, encrypted_key, not_a_private_key, invalid_key, key_mismatch, key_without_certificate, key_required, clear_with_other_fields). Moving the URL to another origin never carries the stored key or CA along: 422 tls_key_required unless the same request replaces the client certificate and key, removes them (clientCertPem "") or clears the settings (a stored CA alone is dropped and audited). A platform admin or publisher automation token can't send it (403 token_not_allowed, details.field tls). Omitted fields keep what is stored. */
+        McpServerTlsInput: {
+            /** @description PEM certificates only (at most 10 and 64 KiB; a private key block is refused). The CA that signed the server's certificate, with any intermediates. "" removes the CA (the system roots apply again). */
+            caPem?: string;
+            /** @description The client certificate chain, leaf first (at most 10 certificates). Not expired, for client authentication, RSA 2048 bits or more, ECDSA P-256/P-384/P-521 or Ed25519. Without clientKeyPem it must belong to the stored key (a renewal). "" (with no key) removes the client certificate and its key. */
+            clientCertPem?: string;
+            /** @description One unencrypted PKCS#8, PKCS#1 or SEC1 PEM private key (a passphrase-protected key is refused) that belongs to the first certificate. Sealed with ENCRYPTION_KEY, never returned. */
+            clientKeyPem?: string;
+            /** @description Remove the CA, the client certificate and its key. Not with other fields. */
+            clear?: boolean;
+        };
+        /** @description Public facts about one certificate */
+        TlsCertificate: {
+            subject: string;
+            issuer: string;
+            /** @description Fingerprint of the DER encoding, hex */
+            sha256: string;
+            /** Format: date-time */
+            notBefore: string;
+            /** Format: date-time */
+            notAfter: string;
+            /** @description DNS names and addresses the certificate lists (client certificate only) */
+            names?: string[];
+        };
+        McpServerTlsCa: {
+            /** @description Fingerprint of the set of certificates (their order doesn't matter); what a review covers */
+            sha256: string;
+            certificates: components["schemas"]["TlsCertificate"][];
+        };
+        McpServerTlsClient: {
+            certificate: components["schemas"]["TlsCertificate"];
+            /**
+             * Format: int32
+             * @description Certificates in the chain, the first included
+             */
+            chainLength: number;
+            /** @description The private key is stored (sealed). It is never returned. */
+            hasKey: boolean;
+            /**
+             * @description expiring is within 14 days of notAfter
+             * @enum {string}
+             */
+            status: "valid" | "expiring" | "expired";
+            /**
+             * Format: int32
+             * @description Whole days until notAfter (zero or negative once expired)
+             */
+            daysLeft: number;
+        };
+        /** @description A server's TLS settings as facts about the certificates; never the key. Absent from a server that has none (system roots, no client certificate). */
+        McpServerTls: {
+            /** @description The CA bundle that replaces the system roots for this server */
+            ca?: components["schemas"]["McpServerTlsCa"] | null;
+            client?: components["schemas"]["McpServerTlsClient"] | null;
+        };
+        ServerWarning: {
+            /** @enum {string} */
+            code: "tls_certificate_expiring" | "tls_certificate_expired";
+            message: string;
+            /**
+             * Format: date-time
+             * @description When it expires (or expired)
+             */
+            at?: string;
+        };
         McpServerCreate: {
             /** @description Unique across the platform, immutable */
             slug: string;
@@ -3549,6 +3621,8 @@ export interface components {
             authValue?: string;
             /** @description The server's own credential as parts, instead of authHeaderName and authValue (decision 70) */
             credentials?: components["schemas"]["McpServerCredentialInput"][];
+            /** @description The server's CA bundle and client certificate (decision 74). The server is created even when discovery then fails; refreshError says why (class tls for a handshake problem) */
+            tls?: components["schemas"]["McpServerTlsInput"];
             /**
              * Format: int32
              * @default 30
@@ -3583,6 +3657,8 @@ export interface components {
             authValue?: string;
             /** @description Omit to keep. The server's whole list of parts. Each one keeps its stored values (keep) or has new ones, and a part left out is removed; an empty list removes the credential. It replaces the single header (the legacy columns are cleared when it is stored). Not together with authHeaderName or authValue (400 invalid_auth_header), which can't change a server whose credential is a list (422 credentials_in_use). Adding, changing or removing parts is not a review trigger (nothing new is sent to a new origin), but the review digest covers the kinds and names, so a reviewer's earlier look is stale. Audited in mcp_server.update (kind and name of each part, authValueChanged; never a value). A publisher automation token can't send it for a server that has a credential (403 token_not_allowed) */
             credentials?: components["schemas"]["McpServerCredentialInput"][];
+            /** @description Omit to keep. Changing the CA or the client certificate forgets the stored health and reads the capabilities again (like a URL change); a changed CA is a review trigger under approval_required (reason upstream_tls_changed). Audited in mcp_server.update (fingerprints and what changed; never a key, a ciphertext or a PEM) */
+            tls?: components["schemas"]["McpServerTlsInput"];
             /** Format: int32 */
             timeoutSeconds?: number;
             enabled?: boolean;
@@ -5650,10 +5726,10 @@ export interface components {
             teamSlug?: string;
         };
         /**
-         * @description server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
+         * @description server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within 14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
          * @enum {string}
          */
-        AttentionKind: "server_failing" | "upstream_signin_lapsed" | "review_pending" | "capabilities_changed" | "personal_keys_expiring" | "service_account_keys_expiring" | "automation_tokens_expiring" | "connections_reconsent" | "gateways_disabled" | "rate_limited" | "notification_failures";
+        AttentionKind: "server_failing" | "upstream_signin_lapsed" | "review_pending" | "capabilities_changed" | "personal_keys_expiring" | "service_account_keys_expiring" | "automation_tokens_expiring" | "connections_reconsent" | "gateways_disabled" | "rate_limited" | "notification_failures" | "server_certificate_expiring";
         /** @enum {string} */
         AttentionSeverity: "critical" | "warning" | "info";
         /** @description The server (or gateway) an item is about */
@@ -6047,7 +6123,7 @@ export interface components {
         PublishRequestedData: {
             server: components["schemas"]["NotificationServerRef"];
             /** @enum {string} */
-            reason: "new" | "url_changed" | "upstream_auth_changed" | "requirement_changed";
+            reason: "new" | "url_changed" | "upstream_auth_changed" | "upstream_tls_changed" | "requirement_changed";
             note?: string;
             requestedBy: {
                 /** @enum {string} */
@@ -6082,8 +6158,8 @@ export interface components {
         };
         KeyExpiringData: {
             /** @enum {string} */
-            keyKind: "personal" | "service_account" | "publisher_token" | "platform_token";
-            /** @description The key's or token's name (never its prefix or secret) */
+            keyKind: "personal" | "service_account" | "publisher_token" | "platform_token" | "server_certificate";
+            /** @description The key's or token's name (never its prefix or secret); for server_certificate the server's name */
             name: string;
             /** Format: date-time */
             expiresAt: string;
@@ -6094,6 +6170,8 @@ export interface components {
                 id: string;
                 name: string;
             } | null;
+            /** @description The server, for server_certificate (its mTLS client certificate expires within 14 days; the team's owners, admins and editors are told) */
+            server?: components["schemas"]["NotificationServerRef"] | null;
         };
         NotificationTestData: {
             message: string;

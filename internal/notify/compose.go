@@ -207,9 +207,14 @@ func compose(ev dbgen.NotificationEvent, team *teamInfo) Message {
 		kind := map[apitypes.KeyExpiringDataKeyKind]string{
 			apitypes.KeyExpiringDataKeyKindPersonal: "API key", apitypes.KeyExpiringDataKeyKindServiceAccount: "Service account key",
 			apitypes.KeyExpiringDataKeyKindPublisherToken: "Publisher token", apitypes.KeyExpiringDataKeyKindPlatformToken: "Platform token",
+			apitypes.KeyExpiringDataKeyKindServerCertificate: "Client certificate of",
 		}[d.KeyKind]
 		m.Title = fmt.Sprintf("%s %s expires in %s", kind, nm(d.Name), plural(int(d.DaysLeft), "day", "days"))
 		m.Body = "It stops working on " + d.ExpiresAt.UTC().Format("2006-01-02 15:04 MST") + ". Make a new one and replace it where it is used."
+		if d.KeyKind == apitypes.KeyExpiringDataKeyKindServerCertificate {
+			m.Body = "The server will refuse the portal's TLS client certificate after " + d.ExpiresAt.UTC().Format("2006-01-02 15:04 MST") +
+				". Upload a renewed certificate and key in the server's TLS settings before then."
+		}
 		switch d.KeyKind {
 		case apitypes.KeyExpiringDataKeyKindPersonal:
 			m.Link = &Link{Type: LinkAccountAPIKeys}
@@ -222,6 +227,10 @@ func compose(ev dbgen.NotificationEvent, team *teamInfo) Message {
 			m.Link = &Link{Type: LinkTeamAutomationTokens, TeamSlug: slug}
 		case apitypes.KeyExpiringDataKeyKindPlatformToken:
 			m.Link = &Link{Type: LinkAutomationTokens}
+		case apitypes.KeyExpiringDataKeyKindServerCertificate:
+			if d.Server != nil {
+				m.Link = &Link{Type: LinkServer, ID: d.Server.Id.String(), TeamSlug: slug}
+			}
 		}
 	}
 	m.Title, m.Body = clip(m.Title, 200), clip(m.Body, 500)

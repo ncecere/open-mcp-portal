@@ -179,6 +179,7 @@ func (a *api) createTeamMcpServer(w http.ResponseWriter, r *http.Request) {
 	ci.OAuth, ci.SendIdentity = fromAPIOAuthInput(in.Oauth), in.SendIdentity
 	ci.PersonSecret = fromAPIPersonSecretInput(in.PersonSecret)
 	ci.MachineOAuth = fromAPIMachineInput(in.MachineOAuth)
+	ci.TLS = fromAPITLS(in.Tls)
 	if actor := a.actor(r); actor.IsToken() && !a.tokenMayCreateServer(w, r, ci) {
 		return
 	}
@@ -266,7 +267,7 @@ func (a *api) updateTeamMcpServer(w http.ResponseWriter, r *http.Request) {
 		TimeoutSeconds: in.TimeoutSeconds, Enabled: in.Enabled, SetRequirement: setRequirement, Requirement: fromAPIRequirement(in.Requirement),
 		CapturePayloads: in.CapturePayloads, AuthMode: strPtr(in.AuthMode), OAuth: fromAPIOAuthInput(in.Oauth), SendIdentity: in.SendIdentity,
 		RequiresPresentPerson: in.RequiresPresentPerson, PersonSecret: fromAPIPersonSecretInput(in.PersonSecret),
-		MachineOAuth: fromAPIMachineInput(in.MachineOAuth),
+		MachineOAuth: fromAPIMachineInput(in.MachineOAuth), TLS: fromAPITLS(in.Tls),
 	}, rev)
 	if failed(w, r, err) {
 		return

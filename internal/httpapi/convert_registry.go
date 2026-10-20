@@ -63,7 +63,7 @@ func (a *api) toAPIServer(v registry.ServerView) apitypes.McpServer {
 		EffectivePublishPolicy: apitypes.PublishPolicy(v.EffectivePolicy),
 		PublishRequestedAt:     s.PublishRequestedAt, PublishRequestNote: s.PublishRequestNote,
 		PublishReviewedAt: s.PublishReviewedAt, PublishReviewedByName: nonEmpty(v.ReviewedByName), PublishReviewNote: s.PublishReviewNote,
-		Counts: toAPICounts(v.Counts), PendingChanges: v.PendingChanges, Health: toAPIHealth(v.Health, true),
+		Counts: toAPICounts(v.Counts), PendingChanges: v.PendingChanges, Health: withWarnings(toAPIHealth(v.Health, true), v.Warnings), Tls: toAPITLS(v.TLS),
 		RefreshedAt: s.RefreshedAt, LastRefreshError: s.LastRefreshError,
 		Requirement: toAPIServerRequirement(v.Requirement), CapturePayloads: &s.CapturePayloads,
 		AuthMode: authModePtr(s), Oauth: a.toAPIServerOAuth(v), PersonSecret: toAPIPersonSecretSettings(v.PersonSecret), MachineOAuth: toAPIMachineOAuth(v), SendIdentity: &s.SendIdentity, RequiresPresentPerson: &s.RequiresPresentPerson, Protocol: toAPIProtocol(s), ReviewDigest: nonEmpty(v.ReviewDigest),
@@ -314,6 +314,62 @@ func toAPINetworkCheck(r upstream.CheckResult) apitypes.NetworkCheckResult {
 			addrs[i] = apitypes.NetworkCheckAddress{Address: a.Address, Allowed: a.Allowed, Reason: apitypes.NetworkCheckAddressReason(a.Reason)}
 		}
 		out.ResolvedAddresses = &addrs
+	}
+	return out
+}
+
+// withWarnings adds a server's warnings (an expiring client certificate) to
+// its health.
+func withWarnings(h apitypes.ServerHealth, ws []registry.HealthWarning) apitypes.ServerHealth {
+	if len(ws) == 0 {
+		return h
+	}
+	out := make([]apitypes.ServerWarning, len(ws))
+	for i, w := range ws {
+		at := w.At
+		out[i] = apitypes.ServerWarning{Code: apitypes.ServerWarningCode(w.Code), Message: w.Message, At: &at}
+	}
+	h.Warnings = &out
+	return h
+}
+
+func toAPICert(c upstream.CertInfo) apitypes.TlsCertificate {
+	out := apitypes.TlsCertificate{Subject: c.Subject, Issuer: c.Issuer, Sha256: c.SHA256, NotBefore: c.NotBefore, NotAfter: c.NotAfter}
+	if len(c.Names) > 0 {
+		out.Names = &c.Names
+	}
+	return out
+}
+
+// toAPITLS is a server's TLS settings as facts about its certificates: never
+// the key or any PEM (nil when it has none).
+func toAPITLS(v *registry.TLSView) *apitypes.McpServerTls {
+	if v == nil {
+		return nil
+	}
+	out := &apitypes.McpServerTls{}
+	if v.CA != nil {
+		ca := &apitypes.McpServerTlsCa{Sha256: v.CA.SHA256, Certificates: make([]apitypes.TlsCertificate, len(v.CA.Certificates))}
+		for i, c := range v.CA.Certificates {
+			ca.Certificates[i] = toAPICert(c)
+		}
+		out.Ca = ca
+	}
+	if c := v.Client; c != nil {
+		out.Client = &apitypes.McpServerTlsClient{Certificate: toAPICert(c.Leaf), ChainLength: int32(c.ChainLength), HasKey: c.HasKey,
+			Status: apitypes.McpServerTlsClientStatus(c.Status), DaysLeft: int32(c.DaysLeft)}
+	}
+	return out
+}
+
+// fromAPITLS reads a request's tls object (nil: absent).
+func fromAPITLS(in *apitypes.McpServerTlsInput) *registry.TLSInput {
+	if in == nil {
+		return nil
+	}
+	out := &registry.TLSInput{CAPEM: in.CaPem, ClientCertPEM: in.ClientCertPem, ClientKeyPEM: in.ClientKeyPem}
+	if in.Clear != nil {
+		out.Clear = *in.Clear
 	}
 	return out
 }

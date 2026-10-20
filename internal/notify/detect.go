@@ -252,7 +252,9 @@ func (s *Service) connectionReconsent(ctx context.Context, q *dbgen.Queries, con
 // ScanKeys emits key.expiring for every active key or token that was made
 // for more than 7 days and expires within 7 days: personal keys (to the
 // person), service account keys and publisher tokens (the team's owners and
-// admins) and platform tokens (platform admins). The dedup key
+// admins) and platform tokens (platform admins); and for every enabled
+// server whose mTLS client certificate expires within 14 days (keyKind
+// server_certificate; the team's owners, admins and editors). The dedup key
 // key.expiring:<kind>:<id> makes the scan idempotent. It reports how many
 // events are new.
 func (s *Service) ScanKeys(ctx context.Context) (int, error) {
@@ -296,6 +298,23 @@ func (s *Service) ScanKeys(ctx context.Context) (int, error) {
 		}
 		count(Emit(ctx, s.q, Event{Type: KeyExpiring, DedupKey: "key.expiring:" + subject + ":" + k.ID.String(), TeamID: k.TeamID.UUID, SubjectType: "automation_token",
 			SubjectID: k.ID.String(), Data: apitypes.KeyExpiringData{KeyKind: kind, Name: clip(k.Name, 100), ExpiresAt: k.ExpiresAt.UTC(), DaysLeft: days(k.ExpiresAt)}}))
+	}
+	certs, err := s.q.ListExpiringServerCertificates(ctx)
+	if err != nil {
+		return emitted, err
+	}
+	for _, c := range certs {
+		// 14 days ahead, once per certificate (a renewed one has its own
+		// fingerprint, so it warns again when its turn comes): to the team's
+		// owners, admins and editors.
+		ref := serverRef(c.ID, c.Slug, c.Name)
+		fp := ""
+		if c.ClientCertSha256 != nil {
+			fp = ":" + clip(*c.ClientCertSha256, 16)
+		}
+		count(Emit(ctx, s.q, Event{Type: KeyExpiring, DedupKey: "key.expiring:server_certificate:" + c.ID.String() + fp, TeamID: c.TeamID, SubjectType: "mcp_server",
+			SubjectID: c.ID.String(), Data: apitypes.KeyExpiringData{KeyKind: apitypes.KeyExpiringDataKeyKindServerCertificate, Name: clip(c.Name, 100),
+				ExpiresAt: c.ClientNotAfter.UTC(), DaysLeft: days(*c.ClientNotAfter), Server: &ref}}))
 	}
 	if emitted > 0 {
 		slog.InfoContext(ctx, "notifications: expiring keys found", "events", emitted)

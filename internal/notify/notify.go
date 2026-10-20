@@ -65,6 +65,11 @@ const (
 	KeyServiceAccount = "service_account"
 	KeyPublisherToken = "publisher_token"
 	KeyPlatformToken  = "platform_token"
+	// KeyServerCertificate is a server's mTLS client certificate (decision 74):
+	// the team's owners, admins and editors are told 14 days ahead.
+	KeyServerCertificate = "server_certificate"
+	// ServerCertWarnDays is how long before expiry a server's client certificate warns.
+	ServerCertWarnDays = 14
 )
 
 // Limits and schedule (docs/notifications.md, "Delivery").

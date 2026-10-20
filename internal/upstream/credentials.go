@@ -112,6 +112,9 @@ func (t Target) Secrets() []string {
 	add(t.IdentityValue)
 	add(t.ProviderToken)
 	add(t.BearerToken)
+	for _, k := range t.TLS.secrets() {
+		add(k) // the client key, should a message ever quote it
+	}
 	return out
 }
 

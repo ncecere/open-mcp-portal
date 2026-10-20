@@ -118,7 +118,7 @@ describe("call error classes", () => {
     "gateway_disabled", "no_access", "role", "unknown",
     "server_disabled", "not_published", "not_approved", "changed", "gone", "team_archived",
     "invalid_params", "invalid_cursor",
-    "unavailable", "auth", "not_found", "rate_limited", "bad_request", "bad_response", "config", "timeout", "too_large", "not_allowed",
+    "unavailable", "auth", "not_found", "rate_limited", "bad_request", "bad_response", "config", "timeout", "too_large", "not_allowed", "tls",
   ];
 
   it("have a plain label for every class the backend records", () => {

@@ -307,3 +307,23 @@ RETURNING *;
 
 -- name: DeleteMachineOAuth :exec
 DELETE FROM mcp_server_machine_oauth WHERE server_id = $1;
+
+-- name: GetMCPServerTLS :one
+-- A server's TLS settings (docs/registry.md "TLS to the server"); no row: the
+-- system roots and no client certificate.
+SELECT * FROM mcp_server_tls WHERE server_id = @server_id;
+
+-- name: ListMCPServerTLSFor :many
+SELECT * FROM mcp_server_tls WHERE server_id = ANY(@server_ids::uuid[]);
+
+-- name: UpsertMCPServerTLS :one
+INSERT INTO mcp_server_tls (server_id, ca_pem, ca_sha256, client_cert_pem, client_key_cipher, client_cert_sha256, client_not_after)
+VALUES (@server_id, @ca_pem, @ca_sha256, @client_cert_pem, @client_key_cipher, @client_cert_sha256, @client_not_after)
+ON CONFLICT (server_id) DO UPDATE
+SET ca_pem = EXCLUDED.ca_pem, ca_sha256 = EXCLUDED.ca_sha256, client_cert_pem = EXCLUDED.client_cert_pem,
+    client_key_cipher = EXCLUDED.client_key_cipher, client_cert_sha256 = EXCLUDED.client_cert_sha256,
+    client_not_after = EXCLUDED.client_not_after, updated_at = now()
+RETURNING *;
+
+-- name: DeleteMCPServerTLS :exec
+DELETE FROM mcp_server_tls WHERE server_id = @server_id;

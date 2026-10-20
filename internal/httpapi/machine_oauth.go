@@ -59,15 +59,17 @@ func toAPIMachineDetection(m *registry.MachineDetection) *apitypes.DetectAuthMac
 	return out
 }
 
-// tokenMayCreateServer is the secret-mode rule of createTeamMcpServer for
+// tokenMayCreateServer is the secret rule of createTeamMcpServer for
 // automation tokens: a token may not create a server in machine_oauth or
-// person_secret mode or send machineOAuth or personSecret (a client secret,
-// and the token endpoint it goes to, are a person's to enter, and so is
-// where people's own keys are sent). Refused with 403 token_not_allowed and
-// details.field.
+// person_secret mode or send machineOAuth, personSecret or tls (a client
+// secret, and the token endpoint it goes to, a client key and a CA are a
+// person's to enter, and so is where people's own keys are sent). Refused with
+// 403 token_not_allowed and details.field.
 func (a *api) tokenMayCreateServer(w http.ResponseWriter, r *http.Request, in registry.CreateInput) bool {
 	field := ""
 	switch {
+	case in.TLS != nil:
+		field = "tls"
 	case in.MachineOAuth != nil:
 		field = "machineOAuth"
 	case in.PersonSecret != nil:

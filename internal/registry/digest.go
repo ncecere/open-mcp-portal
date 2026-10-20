@@ -15,7 +15,12 @@ import (
 
 // The review digest binds an approval to what the reviewer saw (docs/
 // threat-model.md, F-2): a SHA-256 over the server's URL, auth mode, the kind
-// and name of each part of its own credential (never a value) and
+// and name of each part of its own credential (never a value), the
+// fingerprints of its CA bundle and client certificate when it has them (a new
+// or changed CA is a trust change, decision 74), the placement of each
+// person's own secret (person_secret mode, decision 72), its machine OAuth
+// client as a reviewer sees it (token endpoint, client ID, scopes, audience and
+// resource, never the secret; machine_oauth mode, decision 73), and its
 // requirement (and its requires-a-present-person switch when on) and over
 // every listed (not gone) capability's kind, name and fingerprint (and its
 // effective requires-a-present-person, when true), sorted. A refresh that
@@ -27,7 +32,7 @@ import (
 
 // digestVersion is hashed first so a future change of what is covered can't
 // collide with this one.
-const digestVersion = "omp-review-v2"
+const digestVersion = "omp-review-v3"
 
 // CapabilityRef is one listed capability as the digest covers it.
 // PresentPerson is whether calls relayed for a person need that person
@@ -49,7 +54,7 @@ func CapabilityRefOf(sv dbgen.McpServer, kind, name, fingerprint string, present
 // are the server's credential parts, as ServerView lists them; a server whose
 // credential is its legacy header (and none given) is covered by that header.
 func ReviewDigest(sv dbgen.McpServer, caps []CapabilityRef, parts ...CredentialView) string {
-	return ReviewDigestMachine(sv, caps, nil, parts...)
+	return reviewDigest(sv, caps, nil, tlsDigest{}, parts)
 }
 
 // ReviewDigestMachine is ReviewDigest for a server in machine_oauth mode: the
@@ -58,6 +63,13 @@ func ReviewDigest(sv dbgen.McpServer, caps []CapabilityRef, parts ...CredentialV
 // the secret), so changing any of them stales an earlier look. Other servers'
 // digests do not include it.
 func ReviewDigestMachine(sv dbgen.McpServer, caps []CapabilityRef, machine *MachineOAuthView, parts ...CredentialView) string {
+	return reviewDigest(sv, caps, machine, tlsDigest{}, parts)
+}
+
+// reviewDigest is the digest over everything a reviewer approves: machine is
+// the machine OAuth client (nil: none or not that mode) and tls the
+// fingerprints of the CA and client certificate (zero: none).
+func reviewDigest(sv dbgen.McpServer, caps []CapabilityRef, machine *MachineOAuthView, tls tlsDigest, parts []CredentialView) string {
 	h := sha256.New()
 	put := func(s string) {
 		// Length-prefixed, so no field can run into the next.
@@ -109,6 +121,14 @@ func ReviewDigestMachine(sv dbgen.McpServer, caps []CapabilityRef, machine *Mach
 		put(machine.Audience)
 		put(machine.Resource)
 	}
+	if tls != (tlsDigest{}) {
+		// Only when set, so the digest of a server without TLS settings changes
+		// only with the version: the fingerprint of the CA bundle that replaces
+		// the system roots for it, and of the client certificate it presents.
+		put("tls")
+		put(tls.CASHA)
+		put(tls.ClientSHA)
+	}
 	if sv.RequiresPresentPerson {
 		// Only when on, so the digest of every server without the switch is
 		// what it was before the switch existed.
@@ -145,12 +165,17 @@ func digests(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServer) (
 	if err != nil {
 		return nil, err
 	}
-	return digestsWith(ctx, q, servers, creds, machines)
+	tlsByServer, err := tlsRows(ctx, q, servers)
+	if err != nil {
+		return nil, err
+	}
+	return digestsWith(ctx, q, servers, creds, machines, tlsByServer)
 }
 
-// digestsWith is digests with the servers' credential parts already read.
+// digestsWith is digests with the servers' credential parts, machine clients
+// and TLS settings already read.
 func digestsWith(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServer, creds map[uuid.UUID][]CredentialView,
-	machines map[uuid.UUID]*MachineOAuthView) (map[uuid.UUID]string, error) {
+	machines map[uuid.UUID]*MachineOAuthView, tls map[uuid.UUID]*dbgen.McpServerTl) (map[uuid.UUID]string, error) {
 	ids := make([]uuid.UUID, len(servers))
 	for i, sv := range servers {
 		ids[i] = sv.ID
@@ -169,7 +194,7 @@ func digestsWith(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServe
 		for i, r := range byServer[sv.ID] {
 			refs[i] = CapabilityRefOf(sv, r.Kind, r.Name, r.Fingerprint, r.RequiresPresentPerson)
 		}
-		out[sv.ID] = ReviewDigestMachine(sv, refs, machines[sv.ID], creds[sv.ID]...)
+		out[sv.ID] = reviewDigest(sv, refs, machines[sv.ID], digestOf(tls[sv.ID]), creds[sv.ID])
 	}
 	return out, nil
 }

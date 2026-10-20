@@ -326,3 +326,15 @@ UPDATE users SET email_verified = @verified WHERE id = @id AND email_verified IS
 -- name: LockPlatformNotificationDestinations :exec
 -- Serialises creating platform destinations, so the limit of 10 holds.
 SELECT pg_advisory_xact_lock(hashtextextended('omp.notification-destinations.platform', 0));
+
+-- name: ListExpiringServerCertificates :many
+-- Enabled servers of active teams whose client certificate (mTLS) expires
+-- within 14 days and has not expired yet (decision 74); the fingerprint makes
+-- a renewed certificate a new subject for its own warning.
+SELECT s.id, s.slug, s.name, s.team_id, c.client_not_after, c.client_cert_sha256
+FROM mcp_server_tls c
+JOIN mcp_servers s ON s.id = c.server_id AND s.enabled
+JOIN teams t ON t.id = s.team_id AND t.status = 'active'
+WHERE c.client_not_after IS NOT NULL AND c.client_not_after > now() AND c.client_not_after <= now() + interval '14 days'
+ORDER BY c.client_not_after, s.id
+LIMIT 500;
