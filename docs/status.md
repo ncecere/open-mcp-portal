@@ -1,7 +1,11 @@
 # Status and handoff
 
-Last updated: 2026-10-18. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.3.1, **cut on 2026-10-20**
-(release notes: [releases/v0.3.1.md](releases/v0.3.1.md); earlier: [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+Last updated: 2026-10-18. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.3.2, **cut on 2026-10-20**
+(release notes: [releases/v0.3.2.md](releases/v0.3.2.md); earlier: [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+
+## v0.3.2 (2026-10-20)
+
+Per-person secrets, machine OAuth, mTLS and a private CA (migrations `00024` to `00026`): see the [release notes](releases/v0.3.2.md). Verified by tests on each branch and the merged tree, and a browser check of the add-server form; **not** run against a real authorization server, a real server that wants a per-person key or a client certificate, or checked in a browser beyond the form.
 
 ## v0.3.1 (2026-10-20)
 
