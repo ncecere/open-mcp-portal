@@ -1,0 +1,30 @@
+# Tracing (docs/deploy.md "Tracing"): with OTEL_EXPORTER_OTLP_ENDPOINT set, the
+# portal exports spans over OTLP/HTTP (port 4318) to a collector, and the
+# base's default-deny egress would drop them silently. This allows exactly
+# that, to a collector in the namespace "observability" (patch the selectors to
+# yours). Not in the kustomization's resources: add it there when tracing is on.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: open-mcp-portal-egress-otlp
+  labels:
+    app.kubernetes.io/name: open-mcp-portal
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: open-mcp-portal
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: open-mcp-portal
+      app.kubernetes.io/component: server
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: opentelemetry-collector
+      ports:
+        - protocol: TCP
+          port: 4318

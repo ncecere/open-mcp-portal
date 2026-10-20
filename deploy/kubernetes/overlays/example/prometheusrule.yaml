@@ -1,0 +1,155 @@
+# An example PrometheusRule for the Prometheus Operator: the same groups as
+# deploy/prometheus/omp-alerts.yaml (a test keeps them identical; edit that file
+# and copy its groups here). Not in the kustomization's resources: it needs the
+# operator's CRDs. Add it there (or copy it) when the cluster has them; the
+# release label is whatever your Prometheus selects rules by. The job label in
+# the two "down" alerts is the Service's name, which is what servicemonitor.yaml
+# produces.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: open-mcp-portal
+  namespace: open-mcp-portal
+  labels:
+    app.kubernetes.io/name: open-mcp-portal
+    app.kubernetes.io/part-of: open-mcp-portal
+    release: prometheus
+spec:
+  groups:
+    - name: omp.availability
+      rules:
+        - alert: OMPDown
+          expr: absent(up{job="open-mcp-portal"} == 1)
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Open MCP Portal is down
+            description: No replica of the portal has been scraped successfully for 5 minutes.
+            runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompdown
+        - alert: OMPReplicaDown
+          expr: up{job="open-mcp-portal"} == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: A portal replica is not being scraped
+            description: "{{ $labels.instance }} has not answered its /metrics scrape for 10 minutes."
+            runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompreplicadown
+        - alert: OMPHTTPServerErrors
+          expr: |
+            sum(rate(omp_http_requests_total{code="5xx"}[10m])) / sum(rate(omp_http_requests_total[10m])) > 0.05
+            and sum(rate(omp_http_requests_total[10m])) > 0.05
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: More than 5% of the portal's HTTP requests fail with a server error
+            description: "{{ $value | humanizePercentage }} of requests over the last 10 minutes answered 5xx."
+            runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#omphttpservererrors
+        - alert: OMPDBPoolSaturated
+          expr: omp_db_pool_acquired_connections / omp_db_pool_max_connections > 0.9
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: The portal's PostgreSQL connection pool is nearly exhausted
+            description: "{{ $labels.instance }} has had more than 90% of its connections in use for 10 minutes."
+            runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompdbpoolsaturated
+    - name: omp.mcp
+      rules:
+        - alert: OMPUpstreamErrorRatioHigh
+          expr: |
+            sum(rate(omp_mcp_requests_total{method="tools/call",outcome=~"upstream_error|timeout|too_large"}[10m]))
+            / sum(rate(omp_mcp_requests_total{method="tools/call"}[10m])) > 0.2
+            and sum(rate(omp_mcp_requests_total{method="tools/call"}[10m])) > 0.05
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Over 20% of tool calls fail at the MCP servers
+            description: "{{ $value | humanizePercentage }} of tool calls over the last 10 minutes ended as upstream_error, timeout or too_large."
+            runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompupstreamerrorratiohigh
+        - alert: OMPCallLatencyHigh
+          expr: histogram_quantile(0.95, sum by (gateway, server, le) (rate(omp_mcp_call_duration_seconds_bucket[10m]))) > 10
+          for: 15m
+          labels:
+            severity: info
+          annotations:
+            summary: Calls to a server are slow
+            description: "The 95th percentile of calls to {{ $labels.server }} through {{ $labels.gateway }} is {{ $value | humanizeDuration }}."
+            runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompcalllatencyhigh
+        - alert: OMPRateLimitingSustained
+          expr: sum by (limit) (rate(omp_mcp_rate_limited_total[10m])) > 0.2
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Requests are being refused by a rate limit
+            description: "The {{ $labels.limit }} limit has refused more than 12 requests a minute for 15 minutes."
+            runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompratelimitingsustained
+        - alert: OMPServersFailing
+          expr: max(omp_mcp_servers{state="failing"}) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Enabled MCP servers are failing their health checks
+            description: "{{ $value }} enabled MCP server(s) failed their latest health check, for 15 minutes."
+            runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompserversfailing
+        - alert: OMPProviderRefreshRefused
+          expr: sum by (provider) (increase(omp_provider_token_refresh_total{result="refused"}[30m])) > 3
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: A provider refuses to renew people's access
+            description: "{{ $labels.provider }} refused {{ $value | humanize }} token refreshes in 30 minutes: its client secret or the grants may be revoked."
+            runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompproviderrefreshrefused
+        - alert: OMPPayloadCaptureErrors
+          expr: sum(increase(omp_payload_capture_errors_total[30m])) > 0
+          for: 5m
+          labels:
+            severity: info
+          annotations:
+            summary: Payload capture is failing
+            description: "{{ $value | humanize }} captures failed in 30 minutes (the calls themselves were served and recorded)."
+            runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#omppayloadcaptureerrors
+    - name: omp.background
+      rules:
+        - alert: OMPRetentionStale
+          expr: time() - max by (kind) (omp_retention_last_success_timestamp_seconds) > 3600
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Retention has not purged a kind of data for over an hour
+            description: "Nothing has purged {{ $labels.kind }} successfully for {{ $value | humanizeDuration }} (it runs every RETENTION_INTERVAL, 15 minutes by default)."
+            runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompretentionstale
+        - alert: OMPUsageRollupStale
+          expr: time() - max(omp_usage_rollup_last_success_timestamp_seconds) > 3600
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: The usage rollup has not completed for over an hour
+            description: "The rollup last succeeded {{ $value | humanizeDuration }} ago (it runs every 5 minutes); Usage in the UI is behind."
+            runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompusagerollupstale
+        - alert: OMPNoLoopLeader
+          expr: max by (loop) (omp_loop_leader) == 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: No replica is running a background loop
+            description: "No replica has led the {{ $labels.loop }} loop for 30 minutes."
+            runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompnoloopleader
+        - alert: OMPNotificationDeliveryFailures
+          expr: sum by (channel) (increase(omp_notification_deliveries_total{outcome="failed"}[1h])) > 3
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Notifications are failing to be delivered
+            description: "{{ $value | humanize }} {{ $labels.channel }} notifications failed for good in the last hour."
+            runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompnotificationdeliveryfailures

@@ -16,7 +16,7 @@ K8S_TOOLS   := $(CURDIR)/bin/k8s-tools
 KUSTOMIZE   := $(K8S_TOOLS)/kustomize-$(KUSTOMIZE_VERSION)/kustomize
 KUBECONFORM := $(K8S_TOOLS)/kubeconform-$(KUBECONFORM_VERSION)/kubeconform
 
-.PHONY: dev-seed help deps-up deps-down generate check-generated build run migrate fake-mcp fake-oauth example-mail example-mail-fake example-mail-smoke test test-integration test-ci lint actionlint fmt web web-test web-dev docker demo demo-down k8s-validate k8s-smoke
+.PHONY: dev-seed help deps-up deps-down generate check-generated build run migrate fake-mcp fake-oauth example-mail example-mail-fake example-mail-smoke test test-integration test-ci lint actionlint fmt web web-test web-dev docker demo demo-down k8s-validate k8s-smoke prom-check
 
 help: ## Show targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -118,6 +118,17 @@ $(KUBECONFORM):
 
 k8s-validate: $(KUSTOMIZE) $(KUBECONFORM) ## Render the Kubernetes base and overlays; validate with kubeconform
 	KUSTOMIZE=$(KUSTOMIZE) KUBECONFORM=$(KUBECONFORM) deploy/kubernetes/scripts/validate.sh
+
+# promtool, from the PATH or the pinned Prometheus image (docker; the container is removed).
+PROMTOOL_IMAGE ?= prom/prometheus:v3.15.0
+
+prom-check: ## promtool check rules and test rules on deploy/prometheus (local promtool, else docker)
+	@if command -v promtool >/dev/null 2>&1; then \
+		cd deploy/prometheus && promtool check rules omp-alerts.yaml && promtool test rules omp-alerts.test.yaml; \
+	else \
+		docker run --rm --entrypoint sh -v "$(CURDIR)/deploy/prometheus:/rules:ro" -w /rules $(PROMTOOL_IMAGE) \
+			-c 'promtool check rules omp-alerts.yaml && promtool test rules omp-alerts.test.yaml'; \
+	fi
 
 k8s-smoke: ## Apply the Kubernetes base to a throwaway kind cluster and check it (docker, kind, kubectl, jq; SMOKE_CNI=calico enforces NetworkPolicy)
 	scripts/k8s-smoke.sh
