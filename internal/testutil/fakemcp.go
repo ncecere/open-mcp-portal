@@ -571,11 +571,14 @@ func (f *FakeMCP) EnableGatewayTools() {
 	f.gatewayTools = true
 }
 
-// EnableEchoSecrets adds two tools for payload capture tests: echo_secrets
+// EnableEchoSecrets adds three tools for payload capture tests: echo_secrets
 // returns, as text, every credential it received (the identity token, the
 // provider token and the Authorization and X-Api-Key header values), as a
-// misbehaving server might; image returns an image content item. Never
-// enabled by cmd/fakemcp.
+// misbehaving server might; echo_tokens returns only the platform provider
+// token (MCP-Gateway-Provider-Token) and the bearer token (Authorization
+// without "Bearer "), verbatim, so that no pattern rule such as "Bearer ..."
+// can hide a missing exact-value redaction; image returns an image content
+// item. Never enabled by cmd/fakemcp.
 func (f *FakeMCP) EnableEchoSecrets() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -804,6 +807,13 @@ func (f *FakeMCP) server() *mcp.Server {
 					h.Get("MCP-Gateway-Provider-Token"), h.Get("Authorization"), h.Get("X-Api-Key"))},
 				&mcp.TextContent{Text: string(req.Params.Arguments)},
 			}}, nil
+		})
+		s.AddTool(&mcp.Tool{Name: "echo_tokens", Title: "Echo tokens", Description: "Returns the provider token and the bearer token it received, verbatim.",
+			InputSchema: map[string]any{"type": "object"}}, func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			h := headerOf(req)
+			f.sawCall("echo_tokens", h)
+			return fakeText(fmt.Sprintf("provider_token=%s oauth_token=%s end", h.Get("MCP-Gateway-Provider-Token"),
+				strings.TrimPrefix(h.Get("Authorization"), "Bearer "))), nil
 		})
 		s.AddTool(&mcp.Tool{Name: "image", Title: "Image", Description: "Returns an image.", InputSchema: map[string]any{"type": "object"}},
 			func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {

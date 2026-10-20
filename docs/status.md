@@ -229,8 +229,8 @@ server allow-list).
     dates; "Nothing deleted" in Retention's last run. Not re-checked in a browser after the fixes.
   - Verified: `make generate`, gofmt, vet, build, `go test ./...`, `make test-integration` (race), `make k8s-validate`,
     actionlint; web typecheck, 421 Vitest tests, build, `check:styling`, `check:size`.
-  - Gaps: CI never run on GitHub; the kind smoke test (`k8s-smoke`) came later (2026-10-18); provider-token redaction has unit tests only, no
-    end-to-end test through a provider-backed server.
+  - Gaps: CI never run on GitHub; the kind smoke test (`k8s-smoke`) came later (2026-10-18); provider-token redaction had unit tests only (the end-to-end
+    test came in v0.2.2: `TestEchoedProviderTokenIsRedactedEverywhere`).
 - **Deployment (Phase 6 slice): done, not on a cluster.** Distroless image (`make docker`; `--target fakemcp` for the
   demo), `compose.demo.yaml` (`make demo`: gateway + Postgres + fake MCP server, dev sign-in), Kustomize base and
   example overlay in `deploy/kubernetes` (one Deployment with a migrate init container, Service, PDB, NetworkPolicies,
@@ -284,8 +284,8 @@ An old `open-mcp-gateway` dev database moves with `scripts/migrate-dev-db.sh`.
 
 The plan after v0.1.0 is [roadmap.md](roadmap.md): v0.2 is MCP 2026-07-28 support and the team pilot. The list below is what v0.1.0 left open.
 
-1. A real Google or Microsoft auth provider for delegated credentials (`make example-mail` against real Gmail), and an
-   end-to-end test that a provider token echoed by a server is redacted from a captured payload.
+1. A real Google or Microsoft auth provider for delegated credentials (`make example-mail` against real Gmail). (The
+   end-to-end test that a provider token echoed by a server is redacted from a captured payload exists since v0.2.2.)
 2. Check the v0.1.0 release on GitHub: `ci.yml` on `main`, then `image.yml` on the tag (digest, signature with
    `cosign verify`, SBOM assets); fix what only GitHub's runners show.
 3. Deployment follow-ups: an upgrade test from the previous release's image on kind (the kind smoke test, `make k8s-smoke`, exists since
