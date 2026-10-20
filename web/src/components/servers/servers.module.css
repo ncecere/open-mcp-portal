@@ -152,6 +152,13 @@
   color: var(--color-text-muted);
 }
 
+/* Why Add's identity switch starts where it does. */
+.identityNote {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
 /* ---------------- forms ---------------- */
 
 /* A field across both columns of a FormSection. */
