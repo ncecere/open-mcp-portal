@@ -3991,8 +3991,8 @@ paths:
         server and the origin it has now, and never returned, logged or audited (person_secret.create, person_secret.rotate;
         person_secret.agents_update when only allowAgents changes). The request names the origin the person was shown.
         404 server_not_found (no such server, or one the caller may not use through a gateway); 409 not_person_secret;
-        409 server_changed (another origin than the one shown: reload); 400 invalid_secret (no origin); 422
-        invalid_secret_value (8-4096 characters on one line); 422 secret_required (no key stored and none sent); 403
+        409 server_changed (another origin than the one shown: reload); 400 invalid_secret (no origin); 400
+        invalid_secret_value (8-4096 characters on one line); 400 secret_required (no key stored and none sent); 403
         when useForSetup is asked by someone who is not an editor of the server''s team. 429 slow_down (20 a minute per
         person, shared with revokeMyServerSecret).'
       requestBody:
@@ -7360,7 +7360,7 @@ components:
         personSecret:
           allOf:
           - $ref: '#/components/schemas/PersonSecretInput'
-          description: Required with authMode person_secret (422 invalid_person_secret otherwise); ignored for other
+          description: Required with authMode person_secret (400 invalid_person_secret otherwise); ignored for other
             modes. How each person's own secret is sent. Nobody has entered a key yet, so capabilities are not read
             (McpServerCreated.setupRequired); an editor enters theirs under Account > My connections, choosing to read
             the server with it
