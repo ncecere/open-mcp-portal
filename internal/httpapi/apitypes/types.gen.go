@@ -3882,7 +3882,7 @@ type McpCall struct {
 	// ClientName clientInfo.name from initialize, when sent
 	ClientName *string `json:"clientName,omitempty"`
 
-	// ErrorClass Why a call was denied or failed, for example no_access, role, unknown, key_scope (the API key is limited to other gateways), gateway_disabled or an unavailability reason. For capabilities that require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or server_not_allowed (connected, but the person hasn't allowed this server, at its current address, to use the account); denied with service_account, provider_disabled, provider_not_allowed (the provider is restricted and its access list excludes the server), person_not_present (an agent's call whose server or capability requires a present person) or, for an agent's call for a person, person_no_account or person_suspended; needs_authorization with needs_connection for an agent's call (the person must connect an account; the answer was a tool error with no link); upstream_error with provider_unavailable.
+	// ErrorClass Why a call was denied or failed, for example no_access, role, unknown, key_scope (the API key is limited to other gateways), gateway_disabled or an unavailability reason. For capabilities that require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or server_not_allowed (connected, but the person hasn't allowed this server, at its current address, to use the account); denied with service_account, provider_disabled, provider_not_allowed (the provider is restricted and its access list excludes the server), person_not_present (an agent's call whose server or capability requires a present person) or, for an agent's call for a person, person_no_account or person_suspended; needs_authorization with needs_connection for an agent's call (the person must connect an account; the answer was a tool error with no link); upstream_error with provider_unavailable. For a server where each person enters their own key (decision 72): needs_authorization with secret_missing or secret_rejected (the answer carried the link, or for an agent's call a tool error with none) or agents_not_allowed (an agent's call, the person has a key but hasn't allowed agents); denied with service_account or person_suspended.
 	ErrorClass *string `json:"errorClass,omitempty"`
 
 	// ExposedName The tool or prompt name, or the exposed resource URI, the client used (absent for list calls)
@@ -4139,7 +4139,7 @@ type McpServerCreate struct {
 	Name        string                      `json:"name"`
 	Oauth       *McpServerOAuthInput        `json:"oauth,omitempty"`
 
-	// PersonSecret Required with authMode person_secret (422 invalid_person_secret otherwise); ignored for other modes. How each person's own secret is sent. Nobody has entered a key yet, so capabilities are not read (McpServerCreated.setupRequired); an editor enters theirs under Account > My connections, choosing to read the server with it
+	// PersonSecret Required with authMode person_secret (400 invalid_person_secret otherwise); ignored for other modes. How each person's own secret is sent. Nobody has entered a key yet, so capabilities are not read (McpServerCreated.setupRequired); an editor enters theirs under Account > My connections, choosing to read the server with it
 	PersonSecret *PersonSecretInput `json:"personSecret,omitempty"`
 
 	// Requirement Absent or null; no user authorization
