@@ -43,7 +43,7 @@ export const maxUrl = 500;
 
 /** Why a key fetch failed, in words (AgentPlatformFetch.error). */
 export const fetchErrorLabels: Record<string, string> = {
-  not_allowed: "The portal may not connect to the JWKS address. Internal addresses need an entry in Admin › Internal networks; loopback and metadata addresses are never allowed.",
+  not_allowed: "The portal may not connect to the JWKS address. It must use https (plain http is never allowed). Internal addresses need an entry in Admin › Internal networks; loopback and metadata addresses are never allowed.",
   redirect: "The JWKS address redirected. The portal never follows redirects: enter the final address.",
   timeout: "The platform didn't answer in 5 seconds.",
   unreachable: "The portal couldn't reach the platform.",

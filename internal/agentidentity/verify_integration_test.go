@@ -28,6 +28,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ncecere/open-mcp-portal/internal/agentidentity"
+	"github.com/ncecere/open-mcp-portal/internal/apperr"
 	"github.com/ncecere/open-mcp-portal/internal/authz"
 	"github.com/ncecere/open-mcp-portal/internal/netpolicy"
 	"github.com/ncecere/open-mcp-portal/internal/testutil"
@@ -178,6 +179,22 @@ func (e *env) clock() time.Time {
 	e.nowMu.Lock()
 	defer e.nowMu.Unlock()
 	return e.now
+}
+
+func (e *env) exec(sql string) {
+	e.t.Helper()
+	if _, err := e.pool.Exec(context.Background(), sql); err != nil {
+		e.t.Fatalf("%s: %v", sql, err)
+	}
+}
+
+func (e *env) scalar(sql string) string {
+	e.t.Helper()
+	var out string
+	if err := e.pool.QueryRow(context.Background(), sql).Scan(&out); err != nil {
+		e.t.Fatalf("%s: %v", sql, err)
+	}
+	return out
 }
 
 func (e *env) advance(d time.Duration) {
@@ -787,6 +804,73 @@ func TestJWKSFetchGuard(t *testing.T) {
 			t.Fatalf("stored failure: %+v", v.Platform)
 		}
 	})
+}
+
+// L-1 of the security review: the JWKS URL is https without exception. An
+// allowlist entry that allows plain http for the host (an in-cluster service)
+// is not enough: the keys decide who the portal believes a person is. It is
+// refused when saved and again before every fetch (an older row, or an
+// allowlist that changed), and the same host over https still works.
+func TestJWKSURLMustBeHTTPSEvenWhenTheHostAllowsHTTP(t *testing.T) {
+	ctx := context.Background()
+	entries, err := netpolicy.ParseList("http:example.com") // the host may be reached over plain http
+	if err != nil || len(entries) != 1 || !entries[0].AllowHTTP {
+		t.Fatalf("entries = %+v %v", entries, err)
+	}
+	// The shared address rule alone would accept it: this is what the
+	// platform check adds to.
+	if _, err := (&upstream.Client{Networks: staticPolicy{netpolicy.New(entries)}}).NormalizeURL(ctx, "http://example.com/jwks"); err != nil {
+		t.Fatalf("the allowlist entry doesn't allow http for the host, so this test proves nothing: %v", err)
+	}
+	e := newEnv(t)
+	e.svc = e.newService("93.184.216.34", entries)
+	notHTTPS := func(what string, err error) {
+		t.Helper()
+		var ae *apperr.Error
+		if !errors.As(err, &ae) || ae.Status != 422 || ae.Code != "url_not_allowed" || !strings.Contains(ae.Message, "https") {
+			t.Errorf("%s: %v, want 422 url_not_allowed saying https", what, err)
+		}
+	}
+
+	// Saving: refused with and without the allowance.
+	for _, u := range []string{"http://example.com/.well-known/mcp-identity-jwks.json", "HTTP://example.com/jwks", "ftp://example.com/jwks"} {
+		_, err := e.svc.Create(ctx, e.admin, agentidentity.Input{Name: ptr("Plain"), Issuer: ptr(issuer), JWKSURL: ptr(u), Audience: ptr(audience)})
+		notHTTPS("create with "+u, err)
+	}
+	if n := e.scalar(`SELECT count(*)::text FROM agent_platforms`); n != "0" {
+		t.Fatalf("%s platforms were saved", n)
+	}
+	// The same host over https works (default URL and an explicit one).
+	id := e.trust()
+	v, err := e.svc.Get(ctx, e.admin, mustUUID(t, id))
+	if err != nil || v.Platform.JwksUrl != jwksURL {
+		t.Fatalf("https default: %+v %v", v.Platform, err)
+	}
+	// Editing to http is refused and changes nothing.
+	_, err = e.svc.Update(ctx, e.admin, mustUUID(t, id), agentidentity.Input{JWKSURL: ptr("http://example.com/jwks")}, v.Platform.Revision)
+	notHTTPS("update to http", err)
+	if got, _ := e.svc.Get(ctx, e.admin, mustUUID(t, id)); got.Platform.JwksUrl != jwksURL || got.Platform.Revision != v.Platform.Revision {
+		t.Errorf("a refused update changed the platform: %+v", got.Platform)
+	}
+	if _, err := e.svc.Update(ctx, e.admin, mustUUID(t, id), agentidentity.Input{JWKSURL: ptr("https://example.com/other-keys")}, v.Platform.Revision); err != nil {
+		t.Errorf("update to another https address: %v", err)
+	}
+
+	// Fetching: a row that already holds an http URL is not fetched.
+	e.exec(`UPDATE agent_platforms SET jwks_url = 'http://example.com/.well-known/mcp-identity-jwks.json'`)
+	res, err := e.svc.Test(ctx, e.admin, mustUUID(t, id))
+	if err != nil || res.OK || res.Error != agentidentity.FetchNotAllowed || e.f.fetches.Load() != 0 {
+		t.Fatalf("Test with a stored http URL: %+v %v fetches %d", res, err, e.f.fetches.Load())
+	}
+	if got := reasonOf(func() error { _, err := e.verify(e.token(nil, nil)); return err }()); got != agentidentity.ReasonJWKSUnavailable || e.f.fetches.Load() != 0 {
+		t.Fatalf("verification with a stored http URL: %s (fetches %d)", got, e.f.fetches.Load())
+	}
+	// Back to https: it works again (after the failed-fetch back-off).
+	e.exec(`UPDATE agent_platforms SET jwks_url = '` + jwksURL + `'`)
+	e.advance(time.Minute)
+	if _, err := e.verify(e.token(nil, nil)); err != nil {
+		t.Fatalf("verification after the URL is https again: %v", err)
+	}
 }
 
 // The admin operations: platform admins only, never an automation token,

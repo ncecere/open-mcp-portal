@@ -14,7 +14,7 @@ import (
 func (e *matrixEnv) newAgentPlatform() string {
 	n := e.next()
 	return e.exec(`INSERT INTO agent_platforms (name, issuer, jwks_url, audience) VALUES ($1::text, $2::text, $3::text, 'https://portal.example.org') RETURNING id::text`,
-		fmt.Sprintf("platform-%d", n), fmt.Sprintf("https://agents-%d.example.com", n), "http://127.0.0.1:9/jwks") // nothing listens there: a Test answers ok:false at once
+		fmt.Sprintf("platform-%d", n), fmt.Sprintf("https://agents-%d.example.com", n), "https://127.0.0.1:9/jwks") // nothing listens there: a Test answers ok:false at once
 }
 
 // agentPlatform is a fresh platform when the call is expected to succeed,

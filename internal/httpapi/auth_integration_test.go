@@ -3,6 +3,8 @@ package httpapi_test
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -11,6 +13,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 
@@ -28,6 +31,22 @@ type testApp struct {
 	URL    string
 	Pool   *pgxpool.Pool
 	Client *http.Client
+}
+
+var (
+	tlsRootsOnce sync.Once
+	tlsRoots     *x509.CertPool
+)
+
+// testTLSRoots is the CA pool that trusts httptest's TLS servers (they all
+// share one certificate, valid for 127.0.0.1, ::1 and example.com).
+func testTLSRoots() *x509.CertPool {
+	tlsRootsOnce.Do(func() {
+		srv := httptest.NewTLSServer(http.NotFoundHandler())
+		defer srv.Close()
+		tlsRoots = srv.Client().Transport.(*http.Transport).TLSClientConfig.RootCAs
+	})
+	return tlsRoots
 }
 
 // testWeb stands in for the built UI.
@@ -72,6 +91,10 @@ func newTestAppDeps(t *testing.T, mutate func(*config.Config), log *slog.Logger,
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Trusted agent platforms' keys are fetched over https only: the test
+	// issuers are httptest TLS servers, whose certificate the app trusts here
+	// (a test seam; the production rule is unchanged).
+	deps.AgentPlatforms.TLS = &tls.Config{RootCAs: testTLSRoots()}
 	deps.Health = httpapi.NewHealth(map[string]func(context.Context) error{"postgres": pool.Ping})
 	deps.Web, deps.WebBuilt = testWeb, true
 	if hook != nil {

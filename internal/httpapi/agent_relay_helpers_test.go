@@ -25,7 +25,9 @@ import (
 )
 
 // An agent platform for the tests (decisions 65 and 66): a fake issuer that
-// signs tokens with a P-256 key and serves its JWKS from a loopback server,
+// signs tokens with a P-256 key and serves its JWKS from a loopback TLS server
+// (the keys address is https always, L-1; newTestAppDeps makes the app trust
+// the test servers' certificate, which every httptest TLS server shares),
 // a trusted-platform entry for it, and a team service account marked as its
 // relay.
 
@@ -49,7 +51,7 @@ func newRelayIssuer(t *testing.T, issuer string) *relayIssuer {
 	ri := &relayIssuer{t: t, issuer: issuer, keys: map[string]*ecdsa.PrivateKey{}}
 	ri.kid = "key-" + issuer[len(issuer)-4:]
 	ri.key = ri.addKey(ri.kid)
-	ri.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ri.srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ri.fetches.Add(1)
 		ri.mu.Lock()
 		defer ri.mu.Unlock()

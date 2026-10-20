@@ -154,8 +154,9 @@ func cacheTTL(cacheControl string) time.Duration {
 
 // fetchJWKS reads the platform's key set. It never caches or stores anything.
 func (s *Service) fetchJWKS(ctx context.Context, p dbgen.AgentPlatform) (*keySet, *FetchError) {
-	// The allowlist may have changed since the URL was saved.
-	if _, err := s.Client.NormalizeURL(ctx, p.JwksUrl); err != nil {
+	// The allowlist may have changed since the URL was saved, and a row may
+	// predate the https rule: both are checked again here.
+	if _, err := s.checkJWKSURL(ctx, p.JwksUrl); err != nil {
 		return nil, &FetchError{Code: FetchNotAllowed}
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), fetchTimeout+time.Second)

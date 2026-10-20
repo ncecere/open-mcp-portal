@@ -1030,7 +1030,7 @@ export interface paths {
         put?: never;
         /**
          * Trust an agent platform as an issuer of identity tokens (platform admins; browser session only)
-         * @description jwksUrl defaults to <issuer>/.well-known/mcp-identity-jwks.json and audience to this portal's APP_URL (the platform sets it as the server's identityAudience). The JWKS URL follows the rule for MCP servers: https, and an internal address only for a host a platform admin allowed (422 url_not_allowed with details.reason). 422 invalid_issuer; 400 invalid_name or invalid_audience; 409 name_taken, issuer_taken or too_many_agent_platforms (at most 20). Nothing is fetched. Audited as agent_platform.create.
+         * @description jwksUrl defaults to <issuer>/.well-known/mcp-identity-jwks.json and audience to this portal's APP_URL (the platform sets it as the server's identityAudience). The JWKS URL follows the rule for MCP servers (an internal address only for a host a platform admin allowed) and is https always, even for an allowed internal host (422 url_not_allowed with details.reason). 422 invalid_issuer; 400 invalid_name or invalid_audience; 409 name_taken, issuer_taken or too_many_agent_platforms (at most 20). Nothing is fetched. Audited as agent_platform.create.
          */
         post: operations["adminCreateAgentPlatform"];
         delete?: never;

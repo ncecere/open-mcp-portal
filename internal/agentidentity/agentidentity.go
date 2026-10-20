@@ -265,9 +265,10 @@ func (s *Service) resolve(ctx context.Context, cur *dbgen.AgentPlatform, in Inpu
 	if !oneLine(p.Audience, 500) || strings.ContainsAny(p.Audience, " \t") {
 		return p, errBadAudience
 	}
-	// The JWKS URL follows the address rule of MCP servers (https; private
-	// addresses only for hosts a platform admin allowed): 422 url_not_allowed.
-	norm, err := s.Client.NormalizeURL(ctx, p.JwksUrl)
+	// The JWKS URL follows the address rule of MCP servers (private
+	// addresses only for hosts a platform admin allowed) and is https
+	// always: 422 url_not_allowed.
+	norm, err := s.checkJWKSURL(ctx, p.JwksUrl)
 	if err != nil {
 		return p, err
 	}
@@ -276,6 +277,25 @@ func (s *Service) resolve(ctx context.Context, cur *dbgen.AgentPlatform, in Inpu
 }
 
 func defaultJWKS(issuer string) string { return strings.TrimRight(issuer, "/") + WellKnownJWKS }
+
+// errJWKSNotHTTPS: the keys decide who the portal believes a person is, so
+// they are never fetched in clear (L-1 of the security review). An internal
+// address may be allowed for the host, but not plain http.
+var errJWKSNotHTTPS = func() error {
+	e := apperr.New(422, "url_not_allowed", "The keys address must use https, even for an internal address a platform admin allowed: the keys decide who the portal believes a person is.")
+	e.Details = map[string]any{"reason": upstream.ReasonScheme}
+	return e
+}()
+
+// checkJWKSURL applies the rule of MCP server URLs (address allowlist, no
+// userinfo, query or fragment) and, on top of it, https without exception.
+// It is used when a platform is saved and again before every fetch.
+func (s *Service) checkJWKSURL(ctx context.Context, raw string) (string, error) {
+	if u, err := url.Parse(strings.TrimSpace(raw)); err == nil && u.Scheme != "https" {
+		return "", errJWKSNotHTTPS
+	}
+	return s.Client.NormalizeURL(ctx, raw)
+}
 
 func uniqueErr(err error) error {
 	switch {

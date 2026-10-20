@@ -97,10 +97,11 @@ func TestAgentPlatformAdministration(t *testing.T) {
 	}
 	// Validation and uniqueness.
 	for name, body := range map[string]map[string]any{
-		"an http issuer":     {"name": "n1", "issuer": "http://plain.example.test"},
-		"a duplicate name":   {"name": "Second platform", "issuer": "https://dup-name.example.test"},
-		"a duplicate issuer": {"name": "n2", "issuer": "https://second.example.test"},
-		"unknown fields":     {"name": "n4", "issuer": "https://n4.example.test", "secret": "x"},
+		"an http issuer":       {"name": "n1", "issuer": "http://plain.example.test"},
+		"an http keys address": {"name": "n5", "issuer": "https://n5.example.test", "jwksUrl": "http://127.0.0.1:9/jwks"},
+		"a duplicate name":     {"name": "Second platform", "issuer": "https://dup-name.example.test"},
+		"a duplicate issuer":   {"name": "n2", "issuer": "https://second.example.test"},
+		"unknown fields":       {"name": "n4", "issuer": "https://n4.example.test", "secret": "x"},
 	} {
 		if code, _ := e.admin.call("POST", base, body, nil, nil); code < 400 || code >= 500 {
 			t.Errorf("%s = %d", name, code)

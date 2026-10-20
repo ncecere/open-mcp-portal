@@ -88,7 +88,7 @@ export function PlatformDialog({ platform, onClose }: { platform?: AgentPlatform
       <Field
         label="Keys address (JWKS URL)"
         labelHint="Optional"
-        description="Where the platform publishes its public keys. Default: the issuer followed by /.well-known/mcp-identity-jwks.json. An internal address needs an entry in Admin › Internal networks."
+        description="Where the platform publishes its public keys. Default: the issuer followed by /.well-known/mcp-identity-jwks.json. An internal address needs an entry in Admin › Internal networks. The address must always be https: plain http is refused, even for an allowed internal host."
         error={shown("jwksUrl")}
       >
         <Input autoComplete="off" spellCheck={false} inputMode="url" maxLength={maxUrl} value={jwksUrl} onChange={edit(setJwksUrl)} />
