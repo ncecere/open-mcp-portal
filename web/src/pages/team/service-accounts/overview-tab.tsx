@@ -25,6 +25,7 @@ import { TextLink } from "@/components/ui/text-link/text-link";
 import { Time } from "@/components/ui/time/time";
 import s from "../../shared.module.css";
 import { useTeam } from "../common";
+import { RelayCard } from "./relay-card";
 import {
   type AccountGateway,
   accountAccessText,
@@ -62,6 +63,7 @@ export function OverviewTab({ account }: Props) {
         />
       </Card>
       <AccessCard account={account} />
+      <RelayCard account={account} />
     </>
   );
 }

@@ -112,6 +112,17 @@ export function CallPage({ scope, callId, canViewPayload, elsewhere }: Props) {
           items={[
             { label: "When", value: <Time value={c.occurredAt} format="datetime" /> },
             { label: "Who", value: [principalName(c.principal), c.principal.email, principalDetail(c.principal)].filter(Boolean).join(" · ") },
+            ...(c.agent
+              ? [
+                  { label: "Agent", value: `${c.agent.agentName || c.agent.agentId} via ${c.agent.platformName}` },
+                  {
+                    label: "Acting for",
+                    value: c.agent.person
+                      ? [c.agent.person.displayName, c.agent.person.email, c.agent.personPresent === false ? "not present" : c.agent.personPresent ? "present" : undefined].filter(Boolean).join(" · ")
+                      : "Nobody: the call is the relay account's own",
+                  },
+                ]
+              : []),
             { label: "Method", value: <code className={s.mono}>{c.method}</code> },
             ...(c.exposedName ? [{ label: "Called", value: <code className={s.mono}>{c.exposedName}</code> }] : []),
             { label: "Gateway", value: <Ref refd={c.gateway} link={gatewayLink} /> },

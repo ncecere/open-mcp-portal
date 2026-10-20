@@ -89,7 +89,26 @@ type Call struct {
 	// ProviderSlug is the auth provider the capability required (empty:
 	// none). Never a token.
 	ProviderSlug string
+	// A call relayed by a trusted agent platform (decision 66): the agent
+	// (its ID and name at the platform), the platform and, when the token
+	// named a person, whether they were present. UserID is then the person
+	// and the principal the relay service account; without a person only the
+	// agent and platform are set (the call is the account's own).
+	AgentID, AgentName string
+	ViaPlatformID      uuid.UUID
+	ViaPlatformName    string
+	PersonPresent      *bool
 }
+
+// Error classes of calls refused because they came from an agent (decision
+// 66, #57), with the outcomes they are recorded under: ClassNeedsConnection
+// with OutcomeNeedsAuthorization (the person must connect an account; no
+// link was given) and ClassPersonNotPresent with OutcomeDenied (the server or
+// capability requires a present person).
+const (
+	ClassNeedsConnection  = "needs_connection"
+	ClassPersonNotPresent = "person_not_present"
+)
 
 func clip(s string, n int) *string {
 	if s == "" {
@@ -148,6 +167,8 @@ func insertParams(c Call) dbgen.InsertMCPCallParams {
 		OauthClientKind: clip(c.OAuthClientKind, 20), ClientName: clip(c.ClientName, 200), Outcome: c.Outcome, ErrorClass: clip(c.ErrorClass, 64),
 		LatencyMs: int32(min(c.Latency.Milliseconds(), 1<<31-1)), RequestBytes: max(c.RequestBytes, 0), ResponseBytes: max(c.ResponseBytes, 0),
 		ProviderSlug: clip(c.ProviderSlug, 48),
+		AgentID:      clip(c.AgentID, 128), AgentName: clip(c.AgentName, 200), ViaPlatformID: null(c.ViaPlatformID),
+		ViaPlatformName: clip(c.ViaPlatformName, 100), PersonPresent: c.PersonPresent,
 	}
 	if c.Server != nil {
 		p.ServerID, p.ServerTeamID = null(c.Server.ID), null(c.Server.TeamID)

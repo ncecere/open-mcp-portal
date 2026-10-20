@@ -95,6 +95,19 @@ export function principalDetail(p: Principal): string | undefined {
 
 const who = (c: McpCall) => principalName(c.principal);
 
+/**
+ * The agent behind a call an agent platform relayed: "Mail assistant via Pi Durable Platform · for Ada Lovelace",
+ * with "(not present)" when the platform said the person wasn't there, or "no person named" for a call that is the
+ * relay account's own.
+ */
+export function agentLine(c: Pick<McpCall, "agent">): string | undefined {
+  const a = c.agent;
+  if (!a) return undefined;
+  const person = a.person ? a.person.displayName || a.person.email : undefined;
+  const who = person ? `for ${person}${a.personPresent === false ? " (not present)" : ""}` : "no person named";
+  return `${a.agentName || a.agentId} via ${a.platformName} · ${who}`;
+}
+
 /** A call's row name for screen readers: "service-status__get_status by Una User". */
 export const callLabel = (c: McpCall) => `${c.exposedName ?? c.method} by ${who(c)}`;
 
@@ -102,13 +115,23 @@ export const callLabel = (c: McpCall) => `${c.exposedName ?? c.method} by ${who(
  * Who made the call: a person (title: their email), or a service account linked to its record (members and
  * staff read it); a deleted account is plain text, like a deleted gateway or server.
  */
-function PrincipalCell({ p }: { p: Principal }) {
+function PrincipalCell({ c }: { c: McpCall }) {
+  const p = c.principal;
   const detail = principalDetail(p);
+  const agent = agentLine(c);
+  const secondary = agent ? (
+    <>
+      {detail}
+      <span className={s.secondary}>{agent}</span>
+    </>
+  ) : (
+    detail
+  );
   if (p.kind === "service_account" && p.serviceAccountId && p.serviceAccountTeamSlug && p.serviceAccountExists !== false) {
     const link = <Link to="/teams/$team/service-accounts/$serviceAccountId" params={{ team: p.serviceAccountTeamSlug, serviceAccountId: p.serviceAccountId }} />;
-    return <CellText primary={<TextLink render={link}>{principalName(p)}</TextLink>} secondary={detail} />;
+    return <CellText primary={<TextLink render={link}>{principalName(p)}</TextLink>} secondary={secondary} />;
   }
-  return <CellText primary={<span title={p.email}>{principalName(p)}</span>} secondary={detail} />;
+  return <CellText primary={<span title={p.email}>{principalName(p)}</span>} secondary={secondary} />;
 }
 
 /** On a phone: who, when (and through which gateway), under what was called. */
@@ -180,7 +203,7 @@ export function callColumns({ gateway = false, adminLinks = false, detail, narro
       header: "Who",
       defaultHiddenNarrow: true,
       accessor: who,
-      cell: (c) => <PrincipalCell p={c.principal} />,
+      cell: (c) => <PrincipalCell c={c} />,
     },
     {
       id: "what",

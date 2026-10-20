@@ -150,6 +150,6 @@ func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.C
 }
 
 func (rc *request) callContext(o gateways.Offer) providers.CallContext {
-	return providers.CallContext{User: rc.principal.user, Gateway: rc.gateway, CapabilityID: o.Capability.ID, Kind: o.Capability.Kind,
+	return providers.CallContext{User: rc.principal.actingUser(), NoConsent: rc.relayedPerson(), Gateway: rc.gateway, CapabilityID: o.Capability.ID, Kind: o.Capability.Kind,
 		ServerID: o.Server.ID, ServerOrigin: registry.OriginOf(o.Server.URL), ExposedName: o.ExposedName, Title: o.Capability.Title}
 }

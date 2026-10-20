@@ -41,6 +41,7 @@ const params: Format = (v) => (v && typeof v === "object" && !Array.isArray(v) ?
 /** Whether a disconnected account was revoked at the provider too. */
 const revoked: Format = (v) => (v === true ? "Yes" : v === false ? "No (failed)" : v === "not_supported" ? "Not supported by the provider" : v);
 
+const presenceWords: Record<string, string> = { inherit: "Same as the server", required: "Needs a present person", not_required: "Doesn't need a present person" };
 const authModeWords: Record<string, string> = { none: "None", static_header: "Static header", oauth: "OAuth sign-in per person" };
 const registrationWords: Record<string, string> = {
   dcr: "Automatic (dynamic registration)",
@@ -113,7 +114,12 @@ function fieldsFor(action: string): Fields | undefined {
       return { capturePayloads: ["Record call contents", onOff], rateLimitPerMinute: ["Rate limit per minute"] };
     case "mcp_server.create":
     case "mcp_server.update":
-      return { capturePayloads: ["Record call contents", onOff], sendIdentity: ["Send identity token", onOff], authMode: ["Authentication", label(authModeWords)] };
+      return {
+        capturePayloads: ["Record call contents", onOff],
+        sendIdentity: ["Send identity token", onOff],
+        requiresPresentPerson: ["Require a present person", onOff],
+        authMode: ["Authentication", label(authModeWords)],
+      };
     case "mcp_server.auth_update":
       return {
         mode: ["Authentication", label(authModeWords)],
@@ -133,6 +139,15 @@ function fieldsFor(action: string): Fields | undefined {
     case "service_account.update":
     case "service_account.delete":
       return { role: ["Role", label(serviceAccountRoleLabels)], enabled: ["Enabled", onOff], teamId: null };
+    case "service_account.relay_set":
+    case "service_account.relay_clear":
+      return { platform: ["Agent platform"], platformId: null };
+    case "agent_platform.create":
+    case "agent_platform.update":
+    case "agent_platform.delete":
+      return { name: ["Name"], issuer: ["Issuer"], jwksUrl: ["Keys address"], audience: ["Audience"], enabled: ["Enabled", onOff] };
+    case "mcp_capability.presence_set":
+      return { mode: ["Present person", label(presenceWords)], effective: ["Needs a present person", yesNo] };
     case "service_account_key.create":
     case "service_account_key.revoke":
       return { serviceAccount: ["Service account"], expiresAt: ["Expires"], gatewayIds: null, serviceAccountId: null };

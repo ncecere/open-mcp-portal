@@ -134,6 +134,21 @@ func toAPICall(c calls.Row) apitypes.McpCall {
 	if r.ServerID.Valid {
 		out.Server = &apitypes.CallRef{Id: r.ServerID.UUID, Slug: r.ServerSlug, Name: r.ServerName, Exists: r.ServerExists}
 	}
+	if r.AgentID != nil {
+		out.Agent = toAPICallAgent(r)
+	}
+	return out
+}
+
+// toAPICallAgent is the agent behind a call an agent platform relayed: the
+// platform and agent (as recorded), whether the person was present and, when
+// the token named one, the person.
+func toAPICallAgent(r dbgen.ListMCPCallsRow) *apitypes.AgentCall {
+	out := &apitypes.AgentCall{AgentId: *r.AgentID, AgentName: r.AgentName, PlatformId: nullUUID(r.ViaPlatformID),
+		PlatformName: deref(r.ViaPlatformName), PersonPresent: r.PersonPresent}
+	if r.PersonPresent != nil && r.UserID.Valid {
+		out.Person = &apitypes.AgentCallPerson{UserId: nullUUID(r.UserID), Email: nonEmpty(r.UserEmail), DisplayName: r.PersonDisplayName}
+	}
 	return out
 }
 

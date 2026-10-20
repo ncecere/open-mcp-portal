@@ -226,3 +226,47 @@ func TestHeaderChoice(t *testing.T) {
 		}
 	}
 }
+
+// The act claim (decision 66, RFC 8693 style) names the agent behind a call
+// an agent platform relayed for a person; it is in a token exactly when the
+// claims carry an Actor.
+func TestActClaim(t *testing.T) {
+	s, _ := newService(t)
+	claimsOf := func(c identity.Claims) map[string]any {
+		t.Helper()
+		token, err := s.Sign(context.Background(), c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tok, err := jwt.ParseSigned(token, []jose.SignatureAlgorithm{jose.ES256})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out map[string]any
+		if err := tok.UnsafeClaimsWithoutVerification(&out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	base := identity.Claims{Audience: "https://srv.example.com/mcp", PrincipalType: identity.PrincipalUser, Subject: "u-1", Email: "ada@example.com",
+		Name: "Ada", Teams: []string{"tools"}, Gateway: "support", Client: "pdp-relay"}
+	plain := claimsOf(base)
+	if _, ok := plain["act"]; ok {
+		t.Fatalf("a call without an actor has act: %v", plain["act"])
+	}
+	base.Act = &identity.Actor{Subject: "agent-1", Name: "Mail assistant", Issuer: "https://agents.example.com", PrincipalType: identity.PrincipalAgent, PersonPresent: false}
+	got := claimsOf(base)
+	act, _ := got["act"].(map[string]any)
+	if len(act) != 5 || act["sub"] != "agent-1" || act["name"] != "Mail assistant" || act["iss"] != "https://agents.example.com" || act["principal_type"] != "agent" || act["person_present"] != false {
+		t.Fatalf("act = %v", act)
+	}
+	// The person's own claims are untouched by it.
+	if got["principal_type"] != "user" || got["sub"] != "u-1" || got["email"] != "ada@example.com" || got["client"] != "pdp-relay" {
+		t.Fatalf("claims = %v", got)
+	}
+	// An actor without a name leaves the member out.
+	base.Act = &identity.Actor{Subject: "agent-2", Issuer: "https://agents.example.com", PrincipalType: identity.PrincipalAgent, PersonPresent: true}
+	if act, _ := claimsOf(base)["act"].(map[string]any); len(act) != 4 || act["name"] != nil || act["person_present"] != true {
+		t.Fatalf("nameless act = %v", act)
+	}
+}

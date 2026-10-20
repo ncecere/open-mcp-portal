@@ -87,6 +87,22 @@ type Caller struct {
 // Allowed reports whether the person may use the gateway.
 func (c Caller) Allowed() bool { return len(c.Access) > 0 }
 
+// Intersect is what a call relayed by an agent platform may do (decision 66):
+// the person's access and the relay service account's, both. It allows the
+// gateway only when both do, and a minimum role only when both roles meet it
+// (the lower of the two roles decides on team gateways). The access reasons
+// are the person's.
+func Intersect(person, relay Caller) Caller {
+	if !person.Allowed() || !relay.Allowed() {
+		return Caller{}
+	}
+	role := person.Role
+	if authz.RoleAtLeast(person.Role, relay.Role) {
+		role = relay.Role
+	}
+	return Caller{Role: role, Access: person.Access}
+}
+
 // CallerOf works out a person's access to a gateway from their current
 // memberships, grants and stored groups. It doesn't look at whether the
 // gateway or the person is enabled.

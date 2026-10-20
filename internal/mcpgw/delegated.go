@@ -75,7 +75,7 @@ func (rc *request) delegated(o gateways.Offer, rec *calls.Call) (cred *providers
 	}
 	rec.ProviderSlug = req.Provider.Slug
 	noun := kindNoun(o.Capability.Kind)
-	if rc.principal.account != nil {
+	if rc.principal.isServiceAccount() {
 		msg := fmt.Sprintf("This %s needs a person's %s account; service accounts can't use it", noun, req.Provider.Name)
 		if req.Provider.ServerBound() {
 			msg = fmt.Sprintf("This %s needs a person to sign in to %s; service accounts can't use it", noun, req.Provider.Name)
@@ -142,6 +142,11 @@ func (rc *request) providerDisabled(req *registry.Requirement, rec *calls.Call) 
 // (isError) and a prompt or resource read a -32010 error, both with the
 // link in the message.
 func (rc *request) needsAuthorization(o gateways.Offer, c *providers.ConsentNeeded, rec *calls.Call, class string) {
+	if rc.relayedPerson() {
+		// An agent has no browser: no link, no -32042, no input request.
+		rc.needsConnection(o, c, rec)
+		return
+	}
 	if rc.consentInputRequired(o, c, rec, class) {
 		return
 	}

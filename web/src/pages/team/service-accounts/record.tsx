@@ -18,6 +18,8 @@ import { DetailPage } from "../../../components/templates/detail-page";
 import { serviceAccountTabs } from "../../../lib/tabs";
 import { useCurrentUser } from "../../../session";
 import { Alert, ErrorAlert } from "@/components/ui/alert/alert";
+import { Badge } from "@/components/ui/badge/badge";
+import s from "../../shared.module.css";
 import { useTeam } from "../common";
 import { KeysTab } from "./keys-tab";
 import { activeKeysText, roleLabel, type ServiceAccount, type ServiceAccountAbilities, serviceAccountAbilities } from "./labels";
@@ -64,7 +66,14 @@ function Record({ account, abilities, staff }: { account: ServiceAccount; abilit
   return (
     <DetailPage
       title={account.name}
-      meta={!account.enabled ? <EnabledBadge enabled={false} /> : undefined}
+      meta={
+        !account.enabled || account.relayPlatform ? (
+          <span className={s.badges}>
+            {!account.enabled && <EnabledBadge enabled={false} />}
+            {account.relayPlatform && <Badge tone="info">Relay for {account.relayPlatform.name}</Badge>}
+          </span>
+        ) : undefined
+      }
       description={account.description || undefined}
       facts={[
         { label: "Role", value: roleLabel(account.role) },

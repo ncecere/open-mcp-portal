@@ -97,7 +97,7 @@ export const outcomeHelp: Record<CallOutcome, string> = {
   timeout: "The server didn't answer in time.",
   too_large: "The request or response was over 1 MiB.",
   bad_request: "The client's request was invalid.",
-  needs_authorization: "Not sent to the server: the person had to connect or reconnect an account first, and their client got a link to do it.",
+  needs_authorization: "Not sent to the server: the person had to connect or reconnect an account first, and their client got a link to do it (an agent got an error saying where to connect instead).",
   rate_limited: "Not sent to the server: a rate limit was exceeded, so the client was told to try again later (HTTP 429).",
 };
 
@@ -138,6 +138,11 @@ export const callErrorLabels: Record<string, string> = {
   service_account: "Service accounts can't use it",
   provider_disabled: "Auth provider turned off",
   provider_unavailable: "Auth provider unavailable",
+  // Calls an agent platform relayed for a person (decision 66): refused, with a tool error and never a link.
+  needs_connection: "Needs a connection (an agent call: no link was given)",
+  person_not_present: "Needs a present person",
+  person_no_account: "The person has no active account",
+  person_suspended: "The person is suspended",
   // The gateway's own rate limits (outcome "rate_limited").
   person_per_minute: "Over the per-person limit",
   credential_per_minute: "Over the per-key or per-app limit",

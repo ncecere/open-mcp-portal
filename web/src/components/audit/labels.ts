@@ -43,6 +43,7 @@ const actionLabels: Record<string, string> = {
   "mcp_server.auth_update": "Changed MCP server sign-in",
   "mcp_capability.approve": "Approved capability",
   "mcp_capability.requirement_set": "Changed capability's account requirement",
+  "mcp_capability.presence_set": "Changed whether a capability needs a present person",
   "settings.publishing_update": "Changed default publishing policy",
   "settings.network_update": "Changed internal networks",
   "gateway.create": "Created gateway",
@@ -61,6 +62,8 @@ const actionLabels: Record<string, string> = {
   "service_account.create": "Created service account",
   "service_account.update": "Changed service account",
   "service_account.delete": "Deleted service account",
+  "service_account.relay_set": "Marked service account as an agent platform relay",
+  "service_account.relay_clear": "Removed a service account's relay mark",
   "service_account_key.create": "Created service account key",
   "service_account_key.revoke": "Revoked service account key",
   "auth_provider.create": "Added auth provider",
@@ -71,6 +74,10 @@ const actionLabels: Record<string, string> = {
   "provider_connection.revoke": "Disconnected account",
   "provider_connection.server_allow": "Allowed a server to use an account",
   "mcp_server.provider_grants_reset": "Ended permission to use people's accounts",
+  // Agent platforms (decisions 65 and 66, docs/agent-platforms.md).
+  "agent_platform.create": "Trusted an agent platform",
+  "agent_platform.update": "Changed a trusted agent platform",
+  "agent_platform.delete": "Stopped trusting an agent platform",
   // Operations (docs/phase6-operations.md).
   "settings.limits_update": "Changed rate limits",
   "team.limits_update": "Changed team rate limits",
@@ -169,6 +176,7 @@ export const actionGroups: { prefix: string; label: string; platform?: boolean }
   { prefix: "api_key.", label: "API keys", platform: true },
   { prefix: "oauth.", label: "Connected apps", platform: true },
   { prefix: "auth_provider.", label: "Auth providers", platform: true },
+  { prefix: "agent_platform.", label: "Agent platforms", platform: true },
   { prefix: "provider_connection.", label: "Connected accounts", platform: true },
   { prefix: "settings.", label: "Platform settings", platform: true },
   { prefix: "retention.", label: "Retention", platform: true },
@@ -267,6 +275,7 @@ export const targetTypeLabels: Record<string, string> = {
   mcp_call: "Call",
   notification_destination: "Webhook destination",
   automation_token: "Automation token",
+  agent_platform: "Agent platform",
 };
 
 /** An entry's action and target in one line for a short list ("Added member: Una User"). */
