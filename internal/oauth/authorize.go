@@ -168,14 +168,60 @@ func (s *Service) Remembered(ctx context.Context, userID uuid.UUID, clientID str
 	return err == nil, err
 }
 
-// How consent was given (audit metadata of oauth.consent).
+// ConsentState is what the portal knows about one person, client and
+// gateway when an authorization request arrives.
+type ConsentState struct {
+	// Trusted: a metadata-document client on the admins' trusted list.
+	Trusted bool
+	// Remembered: the person already allowed the client on the gateway.
+	Remembered bool
+	// Notice: a trusted client asking for the first time with a loopback
+	// redirect (decision 62). The person sees a short notice and confirms
+	// once; a trusted client with an https redirect never does.
+	Notice bool
+}
+
+// Silent reports whether the request can go straight back with a code: the
+// client is trusted or already allowed, and no first-use notice is due.
+func (c ConsentState) Silent() bool { return (c.Trusted || c.Remembered) && !c.Notice }
+
+// How is how the person's answer is recorded when they allow the request
+// on the consent page: a confirmation of the notice for a trusted client's
+// first loopback sign-in, else a consent.
+func (c ConsentState) How() string {
+	if c.Notice {
+		return ConsentConfirmed
+	}
+	return ConsentAllowed
+}
+
+// ConsentState reads the state for a checked request's client and gateway.
+func (s *Service) ConsentState(ctx context.Context, userID uuid.UUID, c Client, gatewayID uuid.UUID, redirectURI string) (ConsentState, error) {
+	trusted, err := s.Trusted(ctx, c)
+	if err != nil {
+		return ConsentState{}, err
+	}
+	remembered, err := s.Remembered(ctx, userID, c.ID, gatewayID)
+	if err != nil {
+		return ConsentState{}, err
+	}
+	return ConsentState{Trusted: trusted, Remembered: remembered, Notice: trusted && !remembered && loopbackRedirect(redirectURI)}, nil
+}
+
+// How consent was given (audit metadata of oauth.consent and
+// oauth.grant_confirmed).
 const (
 	ConsentAllowed = "allowed" // the person allowed it on the consent page
 	ConsentTrusted = "trusted" // a trusted client: no consent screen
+	// ConsentConfirmed: the person confirmed the first-use notice of a
+	// trusted client with a loopback redirect (audited oauth.grant_confirmed).
+	ConsentConfirmed = "confirmed"
 )
 
 // Approve records the person's consent for a checked request's client on
-// the gateway (a grant, audited as oauth.consent the first time) and
+// the gateway (a grant, audited as oauth.consent the first time, or as
+// oauth.grant_confirmed when they confirmed the notice of a trusted client)
+// and
 // returns the redirect with a new authorization code: single use, CodeTTL,
 // bound to the grant, client, redirect URI, PKCE challenge and resource.
 func (s *Service) Approve(ctx context.Context, a authz.Actor, c Client, g dbgen.Gateway, r AuthorizeRequest, how string) (string, error) {
@@ -208,7 +254,10 @@ func (s *Service) Approve(ctx context.Context, a authz.Actor, c Client, g dbgen.
 // gateway, creating it (and auditing the consent) when there is none.
 func (s *Service) grantFor(ctx context.Context, q *dbgen.Queries, a authz.Actor, c Client, g dbgen.Gateway, how string) (dbgen.OauthGrant, error) {
 	gr, err := q.GetActiveOAuthGrant(ctx, dbgen.GetActiveOAuthGrantParams{UserID: a.UserID, ClientID: c.ID, GatewayID: g.ID})
-	if err == nil || !errors.Is(store.NotFound(err), store.ErrNotFound) {
+	if err == nil {
+		// Signed in again: its refresh tokens get a new absolute lifetime.
+		return gr, q.RenewOAuthGrant(ctx, gr.ID)
+	} else if !errors.Is(store.NotFound(err), store.ErrNotFound) {
 		return gr, err
 	}
 	gr, err = q.InsertOAuthGrant(ctx, dbgen.InsertOAuthGrantParams{
@@ -221,7 +270,11 @@ func (s *Service) grantFor(ctx context.Context, q *dbgen.Queries, a authz.Actor,
 	} else if err != nil {
 		return gr, err
 	}
-	e := a.Audit("oauth.consent", "oauth_grant", gr.ID.String())
+	action := "oauth.consent"
+	if how == ConsentConfirmed {
+		action = "oauth.grant_confirmed"
+	}
+	e := a.Audit(action, "oauth_grant", gr.ID.String())
 	if g.TeamID.Valid {
 		e.TeamID = g.TeamID.UUID
 	}

@@ -51,11 +51,15 @@ func (a *api) checkConsent(w http.ResponseWriter, r *http.Request, q url.Values)
 	cr := consentRequest{user: id.User}
 	var err error
 	if cr.req, err = oauth.RequestFromQuery(q); err == nil {
-		cr.client, err = a.OAuth.Check(r.Context(), cr.req)
+		cr.client, err = a.OAuth.Check(oauth.WithSource(r.Context(), httpx.ClientIP(r, a.Config.TrustedProxies)), cr.req)
 	}
 	var oe *oauth.Error
 	if errors.As(err, &oe) {
-		httpx.Error(w, http.StatusBadRequest, "oauth_"+oe.Code, oe.Description)
+		status := http.StatusBadRequest
+		if oe.Status == http.StatusTooManyRequests { // too many metadata fetches from this address
+			status = oe.Status
+		}
+		httpx.Error(w, status, "oauth_"+oe.Code, oe.Description)
 		return cr, false
 	} else if failed(w, r, err) {
 		return cr, false
@@ -78,11 +82,7 @@ func (a *api) getOAuthConsent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	trusted, err := a.OAuth.Trusted(r.Context(), cr.client)
-	if failed(w, r, err) {
-		return
-	}
-	remembered, err := a.OAuth.Remembered(r.Context(), cr.user.ID, cr.client.ID, cr.gateway.ID)
+	state, err := a.OAuth.ConsentState(r.Context(), cr.user.ID, cr.client, cr.gateway.ID, cr.req.RedirectURI)
 	if failed(w, r, err) {
 		return
 	}
@@ -92,8 +92,8 @@ func (a *api) getOAuthConsent(w http.ResponseWriter, r *http.Request) {
 	}
 	redirect, _ := url.Parse(cr.req.RedirectURI)
 	httpx.JSON(w, http.StatusOK, apitypes.OAuthConsent{
-		Client: toAPIClientInfo(cr.client, trusted), Gateway: a.toAPIMyGateway(mine),
-		RedirectUri: cr.req.RedirectURI, RedirectHost: redirect.Host, Remembered: remembered,
+		Client: toAPIClientInfo(cr.client, state.Trusted), Gateway: a.toAPIMyGateway(mine),
+		RedirectUri: cr.req.RedirectURI, RedirectHost: redirect.Host, Remembered: state.Remembered, Notice: state.Notice,
 	})
 }
 
@@ -113,7 +113,12 @@ func (a *api) decideOAuthConsent(w http.ResponseWriter, r *http.Request) {
 	}
 	to := a.OAuth.DenyRedirect(cr.req)
 	if in.Decision == apitypes.Allow {
-		if to, err = a.OAuth.Approve(r.Context(), a.actor(r), cr.client, cr.gateway, cr.req, oauth.ConsentAllowed); failed(w, r, err) {
+		// A trusted client's first loopback sign-in is a confirmation, not a consent.
+		state, err := a.OAuth.ConsentState(r.Context(), cr.user.ID, cr.client, cr.gateway.ID, cr.req.RedirectURI)
+		if failed(w, r, err) {
+			return
+		}
+		if to, err = a.OAuth.Approve(r.Context(), a.actor(r), cr.client, cr.gateway, cr.req, state.How()); failed(w, r, err) {
 			return
 		}
 	}
@@ -133,7 +138,8 @@ func (a *api) writeGrants(w http.ResponseWriter, r *http.Request, grants []oauth
 		gr := g.OauthGrant
 		c := oauth.GrantClient(gr)
 		return apitypes.OAuthGrant{Id: gr.ID, Client: toAPIClientInfo(c, trusted[c.ID]), CreatedAt: gr.CreatedAt, LastUsedAt: gr.LastUsedAt,
-			Gateway: apitypes.CallRef{Id: gr.GatewayID, Slug: g.GatewaySlug, Name: g.GatewayName, Exists: true}}
+			ExpiresAt: a.OAuth.GrantExpiry(gr),
+			Gateway:   apitypes.CallRef{Id: gr.GatewayID, Slug: g.GatewaySlug, Name: g.GatewayName, Exists: true}}
 	})
 }
 
@@ -172,7 +178,8 @@ func (a *api) adminRevokeUserOAuthGrant(w http.ResponseWriter, r *http.Request) 
 }
 
 func toAPITrustedClients(t oauth.TrustedClients) apitypes.TrustedClients {
-	out := apitypes.TrustedClients{Clients: make([]apitypes.TrustedClient, len(t.Clients)), Revision: t.Revision, UpdatedAt: t.UpdatedAt}
+	out := apitypes.TrustedClients{Clients: make([]apitypes.TrustedClient, len(t.Clients)), OpenRegistration: t.OpenRegistration,
+		Revision: t.Revision, UpdatedAt: t.UpdatedAt}
 	for i, c := range t.Clients {
 		out.Clients[i] = apitypes.TrustedClient{ClientId: c.ClientID, Label: nonEmpty(c.Label)}
 	}
@@ -197,7 +204,7 @@ func (a *api) adminUpdateTrustedClients(w http.ResponseWriter, r *http.Request) 
 		clients[i] = oauth.TrustedClient{ClientID: c.ClientId}
 		setIf(&clients[i].Label, c.Label)
 	}
-	t, err := a.OAuth.UpdateTrustedClients(r.Context(), a.actor(r), clients, rev)
+	t, err := a.OAuth.UpdateTrustedClients(r.Context(), a.actor(r), clients, in.OpenRegistration, rev)
 	if failed(w, r, err) {
 		return
 	}

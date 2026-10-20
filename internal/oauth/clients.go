@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -65,8 +66,11 @@ func hostOf(raw string) string {
 }
 
 // ResolveClient finds a client by its client_id: an https URL is a metadata
-// document (fetched, cached); anything else must be a registered client
-// used within the last 30 days. Every failure is a page error.
+// document (fetched, cached, and limited per source address, source.go);
+// anything else must be a registered client used within the last 30 days
+// that received tokens, or was registered within the last 24 hours. Every
+// failure is a page error. The authorization endpoint calls it only for a
+// signed-in person (decision 62's sibling, H-3).
 func (s *Service) ResolveClient(ctx context.Context, clientID string) (Client, error) {
 	if clientID == "" || len(clientID) > maxURILen {
 		return Client{}, pageError("invalid_client", "This app isn't known: the request doesn't name one. Connect the app again.")
@@ -77,7 +81,8 @@ func (s *Service) ResolveClient(ctx context.Context, clientID string) (Client, e
 	if !strings.HasPrefix(clientID, clientPrefix) {
 		return Client{}, pageError("invalid_client", "This app isn't known: its client_id must be an https URL (a metadata document) or a registered client.")
 	}
-	row, err := s.q.GetOAuthClient(ctx, dbgen.GetOAuthClientParams{ClientID: clientID, UnusedSince: s.now().Add(-ClientUnusedTTL)})
+	row, err := s.q.GetOAuthClient(ctx, dbgen.GetOAuthClientParams{ClientID: clientID, UnusedSince: s.now().Add(-ClientUnusedTTL),
+		UnauthorizedSince: s.now().Add(-ClientUnauthorizedTTL)})
 	if errors.Is(store.NotFound(err), store.ErrNotFound) {
 		return Client{}, pageError("invalid_client", "This app isn't known, or its registration expired. Connect the app again.")
 	} else if err != nil {
@@ -226,15 +231,51 @@ func errRegistrationsFull() *Error {
 		Description: "This portal has reached its limit of registered apps. Ask its administrator, or connect with an app that identifies itself with a Client ID Metadata Document."}
 }
 
-// Register registers a public client (RFC 7591). Registrations unused for
-// 30 days are deleted first, and when OAUTH_MAX_REGISTERED_CLIENTS is set
-// and that many live registrations remain, the request is refused (503
-// temporarily_unavailable; the count and the insert are one transaction
-// under a lock, so replicas can't overshoot the cap together). Audited as
-// oauth.client_register by the system (no person is signed in), with the
-// caller's address; a refusal is logged, not audited (an unauthenticated
-// caller could fill the append-only audit log with it).
+// errTooManyUnused answers a registration from an address that already holds
+// its share of registrations nobody has used: 429 slow_down, since it is
+// about the caller. They age out after 24 hours, or are used.
+func errTooManyUnused() *Error {
+	return &Error{Code: "slow_down", Status: http.StatusTooManyRequests,
+		Description: "Too many apps were registered from your network and none of them has been used yet. Finish connecting those, or wait up to 24 hours."}
+}
+
+// errRegistrationClosed answers a registration while an admin has turned
+// open client registration off (Admin, Trusted clients): 403 access_denied.
+func errRegistrationClosed() *Error {
+	return &Error{Code: "access_denied", Status: http.StatusForbidden,
+		Description: "This portal doesn't accept client registration. Connect with an app that identifies itself with a Client ID Metadata Document, or ask the portal's administrator."}
+}
+
+// OpenRegistration reports whether open client registration is on (the
+// admin switch; on by default). Read now, one row, so a change applies on
+// every replica at once.
+func (s *Service) OpenRegistration(ctx context.Context) (bool, error) {
+	row, err := s.q.GetOAuthSettings(ctx)
+	if err != nil {
+		return false, err
+	}
+	return row.OpenRegistration, nil
+}
+
+// Register registers a public client (RFC 7591), unless an admin turned
+// open registration off (403 access_denied). Registrations unused for 30
+// days, and those that received no tokens within 24 hours, are deleted
+// first. When OAUTH_MAX_REGISTERED_CLIENTS is set and that many live
+// registrations remain, the request is refused (503 temporarily_unavailable);
+// when OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS is set and the caller's address
+// already holds that many registrations that have received no tokens, it is
+// refused too (429 slow_down). The counts and the insert are one transaction
+// under a lock, so replicas can't overshoot the caps together. The address is
+// kept on the row for that count. Audited as oauth.client_register by the
+// system (no person is signed in), with the caller's address; a refusal is
+// logged, not audited (an unauthenticated caller could fill the append-only
+// audit log with it).
 func (s *Service) Register(ctx context.Context, m ClientMetadata, requestID, clientIP string) (Registered, error) {
+	if open, err := s.OpenRegistration(ctx); err != nil {
+		return Registered{}, err
+	} else if !open {
+		return Registered{}, errRegistrationClosed()
+	}
 	c, bad := m.check()
 	if bad != nil {
 		return Registered{}, bad
@@ -245,17 +286,17 @@ func (s *Service) Register(ctx context.Context, m ClientMetadata, requestID, cli
 	c.ID, c.Kind = newToken(clientPrefix), KindRegistered
 	var out Registered
 	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
-		unusedSince := s.now().Add(-ClientUnusedTTL)
-		if s.maxClients > 0 {
+		unusedSince, unauthorizedSince := s.now().Add(-ClientUnusedTTL), s.now().Add(-ClientUnauthorizedTTL)
+		if s.maxClients > 0 || s.maxUnused > 0 {
 			if err := q.LockOAuthClients(ctx); err != nil {
 				return err
 			}
 		}
-		if err := q.DeleteUnusedOAuthClients(ctx, unusedSince); err != nil {
+		if err := q.DeleteUnusedOAuthClients(ctx, dbgen.DeleteUnusedOAuthClientsParams{UnusedSince: unusedSince, UnauthorizedSince: unauthorizedSince}); err != nil {
 			return err
 		}
 		if s.maxClients > 0 {
-			n, err := q.CountLiveOAuthClients(ctx, unusedSince)
+			n, err := q.CountLiveOAuthClients(ctx, dbgen.CountLiveOAuthClientsParams{UnusedSince: unusedSince, UnauthorizedSince: unauthorizedSince})
 			if err != nil {
 				return err
 			}
@@ -265,8 +306,20 @@ func (s *Service) Register(ctx context.Context, m ClientMetadata, requestID, cli
 				return errRegistrationsFull()
 			}
 		}
+		if s.maxUnused > 0 && clientIP != "" {
+			n, err := q.CountPendingOAuthClientsFrom(ctx, dbgen.CountPendingOAuthClientsFromParams{RegisteredFrom: ptr(clientIP), UnauthorizedSince: unauthorizedSince})
+			if err != nil {
+				return err
+			}
+			if n >= int64(s.maxUnused) {
+				s.Log.WarnContext(ctx, "oauth client registration refused: too many unused registrations from one address",
+					"unused", n, "max", s.maxUnused, "request_id", requestID)
+				return errTooManyUnused()
+			}
+		}
 		row, err := q.InsertOAuthClient(ctx, dbgen.InsertOAuthClientParams{
 			ClientID: c.ID, ClientName: c.Name, RedirectUris: c.RedirectURIs, ClientUri: ptr(c.URI), LogoUri: ptr(c.LogoURI),
+			RegisteredFrom: ptr(clientIP),
 		})
 		if err != nil {
 			return err
@@ -288,4 +341,23 @@ func registrationAudit(c Client, applicationType string) map[string]any {
 		after["applicationType"] = applicationType
 	}
 	return after
+}
+
+// RegistrationStatus is the live registered clients (as Register counts
+// them) and whether open registration is on, for `doctor`.
+func RegistrationStatus(ctx context.Context, q *dbgen.Queries, now time.Time) (live int64, open bool, err error) {
+	row, err := q.GetOAuthSettings(ctx)
+	if err != nil {
+		return 0, false, err
+	}
+	live, err = q.CountLiveOAuthClients(ctx, dbgen.CountLiveOAuthClientsParams{UnusedSince: now.Add(-ClientUnusedTTL), UnauthorizedSince: now.Add(-ClientUnauthorizedTTL)})
+	return live, row.OpenRegistration, err
+}
+
+// loopbackRedirect reports whether a redirect URI is a loopback one
+// (http on localhost or a loopback address, RFC 8252 §7.3): the browser
+// hands the result to a program on this computer.
+func loopbackRedirect(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u.Scheme == "http" && loopbackHost(u.Hostname())
 }

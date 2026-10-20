@@ -14,10 +14,14 @@
 //     9207), authorize.go.
 //   - Consent is a person's grant for a client on one gateway (decision 21),
 //     remembered until revoked. Clients on the platform's trusted list skip
-//     the consent screen (decision 24), never the sign-in.
+//     the consent screen (decision 24), never the sign-in; with a loopback
+//     redirect they ask once per person and gateway (decision 62).
 //   - Opaque access tokens (one hour) and rotating refresh tokens (30 days,
-//     renewed on each use); presenting a rotated refresh token again after a
-//     30-second grace revokes the grant. Tokens and codes are stored as
+//     renewed on each use, but never beyond OAUTH_REFRESH_ABSOLUTE_TTL, 180
+//     days by default, after the person last signed the app in, decision
+//     63); presenting a rotated refresh token again after a 30-second grace
+//     revokes the grant, and inside the grace answers the same new pair
+//     (token.go). Tokens and codes are stored as
 //     HMAC-SHA256 digests under API_KEY_PEPPER, like API keys (token.go).
 //     An access token is accepted only by /mcp/{slug} of its gateway, and
 //     every request re-checks the person, the grant and their access.
@@ -42,6 +46,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ncecere/open-mcp-portal/internal/gateways"
+	"github.com/ncecere/open-mcp-portal/internal/ratelimit"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 	"github.com/ncecere/open-mcp-portal/internal/upstream"
 )
@@ -57,12 +62,21 @@ const (
 	RefreshTokenTTL = 30 * 24 * time.Hour
 	// RefreshReuseGrace: a refresh token presented again this soon after its
 	// rotation is a client refreshing twice at once, not a stolen token, so
-	// it gets a new pair instead of revoking the grant.
+	// it gets the same new pair again (not a second one) instead of
+	// revoking the grant.
 	RefreshReuseGrace = 30 * time.Second
+	// DefaultRefreshAbsoluteTTL is the default of OAUTH_REFRESH_ABSOLUTE_TTL:
+	// how long after the person last signed an app in its refresh tokens
+	// stop working, however often they are used (0: no limit).
+	DefaultRefreshAbsoluteTTL = 180 * 24 * time.Hour
 	// CodeTTL is an authorization code's life (single use).
 	CodeTTL = time.Minute
 	// ClientUnusedTTL: a registered client unused this long is deleted.
 	ClientUnusedTTL = 30 * 24 * time.Hour
+	// ClientUnauthorizedTTL: a registered client that has not received
+	// tokens (completed one authorization) within this long is deleted, so
+	// registrations nobody used age out quickly (decision 62's sibling, H-4).
+	ClientUnauthorizedTTL = 24 * time.Hour
 )
 
 // Token prefixes: they tell tokens from API keys (omp_) at a glance and in
@@ -101,6 +115,15 @@ type Config struct {
 	// (OAUTH_MAX_REGISTERED_CLIENTS); 0 is no cap. Metadata-document clients
 	// are not rows and never count.
 	MaxRegisteredClients int
+	// MaxUnusedClientsPerAddress caps the registrations one source address
+	// can hold that have not received tokens yet
+	// (OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS); 0 is no cap.
+	MaxUnusedClientsPerAddress int
+	// RefreshAbsoluteTTL is OAUTH_REFRESH_ABSOLUTE_TTL; 0 is no limit.
+	RefreshAbsoluteTTL time.Duration
+	// Rates counts metadata document fetches per source address (nil: not
+	// limited, for tests of other things).
+	Rates ratelimit.Store
 }
 
 // Service is the authorization server.
@@ -111,6 +134,12 @@ type Service struct {
 	previous   []byte
 	issuer     string
 	maxClients int
+	// maxUnused caps unused registrations per address; refreshTTL is the
+	// absolute lifetime of a refresh token chain (0: none); rates limits
+	// metadata fetches per address.
+	maxUnused  int
+	refreshTTL time.Duration
+	rates      ratelimit.Store
 	gateways   *gateways.Service
 	docs       *metadataDocs
 	Log        *slog.Logger
@@ -129,10 +158,12 @@ func New(pool *pgxpool.Pool, gws *gateways.Service, cfg Config) *Service {
 	}
 	s := &Service{
 		pool: pool, q: q, pepper: cfg.Pepper, previous: cfg.PepperPrevious, issuer: strings.TrimRight(cfg.Issuer, "/"), maxClients: cfg.MaxRegisteredClients, gateways: gws,
+		maxUnused: cfg.MaxUnusedClientsPerAddress, refreshTTL: cfg.RefreshAbsoluteTTL, rates: cfg.Rates,
 		docs: newMetadataDocs(up.GuardedDial(), up.AllowPrivate),
 		Log:  slog.Default(), now: time.Now,
 	}
 	s.docs.log = func() *slog.Logger { return s.Log }
+	s.docs.allow = s.allowFetch
 	return s
 }
 

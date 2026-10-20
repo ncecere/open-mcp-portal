@@ -4406,6 +4406,9 @@ type OAuthConsent struct {
 	Client  OAuthClientInfo `json:"client"`
 	Gateway MyGateway       `json:"gateway"`
 
+	// Notice A trusted client asks for the first time with a loopback redirect, so the page is a short confirmation instead of the usual consent screen (the answer is still allow or deny)
+	Notice bool `json:"notice"`
+
 	// RedirectHost Where the browser goes back to, such as 127.0.0.1:53211
 	RedirectHost string `json:"redirectHost"`
 	RedirectUri  string `json:"redirectUri"`
@@ -4427,8 +4430,11 @@ type OAuthConsentDecisionDecision string
 
 // OAuthGrant defines model for OAuthGrant.
 type OAuthGrant struct {
-	Client     OAuthClientInfo    `json:"client"`
-	CreatedAt  time.Time          `json:"createdAt"`
+	Client    OAuthClientInfo `json:"client"`
+	CreatedAt time.Time       `json:"createdAt"`
+
+	// ExpiresAt When the app has to sign in again however often it is used (OAUTH_REFRESH_ABSOLUTE_TTL after the person last signed it in); null when the portal sets no limit. Past it, the app is shown as expired.
+	ExpiresAt  *time.Time         `json:"expiresAt,omitempty"`
 	Gateway    CallRef            `json:"gateway"`
 	Id         openapi_types.UUID `json:"id"`
 	LastUsedAt *time.Time         `json:"lastUsedAt,omitempty"`
@@ -5097,6 +5103,9 @@ type TrustedClient struct {
 type TrustedClients struct {
 	Clients []TrustedClient `json:"clients"`
 
+	// OpenRegistration Whether POST /oauth/register accepts registrations (and the authorization server metadata lists registration_endpoint). On by default. Apps already registered keep working when it is off.
+	OpenRegistration bool `json:"openRegistration"`
+
 	// Revision Increases on every change. Send it back in If-Match.
 	Revision  Revision  `json:"revision"`
 	UpdatedAt time.Time `json:"updatedAt"`
@@ -5105,6 +5114,9 @@ type TrustedClients struct {
 // TrustedClientsUpdate defines model for TrustedClientsUpdate.
 type TrustedClientsUpdate struct {
 	Clients []TrustedClient `json:"clients"`
+
+	// OpenRegistration Turn open client registration on or off; omitted keeps it as it is
+	OpenRegistration *bool `json:"openRegistration,omitempty"`
 }
 
 // UpstreamSigninLapsedData defines model for UpstreamSigninLapsedData.

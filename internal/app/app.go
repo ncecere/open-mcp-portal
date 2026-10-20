@@ -258,7 +258,8 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 	// Client metadata documents are fetched behind the same address guard
 	// as MCP servers.
 	as := oauth.New(pool, gws, oauth.Config{Issuer: cfg.AppURL, Pepper: pepper, PepperPrevious: pep.Previous, Upstream: client,
-		MaxRegisteredClients: cfg.OAuthMaxRegisteredClients})
+		MaxRegisteredClients: cfg.OAuthMaxRegisteredClients, MaxUnusedClientsPerAddress: cfg.OAuthMaxUnusedClientsPerAddress,
+		RefreshAbsoluteTTL: cfg.OAuthRefreshAbsoluteTTL, Rates: rates})
 	as.Log = log
 	ids := identity.New(pool, box, cfg.AppURL, log)
 	ids.Prepublish = cfg.SigningKeyPrepublish

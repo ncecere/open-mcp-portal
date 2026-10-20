@@ -70,7 +70,9 @@ file named by `OMP_CONFIG_FILE`. Each secret can also be read from a file named 
 | `API_KEY_PEPPER_PREVIOUS` | while rotating (secret) | The old pepper: keys and tokens made with it keep working, and keys are re-digested on use. |
 | `METRICS_ADDR` | optional | Prometheus `/metrics` on its own listener, for example `:9090` (empty: off). See [Metrics](#metrics). |
 | `RETENTION_INTERVAL`, `RETENTION_BATCH_SIZE` | optional | How often old data is deleted (default 15m) and rows per transaction (1000). Periods are set in Admin › Retention. |
-| `OAUTH_MAX_REGISTERED_CLIENTS` | optional | Cap on live OAuth clients registered through the open `POST /oauth/register` (default `1000`; `0` = no cap; 0 to 1000000). Counts registrations used in the last 30 days; over it, registration answers `503 temporarily_unavailable` until one expires. Apps that identify themselves with a metadata document aren't counted. |
+| `OAUTH_MAX_REGISTERED_CLIENTS` | optional | Cap on live OAuth clients registered through the open `POST /oauth/register` (default `1000`; `0` = no cap; 0 to 1000000). Counts registrations used in the last 30 days; over it, registration answers `503 temporarily_unavailable` until one expires. Apps that identify themselves with a metadata document aren't counted. An admin can also turn open registration off (Admin › Trusted clients). |
+| `OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS` | optional | How many registrations that have not received tokens yet one source address can hold (default `20`; `0` = no cap). The answer past it is `429 slow_down`. Registrations that sign in stop counting; unused ones leave after 24 hours. Behind an ingress, set `TRUSTED_PROXIES`, or every caller shares one address. |
+| `OAUTH_REFRESH_ABSOLUTE_TTL` | optional | How long after a person last signed an app in its refresh tokens stop working, however often they are used (default `180d`; `0` turns it off; `180d`, or a duration such as `4320h`, 1 hour to 10 years). Past it the app signs in again. Headless agents should use service accounts or API keys. |
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID` | yes | The only production sign-in method. The redirect URI to register is `${APP_URL}/auth/callback`. |
 | `OIDC_CLIENT_SECRET` | yes (secret) | |
 | `BOOTSTRAP_ADMIN_SUBJECT` | first install | The OIDC `sub` made platform admin on first sign-in. It takes effect once. |
@@ -356,6 +358,15 @@ also checks their checksums). Other settings: `SMOKE_CLUSTER` (name, must start 
    keep serving during the rollout (`maxUnavailable: 0`), so a release's migrations must work with the previous release's
    code. Outside Kubernetes, run `migrate` with the new image first, then restart `serve`.
 3. To roll back, pin the previous digest. Migrations are never rolled back automatically.
+
+**v0.2.2 (migration `00018`, expand only).** Every OAuth app (Claude Code, VS Code, pi, ...) has to sign in again about
+every **180 days** from now: grants that exist at the upgrade get one whole window from the migration, however old they
+are, so nobody is signed out by the upgrade itself. Set `OAUTH_REFRESH_ABSOLUTE_TTL` to another value, or `0` for no
+limit, before upgrading if that doesn't suit you. Clients that refresh twice at once now get the same new tokens
+instead of two sets. A trusted client (Claude Code) shows a one-time notice the first time a person signs it in to a
+gateway from a computer; people who already connected it are not asked. Registrations that never received tokens
+disappear after 24 hours, and one address can hold 20 of them. An anonymous request to `/oauth/authorize` is sent to
+sign in before the client is looked at, so a bad client is reported after sign-in.
 
 ## Backups
 

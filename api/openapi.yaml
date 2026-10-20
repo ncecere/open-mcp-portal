@@ -2720,8 +2720,9 @@ paths:
       - oauth
       operationId: decideOAuthConsent
       summary: Allow or deny an authorization request; returns where to send the browser
-      description: Allow records the caller's consent for the client and gateway (audited as oauth.consent) and
-        issues a single-use authorization code valid for 60 seconds. Deny sends the client access_denied.
+      description: Allow records the caller's consent for the client and gateway (audited as oauth.consent, or as
+        oauth.grant_confirmed when the page was the first-use notice of a trusted client) and issues a single-use
+        authorization code valid for 60 seconds. Deny sends the client access_denied.
       requestBody:
         required: true
         content:
@@ -2846,10 +2847,11 @@ paths:
       operationId: adminGetTrustedClients
       x-omp-token-scopes:
       - platform:read
-      summary: Clients that skip the consent screen (platform admins and auditors)
+      summary: OAuth client settings (platform admins and auditors)
+      description: The clients that skip the consent screen and whether open client registration is on.
       responses:
         '200':
-          description: Trusted clients
+          description: OAuth client settings
           headers:
             ETag:
               $ref: '#/components/headers/ETag'
@@ -2869,9 +2871,10 @@ paths:
       - admin
       - oauth
       operationId: adminUpdateTrustedClients
-      summary: Replace the trusted-client list (platform admins)
+      summary: Replace the trusted-client list and set open registration (platform admins)
       description: 422 invalid_client_id (details.index) when an entry isn't an https URL with a path (Client ID
-        Metadata Document). At most 50 entries. Audited as settings.oauth_clients_update.
+        Metadata Document). At most 50 entries. openRegistration, when sent, turns open client registration on or off
+        (a platform token can't; session only). Audited as settings.oauth_clients_update.
       parameters:
       - $ref: '#/components/parameters/IfMatchHeader'
       requestBody:
@@ -7808,6 +7811,7 @@ components:
       - redirectUri
       - redirectHost
       - remembered
+      - notice
       properties:
         client:
           $ref: '#/components/schemas/OAuthClientInfo'
@@ -7821,6 +7825,10 @@ components:
         remembered:
           type: boolean
           description: The caller already allowed this client for this gateway
+        notice:
+          type: boolean
+          description: A trusted client asks for the first time with a loopback redirect, so the page is a short
+            confirmation instead of the usual consent screen (the answer is still allow or deny)
     OAuthConsentDecision:
       type: object
       required:
@@ -7858,6 +7866,12 @@ components:
           type: string
           format: date-time
           nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the app has to sign in again however often it is used (OAUTH_REFRESH_ABSOLUTE_TTL after the
+            person last signed it in); null when the portal sets no limit. Past it, the app is shown as expired.
     TrustedClient:
       type: object
       required:
@@ -7875,6 +7889,7 @@ components:
       type: object
       required:
       - clients
+      - openRegistration
       - revision
       - updatedAt
       properties:
@@ -7882,6 +7897,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TrustedClient'
+        openRegistration:
+          type: boolean
+          description: Whether POST /oauth/register accepts registrations (and the authorization server metadata lists
+            registration_endpoint). On by default. Apps already registered keep working when it is off.
         revision:
           $ref: '#/components/schemas/Revision'
         updatedAt:
@@ -7897,6 +7916,9 @@ components:
           maxItems: 50
           items:
             $ref: '#/components/schemas/TrustedClient'
+        openRegistration:
+          type: boolean
+          description: Turn open client registration on or off; omitted keeps it as it is
     ServiceAccountRole:
       type: string
       enum:

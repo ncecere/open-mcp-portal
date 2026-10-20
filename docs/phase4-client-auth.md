@@ -19,29 +19,32 @@ resource indicators, PKCE S256, RFC 9207 `iss`), like Grounded.
 | Endpoint | Purpose |
 |---|---|
 | `GET /.well-known/oauth-protected-resource/mcp/{slug}` | Resource metadata: `resource` = `<APP_URL>/mcp/{slug}`, authorization server = `<APP_URL>` (already advertised in today's `401`) |
-| `GET /.well-known/oauth-authorization-server` | AS metadata: code + PKCE S256 only, public clients (`none`), CIMD supported, DCR endpoint |
+| `GET /.well-known/oauth-authorization-server` | AS metadata: code + PKCE S256 only, public clients (`none`), CIMD supported, DCR endpoint (left out while an admin has turned open registration off) |
 | `GET /oauth/authorize` | Authorization code + PKCE; requires `resource=<APP_URL>/mcp/{slug}` exactly; signs the person in (existing OIDC session or redirect) then shows consent in the SPA |
 | `POST /oauth/token` | `authorization_code` and `refresh_token` grants |
-| `POST /oauth/register` | Dynamic Client Registration (public clients only, rate limited, at most `OAUTH_MAX_REGISTERED_CLIENTS` live registrations, unused registrations expire after 30 days) |
+| `POST /oauth/register` | Dynamic Client Registration (public clients only; `403` while an admin has turned it off; rate limited; at most `OAUTH_MAX_REGISTERED_CLIENTS` live registrations and `OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS` unused ones per address; a registration that never received tokens expires after 24 hours, one that did after 30 days unused) |
 | `POST /oauth/revoke` | RFC 7009 |
 
 - **Clients:** Client ID Metadata Documents preferred (fetched with the SSRF guard, ≤16 KiB, no redirects, cached);
   DCR for older clients, marked **Unverified** on the consent page. Redirect URIs: https, or http on loopback
   (any port).
 - **Tokens** (*proposed*, Grounded's values): code 60 s single use; access token `ompat_…` 1 h; refresh token
-  `omprt_…` 30 days, rotated on every use, reuse after 30 s revokes the connection. Opaque, stored as HMAC digests
-  with `API_KEY_PEPPER`.
+  `omprt_…` 30 days, rotated on every use, never beyond `OAUTH_REFRESH_ABSOLUTE_TTL` (180 days by default) after the
+  person last signed the app in; a rotated token presented again inside 30 s gets the same pair, later it revokes the
+  connection. Opaque, stored as HMAC digests with `API_KEY_PEPPER`.
 - **One connection per gateway** (*proposed*): a token is bound to one gateway (`resource`), matching how
   clients add one URL per server. Access is still re-checked on every request.
 - **Consent** per person, client and gateway; shows the client (verified host or "Unverified"), the gateway, and
   what it can do. **Trusted clients** (decision 12): platform admins keep an allowlist of client IDs that skip the
   consent screen, seeded with Claude (`https://claude.ai/oauth/mcp-oauth-client-metadata`), Claude Code
   (`https://claude.ai/oauth/claude-code-client-metadata`) and VS Code (`https://vscode.dev/oauth/client-metadata.json`).
-  DCR clients can't be trusted (their IDs change).
+  DCR clients can't be trusted (their IDs change). Since v0.2.2 a trusted client asks once, as a short notice, the first
+  time a person signs it in to a gateway with a loopback redirect (decision 62).
 - **Connected apps:** Account › Connected apps lists clients per gateway with last use and Disconnect; platform admins
   see and disconnect anyone's (user detail page). Suspending a user or removing their access stops tokens at the
   next request.
-- **Audit:** `oauth.client_register`, `oauth.consent`, `oauth.token_issue`, `oauth.revoke` (reason), never a token.
+- **Audit:** `oauth.client_register`, `oauth.consent`, `oauth.grant_confirmed`, `oauth.token_issue`, `oauth.revoke`
+  (reason), never a token.
 - **Calls:** principal kind `oauth` with the client name.
 
 ## Service accounts
@@ -99,27 +102,29 @@ Code: `internal/oauth` (authorization server: `authorize.go`, `clients.go`, `met
   registration and revocation endpoints; no `scopes_supported`: there are no scopes, a `scope` parameter is ignored and
   the token response has none), `GET /oauth/authorize`, `POST /oauth/token`, `POST /oauth/register`, `POST /oauth/revoke`
   (`GET` on the three POST endpoints is `405`, never the web app). The `/mcp` 401 challenge is unchanged.
-- **Authorize order.** Query > 8000 characters, a repeated parameter, an unknown/unfetchable client, a missing or
+- **Authorize order** (as of v0.2.2; see "As built: v0.2.2" for what changed). The **browser session** comes first:
+  none → `302` to sign in and back (`/auth/login?next=…` with OIDC; the web app's sign-in page `/?next=…` with only the
+  development login), before the client is looked at. Signed in: a suspended person gets a page. Then a query > 8000
+  characters, a repeated parameter, an unknown/unfetchable client, a missing or
   unregistered `redirect_uri` or a `state` over 1000 characters: an HTML **page** (400, never a redirect). Then errors go
   back to the client with `state` and `iss`: `unsupported_response_type`, `invalid_request` (no PKCE, `plain`, malformed
-  challenge), `invalid_target` (resource missing or not exactly `<APP_URL>/mcp/{slug}`). Then the **browser session**:
-  none → `302` to sign in and back (`/auth/login?next=…` with OIDC; the web app's sign-in page `/?next=…` with only the
-  development login); a suspended person gets a page. Signed in, the resource must be a gateway they may use **now**
+  challenge), `invalid_target` (resource missing or not exactly `<APP_URL>/mcp/{slug}`). The resource must be a gateway they may use **now**
   (exists, enabled, team not archived, access); otherwise `invalid_target` (unknown, off and no-access look the same,
   checked only after sign-in). Then a **remembered** consent (active grant for person + client + gateway) or a
   **trusted** client issues the code at once; anyone else is sent to `/oauth/consent?<the same query>`.
 - **Consent API.** `GET /v1/oauth/consent` re-checks the request: problems are `400` with code `oauth_<error>` (for
   example `oauth_invalid_request`, `oauth_invalid_client`), a resource that isn't a gateway the caller can use is
   `404 gateway_not_found`. `client.trusted` is true only for metadata clients on the list. `POST` (CSRF token) with
-  `allow` creates the grant (audited `oauth.consent`, metadata `how: allowed`) and a code; `deny` returns
-  `access_denied`. The query is re-validated on POST, so the page can't widen anything.
+  `allow` creates the grant (audited `oauth.consent`, metadata `how: allowed`, or `oauth.grant_confirmed`, `how:
+  confirmed`, for the first-use notice below) and a code; `deny` returns `access_denied`. `notice` in the GET answer says
+  the page is that notice. The query is re-validated on POST, so the page can't widen anything.
 - **Clients.** Metadata documents are fetched with `internal/upstream`'s address guard (`Client.GuardedDial`): public
   addresses; internal ones only inside the allowlist of internal networks (decision 20); loopback, link-local and
   metadata never — except with the development allowance, which also accepts a document at a plain-`http` loopback URL
   (production: https only). No proxy, no redirects, 5 s, ≤ 16 KiB, `application/json` (or `+json`), `client_id` must
   equal the URL, cached for `max-age` clamped to 1 min–1 h (10 min default). DCR: public clients only, IDs `ompcl_…`,
-  10/min/address, unused registrations deleted after 30 days (on the next registration; an expired one is refused at
-  once); audited `oauth.client_register` by the system with the client IP. Since v0.2.1 at most
+  10/min/address, unused registrations deleted after 30 days, or 24 hours when they never received tokens (on the
+  next registration; an expired one is refused at once); audited `oauth.client_register` by the system with the client IP. Since v0.2.1 at most
   `OAUTH_MAX_REGISTERED_CLIENTS` (default 1000, `0` = no cap) registrations used within the 30 days may exist: the
   count, the deletion of expired ones and the insert run in one transaction under an advisory lock, and over the cap
   the answer is `503 temporarily_unavailable` (OAuth error body, no `Retry-After`: a slot frees only when a
@@ -129,7 +134,8 @@ Code: `internal/oauth` (authorization server: `authorize.go`, `clients.go`, `met
   `not_metadata_url`/`duplicate`/`too_many`; a label over 100 characters is `400 invalid_label`). Read from the database
   on every authorization (no cache). A trusted client's first connection is still audited `oauth.consent` (`how: trusted`).
 - **Tokens.** Code `ompac_` 60 s single use (deleted before any check); access `ompat_` 1 h; refresh `omprt_` 30 days,
-  rotated; reuse within 30 s gets another pair, later reuse revokes the grant (`refresh_reuse`). Stored as hex
+  rotated; reuse within 30 s gets the same pair again (v0.2.2; v0.2.1 minted another), later reuse revokes the grant
+  (`refresh_reuse`); past the absolute lifetime the grant is revoked (`expired_absolute`, v0.2.2). Stored as hex
   HMAC-SHA256 of `"oauth:" + token` under `API_KEY_PEPPER` (no previous-pepper support: rotating the pepper signs every
   client out). An access token is accepted only by `/mcp/{slug}` of its gateway (another gateway: `401 invalid_token`
   with that gateway's challenge) and never by `/v1`. Every request re-checks token expiry, grant, person active (`401`),
@@ -137,7 +143,7 @@ Code: `internal/oauth` (authorization server: `authorize.go`, `clients.go`, `met
 - **Revocation.** RFC 7009: a refresh token revokes the connection, an access token only itself; another client's
   token or junk is a no-op `200`. Connected apps: `DELETE /v1/me/oauth-grants/{id}` (reason `user`), platform admins
   `DELETE /v1/admin/users/{id}/oauth-grants/{id}` (reason `admin`; auditors `403`). Unknown user on the admin list: `404`.
-- **Rate limits** per address and process (in memory, like sign-in): 60/min on authorize, token and revoke, 10/min on
+- **Rate limits** per address (shared in PostgreSQL since v0.2): 60/min on authorize, token and revoke, 10/min on
   register; `429 slow_down` with `Retry-After`. Registration also has the global cap above (`503`, not `429`: it
   isn't about the caller's rate).
 - **Audit:** `oauth.client_register` (target `oauth_client`), `oauth.consent`, `oauth.token_issue` (`grantType`),
@@ -230,3 +236,82 @@ authz matrix for both new operations, the doctor's migration version. Vitest: se
 scope with a platform gateway, rotation note only after a previous key, one combined notice, "Never used"), calls
 (unverified apps, deleted accounts, key names, admin filter without a team), sign-in note, trusted-client focus,
 suspend and grant wording.
+
+## As built: v0.2.2 hardening (H-1, H-3, H-4, H-8)
+
+Migration `00018_oauth_hardening.sql` (expand only). Decisions [62 and 63](decisions.md); threat model
+[section 9](threat-model.md#9-hardening-ideas-not-findings).
+
+**Nothing is fetched before sign-in (H-3).** `GET /oauth/authorize` without a session sends the browser to sign in with
+the whole query and looks at nothing: the client's metadata document is not fetched and no reason is given, whatever
+the client, redirect or resource. The two requests malformed on their face (a query over 8000 characters, a repeated
+parameter) get one generic "Can't connect this app" page with no reason and no code, the same bytes for both. After
+sign-in the request is checked as before and a bad client gets the same pages with their reasons; a person with a bad
+client now learns it after signing in rather than before. Fetches that the cache doesn't answer are counted per source
+address (the address the portal sees, `TRUSTED_PROXIES` applied) at **20 a minute**, in the same PostgreSQL counters as
+the other limits; over it, the signed-in person gets a `429` page (`slow_down`) and the consent page's own check answers
+`429 oauth_slow_down`. Cache hits and anonymous requests don't count. Tests: `TestOAuthAuthorizeAnonymousFetchesNothing`,
+`TestOAuthMetadataFetchCapPerAddress`, `TestMetadataFetchesAreLimitedPerAddress`.
+
+**Open client registration (H-4).** Three controls on top of `OAUTH_MAX_REGISTERED_CLIENTS`:
+
+- *The switch.* Admin › Trusted clients › "Allow open client registration" (`oauth_settings.open_registration`, on by
+  default; the same `PUT /v1/admin/settings/oauth-clients` and revision as the trusted list, so it is session-only: a
+  platform token can't change it, decision 58). Off: the authorization server metadata leaves out
+  `registration_endpoint` and `POST /oauth/register` answers `403 access_denied` (before the body is read; nothing
+  stored or audited). Apps already registered keep working, and apps that use a metadata document, such as Claude Code,
+  are not affected. Audited in `settings.oauth_clients_update` (`openRegistration` before and after).
+- *Shorter life when never used.* `oauth_clients.authorized_at` is set when a registered client first receives tokens. One
+  that has none 24 hours after it registered is gone (it no longer resolves, and the next registration deletes the
+  row); one that has lives until it has been unused for 30 days, as before. Upgrade: registrations that already had a
+  grant keep working.
+- *Per-address cap.* `OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS` (default 20, `0` = no cap): one source address can hold at
+  most that many registrations that have not received tokens yet (`oauth_clients.registered_from`, the address as the
+  portal saw it); the next is refused with `429 slow_down` and stores nothing. A registration that signs in stops
+  counting, and unused ones leave after 24 hours. It counts only unused registrations **on purpose**: those are the only
+  ones a caller can create without a person (receiving tokens takes someone signing in), and behind an ingress without
+  `TRUSTED_PROXIES` every caller shares one address, so counting the used ones too would turn the cap into a limit of 20
+  apps for the whole company. The count and the insert run under the same lock as the global cap.
+- `open-mcp-portal doctor` prints an info line: whether registration is on, and the live registrations against the cap.
+
+Tests: `TestOAuthRegistrationSwitch`, `TestOAuthUnusedRegistrationsAgeOut`, `TestUnusedRegistrationAgesOutAfter24Hours`,
+`TestOAuthRegistrationsPerAddress`, `TestUnusedRegistrationsPerAddress*`, `TestRegistrationSwitchOff`, the doctor test,
+and `TestOAuthTrustedRegisteredAndConnectedApps` (a dynamically registered client, the way pi signs in, completes the
+authorization code + PKCE flow, refreshes and is revoked). **Not done:** a browser-only (`Sec-Fetch`) check, which would
+break the native apps and CLIs that register; the open-redirector point of OA-2 is unchanged.
+
+**First-use notice for trusted loopback clients (H-1).** A trusted client (a metadata document on the admins' list) with
+a loopback redirect (`http` on `localhost`, `127.0.0.1` or `::1`, any port) and no grant for this person and gateway
+gets the consent page's *notice* variant instead of an immediate code: who trusts it, what it receives and where
+("on this computer, at localhost:54321"), Continue and Cancel. Continue creates the grant (audited
+`oauth.grant_confirmed`, `how: confirmed`) and the code; later sign-ins are silent, on any port. Cancel is
+`access_denied`. It is asked again after the app is disconnected (the grant is the memory), for another gateway and
+for another person, and never for a trusted client with an `https` redirect (the usual Claude and VS Code web
+redirects). People who already connected a trusted client before the upgrade have grants and are not asked. This is
+Claude Code's normal desktop flow: its metadata document (`https://claude.ai/oauth/claude-code-client-metadata`, read
+on 2026-10-20) lists `http://localhost/callback` and `http://127.0.0.1/callback`, which `matchRedirect` accepts on any
+port, and it opens the browser at `http://localhost:<port>/callback`; the only change is one confirmation page the
+first time. `TestOAuthTrustedLoopbackFirstUseNotice` walks that flow end to end (document with
+`http://localhost/callback`, trusted by an admin, authorize with `localhost:54321`, notice, deny and continue, code
+exchange with PKCE, the token on `/mcp`, second sign-in silent, another person, another gateway, disconnect, an `https`
+redirect unaffected). **Residual:** after the first confirmation a local process can still start a flow with the
+trusted client's ID and a loopback redirect without being asked, and one that drives the person's real browser can
+press Continue; the notice narrows the silent window, and it gives the person a chance to refuse a flow they did not
+start. Real Claude Code was exercised on a real deployment at v0.2.1 (status.md); the notice version has been tested
+against the fake client only.
+
+**Refresh tokens (H-8).** `OAUTH_REFRESH_ABSOLUTE_TTL` (default `180d`; `0` turns it off; `180d` or Go durations such as
+`4320h`, 1 hour to 10 years). The lifetime is counted from `oauth_grants.authorized_at`: set when a grant is created and
+set again whenever the person completes an authorization for a grant that already exists (signing the app in again).
+A refresh at or after `authorized_at + TTL` revokes the grant (`expired_absolute`) and answers `invalid_grant`; the
+access token it had stops at once (it would have been refused within the hour anyway). Connected apps shows "Sign-in
+expires" per app (`OAuthGrant.expiresAt`; "Expired" past it for a grant nobody has refreshed since). **Upgrade:** every
+grant active when `00018` runs gets one whole window from that moment, however old it is, so nobody is signed out by the
+upgrade; the first re-sign-in a client is asked for is one TTL later. **Inside the grace**, a refresh token that was
+rotated less than 30 seconds ago gets the pair its rotation issued, not another one: the pair is derived from the
+presented token under the pepper, so nothing is stored in the clear and a repeat creates no rows
+(`TestOAuthRefreshGraceReturnsTheSamePair`: three repeats, same tokens, same row count, audited with `repeat: true`; the
+absolute lifetime applies there too). Outside the grace the grant is revoked, as before. A client that refreshes twice
+at once therefore holds one chain, not two. Tests also: `TestOAuthRefreshAbsoluteLifetime`,
+`TestOAuthRefreshAbsoluteLifetimeConfig` (`0` keeps today's behaviour), `TestOAuthMigration00018KeepsWhatWorks` (the
+migration's Down and Up on a database with a 400-day-old grant).

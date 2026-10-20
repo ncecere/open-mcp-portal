@@ -142,7 +142,10 @@ describe("Phase 4 audit words", () => {
     expect(actionLabel("oauth.revoke")).toBe("Disconnected app");
     expect(actionLabel("oauth.revoke", { metadata: { reason: "refresh_reuse" } })).toBe("Disconnected app after a refresh token was reused");
     expect(actionLabel("oauth.revoke", { metadata: { reason: "admin" } })).toBe("Disconnected app by a platform admin");
+    expect(actionLabel("oauth.revoke", { metadata: { reason: "expired_absolute" } })).toBe("Disconnected app after its sign-in expired");
     expect(actionLabel("oauth.revoke", { metadata: { reason: "something_new" } })).toBe("Disconnected app");
+    expect(actionLabel("oauth.grant_confirmed")).toBe("Confirmed connected app");
+    expect(areaOf("oauth.grant_confirmed")).toBe("Connected apps");
     expect(actionLabel("settings.oauth_clients_update")).toBe("Changed trusted clients");
     expect(actionLabel("service_account.create")).toBe("Created service account");
     expect(actionLabel("service_account_key.revoke")).toBe("Revoked service account key");
@@ -162,6 +165,8 @@ describe("Phase 4 audit words", () => {
   it("shows trusted clients and a service account's role and switch in words", () => {
     const clients = { action: "settings.oauth_clients_update", before: { clients: [] }, after: { clients: [{ clientId: "https://vscode.dev/oauth/client-metadata.json", label: "VS Code" }] } };
     expect(changedRows(auditChange(clients))).toEqual([{ field: "Trusted clients", before: [], after: ["VS Code (https://vscode.dev/oauth/client-metadata.json)"] }]);
+    const registration = { action: "settings.oauth_clients_update", before: { clients: [], openRegistration: true }, after: { clients: [], openRegistration: false } };
+    expect(changedRows(auditChange(registration))).toEqual([{ field: "Open client registration", before: "On", after: "Off" }]);
     const sa = { action: "service_account.update", before: { role: "member", enabled: true }, after: { role: "editor", enabled: false } };
     expect(changedRows(auditChange(sa))).toEqual([
       { field: "Role", before: "Member", after: "Editor" },
