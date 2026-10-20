@@ -91,6 +91,10 @@ type agentSpec struct {
 	Absent bool
 	Agent  string
 	Name   string
+	// Tool is the token's tool claim: the tool the call is for. PDP sets it
+	// on a tools/call and on nothing else (M-1), so a token for any other
+	// method leaves it empty (no claim).
+	Tool string
 	// Mutate edits the claims before signing.
 	Mutate func(map[string]any)
 }
@@ -109,9 +113,12 @@ func (ri *relayIssuer) mint(aud string, subject func(email string) string, s age
 	c := map[string]any{
 		"iss": ri.issuer, "aud": aud, "sub": agent, "principal_type": "agent", "name": name,
 		"team":              map[string]any{"id": "6f1c0000", "slug": "personal-1a2b3c4d5e6f", "kind": "personal"},
-		"thread_visibility": "private", "person_present": !s.Absent, "tool": "x",
+		"thread_visibility": "private", "person_present": !s.Absent,
 		"jti": fmt.Sprintf("jti-%d-%d", now.UnixNano(), relayJTI.Add(1)),
 		"iat": now.Unix(), "nbf": now.Add(-30 * time.Second).Unix(), "exp": now.Add(5 * time.Minute).Unix(),
+	}
+	if s.Tool != "" {
+		c["tool"] = s.Tool
 	}
 	if s.Email != "" || s.Subject != "" {
 		sub := s.Subject
@@ -205,6 +212,14 @@ func (fx *relayFx) token(s agentSpec) string {
 	return fx.ri.mint(fx.e.app.URL, fx.subject, s)
 }
 
+// toolToken mints a token for a tools/call of the tool (the name the client
+// calls, as the portal exposes it).
+func (fx *relayFx) toolToken(s agentSpec, tool string) string {
+	fx.t.Helper()
+	s.Tool = tool
+	return fx.token(s)
+}
+
 // post sends a JSON-RPC request to the gateway with a credential and an
 // optional token (header MCP-Gateway-Identity).
 func (fx *relayFx) post(key, token, slug string, body map[string]any) (int, map[string]any) {
@@ -220,11 +235,21 @@ func (fx *relayFx) post(key, token, slug string, body map[string]any) (int, map[
 }
 
 // callTool is a tools/call through the gateway "support" with the relay's
-// key and a token.
-func (fx *relayFx) callTool(token, name string, args map[string]any) (int, map[string]any) {
+// key and a token. who is an agentSpec (a token for exactly this tool is
+// minted), or a token string to send as it is ("": none).
+func (fx *relayFx) callTool(who any, name string, args map[string]any) (int, map[string]any) {
 	fx.t.Helper()
 	if args == nil {
 		args = map[string]any{}
+	}
+	var token string
+	switch w := who.(type) {
+	case agentSpec:
+		token = fx.toolToken(w, name)
+	case string:
+		token = w
+	default:
+		fx.t.Fatalf("callTool: %T", who)
 	}
 	return fx.post(fx.key, token, "support", rpc(7, "tools/call", map[string]any{"name": name, "arguments": args}))
 }

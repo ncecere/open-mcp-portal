@@ -27,7 +27,7 @@ var (
 	// /mcp/{slug} (docs/agent-platforms.md); result is a fixed list.
 	AgentTokens = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "omp_agent_token_total",
-		Help: "Agent platform identity tokens on /mcp/{slug} by result: accepted, accepted_no_person, ignored_not_relay (presented with a credential that is not a relay account's: ignored), person_no_account, person_suspended, or rejected_<reason> (malformed, algorithm, key_id, type, untrusted_issuer, disabled_issuer, unknown_kid, jwks_unavailable, signature, audience, principal_type, claims, person_issuer, expired, not_yet_valid, lifetime, replay, other_platform).",
+		Help: "Agent platform identity tokens on /mcp/{slug} by result: accepted, accepted_no_person, ignored_not_relay (presented with a credential that is not a relay account's: ignored), person_no_account, person_suspended, or rejected_<reason> (malformed, algorithm, key_id, type, untrusted_issuer, disabled_issuer, unknown_kid, jwks_unavailable, signature, audience, principal_type, claims, person_issuer, expired, not_yet_valid, lifetime, replay, other_platform, tool_mismatch).",
 	}, []string{"result"})
 )
 

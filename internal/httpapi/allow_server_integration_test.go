@@ -449,7 +449,7 @@ func TestAgentCallsAfterAllowingFromMyConnections(t *testing.T) {
 	e.connectBroadly("repo")
 
 	// Before: link-free, names the server and where to allow it.
-	code, out := fx.callTool(fx.token(blair), tool, nil)
+	code, out := fx.callTool(blair, tool, nil)
 	text, isErr := toolText(t, out)
 	const want = "needs you to allow STATUS (tools) to use your Github account (repo), which you haven't. Allow STATUS under Account › My connections in Open MCP Portal, then try again."
 	if code != 200 || !isErr || !strings.HasSuffix(text, want) {
@@ -472,7 +472,7 @@ func TestAgentCallsAfterAllowingFromMyConnections(t *testing.T) {
 
 	// After: the agent's call is served with the person's token, no link.
 	id := fx.lastCallID()
-	code, out = fx.callTool(fx.token(blair), tool, nil)
+	code, out = fx.callTool(blair, tool, nil)
 	rep := e.providerReport(out)
 	issued := e.oauth.Issued()
 	if code != 200 || !rep.Received || rep.TokenSHA256 != testutil.TokenDigest(issued[len(issued)-1]) {
@@ -483,7 +483,7 @@ func TestAgentCallsAfterAllowingFromMyConnections(t *testing.T) {
 		t.Fatalf("record = %+v", r)
 	}
 	// Another person's agent still can't use blair's allowance.
-	_, out = fx.callTool(fx.token(agentSpec{Email: "user@localhost"}), tool, nil)
+	_, out = fx.callTool(agentSpec{Email: "user@localhost"}, tool, nil)
 	if text, isErr := toolText(t, out); !isErr || !strings.HasSuffix(text, wantConnect) {
 		t.Fatalf("owner through the relay = %q", text)
 	}
@@ -492,7 +492,7 @@ func TestAgentCallsAfterAllowingFromMyConnections(t *testing.T) {
 	if code, ec := e.member.call("DELETE", fmt.Sprintf("/v1/me/connections/%s/allowed-servers/%s", e.myConnID(), e.server.Id), nil, nil, nil); code != 200 {
 		t.Fatalf("revoke = %d %s", code, ec)
 	}
-	_, out = fx.callTool(fx.token(blair), tool, nil)
+	_, out = fx.callTool(blair, tool, nil)
 	if text, isErr := toolText(t, out); !isErr || !strings.HasSuffix(text, want) {
 		t.Fatalf("after revoking = %q", text)
 	}

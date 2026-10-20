@@ -88,7 +88,7 @@ func TestRelayedCallIsThePersonsWithTheAgentAsActor(t *testing.T) {
 	blairID := e.userID("blair@localhost")
 
 	id := fx.lastCallID()
-	code, out := fx.callTool(fx.token(agentSpec{Email: "blair@localhost"}), "status__whoami", nil)
+	code, out := fx.callTool(agentSpec{Email: "blair@localhost"}, "status__whoami", nil)
 	who := whoamiClaims(t, out)
 	c := who.Claims
 	teams, _ := c["teams"].([]any)
@@ -111,7 +111,7 @@ func TestRelayedCallIsThePersonsWithTheAgentAsActor(t *testing.T) {
 	}
 
 	// The person is not present.
-	_, out = fx.callTool(fx.token(agentSpec{Email: "blair@localhost", Absent: true}), "status__whoami", nil)
+	_, out = fx.callTool(agentSpec{Email: "blair@localhost", Absent: true}, "status__whoami", nil)
 	act, _ = whoamiClaims(t, out).Claims["act"].(map[string]any)
 	if act["person_present"] != false {
 		t.Fatalf("act when absent = %v", act)
@@ -120,7 +120,7 @@ func TestRelayedCallIsThePersonsWithTheAgentAsActor(t *testing.T) {
 	// No person (a shared thread): the account's own call, with the agent
 	// recorded and no act claim.
 	id = fx.lastCallID()
-	_, out = fx.callTool(fx.token(agentSpec{}), "status__whoami", nil)
+	_, out = fx.callTool(agentSpec{}, "status__whoami", nil)
 	who = whoamiClaims(t, out)
 	if who.Claims["principal_type"] != "service_account" || who.Claims["sub"] != fx.account.Id.String() || who.Claims["act"] != nil || who.Claims["email"] != nil {
 		t.Fatalf("no person: %+v", who)
@@ -130,7 +130,7 @@ func TestRelayedCallIsThePersonsWithTheAgentAsActor(t *testing.T) {
 	}
 
 	// The person is found by (iss, sub), never by the email the token carries.
-	_, out = fx.callTool(fx.token(agentSpec{Email: "casey@localhost", Subject: fx.subject("blair@localhost")}), "status__whoami", nil)
+	_, out = fx.callTool(agentSpec{Email: "casey@localhost", Subject: fx.subject("blair@localhost")}, "status__whoami", nil)
 	if w := whoamiClaims(t, out); w.Claims["sub"] != blairID || w.Claims["email"] != "blair@localhost" {
 		t.Fatalf("email in the token decided who: %+v", w.Claims)
 	}
@@ -204,14 +204,14 @@ func TestRelayedAccessIsThePersonIntersectedWithTheRelay(t *testing.T) {
 	// with the agent, and never reaches the server.
 	before := len(e.fake.ToolCalls())
 	id := fx.lastCallID()
-	_, out := fx.callTool(fx.token(agentSpec{Email: "user@localhost"}), "status__echo", map[string]any{"text": "x"})
+	_, out := fx.callTool(agentSpec{Email: "user@localhost"}, "status__echo", map[string]any{"text": "x"})
 	if rpcErrorCode(out) != -32602 {
 		t.Fatalf("owner through an editor relay called an admin tool: %v", out)
 	}
 	if r := fx.recordAfter(id); r.Outcome != "denied" || r.Class != "role" || r.Agent == "" || r.User != e.userID("user@localhost") {
 		t.Fatalf("record = %+v", r)
 	}
-	_, out = fx.callTool(fx.token(agentSpec{Email: "blair@localhost"}), "status__whoami", nil)
+	_, out = fx.callTool(agentSpec{Email: "blair@localhost"}, "status__whoami", nil)
 	if rpcErrorCode(out) != -32602 {
 		t.Fatalf("a member through an editor relay called an editor tool: %v", out)
 	}
@@ -266,7 +266,7 @@ func TestRelayedPersonStatusIsReadEveryCall(t *testing.T) {
 	e, fx := newAgentEnv(t)
 	blair := agentSpec{Email: "blair@localhost"}
 	blairID := e.userID("blair@localhost")
-	call := func(spec agentSpec) (int, map[string]any) { return fx.callTool(fx.token(spec), "status__whoami", nil) }
+	call := func(spec agentSpec) (int, map[string]any) { return fx.callTool(spec, "status__whoami", nil) }
 	if code, out := call(blair); code != 200 || whoamiClaims(t, out).Claims["sub"] != blairID {
 		t.Fatalf("baseline = %d %v", code, out)
 	}
@@ -319,7 +319,7 @@ func TestRelayedPersonStatusIsReadEveryCall(t *testing.T) {
 		t.Fatalf("removed record = %+v", r)
 	}
 	// ... while the relay account's own call (no person) still works.
-	if code, out := fx.callTool(fx.token(agentSpec{}), "status__whoami", nil); code != 200 || whoamiClaims(t, out).Claims["principal_type"] != "service_account" {
+	if code, out := fx.callTool(agentSpec{}, "status__whoami", nil); code != 200 || whoamiClaims(t, out).Claims["principal_type"] != "service_account" {
 		t.Fatalf("relay without a person = %d %v", code, out)
 	}
 	if got := e.toolCalls("whoami"); got != served+1 {
@@ -374,7 +374,7 @@ func TestAgentTokenOnOtherCredentialsIsIgnored(t *testing.T) {
 		t.Fatalf("%s jtis recorded for ignored tokens", n)
 	}
 	// The relay account itself isn't affected by the above.
-	_, out = fx.callTool(alexToken(), "status__whoami", nil)
+	_, out = fx.callTool(agentSpec{Email: "alex@localhost"}, "status__whoami", nil)
 	if who := whoamiClaims(t, out); who.Claims["sub"] != e.userID("alex@localhost") {
 		t.Fatalf("relay + token = %+v", who.Claims)
 	}
@@ -446,7 +446,7 @@ func TestRelayTokenFailuresRefuseTheRequest(t *testing.T) {
 		t.Fatalf("two tokens = %d", req)
 	}
 	// A reused jti is refused.
-	tok = fx.token(blair)
+	tok = fx.toolToken(blair, "status__whoami")
 	if code, _ := fx.callTool(tok, "status__whoami", nil); code != 200 {
 		t.Fatalf("first use = %d", code)
 	}
@@ -458,7 +458,7 @@ func TestRelayTokenFailuresRefuseTheRequest(t *testing.T) {
 	e.admin.get("/v1/admin/agent-platforms/"+fx.platformID, &plat)
 	code, ec := e.admin.call("PATCH", "/v1/admin/agent-platforms/"+fx.platformID, map[string]any{"enabled": false}, &plat, ifMatch(plat.Revision))
 	mustCode(t, "disable", code, ec, 200, "")
-	if code, out := fx.callTool(fx.token(blair), "status__whoami", nil); code != 403 || !strings.Contains(fmt.Sprint(out), "(disabled_issuer)") {
+	if code, out := fx.callTool(blair, "status__whoami", nil); code != 403 || !strings.Contains(fmt.Sprint(out), "(disabled_issuer)") {
 		t.Fatalf("disabled platform = %d %v", code, out)
 	}
 	// ... but the relay's own calls with no token are untouched by it.
@@ -467,7 +467,7 @@ func TestRelayTokenFailuresRefuseTheRequest(t *testing.T) {
 	}
 	code, ec = e.admin.call("PATCH", "/v1/admin/agent-platforms/"+fx.platformID, map[string]any{"enabled": true}, &plat, ifMatch(plat.Revision))
 	mustCode(t, "enable", code, ec, 200, "")
-	if code, _ := fx.callTool(fx.token(blair), "status__whoami", nil); code != 200 {
+	if code, _ := fx.callTool(blair, "status__whoami", nil); code != 200 {
 		t.Fatalf("re-enabled = %d", code)
 	}
 	// The relay mark moves with the platform: deleting it clears the mark, and
@@ -478,7 +478,7 @@ func TestRelayTokenFailuresRefuseTheRequest(t *testing.T) {
 	code, ec = e.admin.call("DELETE", "/v1/admin/agent-platforms/"+fx.platformID, nil, nil, nil)
 	mustCode(t, "delete platform", code, ec, 200, "")
 	before := tokenCount("ignored_not_relay")
-	_, out := fx.callTool(fx.token(blair), "status__whoami", nil)
+	_, out := fx.callTool(blair, "status__whoami", nil)
 	if w := whoamiClaims(t, out); w.Claims["principal_type"] != "service_account" || w.Claims["act"] != nil || tokenCount("ignored_not_relay") != before+1 {
 		t.Fatalf("after deleting the platform: %+v", w.Claims)
 	}
@@ -494,4 +494,118 @@ func (fx *relayFx) rawWithTwoTokens(a, b string) int {
 	fx.t.Helper()
 	code, _, _ := rawMCPMulti(fx.t, fx.e.app, "support", fx.key, whoamiCall(), []string{a, b})
 	return code
+}
+
+// M-1 of the security review: a verified token's tool claim must fit the
+// request. On a tools/call it is present and equals params.name (the name the
+// client called, as the portal exposes it); on every other method it is
+// absent. A mismatch is refused like any bad relay token (403, nothing runs,
+// tool_mismatch). Requests without a verified token are not affected.
+func TestRelayTokenToolClaimIsBoundToTheRequest(t *testing.T) {
+	e, fx := newAgentEnv(t)
+	blair := agentSpec{Email: "blair@localhost"}
+	served := func() int { return len(e.fake.ToolCalls()) }
+	whoami, echo := "status__whoami", "status__echo"
+
+	refused := func(what string, code int, out map[string]any, reason string) {
+		t.Helper()
+		errObj, _ := out["error"].(map[string]any)
+		msg, _ := errObj["message"].(string)
+		if code != 403 || rpcErrorCode(out) != -32001 || !strings.Contains(msg, "("+reason+")") || !strings.Contains(msg, "was not run") {
+			t.Errorf("%s: %d %v (want 403 refused as %s)", what, code, out, reason)
+		}
+	}
+
+	// The matching token works: the call is Blair's, with the agent as actor.
+	before, calls := tokenCount("rejected_tool_mismatch"), served()
+	code, out := fx.callTool(blair, whoami, nil)
+	if who := whoamiClaims(t, out); code != 200 || who.Claims["sub"] != e.userID("blair@localhost") || who.Claims["act"] == nil {
+		t.Fatalf("a token for the tool called = %d %+v", code, who.Claims)
+	}
+
+	// The scenario of the review: a token minted for one tool presented for
+	// another (the hostile server names its tool like a portal tool).
+	code, out = fx.post(fx.key, fx.toolToken(blair, "search_mail"), "support", rpc(7, "tools/call", map[string]any{"name": whoami, "arguments": map[string]any{}}))
+	refused("a token for search_mail used for whoami", code, out, "tool_mismatch")
+	code, out = fx.post(fx.key, fx.toolToken(blair, whoami), "support", rpc(7, "tools/call", map[string]any{"name": echo, "arguments": map[string]any{"text": "x"}}))
+	refused("a token for whoami used for echo", code, out, "tool_mismatch")
+	// No tool claim on a tools/call, and a claim that differs by case, space or an invisible character.
+	code, out = fx.post(fx.key, fx.token(blair), "support", whoamiCall())
+	refused("a tools/call with no tool claim", code, out, "tool_mismatch")
+	for _, tool := range []string{"Status__whoami", whoami + " ", whoami + "\u200b", " " + whoami, "status__who"} {
+		code, out = fx.post(fx.key, fx.toolToken(blair, tool), "support", whoamiCall())
+		refused(fmt.Sprintf("a tool claim of %q", tool), code, out, "tool_mismatch")
+	}
+	// A tools/call without a usable name has nothing to match.
+	code, out = fx.post(fx.key, fx.toolToken(blair, whoami), "support", rpc(7, "tools/call", map[string]any{"arguments": map[string]any{}}))
+	refused("a tools/call with no name", code, out, "tool_mismatch")
+	code, out = fx.post(fx.key, fx.toolToken(blair, whoami), "support", rpc(7, "tools/call", map[string]any{"name": 7}))
+	refused("a tools/call with a numeric name", code, out, "tool_mismatch")
+	// A modern (stateless) request is held to the same rule.
+	mcode, _, mout := rawModern(t, e.app, "support", fx.key, "tools/call", toolCall(whoami, nil), nil, map[string]string{"MCP-Gateway-Identity": fx.toolToken(blair, echo)})
+	refused("a modern tools/call with another tool's token", mcode, mout, "tool_mismatch")
+	mcode, _, mout = rawModern(t, e.app, "support", fx.key, "tools/call", toolCall(whoami, nil), nil, map[string]string{"MCP-Gateway-Identity": fx.toolToken(blair, whoami)})
+	if mcode != 200 || whoamiOf(t, mout).Claims["act"] == nil {
+		t.Fatalf("a modern tools/call with its own token = %d %v", mcode, mout)
+	}
+	if got := tokenCount("rejected_tool_mismatch") - before; got != 11 {
+		t.Errorf("tool_mismatch counted %v times, want 11", got)
+	}
+	if got := served() - calls; got != 2 { // the two matching calls only
+		t.Errorf("%d tool calls reached the server, want 2: a refused request must not run", got)
+	}
+
+	// Every other method must carry no tool claim at all.
+	for _, c := range []struct {
+		name   string
+		method string
+		params any
+	}{
+		{"tools/list", "tools/list", nil},
+		{"initialize", "initialize", map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{}, "clientInfo": map[string]any{"name": "pdp", "version": "1"}}},
+		{"resources/read", "resources/read", map[string]any{"uri": "omp://status/status://services"}},
+		{"prompts/get", "prompts/get", map[string]any{"name": "status__incident_summary"}},
+		{"ping", "ping", nil},
+	} {
+		code, out := fx.post(fx.key, fx.toolToken(blair, whoami), "support", rpc(1, c.method, c.params))
+		refused(c.name+" with a tool claim", code, out, "tool_mismatch")
+		if code, out := fx.post(fx.key, fx.token(blair), "support", rpc(1, c.method, c.params)); code == 403 {
+			t.Errorf("%s with no tool claim was refused: %v", c.name, out)
+		}
+	}
+	// A notification too.
+	note := map[string]any{"jsonrpc": "2.0", "method": "notifications/initialized"}
+	if code, out := fx.post(fx.key, fx.toolToken(blair, whoami), "support", note); code != 403 {
+		t.Errorf("a notification with a tool claim = %d %v", code, out)
+	}
+	if code, out := fx.post(fx.key, fx.token(blair), "support", note); code != 202 {
+		t.Errorf("a notification with no tool claim = %d %v", code, out)
+	}
+	// A token with no person (a team's shared thread) is held to it as well.
+	team := agentSpec{}
+	if code, out := fx.post(fx.key, fx.toolToken(team, echo), "support", whoamiCall()); code != 403 {
+		t.Errorf("a personless token for another tool = %d %v", code, out)
+	}
+	if code, out := fx.callTool(team, whoami, nil); code != 200 || whoamiClaims(t, out).Claims["principal_type"] != "service_account" {
+		t.Errorf("a personless token for the tool called = %d %v", code, out)
+	}
+
+	// A refused token is spent: the jti was recorded when it verified.
+	tok := fx.toolToken(blair, echo)
+	if code, out := fx.post(fx.key, tok, "support", whoamiCall()); code != 403 || !strings.Contains(fmt.Sprint(out), "(tool_mismatch)") {
+		t.Fatalf("mismatch = %d %v", code, out)
+	}
+	if code, out := fx.post(fx.key, tok, "support", rpc(7, "tools/call", map[string]any{"name": echo, "arguments": map[string]any{"text": "x"}})); code != 403 || !strings.Contains(fmt.Sprint(out), "(replay)") {
+		t.Errorf("the refused token again = %d %v", code, out)
+	}
+
+	// Not affected: no token, and a token on a credential that is no relay.
+	if code, out := fx.callTool("", whoami, nil); code != 200 || whoamiClaims(t, out).Claims["principal_type"] != "service_account" {
+		t.Errorf("a relay key without a token = %d %v", code, out)
+	}
+	ignored := tokenCount("ignored_not_relay")
+	if code, out := fx.post(e.key, fx.toolToken(blair, "search_mail"), "support", whoamiCall()); code != 200 || whoamiClaims(t, out).Claims["principal_type"] != "user" || tokenCount("ignored_not_relay") != ignored+1 {
+		t.Errorf("a personal key with a token for another tool = %d %v", code, out)
+	}
+	fx.noSecrets(e.logs)
 }

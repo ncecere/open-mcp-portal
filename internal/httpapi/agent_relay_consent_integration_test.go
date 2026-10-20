@@ -44,7 +44,7 @@ func TestRelayedCallNeverStartsConsent(t *testing.T) {
 	// 1. Not connected: a tool error, no link, no stored consent request, and
 	// the server is never contacted.
 	id := fx.lastCallID()
-	code, out := fx.callTool(fx.token(blair), tool, nil)
+	code, out := fx.callTool(blair, tool, nil)
 	text, isErr := toolText(t, out)
 	if code != 200 || !isErr || !strings.HasSuffix(text, wantConnect) || !strings.HasPrefix(text, tool+" needs your Github account (repo).") {
 		t.Fatalf("not connected = %d %q", code, text)
@@ -61,7 +61,7 @@ func TestRelayedCallNeverStartsConsent(t *testing.T) {
 		t.Fatalf("the server was contacted %d times without a connection", n)
 	}
 	// A modern client that declared URL elicitation gets no input request either.
-	mcode, _, mout := rawModern(t, e.app, "support", fx.key, "tools/call", toolCall(tool, nil), urlCaps, map[string]string{"MCP-Gateway-Identity": fx.token(blair)})
+	mcode, _, mout := rawModern(t, e.app, "support", fx.key, "tools/call", toolCall(tool, nil), urlCaps, map[string]string{"MCP-Gateway-Identity": fx.toolToken(blair, tool)})
 	mtext, mErr := toolText(t, mout)
 	if mcode != 200 || !mErr || !strings.HasSuffix(mtext, wantConnect) {
 		t.Fatalf("modern not connected = %d %v", mcode, mout)
@@ -80,7 +80,7 @@ func TestRelayedCallNeverStartsConsent(t *testing.T) {
 	// 2. Connected, but this server isn't allowed to use the account (F-3
 	// server_not_allowed): a tool error saying to allow it, no link.
 	e.connectBroadly("repo")
-	code, out = fx.callTool(fx.token(blair), tool, nil)
+	code, out = fx.callTool(blair, tool, nil)
 	text, isErr = toolText(t, out)
 	if code != 200 || !isErr || !strings.Contains(text, "needs you to allow STATUS (tools) to use your Github account (repo)") {
 		t.Fatalf("server not allowed = %d %q", code, text)
@@ -89,7 +89,7 @@ func TestRelayedCallNeverStartsConsent(t *testing.T) {
 	if n := e.connectRequests(); n != "0" {
 		t.Fatalf("%s consent requests for server_not_allowed", n)
 	}
-	mcode, _, mout = rawModern(t, e.app, "support", fx.key, "tools/call", toolCall(tool, nil), urlCaps, map[string]string{"MCP-Gateway-Identity": fx.token(blair)})
+	mcode, _, mout = rawModern(t, e.app, "support", fx.key, "tools/call", toolCall(tool, nil), urlCaps, map[string]string{"MCP-Gateway-Identity": fx.toolToken(blair, tool)})
 	if _, isErr := toolText(t, mout); mcode != 200 || !isErr {
 		t.Fatalf("modern server not allowed = %d %v", mcode, mout)
 	}
@@ -100,7 +100,7 @@ func TestRelayedCallNeverStartsConsent(t *testing.T) {
 
 	// 3. The scopes aren't enough: a tool error asking for more access.
 	e.setRequirement(map[string]any{"providerId": e.provider.Id, "scopes": []string{"repo", "read:org"}})
-	code, out = fx.callTool(fx.token(blair), tool, nil)
+	code, out = fx.callTool(blair, tool, nil)
 	text, isErr = toolText(t, out)
 	if code != 200 || !isErr || !strings.Contains(text, "needs your Github account (repo, read:org). Grant more access to your Github account under Account › My connections") {
 		t.Fatalf("missing scopes = %d %q", code, text)
@@ -145,7 +145,7 @@ func TestRelayedCallUsesThePersonsDelegatedCredential(t *testing.T) {
 	token := issued[len(issued)-1]
 
 	id := fx.lastCallID()
-	code, out := fx.callTool(fx.token(blair), tool, nil)
+	code, out := fx.callTool(blair, tool, nil)
 	rep := e.providerReport(out)
 	if code != 200 || !rep.Received || rep.Provider != "github" || rep.TokenSHA256 != testutil.TokenDigest(token) || rep.Claim != "github" || !rep.ClaimMatches || !rep.Verified {
 		t.Fatalf("provider report = %d %+v", code, rep)
@@ -161,7 +161,7 @@ func TestRelayedCallUsesThePersonsDelegatedCredential(t *testing.T) {
 		t.Fatalf("record = %+v", r)
 	}
 	// Another person (the owner) hasn't connected: a tool error, and never blair's token.
-	code, out = fx.callTool(fx.token(owner), tool, nil)
+	code, out = fx.callTool(owner, tool, nil)
 	text, isErr := toolText(t, out)
 	if code != 200 || !isErr || !strings.HasSuffix(text, wantConnect) {
 		t.Fatalf("owner through the relay = %d %q", code, text)
@@ -172,7 +172,7 @@ func TestRelayedCallUsesThePersonsDelegatedCredential(t *testing.T) {
 		t.Fatalf("relay without a person = %v", out)
 	}
 	// An agent call that is not for a present person still uses the person's credential.
-	_, out = fx.callTool(fx.token(agentSpec{Email: "blair@localhost", Absent: true}), tool, nil)
+	_, out = fx.callTool(agentSpec{Email: "blair@localhost", Absent: true}, tool, nil)
 	if rep := e.providerReport(out); !rep.Received || rep.TokenSHA256 != testutil.TokenDigest(token) {
 		t.Fatalf("absent person's report = %+v", rep)
 	}
@@ -191,9 +191,9 @@ func TestRequiresPresentPerson(t *testing.T) {
 	e, fx := newAgentEnv(t)
 	blair := agentSpec{Email: "blair@localhost"}
 	absent := agentSpec{Email: "blair@localhost", Absent: true}
-	whoami := func(spec agentSpec) (int, map[string]any) { return fx.callTool(fx.token(spec), "status__whoami", nil) }
+	whoami := func(spec agentSpec) (int, map[string]any) { return fx.callTool(spec, "status__whoami", nil) }
 	echo := func(spec agentSpec) (int, map[string]any) {
-		return fx.callTool(fx.token(spec), "status__echo", map[string]any{"text": "hi"})
+		return fx.callTool(spec, "status__echo", map[string]any{"text": "hi"})
 	}
 	notPresent := func(out map[string]any, what string) {
 		t.Helper()
@@ -443,7 +443,7 @@ func TestRelayedCallToAnOAuthServerNeverStartsConsent(t *testing.T) {
 	blair := agentSpec{Email: "blair@localhost"}
 	relay := func(tool string) map[string]any {
 		t.Helper()
-		code, out := fx.post(fx.key, fx.token(blair), "ghgw", rpc(9, "tools/call", map[string]any{"name": tool, "arguments": map[string]any{}}))
+		code, out := fx.post(fx.key, fx.toolToken(blair, tool), "ghgw", rpc(9, "tools/call", map[string]any{"name": tool, "arguments": map[string]any{}}))
 		if code != 200 {
 			t.Fatalf("%s = %d %v", tool, code, out)
 		}

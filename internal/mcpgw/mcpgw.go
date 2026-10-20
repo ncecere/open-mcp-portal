@@ -318,6 +318,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.toolBound(w, r, principal, msg) {
+		return
+	}
+
 	rc := &request{h: h, w: w, r: r, start: start, msg: msg, principal: principal, requestBytes: int64(len(body)),
 		modern: era.modern, clientCaps: era.caps}
 	if !rc.resolveGateway(slug) {

@@ -85,6 +85,11 @@ const (
 	// ReasonOtherPlatform: a valid token of a platform this credential is
 	// not a relay for (set by the caller).
 	ReasonOtherPlatform = "other_platform"
+	// ReasonToolMismatch: a valid token whose tool claim doesn't fit the
+	// request it came with (set by the caller, which knows the request): on a
+	// tools/call it must be the called tool's name, on any other method it
+	// must be absent (M-1 of the security review).
+	ReasonToolMismatch = "tool_mismatch"
 )
 
 // Rejection is a token that failed a check. Detail is for logs and
@@ -112,10 +117,14 @@ type Person struct {
 type Identity struct {
 	Platform dbgen.AgentPlatform
 	// AgentID and AgentName are the calling agent (sub, name).
-	AgentID, AgentName             string
-	TeamID, TeamSlug, TeamKind     string
-	ThreadVisibility               string
-	Tool                           string
+	AgentID, AgentName         string
+	TeamID, TeamSlug, TeamKind string
+	ThreadVisibility           string
+	// Tool is the tool claim cleaned for display (informational).
+	Tool string
+	// ToolClaim is the tool claim exactly as signed ("" when absent): the
+	// only form to compare with the name a client called (ToolMatches).
+	ToolClaim                      string
 	Person                         *Person
 	PersonPresent                  bool
 	JTI                            string
@@ -268,7 +277,7 @@ func (s *Service) check(p dbgen.AgentPlatform, payload []byte) (Identity, error)
 		return Identity{}, reject(ReasonClaims, "sub, team.id and jti are required")
 	}
 	id := Identity{Platform: p, AgentID: c.Sub, AgentName: tidy(c.Name, maxNameLen), TeamID: c.Team.ID, TeamSlug: tidy(c.Team.Slug, maxClaimLen),
-		TeamKind: tidy(c.Team.Kind, 32), ThreadVisibility: tidy(c.ThreadVisibility, 32), Tool: tidy(c.Tool, 1100), JTI: c.JTI}
+		TeamKind: tidy(c.Team.Kind, 32), ThreadVisibility: tidy(c.ThreadVisibility, 32), Tool: tidy(c.Tool, 1100), ToolClaim: c.Tool, JTI: c.JTI}
 	if raw := bytes.TrimSpace(c.Person); len(raw) > 0 && !bytes.Equal(raw, []byte("null")) {
 		var pc personClaim
 		if raw[0] != '{' || json.Unmarshal(raw, &pc) != nil || !plain(pc.Iss, 500) || !plain(pc.Sub, 500) {
@@ -303,6 +312,20 @@ func (s *Service) check(p dbgen.AgentPlatform, payload []byte) (Identity, error)
 		return Identity{}, reject(ReasonNotYetValid, "the token isn't valid yet")
 	}
 	return id, nil
+}
+
+// ToolMatches reports whether the token's tool claim fits a request (M-1): on
+// a tools/call (call true) the claim must be present and equal name, the tool
+// the client called (the name the portal exposes); on any other method (call
+// false) the claim must be absent. The comparison is exact, on the claim as
+// signed. PDP's tokens carry tool when the request is for a tool and not
+// otherwise (the recorded tokens in testdata/pdp), so a token minted for one
+// tool can't be used for another tool or another kind of request.
+func (id Identity) ToolMatches(call bool, name string) bool {
+	if !call {
+		return id.ToolClaim == ""
+	}
+	return id.ToolClaim != "" && id.ToolClaim == name
 }
 
 // audienceHas reports whether aud (a JSON string or array of strings)

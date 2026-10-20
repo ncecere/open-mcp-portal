@@ -1,6 +1,7 @@
 package mcpgw
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/observability"
 	"github.com/ncecere/open-mcp-portal/internal/providers"
 	"github.com/ncecere/open-mcp-portal/internal/registry"
+	"github.com/ncecere/open-mcp-portal/internal/serviceaccounts"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 	"github.com/ncecere/open-mcp-portal/internal/upstream"
@@ -126,14 +128,7 @@ func (h *Handler) agentToken(w http.ResponseWriter, r *http.Request, p *principa
 		}
 		return true
 	}
-	fail := func(reason, detail string) bool {
-		countToken("rejected_" + reason)
-		h.log().WarnContext(ctx, "an agent identity token was refused", "reason", reason, "detail", detail,
-			"service_account_id", acct.Account.ID.String(), "request_id", reqID)
-		w.Header().Set("Content-Type", "application/json")
-		refuse(w, http.StatusForbidden, "The agent identity token was refused ("+reason+"). The request was not run.")
-		return false
-	}
+	fail := func(reason, detail string) bool { return h.refuseToken(w, r, acct, reason, detail) }
 	if h.Agents == nil {
 		return fail(agentidentity.ReasonUntrustedIssuer, "agent platforms are not configured")
 	}
@@ -176,6 +171,49 @@ func (h *Handler) agentToken(w http.ResponseWriter, r *http.Request, p *principa
 		countToken("accepted")
 	}
 	return true
+}
+
+// refuseToken refuses a request whose agent token failed a check: HTTP 403,
+// counted as rejected_<reason> and logged with the reason (never the token).
+// Always false: the request was answered.
+func (h *Handler) refuseToken(w http.ResponseWriter, r *http.Request, acct *serviceaccounts.Principal, reason, detail string) bool {
+	countToken("rejected_" + reason)
+	h.log().WarnContext(r.Context(), "an agent identity token was refused", "reason", reason, "detail", detail,
+		"service_account_id", acct.Account.ID.String(), "request_id", httpx.RequestID(r.Context()))
+	w.Header().Set("Content-Type", "application/json")
+	refuse(w, http.StatusForbidden, "The agent identity token was refused ("+reason+"). The request was not run.")
+	return false
+}
+
+// toolBound checks, once the request is read, that a verified token's tool
+// claim fits it (M-1): on a tools/call the claim is present and equals
+// params.name, the tool the client called (the name this portal exposes); on
+// every other method it is absent. A token minted for one tool, or for a
+// handshake, is then no use for another call. A mismatch refuses the request
+// like any bad relay token (403, tool_mismatch, nothing runs). ok false: the
+// request was answered. Requests without a verified token are not affected.
+func (h *Handler) toolBound(w http.ResponseWriter, r *http.Request, p principal, msg message) bool {
+	rl := p.relay
+	if rl == nil {
+		return true
+	}
+	call := msg.Method == methodToolsCall
+	name := ""
+	if call {
+		var params struct {
+			Name string `json:"name"`
+		}
+		_ = json.Unmarshal(msg.Params, &params)
+		name = params.Name
+	}
+	if rl.agent.ToolMatches(call, name) {
+		return true
+	}
+	detail := "the token has a tool claim on a request that isn't a tool call"
+	if call {
+		detail = "the token's tool claim is missing or isn't the tool called"
+	}
+	return h.refuseToken(w, r, p.account, agentidentity.ReasonToolMismatch, detail)
 }
 
 // refusePerson answers a request for a person who can't be used: a tool
