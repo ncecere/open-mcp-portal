@@ -19,7 +19,10 @@ import (
 //  1. from a service account is refused (-32010, data.reason
 //     service_account; recorded denied);
 //  2. of a turned-off provider is refused (-32010 provider_disabled;
-//     recorded denied);
+//     recorded denied), and so is one of a restricted provider whose access
+//     list excludes the server's team and the server (-32010
+//     provider_not_allowed, decision 69; recorded denied; no consent link,
+//     and an agent's relayed call is refused the same);
 //  3. without an active connection covering the scopes, or with one the
 //     person hasn't allowed this server to use (at the origin its URL has
 //     now; reason server_not_allowed), gets a consent link
@@ -40,7 +43,10 @@ import (
 const (
 	DeniedServiceAccount   = "service_account"
 	DeniedProviderDisabled = "provider_disabled"
-	ProviderUnavailable    = "provider_unavailable"
+	// DeniedProviderNotAllowed: the provider is restricted and its access
+	// list excludes this server (decision 69).
+	DeniedProviderNotAllowed = "provider_not_allowed"
+	ProviderUnavailable      = "provider_unavailable"
 )
 
 func kindNoun(kind string) string {
@@ -97,6 +103,8 @@ func (rc *request) delegated(o gateways.Offer, rec *calls.Call) (cred *providers
 		return &c, true
 	case errors.Is(err, providers.ErrProviderDisabled):
 		rc.providerDisabled(req, rec)
+	case errors.Is(err, providers.ErrProviderNotAllowed):
+		rc.providerNotAllowed(req, rec)
 	case errors.As(err, &consent):
 		rc.needsAuthorization(o, consent, rec, "")
 	case errors.As(err, &down):
@@ -112,6 +120,14 @@ func (rc *request) providerUnavailable(o gateways.Offer, rec *calls.Call) {
 	n := rc.failData(codeDenied, fmt.Sprintf("%s couldn't be reached to renew your access. Try again shortly.", req.Provider.Name),
 		map[string]any{"reason": ProviderUnavailable, "provider": req.Provider.Slug})
 	rec.Outcome, rec.ErrorClass = calls.OutcomeUpstreamError, ProviderUnavailable
+	rc.record(*rec, n)
+}
+
+func (rc *request) providerNotAllowed(req *registry.Requirement, rec *calls.Call) {
+	msg := fmt.Sprintf("%s accounts aren't open to this server; ask a platform admin to add it to the provider's access list", req.Provider.Name)
+	n := rc.failData(codeDenied, msg,
+		map[string]any{"reason": DeniedProviderNotAllowed, "provider": req.Provider.Slug})
+	rec.Outcome, rec.ErrorClass = calls.OutcomeDenied, DeniedProviderNotAllowed
 	rc.record(*rec, n)
 }
 

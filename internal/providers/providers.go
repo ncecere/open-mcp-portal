@@ -103,6 +103,8 @@ type Service struct {
 	// (gateways.Service.ReachableServers; nil: none), which the person may
 	// allow to use a connection (allow.go).
 	Reachable func(ctx context.Context, u dbgen.User) ([]gateways.ReachableServer, error)
+	// narrow holds the short-lived narrowed tokens in memory (narrow.go).
+	narrow narrowCache
 }
 
 // New returns the service. up supplies the address guard (the development
@@ -280,6 +282,9 @@ type CreateInput struct {
 	DefaultScopes                          *[]string
 	ScopeParam, ScopeSeparator, RespFormat *string
 	ExtraParams                            *map[string]string
+	// NarrowOnRefresh: calls get a token refreshed with only the scopes
+	// they need (decision 69); nil: off.
+	NarrowOnRefresh *bool
 }
 
 // UpdateInput holds changes; nil keeps a field. The Clear* flags remove an
@@ -295,6 +300,7 @@ type UpdateInput struct {
 	DefaultScopes                                          *[]string
 	ScopeParam, ScopeSeparator, RespFormat                 *string
 	ExtraParams                                            *map[string]string
+	NarrowOnRefresh                                        *bool
 }
 
 // fields are a provider's settings while validating.
@@ -448,6 +454,7 @@ func snapshot(p dbgen.AuthProvider) map[string]any {
 		"userinfoUrl": p.UserinfoUrl, "defaultScopes": nonNil(p.DefaultScopes), "scopeParam": p.ScopeParam,
 		"scopeSeparator": p.ScopeSeparator, "tokenResponseFormat": p.TokenResponseFormat,
 		"extraAuthorizeParams": extraParams(p.ExtraAuthorizeParams), "logoUrl": p.LogoUrl,
+		"accessMode": p.AccessMode, "narrowOnRefresh": p.NarrowOnRefresh,
 	}
 }
 
@@ -510,6 +517,9 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, in CreateInput) (Vi
 		Pkce: f.pkce, AuthorizationUrl: f.authorizationURL, TokenUrl: f.tokenURL, RevocationUrl: f.revocationURL,
 		UserinfoUrl: f.userinfoURL, DefaultScopes: f.scopes, ScopeParam: f.scopeParam, ScopeSeparator: f.separator,
 		TokenResponseFormat: f.format, ExtraAuthorizeParams: params, LogoUrl: f.logoURL, CreatedBy: by(a),
+		// New providers start restricted: no team or server may require
+		// them until an admin lists some (decision 69).
+		AccessMode: AccessRestricted, NarrowOnRefresh: or(in.NarrowOnRefresh, false),
 	}
 	if f.secret != nil {
 		ct, err := s.box.Seal([]byte(*f.secret), SecretAAD(id))
@@ -609,7 +619,7 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, id uuid.UUID, in Up
 			ClientSecretHint: cur.ClientSecretHint, TokenAuthMethod: f.method, Pkce: f.pkce, AuthorizationUrl: f.authorizationURL,
 			TokenUrl: f.tokenURL, RevocationUrl: f.revocationURL, UserinfoUrl: f.userinfoURL, DefaultScopes: f.scopes,
 			ScopeParam: f.scopeParam, ScopeSeparator: f.separator, TokenResponseFormat: f.format, ExtraAuthorizeParams: params,
-			LogoUrl: f.logoURL, UpdatedBy: by(a),
+			LogoUrl: f.logoURL, UpdatedBy: by(a), NarrowOnRefresh: or(in.NarrowOnRefresh, cur.NarrowOnRefresh),
 		}
 		secretChanged := false
 		if f.secret != nil {

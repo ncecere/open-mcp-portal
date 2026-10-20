@@ -571,7 +571,7 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 		if err != nil {
 			return err
 		}
-		if p.AuthProviderID, p.AuthScopes, err = checkRequirement(ctx, q, in.Requirement, uuid.NullUUID{}); err != nil {
+		if p.AuthProviderID, p.AuthScopes, err = checkRequirement(ctx, q, in.Requirement, uuid.NullUUID{}, ta.team.ID, uuid.Nil); err != nil {
 			return err
 		}
 		p.AuthMode, p.SendIdentity = mode, sendIdentity
@@ -690,7 +690,7 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 			return err
 		}
 		if in.SetRequirement {
-			if p.AuthProviderID, p.AuthScopes, err = checkRequirement(ctx, q, in.Requirement, cur.AuthProviderID); err != nil {
+			if p.AuthProviderID, p.AuthScopes, err = checkRequirement(ctx, q, in.Requirement, cur.AuthProviderID, ta.team.ID, cur.ID); err != nil {
 				return err
 			}
 		}

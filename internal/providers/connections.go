@@ -82,6 +82,10 @@ type Connection struct {
 	// connection (a platform provider's grants, F-3); none for a
 	// server-bound provider, whose connection is for its server.
 	Servers []ServerGrant
+	// NarrowsScopes: calls get a token refreshed with only the scopes the
+	// call needs, never this connection's stored token (decision 69). False
+	// means the token a server receives holds every scope granted.
+	NarrowsScopes bool
 }
 
 // Refreshable reports whether a refresh token is held.
@@ -100,7 +104,7 @@ func (s *Service) list(ctx context.Context, userID uuid.UUID) ([]Connection, err
 	for i, r := range rows {
 		out[i] = Connection{Connection: r.ProviderConnection, Provider: ProviderRef{ID: r.ProviderConnection.ProviderID,
 			Slug: r.ProviderSlug, Name: r.ProviderName, Preset: r.ProviderPreset, LogoURL: r.ProviderLogoUrl, Kind: r.ProviderKind},
-			Servers: []ServerGrant{}}
+			Servers: []ServerGrant{}, NarrowsScopes: r.ProviderNarrows && r.ProviderKind != KindMCPServer && r.ProviderConnection.RefreshTokenCipher != nil}
 		for _, g := range grants {
 			if g.ConnectionID == r.ProviderConnection.ID {
 				out[i].Servers = append(out[i].Servers, serverGrantOf(g))

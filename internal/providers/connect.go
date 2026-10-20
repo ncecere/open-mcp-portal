@@ -52,8 +52,11 @@ const (
 	ResultMissingScopes = "missing_scopes"
 	ResultDenied        = "denied"
 	ResultExpired       = "expired"
-	ResultWrongPerson   = "wrong_person"
-	ResultError         = "error"
+	// ResultNotAllowed: connected, but the provider's access list excludes
+	// the server the link was for (decision 69).
+	ResultNotAllowed  = "not_allowed"
+	ResultWrongPerson = "wrong_person"
+	ResultError       = "error"
 )
 
 var (
@@ -543,7 +546,7 @@ func (s *Service) Callback(ctx context.Context, in CallbackInput) (string, error
 		expires = &t
 	}
 	actor := authz.Actor{UserID: in.User.ID, PlatformRole: in.User.PlatformRole, RequestID: in.RequestID, ClientIP: in.ClientIP}
-	setup, grantSkipped := false, false
+	setup, grantSkipped, notAllowed := false, false, false
 	err = store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
 		row, viaRequest, err := s.store(ctx, q, actor, in.User, p, st, tok, granted, label, expires)
 		if err != nil {
@@ -553,7 +556,7 @@ func (s *Service) Callback(ctx context.Context, in CallbackInput) (string, error
 			// The consent link also allows the server it was made for, when
 			// this callback used it up and the provider granted what it asks.
 			if viaRequest && p.Kind != KindMCPServer {
-				grantSkipped, err = s.grantFromRequest(ctx, q, actor, in.User, p, row, st, granted)
+				grantSkipped, notAllowed, err = s.grantFromRequest(ctx, q, actor, in.User, p, row, st, granted)
 			}
 			return err
 		}
@@ -591,6 +594,10 @@ func (s *Service) Callback(ctx context.Context, in CallbackInput) (string, error
 	switch {
 	case len(missing) > 0:
 		return done(p.Slug, ResultMissingScopes, missing), nil
+	case notAllowed:
+		// Connected, but the provider's access list excludes the link's
+		// server: nothing was allowed, and asking again will not help.
+		return done(p.Slug, ResultNotAllowed, nil), nil
 	case grantSkipped:
 		// Connected, but the link's server moved or went meanwhile: nothing
 		// was allowed; the next call asks again.
@@ -604,26 +611,32 @@ func (s *Service) Callback(ctx context.Context, in CallbackInput) (string, error
 // grantFromRequest allows, after a connect that used the link up, the server
 // the link was made for (at the origin it was made for), for the scopes the
 // link names, when the provider granted them all. skipped: the link's server
-// is gone or changed, so nothing was allowed.
+// is gone or changed, so nothing was allowed; notAllowed: the provider's
+// access list excludes the server, so nothing was allowed either.
 func (s *Service) grantFromRequest(ctx context.Context, q *dbgen.Queries, a authz.Actor, u dbgen.User, p dbgen.AuthProvider,
-	conn dbgen.ProviderConnection, st dbgen.ProviderAuthState, granted []string) (skipped bool, err error) {
+	conn dbgen.ProviderConnection, st dbgen.ProviderAuthState, granted []string) (skipped, notAllowed bool, err error) {
 	r, err := q.GetConnectRequest(ctx, *st.RequestDigest)
 	if errors.Is(store.NotFound(err), store.ErrNotFound) || (err == nil && (r.UserID != u.ID || r.ProviderID != p.ID)) {
-		return false, nil
+		return false, false, nil
 	} else if err != nil {
-		return false, err
+		return false, false, err
 	}
 	if !Covers(granted, r.RequiredScopes) {
-		return false, nil // reported as missing scopes
+		return false, false, nil // reported as missing scopes
 	}
 	sv, err := requestServer(ctx, q, r)
 	if errors.Is(err, errServerChanged) || errors.Is(err, errRequestExpired) {
-		return true, nil
+		return true, false, nil
 	} else if err != nil {
-		return false, err
+		return false, false, err
+	}
+	if ok, err := allowsServer(ctx, q, p.ID, sv.ID); err != nil {
+		return false, false, err
+	} else if !ok {
+		return false, true, nil
 	}
 	_, err = s.recordGrant(ctx, q, a, u, p, conn, sv, nonNil(r.RequiredScopes), true)
-	return false, err
+	return false, false, err
 }
 
 // store saves new tokens as the person's active connection and uses up the

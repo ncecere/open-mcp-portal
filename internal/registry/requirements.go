@@ -267,10 +267,19 @@ type RequirementInput struct {
 var errProviderNotFound = apperr.New(http.StatusUnprocessableEntity, "provider_not_found",
 	"Choose an auth provider that exists and is turned on")
 
+// ErrProviderNotAllowed: the provider is restricted (decision 69) and the
+// server's team and the server are not on its access list.
+var ErrProviderNotAllowed = apperr.New(http.StatusUnprocessableEntity, "provider_not_allowed",
+	"This auth provider isn't open to this team or server; a platform admin can add it to the provider's access list")
+
 // checkRequirement validates a requirement to store. A newly chosen
-// provider must exist and be enabled; keep is the provider the server has
-// now, which may stay even while turned off.
-func checkRequirement(ctx context.Context, q *dbgen.Queries, in *RequirementInput, keep uuid.NullUUID) (uuid.NullUUID, []string, error) {
+// provider must exist, be enabled and, when it is restricted, list the
+// server's team or the server (422 provider_not_allowed); keep is the
+// provider the server has now, which may stay even while turned off or no
+// longer open to the server (its calls are refused until the list is fixed,
+// but unrelated edits of the server are not blocked). serverID is the server
+// being edited, or uuid.Nil for one being created (only its team counts).
+func checkRequirement(ctx context.Context, q *dbgen.Queries, in *RequirementInput, keep uuid.NullUUID, teamID, serverID uuid.UUID) (uuid.NullUUID, []string, error) {
 	if in == nil {
 		return uuid.NullUUID{}, []string{}, nil
 	}
@@ -284,8 +293,24 @@ func checkRequirement(ctx context.Context, q *dbgen.Queries, in *RequirementInpu
 	} else if err != nil {
 		return uuid.NullUUID{}, nil, err
 	}
-	if !p.Enabled && !(keep.Valid && keep.UUID == p.ID) {
+	kept := keep.Valid && keep.UUID == p.ID
+	if !p.Enabled && !kept {
 		return uuid.NullUUID{}, nil, errProviderNotFound
+	}
+	if !kept && p.Kind != KindMCPServer {
+		var allowed bool
+		if serverID == uuid.Nil {
+			allowed, err = q.ProviderAllowsTeam(ctx, dbgen.ProviderAllowsTeamParams{ProviderID: p.ID, TeamID: teamID})
+		} else {
+			allowed, err = q.ProviderAllowsServer(ctx, dbgen.ProviderAllowsServerParams{ProviderID: p.ID, ServerID: serverID})
+			// A server whose team is listed passes ProviderAllowsServer too.
+		}
+		if err != nil {
+			return uuid.NullUUID{}, nil, err
+		}
+		if !allowed {
+			return uuid.NullUUID{}, nil, ErrProviderNotAllowed
+		}
 	}
 	return uuid.NullUUID{UUID: p.ID, Valid: true}, scopes, nil
 }
