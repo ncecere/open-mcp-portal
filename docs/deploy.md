@@ -108,6 +108,24 @@ network, allow those networks and hosts:
 Loopback, link-local (including cloud metadata such as `169.254.169.254`), unspecified, multicast and broadcast
 addresses stay blocked whatever the entries say. The rules are in [registry.md](registry.md#security).
 
+**Private CAs and client certificates (mTLS).** An internal server behind a private CA, or one that requires a client
+certificate, is set up per server (Settings › TLS to the server, or `tls` in the API: [registry.md](registry.md#tls-to-the-server)),
+not in the deployment. There is nothing to mount into the pod: the portal never reads a CA file or a certificate from
+disk for MCP servers, and **there is no setting that turns certificate verification off**. A server's CA replaces the
+system roots for that server only. The address rule above still applies on top of it. Things for an operator to know:
+
+- The **client key is stored in the database**, sealed with `ENCRYPTION_KEY` (the same protection as header values).
+  Backups hold it sealed, and restoring one revives the key as it was then (threat model 7.12); keep the key a server
+  presents scoped to what the portal needs and rotate it when someone who could read the database leaves.
+- `rotate-keys` re-seals it with the other sealed columns (`mcp_server_tls.client_key_cipher`).
+- The **expiry** is watched: 14 days ahead the server's health, the admin overview and the team's attention show it, and
+  the hourly scan emails the team's owners, admins and editors (`key.expiring`, `keyKind` `server_certificate`; see
+  [notifications.md](notifications.md)). Renew by uploading the new certificate (and, if the key changed, the key).
+- A change of a server's CA or certificate reads the server again at once; a changed CA sends a published server back to
+  review under `approval_required`.
+- Not covered: a server in `oauth` mode behind a private CA (the sign-in discovery doesn't use the server's CA),
+  certificate revocation (CRL, OCSP) and certificate issuance.
+
 **The NetworkPolicies must allow the same networks and ports.** The base's egress allows TCP 443 to `0.0.0.0/0` and
 `::/0`; add rules in your overlay for internal servers on other ports (plain http on 80 or 8080, `:8443`…). Many CNIs
 don't match pod addresses with `ipBlock`, so in-cluster servers (`*.svc.cluster.local`) usually need a
@@ -570,7 +588,7 @@ administrator's guide is [agent-platforms.md](agent-platforms.md). Deployment no
 
 ## Key rotation
 
-**`ENCRYPTION_KEY`** seals MCP server header values, signing keys' private keys, auth provider client secrets,
+**`ENCRYPTION_KEY`** seals MCP server header values and credential parts, MCP servers' TLS client keys, signing keys' private keys, auth provider client secrets,
 provider connection tokens, PKCE verifiers, consent request IDs, captured payloads and webhook destinations' URLs and signing secrets.
 
 1. **Set previous.** Put the current value in `ENCRYPTION_KEY_PREVIOUS` and a new one (`openssl rand -base64 32`) in
