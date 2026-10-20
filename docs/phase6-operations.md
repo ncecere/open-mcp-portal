@@ -180,6 +180,115 @@ key, service account or request IDs.
 Plus the Go and process collectors. Kubernetes: an optional `metrics` port in the example overlay, a NetworkPolicy
 from the monitoring namespace, and an example `ServiceMonitor` (not in the base: it needs the CRD).
 
+### Dashboards and alert rules (v0.3.1, #34)
+
+Five Grafana dashboards (`deploy/grafana/dashboards/`) and the alert rules (`deploy/prometheus/omp-alerts.yaml`, with
+unit tests, and a `PrometheusRule` example beside the `ServiceMonitor`) are built from the metrics above. A test
+(`TestOpsArtifactsUseRealMetrics`, `TestDashboardsUseRealMetrics`) parses every query and fails when a metric or label
+is not in `observability.NewMetrics`' registry, when an alert lacks a runbook entry below, or when the
+`PrometheusRule` differs from the rules file; `make prom-check` runs `promtool check rules` and `promtool test rules`
+(CI runs it in the `k8s` job). Setup: [deploy.md](deploy.md#dashboards-and-alerts).
+
+## Tracing (decision 71)
+
+OpenTelemetry tracing, off unless `OTEL_EXPORTER_OTLP_ENDPOINT` (or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, or
+`OTEL_TRACES_EXPORTER=otlp`) is set; configuration, sampling, collectors and what a trace holds are in
+[deploy.md](deploy.md#tracing), the propagation rules in [mcp-protocol.md](mcp-protocol.md#trace-context), and the data
+path in the [threat model](threat-model.md#69-telemetry-decision-71). Dependencies added to the binary:
+`go.opentelemetry.io/otel`, `…/otel/trace`, `…/otel/sdk` and `…/otel/exporters/otlp/otlptrace/otlptracehttp` (with the
+generated OTLP protobuf types, and gRPC's packages that those types import; no gRPC exporter is used). The code is
+`internal/observability/tracing.go` (provider, the attribute allow-list, propagation), `internal/mcpgw/trace.go` (the
+spans of `/mcp/{slug}`), `httpapi/middleware.go` (the management API's server span) and `registry` (`registry.probe`).
+`mcp_calls.trace_id` (migration `00023`, nullable) holds the trace ID of a sampled call.
+
+## Alert runbook
+
+Each alert's `runbook_url` points here. Metric names are the ones in the table above; Admin pages are in the UI.
+
+### OMPDown
+
+No replica answered its `/metrics` scrape for 5 minutes (or none is scraped at all). Check the pods
+(`kubectl get pods`, `kubectl logs`), `/readyz` and the database (`open-mcp-portal doctor` inside a pod); if only the
+scrape fails, check the `ServiceMonitor` selector, the `metrics` port and the NetworkPolicy from the monitoring
+namespace. If the job is not called `open-mcp-portal`, fix `job=` in the rule.
+
+### OMPReplicaDown
+
+One replica is not being scraped while others are. Look at that pod's state and events; a pod stuck terminating or
+not ready is usually the cause. Traffic is served by the other replicas meanwhile.
+
+### OMPHTTPServerErrors
+
+More than 5% of HTTP requests answered 5xx for 10 minutes. See which route in Platform › Requests by status class, then
+the logs (`"level":"ERROR"`, the access log's `request_id`, and `trace_id` when tracing is on). Database trouble
+usually shows in the pool panels too ([OMPDBPoolSaturated](#ompdbpoolsaturated)).
+
+### OMPDBPoolSaturated
+
+A replica has had over 90% of its PostgreSQL connections in use for 10 minutes. Look for slow queries or a database
+that is not answering (Platform › PostgreSQL pool: acquires that had to wait). Fix the cause before raising the pool;
+the pool size is the connection string's `pool_max_conns`.
+
+### OMPUpstreamErrorRatioHigh
+
+Over 20% of tool calls end as `upstream_error`, `timeout` or `too_large`. Calls › filter by outcome shows which
+server and error class; MCP servers shows failing health checks. A timeout is the server's own limit (up to 120 s); an
+auth class is a credential or provider problem on that server ([OMPProviderRefreshRefused](#ompproviderrefreshrefused)).
+With tracing on, open a failing call's trace from its page to see where the time went.
+
+### OMPCallLatencyHigh
+
+The 95th percentile of forwarded calls to one server through one gateway is over 10 s for 15 minutes. Informational:
+compare with the server's own timeout and its health checks; the call's trace separates the portal's work from the
+server's.
+
+### OMPRateLimitingSustained
+
+A rate limit has refused more than 12 requests a minute for 15 minutes. The `limit` label says which: a person, a
+credential, a service account or a gateway. Find the caller in Calls (`rate_limited` outcome); raise the limit in
+Admin › Limits or the team's limits if the use is legitimate, otherwise fix or revoke the client (a looping agent).
+
+### OMPServersFailing
+
+Enabled servers have failed their latest health check for 15 minutes. MCP servers lists them with the error class of
+the last check; run **Test** on one. A server that is down stays failing until a check passes; disable servers you no
+longer use.
+
+### OMPProviderRefreshRefused
+
+A provider refused more than 3 token refreshes in 30 minutes: the grant was revoked at the provider, the OAuth app's
+client secret changed, or the provider is rejecting the portal's client. Check the provider in Admin › Auth providers
+(secret, redirect URI) and ask affected people to connect again (they get a link on their next call, or use Account ›
+My connections).
+
+### OMPPayloadCaptureErrors
+
+Captures of call payloads failed (the calls themselves were served and recorded). Look in the logs for warnings from payload
+capture (usually the database, or a sealing key problem: `open-mcp-portal doctor` checks the keys).
+
+### OMPRetentionStale
+
+Nothing has purged a kind of data for over an hour although it should every `RETENTION_INTERVAL`. Look at the
+retention status in Admin › Retention (`last_run.errors`), the logs of the replica leading it and at
+[OMPNoLoopLeader](#ompnoloopleader). Data keeps growing meanwhile.
+
+### OMPUsageRollupStale
+
+The usage rollup (every 5 minutes) has not succeeded for an hour: Usage reports lag, and retention deletes no calls
+before the rollup has seen them. Check the logs for the rollup's error and the database load.
+
+### OMPNoLoopLeader
+
+No replica has led a background loop (`retention`, `usage_rollup`, `notifications`) for 30 minutes. Loops take a
+PostgreSQL advisory lock: check that at least one replica is running and ready, that the database accepts the lock
+(a long-held lock from a stuck session), and the logs.
+
+### OMPNotificationDeliveryFailures
+
+More than 3 notifications failed for good in an hour on one channel. For email check `SMTP_*` and `doctor`; for
+webhooks the destination's delivery log shows the status and error class (Admin › Notifications for platform destinations, the team's destinations for team ones); failed deliveries
+are retried before they count as failed.
+
 ## Key rotation (decision 36)
 
 - **`API_KEY_PEPPER_PREVIOUS`** (secret, 32 bytes base64, must differ from the current one; the example value is
@@ -253,7 +362,7 @@ a Phase 6 server always sends them.
 ## Not in this phase
 
 Legal holds, retention dry runs and manual runs; per-tool or per-person limit overrides; quotas (per day/month); an
-unauthenticated per-address limit on `/mcp`; tracing; dashboards and alert rules as code; payload search or export;
+unauthenticated per-address limit on `/mcp`; tracing, dashboards and alert rules as code (added in v0.3.1, see above); payload search or export;
 image publishing.
 
 ## As built
