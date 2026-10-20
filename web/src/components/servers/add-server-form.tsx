@@ -2,10 +2,12 @@
  * Add MCP server (?form=new over the team's server list): name and slug
  * (suggested from the name, never changed afterwards), description, the
  * address, timeout and the switch, then how the portal authenticates:
- * Detect sign-in, and None, a static header, or each person's own OAuth
- * sign-in (auth-mode-fields.tsx). The portal reads the server's
- * capabilities at once, except in OAuth mode: someone signs in first, so the
- * record page opens on "Authorize to read its tools" (setup.tsx).
+ * Detect sign-in, and None, a static header, each person's own OAuth
+ * sign-in or each person's own key (auth-mode-fields.tsx). The portal reads
+ * the server's capabilities at once, except in OAuth mode (someone signs in
+ * first: the record page opens on "Authorize to read its tools", setup.tsx)
+ * and in own-key mode (an editor enters theirs under Account › My connections
+ * first, person-secret-card.tsx).
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -25,6 +27,7 @@ import { serverSlug, slugPattern } from "./labels";
 import { firstDiscoveryKey } from "./scope";
 import { CredentialFields } from "./credential-fields";
 import { credentialsBody, newPart, partProblems, type PartForm } from "./credentials";
+import { secretInput, secretProblems } from "./person-secret";
 import { EnabledSwitch, type ServerForm, serverFieldErrors, serverProblems, TimeoutField, UrlField, urlProblem } from "./server-fields";
 import { applyDetection, type DetectResult, oauthInput, oauthProblems, upstreamFormOf, type UpstreamForm } from "./upstream-auth";
 import m from "./servers.module.css";
@@ -41,7 +44,13 @@ const slugProblem = (slug: string) =>
 function authBody(parts: PartForm[], u: UpstreamForm, secret: string, sendIdentity: boolean | undefined, detected?: DetectResult) {
   const credentials = u.mode === "static_header" ? credentialsBody(parts) : undefined;
   const mode = u.mode === "static_header" && !credentials?.length ? "none" : u.mode;
-  return { authMode: mode, ...(credentials?.length ? { credentials } : {}), ...(mode === "oauth" ? { oauth: oauthInput(u.oauth, secret, detected) } : {}), ...(sendIdentity === undefined ? {} : { sendIdentity }) };
+  return {
+    authMode: mode,
+    ...(credentials?.length ? { credentials } : {}),
+    ...(mode === "oauth" ? { oauth: oauthInput(u.oauth, secret, detected) } : {}),
+    ...(mode === "person_secret" ? { personSecret: secretInput(u.secret) } : {}),
+    ...(sendIdentity === undefined ? {} : { sendIdentity }),
+  };
 }
 
 export function AddServerForm({ team, onClose }: { team: string; onClose: () => void }) {
@@ -85,7 +94,7 @@ export function AddServerForm({ team, onClose }: { team: string; onClose: () => 
       const s = created.server;
       qc.setQueryData(firstDiscoveryKey(s.id), created);
       void qc.invalidateQueries({ queryKey: teamServersKey(team) });
-      if (created.setupRequired) toast.success(`${s.name} was added`, "Authorize next, so the portal can read its tools.");
+      if (created.setupRequired) toast.success(`${s.name} was added`, s.authMode === "person_secret" ? "Enter your key next, so the portal can read its tools." : "Authorize next, so the portal can read its tools.");
       else if (created.refreshError) toast.warning(`${s.name} was added`, "Its capabilities couldn't be read yet.");
       else toast.success(`${s.name} was added`);
       setCreated(created);
@@ -102,6 +111,7 @@ export function AddServerForm({ team, onClose }: { team: string; onClose: () => 
   const staticMode = upstream.mode === "static_header";
   const partErrors = staticMode ? partProblems(parts) : {};
   const noParts = staticMode && parts.length === 0;
+  const secretErrors = upstream.mode === "person_secret" ? secretProblems(upstream.secret) : {};
   const allProblems = () => ({ ...serverProblems(form, { dev }), ...oauthProblems(upstream, { detected, secret }) });
   const problems = submitted ? allProblems() : {};
   const fromServer = serverFieldErrors(create.error);
@@ -116,7 +126,7 @@ export function AddServerForm({ team, onClose }: { team: string; onClose: () => 
 
   const submit = () => {
     setSubmitted(true);
-    if (Object.keys(allProblems()).length > 0 || Object.keys(partErrors).length > 0 || noParts || slugProblem(slug)) {
+    if (Object.keys(allProblems()).length > 0 || Object.keys(secretErrors).length > 0 || Object.keys(partErrors).length > 0 || noParts || slugProblem(slug)) {
       requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
       return;
     }
@@ -192,6 +202,7 @@ export function AddServerForm({ team, onClose }: { team: string; onClose: () => 
           secret={secret}
           setSecret={setSecret}
           errors={problems}
+          secretErrors={submitted ? secretErrors : {}}
           headerFields={<CredentialFields parts={parts} setParts={setParts} errors={submitted ? partErrors : {}} noParts={submitted && noParts} />}
         />
       </FormSection>

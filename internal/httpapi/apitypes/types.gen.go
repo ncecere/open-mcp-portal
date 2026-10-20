@@ -1167,6 +1167,7 @@ func (e McpServerTransport) Valid() bool {
 const (
 	McpServerAuthModeNone         McpServerAuthMode = "none"
 	McpServerAuthModeOauth        McpServerAuthMode = "oauth"
+	McpServerAuthModePersonSecret McpServerAuthMode = "person_secret"
 	McpServerAuthModeStaticHeader McpServerAuthMode = "static_header"
 )
 
@@ -1176,6 +1177,8 @@ func (e McpServerAuthMode) Valid() bool {
 	case McpServerAuthModeNone:
 		return true
 	case McpServerAuthModeOauth:
+		return true
+	case McpServerAuthModePersonSecret:
 		return true
 	case McpServerAuthModeStaticHeader:
 		return true
@@ -1748,6 +1751,48 @@ func (e OAuthConsentDecisionDecision) Valid() bool {
 	}
 }
 
+// Defines values for PersonSecretPlacement.
+const (
+	PersonSecretPlacementBearer PersonSecretPlacement = "bearer"
+	PersonSecretPlacementHeader PersonSecretPlacement = "header"
+	PersonSecretPlacementQuery  PersonSecretPlacement = "query"
+)
+
+// Valid indicates whether the value is a known member of the PersonSecretPlacement enum.
+func (e PersonSecretPlacement) Valid() bool {
+	switch e {
+	case PersonSecretPlacementBearer:
+		return true
+	case PersonSecretPlacementHeader:
+		return true
+	case PersonSecretPlacementQuery:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PersonSecretSetupStatus.
+const (
+	PersonSecretSetupStatusActive   PersonSecretSetupStatus = "active"
+	PersonSecretSetupStatusMissing  PersonSecretSetupStatus = "missing"
+	PersonSecretSetupStatusRejected PersonSecretSetupStatus = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the PersonSecretSetupStatus enum.
+func (e PersonSecretSetupStatus) Valid() bool {
+	switch e {
+	case PersonSecretSetupStatusActive:
+		return true
+	case PersonSecretSetupStatusMissing:
+		return true
+	case PersonSecretSetupStatusRejected:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PlatformRole.
 const (
 	PlatformRoleNone            PlatformRole = "none"
@@ -1937,6 +1982,24 @@ func (e RetentionKind) Valid() bool {
 	}
 }
 
+// Defines values for SecretRequestReason.
+const (
+	SecretMissing  SecretRequestReason = "secret_missing"
+	SecretRejected SecretRequestReason = "secret_rejected"
+)
+
+// Valid indicates whether the value is a known member of the SecretRequestReason enum.
+func (e SecretRequestReason) Valid() bool {
+	switch e {
+	case SecretMissing:
+		return true
+	case SecretRejected:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ServerHealthStatus.
 const (
 	ServerHealthStatusFailing ServerHealthStatus = "failing"
@@ -1952,6 +2015,24 @@ func (e ServerHealthStatus) Valid() bool {
 	case ServerHealthStatusHealthy:
 		return true
 	case ServerHealthStatusUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ServerSecretStatus.
+const (
+	ServerSecretStatusActive   ServerSecretStatus = "active"
+	ServerSecretStatusRejected ServerSecretStatus = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the ServerSecretStatus enum.
+func (e ServerSecretStatus) Valid() bool {
+	switch e {
+	case ServerSecretStatusActive:
+		return true
+	case ServerSecretStatusRejected:
 		return true
 	default:
 		return false
@@ -3801,7 +3882,7 @@ type McpCall struct {
 	// ClientName clientInfo.name from initialize, when sent
 	ClientName *string `json:"clientName,omitempty"`
 
-	// ErrorClass Why a call was denied or failed, for example no_access, role, unknown, key_scope (the API key is limited to other gateways), gateway_disabled or an unavailability reason. For capabilities that require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or server_not_allowed (connected, but the person hasn't allowed this server, at its current address, to use the account); denied with service_account, provider_disabled, provider_not_allowed (the provider is restricted and its access list excludes the server), person_not_present (an agent's call whose server or capability requires a present person) or, for an agent's call for a person, person_no_account or person_suspended; needs_authorization with needs_connection for an agent's call (the person must connect an account; the answer was a tool error with no link); upstream_error with provider_unavailable.
+	// ErrorClass Why a call was denied or failed, for example no_access, role, unknown, key_scope (the API key is limited to other gateways), gateway_disabled or an unavailability reason. For capabilities that require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or server_not_allowed (connected, but the person hasn't allowed this server, at its current address, to use the account); denied with service_account, provider_disabled, provider_not_allowed (the provider is restricted and its access list excludes the server), person_not_present (an agent's call whose server or capability requires a present person) or, for an agent's call for a person, person_no_account or person_suspended; needs_authorization with needs_connection for an agent's call (the person must connect an account; the answer was a tool error with no link); upstream_error with provider_unavailable. For a server where each person enters their own key (decision 72): needs_authorization with secret_missing or secret_rejected (the answer carried the link, or for an agent's call a tool error with none) or agents_not_allowed (an agent's call, the person has a key but hasn't allowed agents); denied with service_account or person_suspended.
 	ErrorClass *string `json:"errorClass,omitempty"`
 
 	// ExposedName The tool or prompt name, or the exposed resource URI, the client used (absent for list calls)
@@ -3950,7 +4031,7 @@ type McpServer struct {
 	// AuthHeaderName The static header sent with every request, for a server whose credential is still its single header (absent: none, or the credential is the list credentials)
 	AuthHeaderName *string `json:"authHeaderName,omitempty"`
 
-	// AuthMode How the portal authenticates to the server (decision 39). none: only the identity token, in Authorization: Bearer. static_header: one static header (authHeaderName); the identity token moves to MCP-Gateway-Identity when that header is Authorization. oauth: each person's own token from the server's authorization server in Authorization: Bearer, and the identity token in MCP-Gateway-Identity. oauth excludes a static Authorization header and a requirement (one credential per call)
+	// AuthMode How the portal authenticates to the server (decision 39). none: only the identity token, in Authorization: Bearer. static_header: one static header (authHeaderName); the identity token moves to MCP-Gateway-Identity when that header is Authorization. oauth: each person's own token from the server's authorization server in Authorization: Bearer, and the identity token in MCP-Gateway-Identity. oauth excludes a static Authorization header and a requirement (one credential per call). person_secret: each person's own API key or token, entered under Account > My connections and sent as the placement in personSecret says (a header, a bearer token or a query parameter; decision 72); a bearer or an Authorization header moves the identity token to MCP-Gateway-Identity. person_secret excludes a requirement and a static part that sets the same header, query parameter or Authorization
 	AuthMode *McpServerAuthMode `json:"authMode,omitempty"`
 
 	// AuthValueHint Last 4 characters of the single header's value, or empty
@@ -3985,6 +4066,9 @@ type McpServer struct {
 
 	// PendingChanges Capabilities of a published server whose definition changed since approval (hidden from the catalog until approved)
 	PendingChanges int64 `json:"pendingChanges"`
+
+	// PersonSecret How each person's own secret is sent, and how many people have entered one, when authMode is person_secret; else null. Absent from servers before v0.3.2
+	PersonSecret *PersonSecretSettings `json:"personSecret,omitempty"`
 
 	// Protocol The MCP protocol version the portal last negotiated with the upstream server (set by refresh, health checks and test); read-only. Null until the first successful exchange.
 	Protocol              *McpServerProtocol `json:"protocol,omitempty"`
@@ -4031,7 +4115,7 @@ type McpServer struct {
 // McpServerTransport defines model for McpServer.Transport.
 type McpServerTransport string
 
-// McpServerAuthMode How the portal authenticates to the server (decision 39). none: only the identity token, in Authorization: Bearer. static_header: one static header (authHeaderName); the identity token moves to MCP-Gateway-Identity when that header is Authorization. oauth: each person's own token from the server's authorization server in Authorization: Bearer, and the identity token in MCP-Gateway-Identity. oauth excludes a static Authorization header and a requirement (one credential per call)
+// McpServerAuthMode How the portal authenticates to the server (decision 39). none: only the identity token, in Authorization: Bearer. static_header: one static header (authHeaderName); the identity token moves to MCP-Gateway-Identity when that header is Authorization. oauth: each person's own token from the server's authorization server in Authorization: Bearer, and the identity token in MCP-Gateway-Identity. oauth excludes a static Authorization header and a requirement (one credential per call). person_secret: each person's own API key or token, entered under Account > My connections and sent as the placement in personSecret says (a header, a bearer token or a query parameter; decision 72); a bearer or an Authorization header moves the identity token to MCP-Gateway-Identity. person_secret excludes a requirement and a static part that sets the same header, query parameter or Authorization
 type McpServerAuthMode string
 
 // McpServerCreate defines model for McpServerCreate.
@@ -4054,6 +4138,9 @@ type McpServerCreate struct {
 	Enabled     *bool                       `json:"enabled,omitempty"`
 	Name        string                      `json:"name"`
 	Oauth       *McpServerOAuthInput        `json:"oauth,omitempty"`
+
+	// PersonSecret Required with authMode person_secret (400 invalid_person_secret otherwise); ignored for other modes. How each person's own secret is sent. Nobody has entered a key yet, so capabilities are not read (McpServerCreated.setupRequired); an editor enters theirs under Account > My connections, choosing to read the server with it
+	PersonSecret *PersonSecretInput `json:"personSecret,omitempty"`
 
 	// Requirement Absent or null; no user authorization
 	Requirement *McpServerRequirementInput `json:"requirement,omitempty"`
@@ -4307,6 +4394,9 @@ type McpServerUpdate struct {
 
 	// Oauth Only with authMode oauth (sent now or stored). Omitted fields keep their stored values
 	Oauth *McpServerOAuthInput `json:"oauth,omitempty"`
+
+	// PersonSecret Only with authMode person_secret (sent now or stored; required when switching to it). Omit to keep. A URL on another origin, another mode or another placement deletes every person's secret for the server (audited as mcp_server.person_secrets_reset); a path-only edit, or another name, prefix, label or help, keeps them. A new mode, placement, name or prefix sends a published server back to review under approval_required. A publisher automation token can't send it, nor switch a server to this mode (403 token_not_allowed)
+	PersonSecret *PersonSecretInput `json:"personSecret,omitempty"`
 
 	// Requirement Omit to keep; null removes it. A widening change sends a published server back to review under approval_required
 	Requirement *McpServerRequirementInput `json:"requirement,omitempty"`
@@ -4905,6 +4995,64 @@ type OwnerAssign struct {
 	Email openapi_types.Email `json:"email"`
 }
 
+// PersonSecretInput How a server's person secrets travel and how the page where people enter them describes the key
+type PersonSecretInput struct {
+	// Help Plain text on that page, saying where to find the key
+	Help *string `json:"help,omitempty"`
+
+	// Label What the key is called on the page where people enter it
+	//
+	// Example: Acme API key
+	Label *string `json:"label,omitempty"`
+
+	// Name The header (not a reserved one; Authorization is allowed) or the query parameter (1-64 letters, digits, dots, hyphens and underscores, never starting with mcp-). Absent for bearer
+	//
+	// Example: X-API-Key
+	Name *string `json:"name,omitempty"`
+
+	// Placement header: Name: prefix + secret. bearer: Authorization: Bearer secret. query: ?Name=prefix+secret, added to each request and never to the saved URL; many servers and proxies log URLs, so prefer header or bearer
+	Placement PersonSecretPlacement `json:"placement"`
+
+	// Prefix Sent before the secret, for example "Token ". Not for bearer
+	Prefix *string `json:"prefix,omitempty"`
+}
+
+// PersonSecretPlacement header: Name: prefix + secret. bearer: Authorization: Bearer secret. query: ?Name=prefix+secret, added to each request and never to the saved URL; many servers and proxies log URLs, so prefer header or bearer
+type PersonSecretPlacement string
+
+// PersonSecretSettings defines model for PersonSecretSettings.
+type PersonSecretSettings struct {
+	Help  string  `json:"help"`
+	Label string  `json:"label"`
+	Name  *string `json:"name,omitempty"`
+
+	// People How many people have entered a key for this server
+	People int64 `json:"people"`
+
+	// Placement header: Name: prefix + secret. bearer: Authorization: Bearer secret. query: ?Name=prefix+secret, added to each request and never to the saved URL; many servers and proxies log URLs, so prefer header or bearer
+	Placement PersonSecretPlacement `json:"placement"`
+	Prefix    string                `json:"prefix"`
+
+	// Rejected Of those, how many the server refused (they are asked to enter them again)
+	Rejected int64 `json:"rejected"`
+
+	// Setup The editor whose own key reads the server's capabilities (decision 42's counterpart); scheduled health checks send nobody's key
+	Setup PersonSecretSetup `json:"setup"`
+}
+
+// PersonSecretSetup The editor whose own key reads the server's capabilities (decision 42's counterpart); scheduled health checks send nobody's key
+type PersonSecretSetup struct {
+	At         *time.Time          `json:"at,omitempty"`
+	PersonId   *openapi_types.UUID `json:"personId,omitempty"`
+	PersonName *string             `json:"personName,omitempty"`
+
+	// Status missing when nobody was chosen, or the person is no longer an active editor of the team, or their key was revoked or is for another address
+	Status PersonSecretSetupStatus `json:"status"`
+}
+
+// PersonSecretSetupStatus missing when nobody was chosen, or the person is no longer an active editor of the team, or their key was revoked or is for another address
+type PersonSecretSetupStatus string
+
 // PlatformRateLimit defines model for PlatformRateLimit.
 type PlatformRateLimit struct {
 	// BuiltInDefault The default before any platform admin changed it
@@ -5177,6 +5325,29 @@ type Revision = int64
 // ScopeList OAuth scopes exactly as the provider names them (RFC 6749 scope characters, no spaces or quotes); duplicates collapse. Use the provider's canonical names (the ones its token response returns), otherwise the gateway can't tell that they were granted.
 type ScopeList = []string
 
+// SecretRequest Why a call asked the person to enter their key (a link from JSON-RPC -32042 or an input request)
+type SecretRequest struct {
+	Capability ConnectRequestCapability `json:"capability"`
+
+	// Config How a server's person secrets travel and how the page where people enter them describes the key
+	Config  PersonSecretInput `json:"config"`
+	Gateway CallRef           `json:"gateway"`
+	Id      string            `json:"id"`
+
+	// Origin Where the key will be sent, and only there
+	Origin string              `json:"origin"`
+	Reason SecretRequestReason `json:"reason"`
+
+	// Secret A server in person_secret mode with the caller's own key for it, if any. The key itself is never returned, only its last four characters when it has at least eight
+	Secret ServerSecret `json:"secret"`
+
+	// Server An MCP server and its team, as a person is asked to allow it
+	Server ConnectServer `json:"server"`
+}
+
+// SecretRequestReason defines model for SecretRequest.Reason.
+type SecretRequestReason string
+
 // ServerHealth The latest health check. unknown before the first one.
 type ServerHealth struct {
 	CheckedAt *time.Time `json:"checkedAt,omitempty"`
@@ -5206,6 +5377,42 @@ type ServerRecoveredData struct {
 	Server NotificationServerRef `json:"server"`
 	Since  time.Time             `json:"since"`
 }
+
+// ServerSecret A server in person_secret mode with the caller's own key for it, if any. The key itself is never returned, only its last four characters when it has at least eight
+type ServerSecret struct {
+	// AllowAgents An agent that relays a call for the person may use the key (decisions 66 and 68). Off by default
+	AllowAgents bool `json:"allowAgents"`
+
+	// CanSetup The caller is an active editor of the server's team, so their key can read its capabilities
+	CanSetup bool `json:"canSetup"`
+
+	// Config How a server's person secrets travel and how the page where people enter them describes the key
+	Config    PersonSecretInput `json:"config"`
+	CreatedAt *time.Time        `json:"createdAt,omitempty"`
+	HasSecret bool              `json:"hasSecret"`
+	Hint      *string           `json:"hint,omitempty"`
+
+	// IsSetup Their key reads the server's capabilities now
+	IsSetup    bool       `json:"isSetup"`
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+
+	// Origin The scheme, host and port of the server's URL now; an entered key is bound to it
+	Origin string `json:"origin"`
+
+	// Reachable The caller may use the server through a gateway now (they may enter or replace a key)
+	Reachable  bool       `json:"reachable"`
+	RejectedAt *time.Time `json:"rejectedAt,omitempty"`
+	RotatedAt  *time.Time `json:"rotatedAt,omitempty"`
+
+	// Server An MCP server and its team, as a person is asked to allow it
+	Server ConnectServer `json:"server"`
+
+	// Status The server answered 401 or 403 to a rejected key; it is not sent again until replaced
+	Status *ServerSecretStatus `json:"status,omitempty"`
+}
+
+// ServerSecretStatus The server answered 401 or 403 to a rejected key; it is not sent again until replaced
+type ServerSecretStatus string
 
 // ServerUnhealthyData defines model for ServerUnhealthyData.
 type ServerUnhealthyData struct {
@@ -5323,6 +5530,21 @@ type ServiceAccountUpdate struct {
 
 	// Role The team role used for capabilities' minimum roles (decision 22)
 	Role *ServiceAccountRole `json:"role,omitempty"`
+}
+
+// SetServerSecret A key, or a change to the caller's entry for one server
+type SetServerSecret struct {
+	// AllowAgents Omit to keep (false for a new entry)
+	AllowAgents *bool `json:"allowAgents,omitempty"`
+
+	// Origin The origin the page showed (ServerSecret.origin); refused (409 server_changed) when the server has another now
+	Origin string `json:"origin"`
+
+	// UseForSetup Read the server's capabilities with this key from now on (editors of the server's team only, else 403). The capabilities are read once it is saved; a failure is stored as the server's refresh error
+	UseForSetup *bool `json:"useForSetup,omitempty"`
+
+	// Value The key, on one line (surrounding space is trimmed). Omit to keep the stored key while changing allowAgents or useForSetup. Sealed, never returned, logged or audited
+	Value *string `json:"value,omitempty"`
 }
 
 // Team defines model for Team.
@@ -6491,6 +6713,9 @@ type AllowConnectionServerJSONRequestBody = AllowServerRequest
 
 // UpdateMyNotificationPreferencesJSONRequestBody defines body for UpdateMyNotificationPreferences for application/json ContentType.
 type UpdateMyNotificationPreferencesJSONRequestBody = NotificationPreferencesUpdate
+
+// SetMyServerSecretJSONRequestBody defines body for SetMyServerSecret for application/json ContentType.
+type SetMyServerSecretJSONRequestBody = SetServerSecret
 
 // DecideOAuthConsentJSONRequestBody defines body for DecideOAuthConsent for application/json ContentType.
 type DecideOAuthConsentJSONRequestBody = OAuthConsentDecision

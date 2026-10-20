@@ -76,6 +76,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/limits"
 	"github.com/ncecere/open-mcp-portal/internal/oauth"
 	"github.com/ncecere/open-mcp-portal/internal/observability"
+	"github.com/ncecere/open-mcp-portal/internal/personsecrets"
 	"github.com/ncecere/open-mcp-portal/internal/providers"
 	"github.com/ncecere/open-mcp-portal/internal/ratelimit"
 	"github.com/ncecere/open-mcp-portal/internal/registry"
@@ -174,6 +175,9 @@ type Handler struct {
 	// Providers supplies people's delegated credentials for capabilities
 	// that require an auth provider (nil: such calls are refused).
 	Providers *providers.Service
+	// PersonSecrets supplies people's own secrets for servers in person_secret
+	// mode (personsecret.go; nil: such calls are refused).
+	PersonSecrets *personsecrets.Service
 	// Limits and RateStore apply the rate limits (nil: none).
 	Limits    *limits.Service
 	RateStore ratelimit.Store
@@ -502,6 +506,9 @@ type request struct {
 	// server's answer should it echo them (the client and the model never
 	// see them).
 	scrub []string
+	// personSecretUsed is the person's own secret the call carries (nil:
+	// none), kept to mark it rejected when the server refuses it.
+	personSecretUsed *personsecrets.Secret
 	// modern: the request is of the 2026-07-28 era (era.go); clientCaps are
 	// the capabilities it declared.
 	modern     bool

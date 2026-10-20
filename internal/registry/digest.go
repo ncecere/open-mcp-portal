@@ -72,6 +72,11 @@ func ReviewDigest(sv dbgen.McpServer, caps []CapabilityRef, parts ...CredentialV
 	for _, k := range keys {
 		put(k)
 	}
+	if cfg, ok := PersonSecretConfig(sv); ok {
+		// Only in person_secret mode, so no other server's digest moves: where
+		// and how people's own secrets are sent is what a reviewer approves.
+		put("person-secret:" + cfg.Placement + ":" + cfg.Name + ":" + cfg.Prefix)
+	}
 	if sv.AuthProviderID.Valid {
 		put(sv.AuthProviderID.UUID.String())
 		scopes := sorted(sv.AuthScopes)

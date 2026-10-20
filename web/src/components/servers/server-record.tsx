@@ -59,6 +59,7 @@ export function ServerRecord({ server, scope, abilities, notices, links = [] }: 
         { label: "Capabilities", value: server.refreshedAt ? countsText(server.counts) : "Not read yet" },
         { label: "User authorization", value: server.requirement ? needsText(server.requirement) : undefined },
         { label: "Sign-in", value: server.authMode === "oauth" && server.oauth ? `At ${urlHost(server.oauth.authorizationServer)} · read as ${readAsText(server.oauth.setupConnection)}` : undefined },
+        { label: "Keys", value: server.personSecret ? `Each person's own · ${server.personSecret.people} entered` : undefined },
       ]}
       menuLabel="More server actions"
       menuActions={links}

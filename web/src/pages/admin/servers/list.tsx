@@ -27,6 +27,7 @@ type AuthMode = Schemas["McpServerAuthMode"];
 const authModeOptions: { value: AuthMode; label: string }[] = [
   { value: "oauth", label: "OAuth sign-in" },
   { value: "static_header", label: "Static header" },
+  { value: "person_secret", label: "Own key per person" },
   { value: "none", label: "None" },
 ];
 

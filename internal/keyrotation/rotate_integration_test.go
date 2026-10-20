@@ -60,8 +60,11 @@ func seed(t *testing.T, pool *pgxpool.Pool, b *secrets.Box) map[string]string {
 		"auth_providers":            scalar(t, pool, `INSERT INTO auth_providers (slug, name, client_id, token_auth_method, pkce, authorization_url, token_url) VALUES ('p', 'P', 'c', 'none', true, 'https://a', 'https://t') RETURNING id::text`),
 		"provider_auth_states":      strings.Repeat("a", 64),
 		"provider_connect_requests": strings.Repeat("B", 43),
+		"secret_requests":           strings.Repeat("C", 43),
 	}
+
 	keys["mcp_server_credentials"] = scalar(t, pool, `INSERT INTO mcp_server_credentials (server_id, position, kind, value_cipher, secondary_cipher) VALUES ($1, 0, 'basic', '\x00', '\x00') RETURNING id::text`, keys["mcp_servers"])
+	keys["person_secrets"] = scalar(t, pool, `INSERT INTO person_secrets (user_id, server_id, origin, secret_cipher) VALUES ($1, $2, 'https://x', '\x00') RETURNING id::text`, user, keys["mcp_servers"])
 	keys["provider_connections"] = scalar(t, pool, `INSERT INTO provider_connections (user_id, provider_id, status, access_token_cipher) VALUES ($1, $2, 'active', '\x00') RETURNING id::text`, user, keys["auth_providers"])
 	gw := scalar(t, pool, `INSERT INTO gateways (slug, name, owner_kind) VALUES ('g', 'G', 'platform') RETURNING id::text`)
 	keys["mcp_call_payloads"] = scalar(t, pool, `INSERT INTO mcp_calls (method, gateway_id, gateway_slug, gateway_name, user_id, outcome) VALUES ('tools/call', $1, 'g', 'G', $2, 'ok') RETURNING id::text`, gw, user)
@@ -69,6 +72,7 @@ func seed(t *testing.T, pool *pgxpool.Pool, b *secrets.Box) map[string]string {
 		VALUES ('kid-1', '\x00', '{}', 'retiring', now() + interval '1 day') RETURNING kid`)
 	scalar(t, pool, `INSERT INTO provider_auth_states (state_digest, user_id, session_digest, provider_id, scopes, expires_at) VALUES ($1, $2, $1, $3, '{}', now() + interval '1 hour') RETURNING state_digest`, keys["provider_auth_states"], user, keys["auth_providers"])
 	scalar(t, pool, `INSERT INTO provider_connect_requests (id_digest, id_cipher, user_id, provider_id, required_scopes, reason, gateway_id, gateway_slug, gateway_name, capability_id, capability_kind, exposed_name, expires_at) VALUES ($1, '\x00', $2, $3, '{}', 'not_connected', $4, 'g', 'G', gen_random_uuid(), 'tool', 'x', now() + interval '1 hour') RETURNING id_digest`, keys["provider_connect_requests"], user, keys["auth_providers"], gw)
+	scalar(t, pool, `INSERT INTO secret_requests (id_digest, id_cipher, user_id, server_id, server_origin, reason, gateway_id, gateway_slug, gateway_name, capability_id, capability_kind, exposed_name, expires_at) VALUES ($1, '\x00', $2, $3, 'https://x', 'secret_missing', $4, 'g', 'G', gen_random_uuid(), 'tool', 'x', now() + interval '1 hour') RETURNING id_digest`, keys["secret_requests"], user, keys["mcp_servers"], gw)
 	scalar(t, pool, `INSERT INTO mcp_call_payloads (call_id, occurred_at, by_gateway, by_server, arguments_cipher, result_cipher, arguments_bytes) VALUES ($1::bigint, now(), true, false, '\x00', '\x00', 1) RETURNING call_id::text`, keys["mcp_call_payloads"])
 	keys["notification_destinations"] = scalar(t, pool, `INSERT INTO notification_destinations (scope, name, format, url_cipher, url_display, secret_cipher, secret_previous_cipher, events)
 		VALUES ('platform', 'hook', 'json', '\x00', 'https://h.example.com/...', '\x00', '\x00', '{publish.requested}') RETURNING id::text`)
@@ -119,7 +123,7 @@ func TestRotateKeys(t *testing.T) {
 	cfg.DatabaseURL, cfg.AppURL, cfg.DevAuth = dbURL, "http://localhost:8088", true
 	cfg.EncryptionKey, cfg.EncryptionKeyPrevious, cfg.APIKeyPepper = newKey, oldKey, oldKey
 	rep := doctor.Run(ctx, cfg, doctor.Options{Timeout: 10 * time.Second})
-	if c := find(rep, "encryption"); c.Status != doctor.Info || !strings.Contains(c.Detail, "14 sealed value(s) still on ENCRYPTION_KEY_PREVIOUS") {
+	if c := find(rep, "encryption"); c.Status != doctor.Info || !strings.Contains(c.Detail, "16 sealed value(s) still on ENCRYPTION_KEY_PREVIOUS") {
 		t.Fatalf("doctor before = %+v", c)
 	}
 
@@ -153,7 +157,7 @@ func TestRotateKeys(t *testing.T) {
 			t.Errorf("%s after rotation: %q %v", c.Name(), plain, err)
 		}
 	}
-	if n := scalar(t, pool, `SELECT count(*)::text FROM audit_log WHERE action = 'platform.secrets_reencrypt'`); n != "14" {
+	if n := scalar(t, pool, `SELECT count(*)::text FROM audit_log WHERE action = 'platform.secrets_reencrypt'`); n != "16" {
 		t.Errorf("per-batch audit entries = %s", n)
 	}
 	if meta := scalar(t, pool, `SELECT metadata::text FROM audit_log WHERE action = 'platform.key_rotation'`); strings.Contains(meta, "secret of") {

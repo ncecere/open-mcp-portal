@@ -78,6 +78,8 @@ func AuthModeOf(sv dbgen.McpServer) string {
 	switch {
 	case sv.AuthMode == AuthOAuth:
 		return AuthOAuth
+	case sv.AuthMode == AuthPersonSecret:
+		return AuthPersonSecret
 	case sv.AuthMode == AuthStaticHeader || sv.AuthHeaderName != nil:
 		return AuthStaticHeader
 	}
@@ -664,6 +666,9 @@ func planUnchanged(cur dbgen.AuthProvider, plan *oauthPlan) bool {
 // null, sendIdentity}. Never a secret or a client ID.
 func authSnapshot(sv dbgen.McpServer, p *dbgen.AuthProvider) map[string]any {
 	out := map[string]any{"authMode": AuthModeOf(sv), "oauth": nil, "sendIdentity": sv.SendIdentity}
+	if ps := secretSnapshot(sv); ps != nil {
+		out["personSecret"] = ps
+	}
 	if p == nil || AuthModeOf(sv) != AuthOAuth {
 		return out
 	}
@@ -879,8 +884,13 @@ func createMode(in CreateInput) (string, error) {
 		}
 	case AuthOAuth:
 		return AuthOAuth, nil
+	case AuthPersonSecret:
+		if in.PersonSecret == nil {
+			return "", invalidSecretConfig("placement", "Choose how each person's secret is sent: personSecret is required in person_secret mode")
+		}
+		return AuthPersonSecret, nil
 	default:
-		return "", apperr.Invalid("invalid_auth_mode", "authMode must be none, static_header or oauth")
+		return "", apperr.Invalid("invalid_auth_mode", "authMode must be none, static_header, oauth or person_secret")
 	}
 	// An oauth input without oauth mode is ignored (clients may always send
 	// it with its defaults).

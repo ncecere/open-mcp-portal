@@ -31,6 +31,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/oauth"
 	"github.com/ncecere/open-mcp-portal/internal/observability"
 	"github.com/ncecere/open-mcp-portal/internal/overview"
+	"github.com/ncecere/open-mcp-portal/internal/personsecrets"
 	"github.com/ncecere/open-mcp-portal/internal/platform"
 	"github.com/ncecere/open-mcp-portal/internal/providers"
 	"github.com/ncecere/open-mcp-portal/internal/ratelimit"
@@ -315,6 +316,12 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 	// A person allows a server from My connections (decision 68): the servers
 	// they may use through a gateway are the ones offered.
 	provs.Reachable = gws.ReachableServers
+	// Per-person secrets (decision 72): people enter their own key for servers
+	// in person_secret mode; the setup person's key reads the server's
+	// capabilities through the registry.
+	pers := personsecrets.New(pool, box, cfg.AppURL, log)
+	pers.Reachable = gws.ReachableServers
+	pers.Registry = reg
 	// Trusted agent platforms (decisions 65 and 66): their keys are fetched
 	// behind the same address guard as MCP servers; a person named in an
 	// agent token must have signed in with this portal's own issuer.
@@ -337,7 +344,7 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 	provs.Notify = notifier
 	callSvc := calls.New(pool)
 	ret := retention.New(pool, retention.Config{Interval: cfg.RetentionInterval, BatchSize: int32(cfg.RetentionBatchSize)}, log)
-	ret.Hooks = []retention.Hook{provs.Cleanup, rates.Cleanup, agents.Cleanup, func(ctx context.Context) (int64, error) {
+	ret.Hooks = []retention.Hook{provs.Cleanup, pers.Cleanup, rates.Cleanup, agents.Cleanup, func(ctx context.Context) (int64, error) {
 		return notifier.Purge(ctx, int32(cfg.RetentionBatchSize), func(kind string, n int64) {
 			observability.RetentionDeleted.WithLabelValues(kind).Add(float64(n))
 		})
@@ -381,10 +388,11 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 		ServiceAccounts: sas,
 		AgentPlatforms:  agents,
 		Providers:       provs,
+		PersonSecrets:   pers,
 		Automation:      autoSvc,
 		Notify:          notifier,
 		Overview:        overview.New(pool),
-		MCP: &mcpgw.Handler{Gateways: gws, Keys: keys, OAuth: as, ServiceAccounts: sas, Agents: agents, Identity: ids, Registry: reg, Providers: provs, Secrets: box,
+		MCP: &mcpgw.Handler{Gateways: gws, Keys: keys, OAuth: as, ServiceAccounts: sas, Agents: agents, Identity: ids, Registry: reg, Providers: provs, PersonSecrets: pers, Secrets: box,
 			Limits: lims, RateStore: rates, Capture: capt, Pool: pool, AppURL: cfg.AppURL, Log: log},
 	}, nil
 }

@@ -7,6 +7,8 @@
  * keeps the granted scopes; Disconnect asks first. Connecting from here
  * comes back with ?connected=<provider slug>, said as a notice when that
  * provider's connection is active (nothing else from the address is shown).
+ * Under it, "Keys for servers": the servers where each person enters their own
+ * key (decision 72), to enter, replace, let agents use or remove it.
  */
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
@@ -16,10 +18,12 @@ import { authProvidersQuery } from "../../api/queries";
 import { FormDialog } from "../../components/form-dialog";
 import { connectedReturnTo, ProviderConnections, useConnections } from "../../components/providers/connections";
 import { scopesText } from "../../components/providers/labels";
+import { ServerSecrets } from "../../components/secrets/server-secrets";
 import { useStartConnection } from "../../components/providers/requires";
 import { terms } from "../../lib/terms";
 import { Alert, ErrorAlert } from "@/components/ui/alert/alert";
 import { Button } from "@/components/ui/button/button";
+import { Card } from "@/components/ui/card/card";
 import { Field } from "@/components/ui/field/field";
 import { NativeSelect } from "@/components/ui/input/input";
 import { Loading } from "@/components/ui/spinner/spinner";
@@ -66,6 +70,12 @@ export function MyConnectionsPage() {
           </>
         }
       />
+      <Card
+        title="Keys for servers"
+        description="Some servers want each person's own API key. Enter yours here (or from the link your AI client shows the first time). It is stored encrypted, sent only to that server, and never shown again; an agent acting for you uses it only if you allow that."
+      >
+        <ServerSecrets owner={{ self: true }} canRevoke />
+      </Card>
       {connecting && <ConnectDialog onClose={() => setConnecting(false)} />}
     </>
   );

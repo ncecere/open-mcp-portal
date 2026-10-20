@@ -210,6 +210,9 @@ type ServerView struct {
 	OAuth *OAuthView
 	// ReviewDigest binds a review to what its reader saw (ReviewDigest).
 	ReviewDigest string
+	// PersonSecret is the settings and state of a server in person_secret
+	// mode (nil otherwise).
+	PersonSecret *PersonSecretView
 	// Credentials are the parts of the server's own credential, in order:
 	// kind, name and hint only (the legacy header counts as one part).
 	Credentials []CredentialView
@@ -278,6 +281,9 @@ func views(ctx context.Context, q *dbgen.Queries, rows []dbgen.ListMCPServersRow
 		out[index[health[i].ServerID]].Health = &health[i]
 	}
 	if err := oauthViews(ctx, q, out, index, ps); err != nil {
+		return nil, err
+	}
+	if err := secretViews(ctx, q, out, index); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -413,6 +419,9 @@ type CreateInput struct {
 	// SendIdentity sends the identity token (nil: true, except authMode none
 	// on a public or unresolvable host: false; decisions 45 and 64).
 	SendIdentity *bool
+	// PersonSecret says how each person's own secret is sent (authMode
+	// person_secret only; required there, decision 72).
+	PersonSecret *PersonSecretInput
 }
 
 // UpdateInput holds optional changes. AuthHeaderName "" removes the header
@@ -444,6 +453,10 @@ type UpdateInput struct {
 	// present (nil keeps it; presence.go). Relaxing it can send a published
 	// server back to review.
 	RequiresPresentPerson *bool
+	// PersonSecret changes how each person's own secret is sent (nil keeps
+	// it; only for a server in person_secret mode, which it is required for
+	// when the mode is being chosen).
+	PersonSecret *PersonSecretInput
 }
 
 // errCaptureRole: only the server team's owners and admins switch capture.
@@ -508,6 +521,9 @@ func snapshot(s dbgen.McpServer, parts ...CredentialView) map[string]any {
 	if s.AuthHeaderName != nil {
 		out["authHeaderName"] = *s.AuthHeaderName
 	}
+	if ps := secretSnapshot(s); ps != nil {
+		out["personSecret"] = ps
+	}
 	if len(parts) > 0 {
 		out["hasAuth"] = true
 		out["credentials"] = credentialSnapshot(parts)
@@ -541,6 +557,17 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 	mode, err := createMode(in)
 	if err != nil {
 		return Created{}, err
+	}
+	var secretCfg *PersonSecretInput
+	if mode == AuthPersonSecret {
+		cfg, err := normalizePersonSecret(*in.PersonSecret)
+		if err != nil {
+			return Created{}, err
+		}
+		if err := personSecretConflicts(cfg, createViews(in), in.Requirement != nil); err != nil {
+			return Created{}, err
+		}
+		secretCfg = &cfg
 	}
 	var plan *oauthPlan
 	if mode == AuthOAuth {
@@ -603,6 +630,11 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 		} else if err != nil {
 			return err
 		}
+		if secretCfg != nil {
+			if row, err = q.SetMCPServerSecretConfig(ctx, secretConfigParams(id, secretCfg, true)); err != nil {
+				return err
+			}
+		}
 		var parts []CredentialView
 		if len(in.Credentials) > 0 {
 			cp, err := s.planCredentials(row, storedCredentials{}, in.Credentials)
@@ -640,9 +672,10 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 		return Created{}, err
 	}
 	var out Created
-	if mode == AuthOAuth {
-		// Nobody has signed in yet: capabilities are read after the setup
-		// sign-in (authorize-setup).
+	if mode == AuthOAuth || mode == AuthPersonSecret {
+		// Nobody has signed in (or entered a key) yet: capabilities are read
+		// after the setup sign-in (authorize-setup), or after an editor enters
+		// their own key and chooses to read the server with it.
 		out.SetupRequired = true
 		out.View, err = s.view(ctx, s.q, id)
 		return out, err
@@ -733,13 +766,19 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 				return err
 			}
 		}
+		if pre.secret != nil {
+			if err := personSecretConflicts(*pre.secret, ap.views, p.AuthProviderID.Valid); err != nil {
+				return err
+			}
+		}
 		if in.SendIdentity != nil {
 			p.SendIdentity = *in.SendIdentity
 		}
 		setIf(&p.RequiresPresentPerson, in.RequiresPresentPerson)
 		curProv := pre.provider
 		planChanged := pre.plan != nil && (curProv == nil || !planUnchanged(*curProv, pre.plan))
-		if unchanged(cur, p, valueChanged || ap.rewrites(), in.CapturePayloads) && !planChanged && pre.mode == AuthModeOf(cur) {
+		secretChanged := pre.secret != nil && !samePersonSecret(cur, *pre.secret)
+		if unchanged(cur, p, valueChanged || ap.rewrites(), in.CapturePayloads) && !planChanged && pre.mode == AuthModeOf(cur) && !secretChanged {
 			return nil
 		}
 		ps, err := LoadProviders(ctx, q)
@@ -758,6 +797,17 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 		row, err := q.UpdateMCPServer(ctx, p)
 		if err != nil {
 			return err
+		}
+		// A person secret server's settings, or none for another mode. The
+		// setup person is kept only while nothing resets everyone's secrets.
+		reason := secretResetReason(cur, withSecretConfig(row, pre.secret))
+		if row, err = q.SetMCPServerSecretConfig(ctx, secretConfigParams(id, pre.secret, reason == "")); err != nil {
+			return err
+		}
+		if reason != "" {
+			if err := resetPersonSecrets(ctx, q, a, ta.team.ID, id, reason, originChange(cur.URL, row.URL)); err != nil {
+				return err
+			}
 		}
 		if ap.rewrites() {
 			if err := storeCredentials(ctx, q, id, *ap.plan); err != nil {
@@ -813,6 +863,8 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 			err = s.resubmit(ctx, q, a, ta.team, cur, "url_changed", "The server's URL changed; review it again.")
 		case authChanged:
 			err = s.resubmit(ctx, q, a, ta.team, cur, "upstream_auth_changed", noteUpstreamAuthChanged)
+		case secretAuthChanged(cur, row):
+			err = s.resubmit(ctx, q, a, ta.team, cur, "upstream_auth_changed", noteSecretChanged)
 		case widened(before, after):
 			err = s.resubmit(ctx, q, a, ta.team, cur, "requirement_changed", noteRequirementChanged)
 		case relaxed(presenceBefore, presenceAfter):
@@ -860,6 +912,9 @@ type updatePrep struct {
 	plan *oauthPlan
 	// revoked: leaving oauth, the connections were revoked (results).
 	revoked map[uuid.UUID]any
+	// secret is the person secret configuration after the update (nil: the
+	// mode is not person_secret).
+	secret *PersonSecretInput
 }
 
 // prepareUpdate runs what an update needs from the network: discovery and
@@ -890,12 +945,12 @@ func (s *Service) prepareUpdate(ctx context.Context, a authz.Actor, ref string, 
 	out := updatePrep{mode: AuthModeOf(cur)}
 	if in.AuthMode != nil {
 		switch *in.AuthMode {
-		case AuthNone, AuthStaticHeader, AuthOAuth:
+		case AuthNone, AuthStaticHeader, AuthOAuth, AuthPersonSecret:
 			out.mode = *in.AuthMode
 		default:
-			return out, apperr.Invalid("invalid_auth_mode", "authMode must be none, static_header or oauth")
+			return out, apperr.Invalid("invalid_auth_mode", "authMode must be none, static_header, oauth or person_secret")
 		}
-	} else if out.mode != AuthOAuth {
+	} else if out.mode != AuthOAuth && out.mode != AuthPersonSecret {
 		// Without a mode, a credential added or removed decides it.
 		out.mode = AuthNone
 		if _, has := finalAuthorization(cur, stored, in); has {
@@ -906,6 +961,20 @@ func (s *Service) prepareUpdate(ctx context.Context, a authz.Actor, ref string, 
 		// An oauth input without oauth mode is ignored (clients may always
 		// send it with its defaults).
 		in.OAuth = nil
+	}
+	if out.mode == AuthPersonSecret {
+		cfg, err := secretConfigFor(cur, in)
+		if err != nil {
+			return out, err
+		}
+		requirement := cur.AuthProviderID.Valid
+		if in.SetRequirement {
+			requirement = in.Requirement != nil
+		}
+		if err := personSecretConflicts(cfg, finalViews(cur, stored, in), requirement); err != nil {
+			return out, err
+		}
+		out.secret = &cfg
 	}
 	if AuthModeOf(cur) == AuthOAuth {
 		p, err := s.q.GetServerProvider(ctx, uuid.NullUUID{UUID: id, Valid: true})
@@ -1235,6 +1304,9 @@ func (s *Service) Delete(ctx context.Context, a authz.Actor, ref string, id uuid
 			return err
 		}
 		if err := resetProviderGrants(ctx, q, a, ta.team.ID, id, "server_deleted", nil); err != nil {
+			return err
+		}
+		if err := resetPersonSecrets(ctx, q, a, ta.team.ID, id, "server_deleted", nil); err != nil {
 			return err
 		}
 		if err := q.DeleteMCPServer(ctx, id); err != nil {

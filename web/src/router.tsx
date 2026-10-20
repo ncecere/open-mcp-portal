@@ -333,7 +333,19 @@ const connectDoneRoute = createRoute({
   component: lazy(pages.connect, "ConnectDonePage"),
 });
 
-export const routeTree = rootRoute.addChildren([appTree, oauthConsentRoute, connectDoneRoute, connectRoute]);
+/** The link a call returns when a server wants the person's own key (decision 72). */
+const ConnectSecretPage = lazy(pages.connect, "ConnectSecretPage");
+const connectSecretRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "connect/secret/$requestId",
+  component: () => (
+    <SessionGate>
+      <ConnectSecretPage />
+    </SessionGate>
+  ),
+});
+
+export const routeTree = rootRoute.addChildren([appTree, oauthConsentRoute, connectDoneRoute, connectRoute, connectSecretRoute]);
 
 export const router = createRouter({
   routeTree,

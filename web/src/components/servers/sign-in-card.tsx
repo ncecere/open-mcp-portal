@@ -32,6 +32,12 @@ function sentText(server: McpServer) {
   const identity = sendsIdentity(server);
   const mode = authModeOf(server);
   if (mode === "oauth") return `The caller's own token in Authorization: Bearer${identity ? ", and the portal's identity token in MCP-Gateway-Identity" : ""}.`;
+  if (mode === "person_secret") {
+    const p = server.personSecret;
+    const how = !p ? "their own key" : p.placement === "bearer" ? "their own key in Authorization: Bearer" : p.placement === "header" ? `their own key in the ${p.name} header` : `their own key in the ${p.name} query parameter`;
+    const moves = p && (p.placement === "bearer" || p.name?.toLowerCase() === "authorization") ? "MCP-Gateway-Identity" : "Authorization: Bearer";
+    return `The caller's ${how}${identity ? `, and the portal's identity token in ${moves}` : ""}.`;
+  }
   if (mode === "static_header") {
     const parts = partsOf(server);
     const where = parts.some(setsAuthorization) ? "MCP-Gateway-Identity" : "Authorization: Bearer";

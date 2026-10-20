@@ -15,6 +15,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/httpx"
 	"github.com/ncecere/open-mcp-portal/internal/notify"
 	"github.com/ncecere/open-mcp-portal/internal/overview"
+	"github.com/ncecere/open-mcp-portal/internal/registry"
 )
 
 // The v0.2 pilot-readiness operations: the admin overview and team
@@ -577,6 +578,14 @@ func (a *api) tokenMayUpdateServer(w http.ResponseWriter, r *http.Request, actor
 	}
 	if in.RequiresPresentPerson != nil && *in.RequiresPresentPerson != sv.RequiresPresentPerson {
 		return refuse("requiresPresentPerson")
+	}
+	if in.AuthMode != nil && string(*in.AuthMode) == registry.AuthPersonSecret && registry.AuthModeOf(sv) != registry.AuthPersonSecret {
+		// A token never switches a server to asking people for their own keys,
+		// even one with nothing to steal yet: that sends their keys to its URL.
+		return refuse("authMode")
+	}
+	if _, ok := keys["personSecret"]; ok {
+		return refuse("personSecret")
 	}
 	if !v.HasAuth() && sv.AuthMode == "none" && !sv.AuthProviderID.Valid {
 		return true // no credentials yet: nothing to steal or redirect

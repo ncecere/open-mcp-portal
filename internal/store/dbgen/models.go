@@ -344,6 +344,13 @@ type McpServer struct {
 	ProtocolVersion       *string
 	ProtocolNegotiatedAt  *time.Time
 	RequiresPresentPerson bool
+	SecretPlacement       *string
+	SecretName            *string
+	SecretPrefix          string
+	SecretLabel           string
+	SecretHelp            string
+	SecretSetupUserID     uuid.NullUUID
+	SecretSetupAt         *time.Time
 }
 
 type McpServerCredential struct {
@@ -516,6 +523,21 @@ type OauthToken struct {
 	PepperID  []byte
 }
 
+type PersonSecret struct {
+	ID           uuid.UUID
+	UserID       uuid.UUID
+	ServerID     uuid.UUID
+	Origin       string
+	SecretCipher []byte
+	Hint         string
+	Status       string
+	AllowAgents  bool
+	CreatedAt    time.Time
+	RotatedAt    *time.Time
+	RejectedAt   *time.Time
+	LastUsedAt   *time.Time
+}
+
 type PlatformBootstrap struct {
 	OIDCIssuer  string
 	OIDCSubject string
@@ -605,6 +627,25 @@ type RetentionSetting struct {
 	UpdatedBy uuid.NullUUID
 	UpdatedAt time.Time
 	LastRun   json.RawMessage
+}
+
+type SecretRequest struct {
+	IDDigest        string
+	IDCipher        []byte
+	UserID          uuid.UUID
+	ServerID        uuid.UUID
+	ServerOrigin    string
+	Reason          string
+	GatewayID       uuid.UUID
+	GatewaySlug     string
+	GatewayName     string
+	CapabilityID    uuid.UUID
+	CapabilityKind  string
+	ExposedName     string
+	CapabilityTitle string
+	CreatedAt       time.Time
+	ExpiresAt       time.Time
+	UsedAt          *time.Time
 }
 
 type ServiceAccount struct {

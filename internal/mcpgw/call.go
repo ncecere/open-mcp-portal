@@ -105,9 +105,16 @@ func (rc *request) forward(kind string, o gateways.Offer, args json.RawMessage, 
 	if !ok {
 		return
 	}
+	secret, ok := rc.personSecret(o, &rec)
+	if !ok {
+		return
+	}
 	target, err := rc.h.Registry.Target(ctx, o.Server)
 	if err != nil {
 		rc.upstreamFailed(rec, err)
+		return
+	}
+	if !rc.withPersonSecret(&target, secret) {
 		return
 	}
 	who := identityFor{tool: o.ExposedName}
@@ -142,7 +149,10 @@ func (rc *request) forward(kind string, o gateways.Offer, args json.RawMessage, 
 	if progress, ok := rc.wantsStream(); ok && kind == upstream.KindTool {
 		st := rc.startStream(progress)
 		defer st.close()
-		fwd.ProgressToken, fwd.OnProgress = progress, st.progress
+		fwd.ProgressToken, fwd.OnProgress = progress, func(p upstream.Progress) {
+			p.Message = rc.scrubText(p.Message)
+			st.progress(p)
+		}
 		target.MaxBody = maxStreamBytes
 	}
 	rc.forwardCall(o, rec, cred, target, fwd)

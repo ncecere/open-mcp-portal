@@ -162,6 +162,10 @@ export const callErrorLabels: Record<string, string> = {
   // Calls an agent platform relayed for a person (decision 66): refused, with a tool error and never a link.
   needs_connection: "Needs a connection (an agent call: no link was given)",
   person_not_present: "Needs a present person",
+  // A server where each person enters their own key (decision 72).
+  secret_missing: "Needs the person's own key for the server",
+  secret_rejected: "The server refused the person's key",
+  agents_not_allowed: "The person hasn't let agents use their key",
   person_no_account: "The person has no active account",
   person_suspended: "The person is suspended",
   // The gateway's own rate limits (outcome "rate_limited").

@@ -59,6 +59,10 @@ type TestResult struct {
 	// check.
 	SignInRequired bool
 	Note           string
+	// SecretRequired: a person_secret server has no key to read it with (no
+	// setup person, or theirs is rejected, for another origin or no longer
+	// usable).
+	SecretRequired bool
 }
 
 // probe discovers a server's capabilities (no storing), without an identity
@@ -129,6 +133,24 @@ func (s *Service) probeUntraced(ctx context.Context, sv dbgen.McpServer, trigger
 		}
 		t.BearerToken, res.ReadAs = token, &person
 	}
+	var secretID uuid.UUID
+	var secretSealed []byte
+	if cfg, ok := PersonSecretConfig(sv); ok {
+		// A person_secret server: scheduled checks send nobody's key (a 401 or
+		// 403 is healthy, "requires a personal key"); a Test or Refresh reads
+		// with the setup person's own key (decision 72).
+		if trigger == TriggerScheduled {
+			return s.probeSecretRequired(ctx, sv, t)
+		}
+		secret, person, id, sealed, fail := s.setupSecret(ctx, sv)
+		if fail != nil {
+			return *fail, upstream.Discovery{}, nil
+		}
+		if !t.WithPersonSecret(cfg.Placement, cfg.Name, cfg.Prefix, secret) {
+			return TestResult{Err: &upstream.Error{Class: upstream.ClassConfig, Message: "The server's secret settings are incomplete."}}, upstream.Discovery{}, nil
+		}
+		res.ReadAs, secretID, secretSealed = &person, id, sealed
+	}
 	if token != "" {
 		t.IdentityHeader, t.IdentityValue = identity.Header(t.AuthorizationHeader(), token)
 		if t.BearerToken != "" {
@@ -144,6 +166,13 @@ func (s *Service) probeUntraced(ctx context.Context, sv dbgen.McpServer, trigger
 			e = &upstream.Error{Class: upstream.ClassUnavailable, Message: "The test failed."}
 		}
 		msg := upstream.SafeMessage(e.Message, append(t.Secrets(), token)...)
+		if secretID != uuid.Nil && e.Class == upstream.ClassAuth && (e.HTTPStatus == http.StatusUnauthorized || e.HTTPStatus == http.StatusForbidden) {
+			// The server refused the key it was read with: not sent again
+			// until replaced (the value that was sent, not a newer one).
+			if _, err := s.q.RejectPersonSecret(ctx, dbgen.RejectPersonSecretParams{ID: secretID, SecretCipher: secretSealed}); err != nil {
+				s.log.WarnContext(ctx, "could not mark a rejected person secret", "server", sv.ID, "err", err)
+			}
+		}
 		res.Err = &upstream.Error{Class: e.Class, HTTPStatus: e.HTTPStatus, Message: msg}
 		return res, d, t.Secrets()
 	}
@@ -243,6 +272,9 @@ func (s *Service) Refresh(ctx context.Context, a authz.Actor, ref string, id uui
 		return RefreshResult{}, err
 	}
 	if fail != nil {
+		if fail.SecretRequired {
+			return RefreshResult{}, errSecretSetupRequired
+		}
 		if fail.SetupRequired {
 			e := apperr.Conflict("setup_reconsent_required", "The sign-in used to read this server's capabilities can't be used: an editor signs in again")
 			e.Details = map[string]any{"status": fail.SetupStatus}

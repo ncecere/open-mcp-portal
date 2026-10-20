@@ -51,7 +51,13 @@ const credentialParts: Format = (v) =>
   Array.isArray(v)
     ? v.map((c: { kind?: string; name?: string }) => (c.kind === "bearer" ? "Bearer token" : c.kind === "basic" ? "Basic (user and password)" : `${c.kind === "query" ? "Query parameter" : "Header"} ${c.name ?? ""}`.trim()))
     : v;
-const authModeWords: Record<string, string> = { none: "None", static_header: "Static header", oauth: "OAuth sign-in per person" };
+const authModeWords: Record<string, string> = { none: "None", static_header: "Static header", oauth: "OAuth sign-in per person", person_secret: "Each person's own key" };
+/** How people's own keys are sent (never a key): "Header X-Api-Key", "Bearer token", "Query parameter k". */
+const ownKeySettings: Format = (v) => {
+  if (!v || typeof v !== "object") return v;
+  const c = v as { placement?: string; name?: string };
+  return c.placement === "bearer" ? "Bearer token" : `${c.placement === "query" ? "Query parameter" : "Header"} ${c.name ?? ""}`.trim();
+};
 const registrationWords: Record<string, string> = {
   dcr: "Automatic (dynamic registration)",
   cimd: "Automatic (client metadata document)",
@@ -129,7 +135,13 @@ function fieldsFor(action: string): Fields | undefined {
         requiresPresentPerson: ["Require a present person", onOff],
         authMode: ["Authentication", label(authModeWords)],
         credentials: ["Credential parts", credentialParts],
+        personSecret: ["Each person's key is sent as", ownKeySettings],
       };
+    case "person_secret.create":
+    case "person_secret.rotate":
+    case "person_secret.revoke":
+    case "person_secret.agents_update":
+      return { allowAgents: ["Agents may use it", onOff], userId: null, serverId: null, origin: ["Entered for"], server: ["Server"] };
     case "mcp_server.auth_update":
       return {
         mode: ["Authentication", label(authModeWords)],
