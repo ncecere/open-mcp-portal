@@ -25,7 +25,7 @@ import { adminOnly } from "@/lib/terms";
 import { useAuthConfig } from "@/session";
 import s from "../../shared.module.css";
 import { useIsPlatformAdmin } from "../hooks";
-import { AppFields, EndpointFields, IdentityFields, RequestFields } from "./fields";
+import { AppFields, EndpointFields, IdentityFields, NarrowingFields, RequestFields } from "./fields";
 import { formOf, labels, type ProviderForm, providerProblems, serverProblems, updateBody } from "./form";
 
 /** What saving does to people, said in the confirmation (empty: nothing to confirm). */
@@ -104,6 +104,9 @@ export function ProviderSettingsTab({ provider }: { provider: AuthProvider }) {
       </SettingsSection>
       <SettingsSection title="Authorization request">
         <RequestFields {...fields} />
+      </SettingsSection>
+      <SettingsSection title="Token scopes per call" description="Whether a server gets only the scopes its call needs.">
+        <NarrowingFields {...fields} />
       </SettingsSection>
       {isAdmin && <DeleteProvider provider={provider} />}
       <AlertDialog

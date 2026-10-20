@@ -49,6 +49,8 @@ export const authProvider = (extra: Partial<Schemas["AuthProvider"]> = {}): Sche
   redirectUri: "https://mcp.example.com/connect/callback",
   serverCount: 1,
   connectionCount: 3,
+  accessMode: "open",
+  narrowOnRefresh: false,
   revision: 2,
   createdAt: "2026-10-14T10:00:00Z",
   updatedAt: "2026-10-15T10:00:00Z",
@@ -73,6 +75,7 @@ export const preset = (extra: Partial<Schemas["AuthProviderPreset"]> = {}): Sche
   urlParameters: [],
   docsUrl: "https://github.com/settings/developers",
   notes: "OAuth-app tokens don't expire.",
+  narrowOnRefresh: false,
   ...extra,
 });
 
@@ -144,7 +147,19 @@ export const connection = (extra: Partial<Schemas["ProviderConnection"]> = {}): 
   lastUsedAt: "2026-10-16T07:00:00Z",
   expiresAt: null,
   refreshable: false,
+  narrowsScopes: false,
   allowedServers: [],
+  ...extra,
+});
+
+/** A provider's access list (decision 69): restricted to one team and one server, one server blocked. */
+export const providerAccess = (extra: Partial<Schemas["AuthProviderAccess"]> = {}): Schemas["AuthProviderAccess"] => ({
+  accessMode: "restricted",
+  teams: [{ id: "40404040-4040-4404-8404-404040404040", slug: "platform", name: "Platform tools" }],
+  servers: [connectServer({ id: "50505050-5050-4505-8505-505050505050", slug: "wiki", name: "Wiki", teamSlug: "docs", teamName: "Docs" })],
+  blocked: [],
+  blockedCount: 0,
+  revision: 2,
   ...extra,
 });
 

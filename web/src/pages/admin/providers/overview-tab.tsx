@@ -4,7 +4,7 @@
  * "stored, ends in …"), and where it's used.
  */
 import { Link } from "@tanstack/react-router";
-import { type AuthProvider, scopesText, tokenAuthMethodLabels, tokenResponseFormatLabels } from "@/components/providers/labels";
+import { accessModeLabels, accessSummary, type AuthProvider, scopesText, tokenAuthMethodLabels, tokenResponseFormatLabels } from "@/components/providers/labels";
 import { Card } from "@/components/ui/card/card";
 import { CopyField } from "@/components/ui/copy-field/copy-field";
 import { DescriptionList } from "@/components/ui/description-list/description-list";
@@ -61,6 +61,15 @@ export function ProviderOverviewTab({ provider: p }: { provider: AuthProvider })
                   "No server requires it yet"
                 ),
             },
+            {
+              label: "Access",
+              value: (
+                <TextLink render={<Link to="/admin/auth-providers/$providerId" params={{ providerId: p.id }} search={{ tab: "access" }} />}>
+                  {`${accessModeLabels[p.accessMode]}: ${accessSummary(p).toLowerCase()}`}
+                </TextLink>
+              ),
+            },
+            { label: "Token scopes per call", value: p.narrowOnRefresh ? "Narrowed: a call gets a token for only the scopes it needs (connections with a refresh token)" : "Not narrowed: servers get the stored token, with every scope granted" },
             { label: "Connections", value: `${plural(p.connectionCount, "person", "people")} connected an account` },
             { label: "Added", value: <>{<Time value={p.createdAt} />}{p.createdByName ? ` by ${p.createdByName}` : ""}</> },
             { label: "Last changed", value: <Time value={p.updatedAt} /> },

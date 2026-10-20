@@ -27,6 +27,8 @@ export type ProviderForm = {
   /** extraAuthorizeParams as text: one key=value per line. */
   extraParams: string;
   logoUrl: string;
+  /** A call carries a token refreshed with only the scopes it needs (decision 69). */
+  narrowOnRefresh: boolean;
 };
 
 export type FieldKey = keyof ProviderForm | "clientSecret";
@@ -49,6 +51,7 @@ export const labels: Partial<Record<keyof ProviderForm, string>> = {
   extraParams: "Extra authorization parameters",
   logoUrl: "Logo URL",
   preset: "Preset",
+  narrowOnRefresh: "Narrow tokens per call",
 };
 
 export const emptyForm: ProviderForm = {
@@ -69,6 +72,7 @@ export const emptyForm: ProviderForm = {
   tokenResponseFormat: "standard",
   extraParams: "",
   logoUrl: "",
+  narrowOnRefresh: false,
 };
 
 /** extraAuthorizeParams as editable text. */
@@ -99,6 +103,7 @@ export function formFromPreset(p: AuthProviderPreset, values: Record<string, str
     scopeSeparator: p.scopeSeparator,
     tokenResponseFormat: p.tokenResponseFormat,
     extraParams: paramsText(p.extraAuthorizeParams),
+    narrowOnRefresh: p.narrowOnRefresh,
   };
 }
 
@@ -122,6 +127,7 @@ export function formOf(p: AuthProvider): ProviderForm {
     tokenResponseFormat: p.tokenResponseFormat,
     extraParams: paramsText(p.extraAuthorizeParams),
     logoUrl: p.logoUrl ?? "",
+    narrowOnRefresh: p.narrowOnRefresh,
   };
 }
 
@@ -223,6 +229,7 @@ export function createBody(f: ProviderForm, secret: string): Schemas["AuthProvid
     tokenResponseFormat: f.tokenResponseFormat,
     extraAuthorizeParams: parseParams(f.extraParams, f.scopeParam).params,
     logoUrl: blank(f.logoUrl),
+    narrowOnRefresh: f.narrowOnRefresh,
   };
 }
 

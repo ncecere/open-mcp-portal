@@ -145,11 +145,23 @@ export const adminAuthProviderQuery = (providerId: string) =>
     queryFn: async () => unwrap(await api.GET("/v1/admin/auth-providers/{providerId}", { params: { path: { providerId } } })),
   });
 
-/** The enabled providers anyone signed in can pick (a server's requirement, Connect an account). */
-export const authProvidersQuery = () =>
+/** Who may use one auth provider: its mode, listed teams and servers, and the servers it blocks now (platform admins and auditors). */
+export const adminAuthProviderAccessQuery = (providerId: string) =>
   queryOptions({
-    queryKey: ["auth-providers"],
-    queryFn: async () => unwrap(await api.GET("/v1/auth-providers")),
+    queryKey: [...adminAuthProvidersKey, providerId, "access"],
+    queryFn: async () => unwrap(await api.GET("/v1/admin/auth-providers/{providerId}/access", { params: { path: { providerId } } })),
+  });
+
+/**
+ * The enabled providers anyone signed in can pick (Connect an account). With a team (and the server being edited)
+ * only the providers that team's servers may require: open ones and restricted ones that list the team or the server
+ * (the picker of a server's requirement; saving and every call check the list again).
+ */
+export const authProvidersQuery = (forServer?: { team: string; serverId?: string }) =>
+  queryOptions({
+    queryKey: forServer ? ["auth-providers", forServer.team, forServer.serverId ?? ""] : ["auth-providers"],
+    queryFn: async () =>
+      unwrap(await api.GET("/v1/auth-providers", { params: { query: forServer ? { team: forServer.team, serverId: forServer.serverId } : {} } })),
     staleTime: 60_000,
   });
 
