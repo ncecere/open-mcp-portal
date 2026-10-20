@@ -70,6 +70,7 @@ const actionLabels: Record<string, string> = {
   "auth_provider.create": "Added auth provider",
   "auth_provider.update": "Changed auth provider",
   "auth_provider.delete": "Deleted auth provider",
+  "auth_provider.access_update": "Changed who may use an auth provider",
   "provider_connection.create": "Connected account",
   "provider_connection.refresh_failed": "Account needs reconnecting",
   "provider_connection.revoke": "Disconnected account",
