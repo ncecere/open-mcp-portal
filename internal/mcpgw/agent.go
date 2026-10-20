@@ -276,8 +276,10 @@ func (rc *request) needsConnection(o gateways.Offer, c *providers.ConsentNeeded,
 		}
 		msg = fmt.Sprintf("%s needs your own sign-in to %s%s. %s %s %s", o.ExposedName, name, scopes, verb, name, where)
 	case c.Reason == providers.ReasonServerNotAllowed:
-		msg = fmt.Sprintf("%s needs you to allow %s to use your %s account%s, which you haven't. An agent can't ask: use the tool yourself once from an MCP client connected to the portal and allow it when asked, then try again.",
-			o.ExposedName, serverLabel(o), name, scopes)
+		// Link-free (decision 66): the person allows the server themselves,
+		// on the portal's My connections page (decision 68), no call needed.
+		msg = fmt.Sprintf("%s needs you to allow %s to use your %s account%s, which you haven't. Allow %s %s, then try again.",
+			o.ExposedName, serverLabel(o), name, scopes, o.Server.Name, "under Account › My connections in Open MCP Portal")
 	default:
 		verb := "Connect your"
 		switch c.Reason {

@@ -274,6 +274,9 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 	// which reads capabilities after a setup sign-in.
 	reg.SetOAuth(registry.OAuthSettings{AppURL: cfg.AppURL, InstanceName: cfg.Instance.Name, Hooks: provs})
 	provs.Registry = reg
+	// A person allows a server from My connections (decision 68): the servers
+	// they may use through a gateway are the ones offered.
+	provs.Reachable = gws.ReachableServers
 	// Trusted agent platforms (decisions 65 and 66): their keys are fetched
 	// behind the same address guard as MCP servers; a person named in an
 	// agent token must have signed in with this portal's own issuer.

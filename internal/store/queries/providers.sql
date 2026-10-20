@@ -122,6 +122,9 @@ SELECT * FROM provider_connections WHERE user_id = @user_id AND provider_id = @p
 -- name: LockProviderConnection :one
 SELECT * FROM provider_connections WHERE user_id = @user_id AND provider_id = @provider_id FOR UPDATE;
 
+-- name: GetProviderConnectionByID :one
+SELECT * FROM provider_connections WHERE id = $1;
+
 -- name: LockProviderConnectionByID :one
 SELECT * FROM provider_connections WHERE id = $1 FOR UPDATE;
 
@@ -269,6 +272,10 @@ RETURNING *;
 -- A server's URL origin or provider changed, or it was deleted: nobody's
 -- consent counts for what it is now.
 DELETE FROM provider_server_grants WHERE server_id = @server_id;
+
+-- name: DeleteProviderServerGrant :execrows
+-- The person takes back one server's allowance of one connection.
+DELETE FROM provider_server_grants WHERE connection_id = @connection_id AND server_id = @server_id;
 
 -- name: ListProviderServerGrantsForUser :many
 -- The servers a person's connections are allowed for, by server name.

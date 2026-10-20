@@ -2324,6 +2324,36 @@ type AgentPlatformUpdate struct {
 	Name    *string `json:"name,omitempty"`
 }
 
+// AllowServerRequest The server to allow, with the address and scopes the person was shown
+type AllowServerRequest struct {
+	// Origin The origin listAllowableServers returned; refused (409 server_changed) when the server has another now
+	Origin string `json:"origin"`
+
+	// Scopes The scopes listAllowableServers returned; refused when the server asks for any that are not here
+	Scopes   ScopeList          `json:"scopes"`
+	ServerId openapi_types.UUID `json:"serverId"`
+}
+
+// AllowableServer A server a person may allow to use a connected account, as the Allow button shows it
+type AllowableServer struct {
+	// Allowed Already allowed at this origin for these scopes
+	Allowed bool `json:"allowed"`
+
+	// Covered The connection is active and already has every one of scopes
+	Covered bool `json:"covered"`
+
+	// Origin The scheme, host and port of the server's URL now; an allowance is bound to it
+	//
+	// Example: https://tools.example.com
+	Origin string `json:"origin"`
+
+	// Scopes What the server's capabilities, as the person may use them, ask of the account
+	Scopes ScopeList `json:"scopes"`
+
+	// Server An MCP server and its team, as a person is asked to allow it
+	Server ConnectServer `json:"server"`
+}
+
 // ApiKey defines model for ApiKey.
 type ApiKey struct {
 	CreatedAt time.Time  `json:"createdAt"`
@@ -6265,6 +6295,9 @@ type CreateMyApiKeyJSONRequestBody = ApiKeyCreate
 
 // StartMyConnectionJSONRequestBody defines body for StartMyConnection for application/json ContentType.
 type StartMyConnectionJSONRequestBody = ConnectStart
+
+// AllowConnectionServerJSONRequestBody defines body for AllowConnectionServer for application/json ContentType.
+type AllowConnectionServerJSONRequestBody = AllowServerRequest
 
 // UpdateMyNotificationPreferencesJSONRequestBody defines body for UpdateMyNotificationPreferences for application/json ContentType.
 type UpdateMyNotificationPreferencesJSONRequestBody = NotificationPreferencesUpdate

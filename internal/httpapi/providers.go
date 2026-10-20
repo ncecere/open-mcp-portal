@@ -28,6 +28,11 @@ import (
 // connectStartsPerMinute bounds POST /v1/me/connections/start per person.
 const connectStartsPerMinute = 20
 
+// connectAllowsPerMinute bounds allowing and taking back a server's
+// allowance (POST .../allow-server, DELETE .../allowed-servers/{serverId})
+// per person, as connectStartsPerMinute does for connecting.
+const connectAllowsPerMinute = 20
+
 // providerRoutes: auth providers, connections, consent links and the
 // providers' callback.
 func (a *api) providerRoutes() []route {
@@ -45,6 +50,9 @@ func (a *api) providerRoutes() []route {
 		{"GET", "/v1/me/connections", a.session(a.listMyConnections)},
 		{"POST", "/v1/me/connections/start", a.session(a.startMyConnection)},
 		{"DELETE", "/v1/me/connections/{connectionId}", a.session(a.revokeMyConnection)},
+		{"GET", "/v1/me/connections/{connectionId}/allowable-servers", a.session(a.listAllowableServers)},
+		{"POST", "/v1/me/connections/{connectionId}/allow-server", a.session(a.allowConnectionServer)},
+		{"DELETE", "/v1/me/connections/{connectionId}/allowed-servers/{serverId}", a.session(a.revokeAllowedServer)},
 		{"GET", "/v1/connect/requests/{requestId}", a.session(a.getConnectRequest)},
 		{"POST", "/v1/connect/requests/{requestId}/confirm", a.session(a.confirmConnectRequest)},
 		{"PUT", "/v1/teams/{team}/mcp-servers/{serverId}/capabilities/{capabilityId}/requirement", a.session(a.setTeamMcpCapabilityRequirement)},
@@ -323,15 +331,84 @@ func (a *api) revokeMyConnection(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, r, a.Providers.RevokeMine(r.Context(), a.actor(r), id))
 }
 
-func (a *api) startMyConnection(w http.ResponseWriter, r *http.Request) {
+// connectLimited counts one attempt of a connect operation against the
+// person's limit; it answers 429 slow_down and returns false when it is
+// used up.
+func (a *api) connectLimited(w http.ResponseWriter, r *http.Request, key string, limit int, message string) bool {
 	id, _ := auth.FromContext(r.Context())
-	ok, wait, err := ratelimit.Allow(r.Context(), a.limiter, "connect-start:"+id.User.ID.String(), connectStartsPerMinute)
+	ok, wait, err := ratelimit.Allow(r.Context(), a.limiter, key+":"+id.User.ID.String(), limit)
 	if failed(w, r, err) {
-		return
+		return false
 	}
 	if !ok {
 		w.Header().Set("Retry-After", strconv.Itoa(ratelimit.RetryAfter(wait)))
-		httpx.Error(w, http.StatusTooManyRequests, "slow_down", "Too many attempts to connect. Try again shortly.")
+		httpx.Error(w, http.StatusTooManyRequests, "slow_down", message)
+		return false
+	}
+	return true
+}
+
+func (a *api) listAllowableServers(w http.ResponseWriter, r *http.Request) {
+	connID, ok := pathUUID(w, r, "connectionId")
+	if !ok || !a.browserOnly(w, r) {
+		return
+	}
+	vs, err := a.Providers.ListAllowable(r.Context(), a.actor(r), connID)
+	writeList(w, r, vs, err, func(v providers.Allowable) apitypes.AllowableServer {
+		return apitypes.AllowableServer{Server: toAPIConnectServer(v.Server), Origin: v.Origin, Scopes: nonNilStrings(v.Scopes),
+			Covered: v.Covered, Allowed: v.Allowed}
+	})
+}
+
+// browserOnly answers 403 session_required unless the call is the web
+// app's (a browser session): allowing a server is a person's own decision,
+// never an API key's, an automation token's or an agent's.
+func (a *api) browserOnly(w http.ResponseWriter, r *http.Request) bool {
+	if id, _ := auth.FromContext(r.Context()); id.SessionID == "" {
+		httpx.Error(w, http.StatusForbidden, "session_required", "Do this from the web app")
+		return false
+	}
+	return true
+}
+
+func (a *api) allowConnectionServer(w http.ResponseWriter, r *http.Request) {
+	connID, ok := pathUUID(w, r, "connectionId")
+	if !ok || !a.browserOnly(w, r) {
+		return
+	}
+	if !a.connectLimited(w, r, "connect-allow", connectAllowsPerMinute, "Too many attempts to allow servers. Try again shortly.") {
+		return
+	}
+	var in apitypes.AllowServerRequest
+	if !httpx.Decode(w, r, &in) {
+		return
+	}
+	c, err := a.Providers.AllowServer(r.Context(), a.actor(r), connID, providers.AllowInput{ServerID: in.ServerId, Origin: in.Origin, Scopes: in.Scopes})
+	if failed(w, r, err) {
+		return
+	}
+	httpx.JSON(w, http.StatusOK, apitypes.ConnectConfirmed{Provider: toAPIProviderRef(c.Provider), Server: toAPIConnectServer(c.Server),
+		Scopes: nonNilStrings(c.Scopes)})
+}
+
+func (a *api) revokeAllowedServer(w http.ResponseWriter, r *http.Request) {
+	connID, ok := pathUUID(w, r, "connectionId")
+	if !ok {
+		return
+	}
+	serverID, ok := pathUUID(w, r, "serverId")
+	if !ok || !a.browserOnly(w, r) {
+		return
+	}
+	if !a.connectLimited(w, r, "connect-allow", connectAllowsPerMinute, "Too many attempts to change allowed servers. Try again shortly.") {
+		return
+	}
+	writeOK(w, r, a.Providers.RevokeServer(r.Context(), a.actor(r), connID, serverID))
+}
+
+func (a *api) startMyConnection(w http.ResponseWriter, r *http.Request) {
+	id, _ := auth.FromContext(r.Context())
+	if !a.connectLimited(w, r, "connect-start", connectStartsPerMinute, "Too many attempts to connect. Try again shortly.") {
 		return
 	}
 	var in apitypes.ConnectStart
@@ -359,8 +436,7 @@ func (a *api) startMyConnection(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) confirmConnectRequest(w http.ResponseWriter, r *http.Request) {
-	id, _ := auth.FromContext(r.Context())
-	if id.SessionID == "" {
+	if id, _ := auth.FromContext(r.Context()); id.SessionID == "" {
 		httpx.Error(w, http.StatusForbidden, "session_required", "Confirm from the web app")
 		return
 	}

@@ -99,6 +99,24 @@ func (q *Queries) DeleteProviderConnection(ctx context.Context, id uuid.UUID) er
 	return err
 }
 
+const deleteProviderServerGrant = `-- name: DeleteProviderServerGrant :execrows
+DELETE FROM provider_server_grants WHERE connection_id = $1 AND server_id = $2
+`
+
+type DeleteProviderServerGrantParams struct {
+	ConnectionID uuid.UUID
+	ServerID     uuid.UUID
+}
+
+// The person takes back one server's allowance of one connection.
+func (q *Queries) DeleteProviderServerGrant(ctx context.Context, arg DeleteProviderServerGrantParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteProviderServerGrant, arg.ConnectionID, arg.ServerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteProviderServerGrantsForServer = `-- name: DeleteProviderServerGrantsForServer :execrows
 DELETE FROM provider_server_grants WHERE server_id = $1
 `
@@ -284,6 +302,31 @@ type GetProviderConnectionParams struct {
 
 func (q *Queries) GetProviderConnection(ctx context.Context, arg GetProviderConnectionParams) (ProviderConnection, error) {
 	row := q.db.QueryRow(ctx, getProviderConnection, arg.UserID, arg.ProviderID)
+	var i ProviderConnection
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ProviderID,
+		&i.Status,
+		&i.Scopes,
+		&i.AccountLabel,
+		&i.AccessTokenCipher,
+		&i.RefreshTokenCipher,
+		&i.ExpiresAt,
+		&i.ConnectedAt,
+		&i.RefreshedAt,
+		&i.LastUsedAt,
+		&i.LastErrorClass,
+	)
+	return i, err
+}
+
+const getProviderConnectionByID = `-- name: GetProviderConnectionByID :one
+SELECT id, user_id, provider_id, status, scopes, account_label, access_token_cipher, refresh_token_cipher, expires_at, connected_at, refreshed_at, last_used_at, last_error_class FROM provider_connections WHERE id = $1
+`
+
+func (q *Queries) GetProviderConnectionByID(ctx context.Context, id uuid.UUID) (ProviderConnection, error) {
+	row := q.db.QueryRow(ctx, getProviderConnectionByID, id)
 	var i ProviderConnection
 	err := row.Scan(
 		&i.ID,

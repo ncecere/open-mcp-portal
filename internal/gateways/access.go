@@ -14,6 +14,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/apperr"
 	"github.com/ncecere/open-mcp-portal/internal/audit"
 	"github.com/ncecere/open-mcp-portal/internal/authz"
+	"github.com/ncecere/open-mcp-portal/internal/registry"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 	"github.com/ncecere/open-mcp-portal/internal/teams"
@@ -315,14 +316,14 @@ func (s *Service) ListMine(ctx context.Context, u dbgen.User) ([]Mine, error) {
 	return out, nil
 }
 
-// UsesServer reports whether a person may use any capability of a server
-// through one of their gateways now (signing in to an oauth server without
-// a consent link, docs/phase7-upstream-oauth.md).
-func (s *Service) UsesServer(ctx context.Context, u dbgen.User, serverID uuid.UUID) (bool, error) {
+// allowedOffers are the capabilities a person may use now through their
+// gateways (enabled, a team gateway's team active, access, minimum roles).
+func (s *Service) allowedOffers(ctx context.Context, u dbgen.User) ([]Offer, error) {
 	rows, err := s.q.ListGatewaysForUser(ctx, dbgen.ListGatewaysForUserParams{UserID: uuid.NullUUID{UUID: u.ID, Valid: true}, Groups: groupsOf(u)})
 	if err != nil {
-		return false, err
+		return nil, err
 	}
+	var out []Offer
 	for _, r := range rows {
 		c := Caller{Role: r.MemberRole, Access: grantKinds(r.GrantKinds)}
 		if r.Gateway.OwnerKind == OwnerTeam {
@@ -330,15 +331,99 @@ func (s *Service) UsesServer(ctx context.Context, u dbgen.User, serverID uuid.UU
 		}
 		offers, err := s.Offers(ctx, r.Gateway, c)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 		for _, o := range offers {
-			if o.Allowed && o.Server.ID == serverID {
-				return true, nil
+			if o.Allowed {
+				out = append(out, o)
 			}
 		}
 	}
+	return out, nil
+}
+
+// UsesServer reports whether a person may use any capability of a server
+// through one of their gateways now (signing in to an oauth server without
+// a consent link, docs/phase7-upstream-oauth.md).
+func (s *Service) UsesServer(ctx context.Context, u dbgen.User, serverID uuid.UUID) (bool, error) {
+	offers, err := s.allowedOffers(ctx, u)
+	if err != nil {
+		return false, err
+	}
+	for _, o := range offers {
+		if o.Server.ID == serverID {
+			return true, nil
+		}
+	}
 	return false, nil
+}
+
+// ProviderNeed is what a server's capabilities a person may use ask of one
+// platform provider: the union of their effective scopes, sorted.
+type ProviderNeed struct {
+	Provider registry.Provider
+	Scopes   []string
+}
+
+// ReachableServer is a server a person may use through a gateway now, with
+// the platform providers (enabled, not an oauth server's own sign-in) its
+// reachable capabilities require.
+type ReachableServer struct {
+	Server             dbgen.McpServer
+	TeamSlug, TeamName string
+	Needs              []ProviderNeed
+}
+
+// ReachableServers lists the servers a person may use through one of their
+// gateways now, by server name: the visibility rule for allowing a server
+// to use a connected account (decision 68). It is the one calls use, so
+// it offers exactly the servers whose calls the person could make: their
+// teams' servers on their teams' gateways, and published servers with
+// approved capabilities on the gateways they have access to.
+func (s *Service) ReachableServers(ctx context.Context, u dbgen.User) ([]ReachableServer, error) {
+	offers, err := s.allowedOffers(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+	byID := map[uuid.UUID]*ReachableServer{}
+	var order []uuid.UUID
+	for _, o := range offers {
+		rs, ok := byID[o.Server.ID]
+		if !ok {
+			rs = &ReachableServer{Server: o.Server, TeamSlug: o.TeamSlug, TeamName: o.TeamName}
+			byID[o.Server.ID] = rs
+			order = append(order, o.Server.ID)
+		}
+		req := o.Requires
+		if req == nil || !req.Provider.Enabled || req.Provider.ServerBound() {
+			continue
+		}
+		i := slices.IndexFunc(rs.Needs, func(n ProviderNeed) bool { return n.Provider.ID == req.Provider.ID })
+		if i < 0 {
+			rs.Needs = append(rs.Needs, ProviderNeed{Provider: req.Provider, Scopes: []string{}})
+			i = len(rs.Needs) - 1
+		}
+		for _, sc := range req.Scopes {
+			if !slices.Contains(rs.Needs[i].Scopes, sc) {
+				rs.Needs[i].Scopes = append(rs.Needs[i].Scopes, sc)
+			}
+		}
+	}
+	out := make([]ReachableServer, 0, len(order))
+	for _, id := range order {
+		rs := byID[id]
+		for i := range rs.Needs {
+			slices.Sort(rs.Needs[i].Scopes)
+		}
+		out = append(out, *rs)
+	}
+	slices.SortFunc(out, func(a, b ReachableServer) int {
+		if c := strings.Compare(a.Server.Name, b.Server.Name); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Server.ID.String(), b.Server.ID.String())
+	})
+	return out, nil
 }
 
 // ListForServiceAccount lists the gateways a service account of a team with

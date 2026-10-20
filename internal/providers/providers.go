@@ -35,6 +35,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/apperr"
 	"github.com/ncecere/open-mcp-portal/internal/audit"
 	"github.com/ncecere/open-mcp-portal/internal/authz"
+	"github.com/ncecere/open-mcp-portal/internal/gateways"
 	"github.com/ncecere/open-mcp-portal/internal/registry"
 	"github.com/ncecere/open-mcp-portal/internal/secrets"
 	"github.com/ncecere/open-mcp-portal/internal/store"
@@ -98,6 +99,10 @@ type Service struct {
 	Registry *registry.Service
 	// Notify hears of connections that turn needs_reconsent (nil: nobody).
 	Notify Notifier
+	// Reachable lists the servers a person may use through a gateway now
+	// (gateways.Service.ReachableServers; nil: none), which the person may
+	// allow to use a connection (allow.go).
+	Reachable func(ctx context.Context, u dbgen.User) ([]gateways.ReachableServer, error)
 }
 
 // New returns the service. up supplies the address guard (the development
