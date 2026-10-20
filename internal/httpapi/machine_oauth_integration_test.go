@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/ncecere/open-mcp-portal/internal/httpapi"
 	"github.com/ncecere/open-mcp-portal/internal/httpapi/apitypes"
+	"github.com/ncecere/open-mcp-portal/internal/observability"
 	"github.com/ncecere/open-mcp-portal/internal/registry"
 	"github.com/ncecere/open-mcp-portal/internal/testutil"
 )
@@ -873,5 +875,157 @@ func TestMachineOAuthSecretIsBoundToItsServer(t *testing.T) {
 	code, raw := e.owner.raw("POST", toolsTeam+"/mcp-servers/"+other.Id.String()+"/test", nil, nil)
 	if code != 200 || !strings.Contains(string(raw), "can't be decrypted") || strings.Contains(string(raw), `"ok":true`) {
 		t.Fatalf("a ciphertext of another server opened: %d %s", code, raw)
+	}
+}
+
+// The token request is observable without a token in it: omp_machine_token_requests_total
+// counts requests (not cache hits) by result, and the span of a token request
+// carries only the allowed attributes and a class, never a token, secret or URL.
+func TestMachineOAuthMetricsAndSpans(t *testing.T) {
+	e := newMachineEnv(t)
+	sr := tracingOn(t)
+	count := func(result string) float64 {
+		return promtest.ToFloat64(observability.MachineTokenRequests.WithLabelValues(result))
+	}
+	ok0, refused0, down0 := count("ok"), count("refused"), count("unavailable")
+	e.mustPatch(e.editor, e.machine(nil))
+	e.approve()
+	for range 3 {
+		if code, out := e.callTool(e.key.Secret, "status__whoami", nil); code != 200 || out["error"] != nil {
+			t.Fatalf("call = %d %v", code, out)
+		}
+	}
+	if count("ok")-ok0 != 1 {
+		t.Fatalf("ok token requests = %v, want 1 (the cache serves the rest)", count("ok")-ok0)
+	}
+	e.as.Set(func(f *testutil.FakeOAuth) { f.FailClientCredentials = "invalid_client" })
+	e.forget()
+	e.callTool(e.key.Secret, "status__whoami", nil)
+	e.as.Set(func(f *testutil.FakeOAuth) { f.FailClientCredentials = "unavailable" })
+	e.forget()
+	e.callTool(e.key.Secret, "status__whoami", nil)
+	if count("refused")-refused0 != 1 || count("unavailable")-down0 != 1 {
+		t.Fatalf("refused %v, unavailable %v", count("refused")-refused0, count("unavailable")-down0)
+	}
+	allowed := map[string]bool{}
+	for _, k := range observability.AllowedAttributeKeys() {
+		allowed[k] = true
+	}
+	var token []string
+	for _, sp := range sr.Ended() {
+		if sp.Name() != "upstream.machine_token" {
+			continue
+		}
+		token = append(token, sp.Name())
+		texts := []string{sp.Name(), sp.Status().Description}
+		for _, a := range sp.Attributes() {
+			if !allowed[string(a.Key)] {
+				t.Errorf("the token span carries %s", a.Key)
+			}
+			texts = append(texts, a.Value.Emit())
+		}
+		for _, text := range texts {
+			for _, bad := range append(e.sentinels(), "127.0.0.1", "/token", e.as.ClientID) {
+				if strings.Contains(text, bad) {
+					t.Errorf("a token span holds %q: %q", bad, text)
+				}
+			}
+		}
+	}
+	if len(token) != 3 {
+		t.Fatalf("%d token spans, want 3", len(token))
+	}
+}
+
+// An automation token can't choose where a client secret goes: it may not
+// create a server in machine_oauth mode, send machineOAuth or switch a server
+// to it, even on a server without credentials (decision 58, decision 73).
+func TestMachineOAuthIsSessionOnlyForTokens(t *testing.T) {
+	e := newMatrixEnv(t)
+	var pub tokenCred
+	for _, c := range e.tokenCreds() {
+		if c.name == "publisher-write" {
+			pub = c
+		}
+	}
+	machine := map[string]any{"tokenUrl": "https://idp.example.com/token", "clientId": "c", "clientSecret": "token-sentinel-secret"}
+	field := func(body []byte) string {
+		var env struct {
+			Error struct {
+				Code    string
+				Details struct{ Field string }
+			}
+		}
+		_ = json.Unmarshal(body, &env)
+		if env.Error.Code != "token_not_allowed" {
+			return env.Error.Code
+		}
+		return env.Error.Details.Field
+	}
+	create := func(extra map[string]any) (int, []byte) {
+		b := map[string]any{"slug": "from-ci", "name": "From CI", "url": e.fakeURL}
+		for k, v := range extra {
+			b[k] = v
+		}
+		code, _, body := e.bearer(pub.secret, post("/v1/teams/bravo/mcp-servers", b))
+		return code, body
+	}
+	for name, c := range map[string]struct {
+		extra map[string]any
+		field string
+	}{
+		"machineOAuth with the mode": {map[string]any{"authMode": "machine_oauth", "machineOAuth": machine}, "machineOAuth"},
+		"machineOAuth alone":         {map[string]any{"machineOAuth": machine}, "machineOAuth"},
+		"the mode alone":             {map[string]any{"authMode": "machine_oauth"}, "authMode"},
+	} {
+		if code, body := create(c.extra); code != 403 || field(body) != c.field || strings.Contains(string(body), "token-sentinel-secret") {
+			t.Errorf("create with %s = %d %s", name, code, body)
+		}
+	}
+	if n := e.exec(`SELECT count(*)::text FROM mcp_servers WHERE slug = 'from-ci'`); n != "0" {
+		t.Errorf("a refused create stored a server")
+	}
+	// Updates: on a server without credentials too.
+	srv := e.newServer(e.b, "private")
+	path := "/v1/teams/bravo/mcp-servers/" + srv
+	rev := func() map[string]string {
+		return map[string]string{"If-Match": `"` + e.exec(`SELECT revision::text FROM mcp_servers WHERE id = $1`, srv) + `"`}
+	}
+	for name, c := range map[string]struct {
+		body  map[string]any
+		field string
+	}{
+		"machineOAuth":        {map[string]any{"machineOAuth": machine}, "machineOAuth"},
+		"the mode":            {map[string]any{"authMode": "machine_oauth", "machineOAuth": machine}, "machineOAuth"},
+		"the mode alone":      {map[string]any{"authMode": "machine_oauth"}, "authMode"},
+		"a null machineOAuth": {map[string]any{"machineOAuth": nil}, "machineOAuth"},
+	} {
+		if code, _, body := e.bearer(pub.secret, patch(path, c.body).h(rev())); code != 403 || field(body) != c.field {
+			t.Errorf("update with %s = %d %s", name, code, body)
+		}
+	}
+	// A server already in the mode is protected as one with credentials: the
+	// token can't re-point it, change its client or leave the mode.
+	e.run(`UPDATE mcp_servers SET auth_mode = 'machine_oauth' WHERE id = $1`, srv)
+	e.run(`INSERT INTO mcp_server_machine_oauth (server_id, token_url, client_id, client_secret_cipher) VALUES ($1, 'https://idp.example.com/token', 'c', '\x00')`, srv)
+	for name, c := range map[string]struct {
+		body  map[string]any
+		field string
+	}{
+		"the url":         {map[string]any{"url": "https://attacker.example.com/mcp"}, "url"},
+		"the mode":        {map[string]any{"authMode": "none"}, "authMode"},
+		"the client":      {map[string]any{"machineOAuth": map[string]any{"scopes": []string{"x"}}}, "machineOAuth"},
+		"sendIdentity":    {map[string]any{"sendIdentity": false}, "sendIdentity"},
+		"a static header": {map[string]any{"authHeaderName": "X-Key", "authValue": "x-1234567890"}, "authHeaderName"},
+	} {
+		if code, _, body := e.bearer(pub.secret, patch(path, c.body).h(rev())); code != 403 || field(body) != c.field {
+			t.Errorf("update of a machine server: %s = %d %s", name, code, body)
+		}
+	}
+	if code, _, body := e.bearer(pub.secret, patch(path, map[string]any{"description": "still fine"}).h(rev())); code != 200 {
+		t.Errorf("a harmless field = %d %s", code, body)
+	}
+	if got := e.exec(`SELECT token_url || client_id FROM mcp_server_machine_oauth WHERE server_id = $1`, srv); got != "https://idp.example.com/tokenc" {
+		t.Errorf("a token changed the client: %s", got)
 	}
 }
