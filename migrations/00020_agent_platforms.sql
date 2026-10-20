@@ -26,9 +26,21 @@
 -- New tables and nullable or defaulted columns only (expand/contract): the
 -- previous release ignores them. No CHECK on mcp_calls.outcome or error_class
 -- changes: the refusals use outcomes and classes that exist.
+--
+-- Locks on mcp_calls (the largest table): the new columns are added without a
+-- CHECK (a plain nullable ADD COLUMN is a catalog change, no scan), the length
+-- checks are added NOT VALID (no scan) and then validated (a scan that takes
+-- only SHARE UPDATE EXCLUSIVE: calls keep being recorded). That only helps when
+-- the ADD CONSTRAINT and the VALIDATE are separate transactions, because a
+-- lock taken in a transaction is held to its end; so this migration runs
+-- without goose's wrapping transaction (NO TRANSACTION) and every statement is
+-- safe to run again (IF NOT EXISTS, IF EXISTS, drop-then-add) if one fails
+-- half way. There is no index on mcp_calls.via_platform_id: no query filters
+-- on it, and building an index blocks writes to the table.
 
+-- +goose NO TRANSACTION
 -- +goose Up
-CREATE TABLE agent_platforms (
+CREATE TABLE IF NOT EXISTS agent_platforms (
     id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     name            text        NOT NULL CHECK (char_length(name) BETWEEN 1 AND 100),
     issuer          text        NOT NULL CHECK (char_length(issuer) BETWEEN 1 AND 500),
@@ -50,45 +62,55 @@ CREATE TABLE agent_platforms (
     CONSTRAINT agent_platforms_jwks_result CHECK ((jwks_checked_at IS NULL) = (jwks_ok IS NULL))
 );
 
-CREATE TABLE agent_token_jtis (
+CREATE TABLE IF NOT EXISTS agent_token_jtis (
     platform_id uuid        NOT NULL REFERENCES agent_platforms (id) ON DELETE CASCADE,
     jti         text        NOT NULL CHECK (char_length(jti) BETWEEN 1 AND 128),
     expires_at  timestamptz NOT NULL,
     PRIMARY KEY (platform_id, jti)
 );
-CREATE INDEX agent_token_jtis_expires_idx ON agent_token_jtis (expires_at);
+CREATE INDEX IF NOT EXISTS agent_token_jtis_expires_idx ON agent_token_jtis (expires_at);
 
 ALTER TABLE service_accounts
-    ADD COLUMN relay_platform_id uuid        REFERENCES agent_platforms (id) ON DELETE SET NULL,
-    ADD COLUMN relay_marked_by   uuid        REFERENCES users (id) ON DELETE SET NULL,
-    ADD COLUMN relay_marked_at   timestamptz;
-CREATE INDEX service_accounts_relay_idx ON service_accounts (relay_platform_id) WHERE relay_platform_id IS NOT NULL;
+    ADD COLUMN IF NOT EXISTS relay_platform_id uuid        REFERENCES agent_platforms (id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS relay_marked_by   uuid        REFERENCES users (id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS relay_marked_at   timestamptz;
+CREATE INDEX IF NOT EXISTS service_accounts_relay_idx ON service_accounts (relay_platform_id) WHERE relay_platform_id IS NOT NULL;
 
 ALTER TABLE mcp_calls
-    ADD COLUMN agent_id          text    CHECK (char_length(agent_id) <= 128),
-    ADD COLUMN agent_name        text    CHECK (char_length(agent_name) <= 200),
-    ADD COLUMN via_platform_id   uuid,
-    ADD COLUMN via_platform_name text    CHECK (char_length(via_platform_name) <= 100),
-    ADD COLUMN person_present    boolean;
-CREATE INDEX mcp_calls_via_platform_idx ON mcp_calls (via_platform_id, id DESC) WHERE via_platform_id IS NOT NULL;
+    ADD COLUMN IF NOT EXISTS agent_id          text,
+    ADD COLUMN IF NOT EXISTS agent_name        text,
+    ADD COLUMN IF NOT EXISTS via_platform_id   uuid,
+    ADD COLUMN IF NOT EXISTS via_platform_name text,
+    ADD COLUMN IF NOT EXISTS person_present    boolean;
+ALTER TABLE mcp_calls
+    DROP CONSTRAINT IF EXISTS mcp_calls_agent_id_len,
+    ADD CONSTRAINT mcp_calls_agent_id_len CHECK (char_length(agent_id) <= 128) NOT VALID;
+ALTER TABLE mcp_calls
+    DROP CONSTRAINT IF EXISTS mcp_calls_agent_name_len,
+    ADD CONSTRAINT mcp_calls_agent_name_len CHECK (char_length(agent_name) <= 200) NOT VALID;
+ALTER TABLE mcp_calls
+    DROP CONSTRAINT IF EXISTS mcp_calls_via_platform_name_len,
+    ADD CONSTRAINT mcp_calls_via_platform_name_len CHECK (char_length(via_platform_name) <= 100) NOT VALID;
+ALTER TABLE mcp_calls VALIDATE CONSTRAINT mcp_calls_agent_id_len;
+ALTER TABLE mcp_calls VALIDATE CONSTRAINT mcp_calls_agent_name_len;
+ALTER TABLE mcp_calls VALIDATE CONSTRAINT mcp_calls_via_platform_name_len;
 
-ALTER TABLE mcp_servers ADD COLUMN requires_present_person boolean NOT NULL DEFAULT false;
-ALTER TABLE mcp_capabilities ADD COLUMN requires_present_person boolean;
+ALTER TABLE mcp_servers ADD COLUMN IF NOT EXISTS requires_present_person boolean NOT NULL DEFAULT false;
+ALTER TABLE mcp_capabilities ADD COLUMN IF NOT EXISTS requires_present_person boolean;
 
 -- +goose Down
-ALTER TABLE mcp_capabilities DROP COLUMN requires_present_person;
-ALTER TABLE mcp_servers DROP COLUMN requires_present_person;
-DROP INDEX mcp_calls_via_platform_idx;
+ALTER TABLE mcp_capabilities DROP COLUMN IF EXISTS requires_present_person;
+ALTER TABLE mcp_servers DROP COLUMN IF EXISTS requires_present_person;
 ALTER TABLE mcp_calls
-    DROP COLUMN person_present,
-    DROP COLUMN via_platform_name,
-    DROP COLUMN via_platform_id,
-    DROP COLUMN agent_name,
-    DROP COLUMN agent_id;
-DROP INDEX service_accounts_relay_idx;
+    DROP COLUMN IF EXISTS person_present,
+    DROP COLUMN IF EXISTS via_platform_name,
+    DROP COLUMN IF EXISTS via_platform_id,
+    DROP COLUMN IF EXISTS agent_name,
+    DROP COLUMN IF EXISTS agent_id;
+DROP INDEX IF EXISTS service_accounts_relay_idx;
 ALTER TABLE service_accounts
-    DROP COLUMN relay_marked_at,
-    DROP COLUMN relay_marked_by,
-    DROP COLUMN relay_platform_id;
-DROP TABLE agent_token_jtis;
-DROP TABLE agent_platforms;
+    DROP COLUMN IF EXISTS relay_marked_at,
+    DROP COLUMN IF EXISTS relay_marked_by,
+    DROP COLUMN IF EXISTS relay_platform_id;
+DROP TABLE IF EXISTS agent_token_jtis;
+DROP TABLE IF EXISTS agent_platforms;
