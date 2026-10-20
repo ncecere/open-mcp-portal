@@ -1,7 +1,11 @@
 # Status and handoff
 
-Last updated: 2026-10-18. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.3.0, **cut on 2026-10-20**
-(release notes: [releases/v0.3.0.md](releases/v0.3.0.md); earlier: [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+Last updated: 2026-10-18. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.3.1, **cut on 2026-10-20**
+(release notes: [releases/v0.3.1.md](releases/v0.3.1.md); earlier: [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+
+## v0.3.1 (2026-10-20)
+
+Provider access lists and narrowing, credential parts, tracing (migrations `00021` to `00023`): see the [release notes](releases/v0.3.1.md). Verified by tests and a browser check of two screens; **not** run against a real provider, a real collector or a real server that wants Basic or a query key.
 
 ## v0.3.0 (2026-10-20)
 

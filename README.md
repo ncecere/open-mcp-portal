@@ -8,7 +8,7 @@ own scripts to a gateway and see only what they may use, with every call checked
 Go + PostgreSQL 17, with a React/Vite web UI embedded in one binary. Documentation: <https://docs.omp.bitop.dev>.
 Website: <https://omp.bitop.dev>.
 
-**Development software (v0.3.0).** Phases 1 to 7 and the v0.2 pilot work (MCP 2026-07-28, an admin overview, notifications, automation tokens) are done. Claude Code and pi have signed in over OAuth and called
+**Development software (v0.3.1).** Phases 1 to 7 and the v0.2 pilot work (MCP 2026-07-28, an admin overview, notifications, automation tokens) are done. Claude Code and pi have signed in over OAuth and called
 tools (Claude Code also speaks the 2026-07-28 revision natively), and GitHub's hosted MCP server works with each person's own GitHub sign-in. It runs on one Talos cluster. Not tried yet: a real Google or
 Microsoft provider for delegated credentials (only a fake), VS Code and Cursor; it hasn't run
 in production. See the [v0.2.0 release notes](docs/releases/v0.2.0.md) and [status](docs/status.md) for what has been
@@ -75,7 +75,7 @@ Releases publish a multi-arch image (linux/amd64 and linux/arm64) with SBOM and 
 [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) keyless signature:
 
 ```sh
-docker pull ghcr.io/ncecere/open-mcp-portal:v0.3.0
+docker pull ghcr.io/ncecere/open-mcp-portal:v0.3.1
 ```
 
 Tags are `vX.Y.Z` and, for final releases, `latest`. **Pin the image by digest** in a real deployment: the digest is in
@@ -84,11 +84,11 @@ before you use it:
 
 ```sh
 cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:<digest> \
-  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.3.0 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.3.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-The Kubernetes base uses `ghcr.io/ncecere/open-mcp-portal:v0.3.0`; the example overlay shows pinning the digest. You
+The Kubernetes base uses `ghcr.io/ncecere/open-mcp-portal:v0.3.1`; the example overlay shows pinning the digest. You
 generate your own `ENCRYPTION_KEY` and `API_KEY_PEPPER` (`openssl rand -base64 32` each); see
 [deploying](docs/deploy.md#required-settings-and-secrets). To try it locally without installing anything, run
 `make demo` (Docker builds the image itself).
@@ -97,7 +97,7 @@ generate your own `ENCRYPTION_KEY` and `API_KEY_PEPPER` (`openssl rand -base64 3
 
 - [Specification](SPEC.md) and [product decisions](docs/decisions.md)
 - [Status and handoff](docs/status.md)
-- [Roadmap](docs/roadmap.md): what comes after v0.3.0, in order, with an [issue and implementation plan](https://github.com/ncecere/open-mcp-portal/milestones) for each item
+- [Roadmap](docs/roadmap.md): what comes after v0.3.1, in order, with an [issue and implementation plan](https://github.com/ncecere/open-mcp-portal/milestones) for each item
 - Phase designs: [registry](docs/registry.md), [gateways](docs/phase3-gateways.md),
   [client sign-in](docs/phase4-client-auth.md), [delegated credentials](docs/phase5-delegated-credentials.md),
   [operations](docs/phase6-operations.md), [upstream OAuth](docs/phase7-upstream-oauth.md)

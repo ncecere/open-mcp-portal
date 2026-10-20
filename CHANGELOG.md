@@ -6,7 +6,7 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
-## Unreleased
+## [0.3.1] - 2026-10-20
 
 A per-provider access list and narrower delegated tokens (roadmap #27, threat model H-5, [decision](docs/decisions.md) 69). Migration `00021` (expand-only).
 

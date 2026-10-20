@@ -29,8 +29,8 @@ resources:
 # (open-mcp-portal-<tag>.digest.txt) and verify the signature first (docs/deploy.md).
 images:
   - name: ghcr.io/ncecere/open-mcp-portal
-    newTag: v0.3.0
-    digest: sha256:f6a3598c47e738fd307c7296f0357670872c247ac487069a52686ebb13c515e4
+    newTag: v0.3.1
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
 
 configMapGenerator:
   - name: open-mcp-portal-config
