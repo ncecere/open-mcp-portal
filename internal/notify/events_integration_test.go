@@ -550,3 +550,66 @@ func TestKeyExpiryScan(t *testing.T) {
 		t.Error("a service account key's payload names its service account")
 	}
 }
+
+// A server's mTLS client certificate that expires within 14 days is told as
+// key.expiring (keyKind server_certificate) to the team's owners, admins and
+// editors, once per certificate: not to members, not for a disabled server,
+// not for one that has already expired, not for a certificate further off,
+// and a renewed certificate warns again when its turn comes (decision 74).
+func TestServerCertificateExpiryScan(t *testing.T) {
+	e := newEnv(t, nil)
+	team := e.team("ops")
+	owner, admin, editor, member := e.user("none"), e.user("none"), e.user("none"), e.user("none")
+	e.member(team, owner, "owner")
+	e.member(team, admin, "admin")
+	e.member(team, editor, "editor")
+	e.member(team, member, "member")
+	cert := func(slug string, enabled bool, left string, sha string) uuid.UUID {
+		id := uuid.MustParse(e.exec(`INSERT INTO mcp_servers (team_id, slug, name, url, enabled) VALUES ($1, $2::text, $2::text, 'https://x.example/mcp', $3) RETURNING id::text`, team, slug, enabled))
+		e.run(`INSERT INTO mcp_server_tls (server_id, client_cert_pem, client_key_cipher, client_cert_sha256, client_not_after)
+			VALUES ($1, 'x', '\x00', $2, now() + $3::interval)`, id, strings.Repeat(sha, 64), left)
+		return id
+	}
+	soon := cert("soon", true, "10 days", "a")
+	cert("off", false, "3 days", "b")
+	cert("expired", true, "-1 hour", "c")
+	cert("later", true, "30 days", "d")
+	n, err := e.svc.ScanKeys(context.Background())
+	if err != nil || n != 1 {
+		t.Fatalf("scan: %d events, %v (want only the enabled server expiring in 10 days)", n, err)
+	}
+	if n, _ := e.svc.ScanKeys(context.Background()); n != 0 {
+		t.Fatalf("a second scan found %d new events", n)
+	}
+	e.fanOutAll()
+	for u, want := range map[uuid.UUID]int{owner: 1, admin: 1, editor: 1, member: 0} {
+		if got := e.inbox(u); got != want {
+			t.Errorf("%s inbox = %d, want %d", u, got, want)
+		}
+	}
+	payload := e.exec(`SELECT payload::text FROM notification_events WHERE dedup_key LIKE 'key.expiring:server_certificate:%'`)
+	for _, want := range []string{`"keyKind": "server_certificate"`, soon.String(), `"daysLeft": 10`} {
+		if !strings.Contains(payload, want) {
+			t.Errorf("payload %s lacks %s", payload, want)
+		}
+	}
+	if strings.Contains(payload, "PRIVATE") || strings.Contains(payload, "BEGIN") {
+		t.Errorf("a certificate reached the payload: %s", payload)
+	}
+	// A renewed certificate (another fingerprint) that is itself close to expiry
+	// warns again; the same one doesn't.
+	e.run(`UPDATE mcp_server_tls SET client_cert_sha256 = $2, client_not_after = now() + interval '12 days' WHERE server_id = $1`, soon, strings.Repeat("e", 64))
+	if n, _ := e.svc.ScanKeys(context.Background()); n != 1 {
+		t.Fatalf("the renewed certificate: %d new events", n)
+	}
+	// Webhooks: a team destination and a platform one (with team events) get it.
+	route := dbgen.NotificationEvent{Event: KeyExpiring, Payload: []byte(`{"keyKind":"server_certificate"}`)}
+	if team, platform, needs := webhookRoute(route); !team || !platform || !needs {
+		t.Errorf("webhook route = %v %v %v", team, platform, needs)
+	}
+	// The wording names the server and where to renew.
+	m := compose(dbgen.NotificationEvent{Event: KeyExpiring, Payload: []byte(payload)}, &teamInfo{ID: team, Slug: "ops", Name: "Ops"})
+	if !strings.Contains(m.Title, "soon") || !strings.Contains(m.Body, "TLS settings") || m.Link == nil || m.Link.Type != LinkServer || m.Link.ID != soon.String() {
+		t.Errorf("message = %+v", m)
+	}
+}
