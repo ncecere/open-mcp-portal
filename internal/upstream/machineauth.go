@@ -357,6 +357,10 @@ func (m *MachineTokens) request(ctx context.Context, cfg MachineConfig) (string,
 		return "", 0, machineUnavailable("unreachable", 0)
 	}
 	defer res.Body.Close()
+	if res.StatusCode >= 300 && res.StatusCode < 400 {
+		// Not followed (the client refuses; a 307 of a POST is returned as is).
+		return "", 0, machineUnavailable("redirect", res.StatusCode)
+	}
 	raw, err := io.ReadAll(io.LimitReader(res.Body, maxMachineBody+1))
 	if err != nil {
 		return "", 0, machineUnavailable("unreadable", res.StatusCode)
