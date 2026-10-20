@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -60,6 +61,13 @@ type FakeOAuth struct {
 	FailUserinfo bool
 	// RefreshDelay delays refresh answers (concurrency tests).
 	RefreshDelay time.Duration
+	// HonourRefreshScope makes a refresh request's scope parameter narrow the
+	// new access token (RFC 6749 section 6, as Microsoft's endpoint does): the
+	// token holds only those scopes, a scope outside the grant is
+	// invalid_scope, and the refresh token issued with it keeps the whole
+	// grant. Off (the default, as most providers behave), scope on refresh is
+	// ignored and the token holds everything granted.
+	HonourRefreshScope bool
 	// Login is what /userinfo calls the account.
 	Login string
 
@@ -93,6 +101,7 @@ type FakeOAuth struct {
 	// registrations are the bodies of every /register request.
 	registrations []map[string]any
 	revoked       []string
+	refreshScopes []string // the scope parameter of every refresh request ("" when absent)
 	issued        []string
 	issuedRT      []string
 	lastAuth      url.Values
@@ -379,6 +388,14 @@ func (f *FakeOAuth) AuthorizeRequests() int {
 	return f.authorizes
 }
 
+// RefreshScopes are the scope parameters of the refresh requests so far, in
+// order ("" for one without scope).
+func (f *FakeOAuth) RefreshScopes() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.refreshScopes...)
+}
+
 func (f *FakeOAuth) RefreshRequests() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -551,6 +568,7 @@ func (f *FakeOAuth) token(w http.ResponseWriter, r *http.Request) {
 	case "refresh_token":
 		f.mu.Lock()
 		f.refreshs++
+		f.refreshScopes = append(f.refreshScopes, r.PostForm.Get("scope"))
 		delay, failMode := f.RefreshDelay, f.FailRefresh
 		f.mu.Unlock()
 		time.Sleep(delay)
@@ -577,15 +595,30 @@ func (f *FakeOAuth) token(w http.ResponseWriter, r *http.Request) {
 		if resource == "" {
 			resource = g.resource
 		}
+		f.mu.Lock()
+		honour := f.HonourRefreshScope
+		f.mu.Unlock()
+		if want := strings.FieldsFunc(r.PostForm.Get("scope"), func(r rune) bool { return r == ' ' || r == ',' }); honour && len(want) > 0 {
+			for _, sc := range want {
+				if !slices.Contains(g.scopes, sc) {
+					f.fail(w, http.StatusBadRequest, "invalid_scope")
+					return
+				}
+			}
+			f.issue(w, r, fakeGrant{scopes: want, resource: resource, clientID: clientID}, g)
+			return
+		}
 	default:
 		f.fail(w, http.StatusBadRequest, "unsupported_grant_type")
 		return
 	}
-	f.issue(w, r, fakeGrant{scopes: scopes, resource: resource, clientID: clientID})
+	g := fakeGrant{scopes: scopes, resource: resource, clientID: clientID}
+	f.issue(w, r, g, g)
 }
 
-// issue answers with a new access token (and a refresh token).
-func (f *FakeOAuth) issue(w http.ResponseWriter, r *http.Request, g fakeGrant) {
+// issue answers with a new access token for g (and a refresh token for rg,
+// which differs from g when a refresh narrowed the access token).
+func (f *FakeOAuth) issue(w http.ResponseWriter, r *http.Request, g, rg fakeGrant) {
 	scopes := g.scopes
 	f.mu.Lock()
 	access := fakeToken("fat_")
@@ -601,7 +634,7 @@ func (f *FakeOAuth) issue(w http.ResponseWriter, r *http.Request, g fakeGrant) {
 		if refresh == "" || f.RotateRefresh {
 			refresh = fakeToken("frt_")
 		}
-		f.refresh[refresh] = g
+		f.refresh[refresh] = rg
 		f.issuedRT = append(f.issuedRT, refresh)
 		out["refresh_token"] = refresh
 	}

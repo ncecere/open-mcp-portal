@@ -161,13 +161,15 @@ func TestGatewayDelegatedGmailEndToEnd(t *testing.T) {
 	// without an identity token.
 	var team struct {
 		Team struct {
-			ID string `json:"id"`
+			Team struct {
+				ID string `json:"id"`
+			} `json:"team"`
 		} `json:"team"`
 	}
 	admin.must("POST", "/v1/admin/teams", map[string]any{"slug": "mail-team", "name": "Mail team", "ownerEmail": "admin@localhost"}, &team, 201)
 	// A new provider is restricted until an admin lists who may use it.
 	admin.must("PUT", "/v1/admin/auth-providers/"+provider.ID+"/access", map[string]any{"accessMode": "restricted",
-		"teamIds": []string{team.Team.ID}, "serverIds": []string{}}, nil, 200,
+		"teamIds": []string{team.Team.Team.ID}, "serverIds": []string{}}, nil, 200,
 		map[string]string{"If-Match": fmt.Sprintf("%q", fmt.Sprint(provider.Revision))})
 	var created struct {
 		Server struct {

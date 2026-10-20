@@ -3,6 +3,7 @@
 //
 //	go run ./cmd/fakeoauth                  # http://127.0.0.1:8092
 //	go run ./cmd/fakeoauth -ttl 2m          # short-lived access tokens, to watch refreshes
+//	go run ./cmd/fakeoauth -ttl 2m -honour-refresh-scope   # a refresh's scope narrows the token (narrowOnRefresh)
 //
 // It serves GET /authorize (a page with Approve and Deny; -auto approves at
 // once), POST /token (authorization_code with optional PKCE S256, and
@@ -54,6 +55,7 @@ func main() {
 	rejectResource := flag.Bool("reject-resource", false, "refuse requests with a resource parameter (invalid_target)")
 	iss := flag.Bool("iss", true, "send iss in authorization responses (RFC 9207) and say so in the metadata")
 	scopes := flag.String("scopes", "repo read:user write", "scopes_supported in the metadata (space-separated)")
+	honourRefreshScope := flag.Bool("honour-refresh-scope", false, "let a refresh request's scope narrow the new access token (RFC 6749 section 6, like Microsoft)")
 	flag.Parse()
 
 	f, h := testutil.NewFakeOAuthHandler(*clientID, *clientSecret)
@@ -61,6 +63,7 @@ func main() {
 		f.AccessTTL, f.AutoApprove, f.RotateRefresh, f.Login = *ttl, *auto, *rotate, *login
 		f.IssuerPath, f.DCR, f.CIMD, f.RejectResource, f.IssParam = *issuerPath, *dcr && !*noDCR, *cimd, *rejectResource, *iss
 		f.ScopesSupported = strings.Fields(*scopes)
+		f.HonourRefreshScope = *honourRefreshScope
 	})
 	logged := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
