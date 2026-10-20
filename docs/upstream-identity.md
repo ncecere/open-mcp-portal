@@ -10,12 +10,12 @@ Lists (`tools/list`, `prompts/list`, `resources/list`, `resources/templates/list
 
 | Your server's upstream auth (set when it was registered) | The token arrives as |
 |---|---|
-| `none`, or a static header other than `Authorization` (for example `X-API-Key`) | `Authorization: Bearer <jwt>` |
-| a static `Authorization` header | `MCP-Gateway-Identity: <jwt>` (the bare token). Your static `Authorization` value is sent unchanged |
+| `none`, or a static credential none of whose parts sets `Authorization` (headers such as `X-API-Key`, a query key) | `Authorization: Bearer <jwt>` |
+| a static credential with a part that sets `Authorization`: a header named `Authorization`, a bearer token or Basic ([registry.md](registry.md#a-servers-own-credential-parts)) | `MCP-Gateway-Identity: <jwt>` (the bare token). Your static `Authorization` value is sent unchanged |
 | `oauth` (each person signs in to your server's own authorization server, [phase7-upstream-oauth.md](phase7-upstream-oauth.md)) | `MCP-Gateway-Identity: <jwt>`. `Authorization: Bearer` carries the person's own token for your server, issued for your server's URL (RFC 8707 `resource`) |
 | any mode with **Send identity** off (`sendIdentity: false`) | not sent at all: no identity header |
 
-With no static header, your server can act as an ordinary OAuth resource server that accepts bearer tokens from the portal's JWKS. Servers can't register a static header named `MCP-Gateway-Identity`, `MCP-Gateway-Provider` or `MCP-Gateway-Provider-Token`.
+A static credential's other parts (more headers, a query parameter) arrive on every request as the team entered them, next to the identity token; they are the portal's secret for your server, so don't log the query string. A call an agent platform relays for a person (decisions 65 to 68) gets its identity token in the same place as the person's own call. With no static credential, your server can act as an ordinary OAuth resource server that accepts bearer tokens from the portal's JWKS. Servers can't register a static header named `MCP-Gateway-Identity`, `MCP-Gateway-Provider` or `MCP-Gateway-Provider-Token`.
 
 The header names keep `Gateway` although the product is now called Open MCP Portal (it was Open MCP Gateway): they are a contract with the authors of MCP servers, and they describe what reaches your server, a call relayed through a gateway (`/mcp/{slug}`). They won't change.
 
