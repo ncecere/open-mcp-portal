@@ -22,6 +22,7 @@ import { toast } from "@/components/ui/toast/toast";
 import s from "../../pages/shared.module.css";
 import { EnabledBadge, HealthBadge } from "./badges";
 import { CatalogCard } from "./catalog-card";
+import { PersonSecretCard } from "./person-secret-card";
 import { ProtocolText } from "./protocol";
 import { RequirementCard } from "./requirement-card";
 import { SetupConnectedNotice, SetupNotice } from "./setup";
@@ -67,7 +68,8 @@ export function OverviewTab({ server, scope, abilities }: Props) {
       </div>
       <ConnectionCard server={server} scope={scope} abilities={abilities} onRun={dismiss} />
       <SignInCard server={server} scope={scope} abilities={abilities} />
-      {authModeOf(server) !== "oauth" && <RequirementCard server={server} scope={scope} />}
+      <PersonSecretCard server={server} scope={scope} abilities={abilities} />
+      {authModeOf(server) !== "oauth" && authModeOf(server) !== "person_secret" && <RequirementCard server={server} scope={scope} />}
       <CatalogCard server={server} scope={scope} abilities={abilities} />
     </>
   );

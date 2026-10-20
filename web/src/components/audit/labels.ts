@@ -76,6 +76,12 @@ const actionLabels: Record<string, string> = {
   "provider_connection.revoke": "Disconnected account",
   "provider_connection.server_allow": "Allowed a server to use an account",
   "mcp_server.provider_grants_reset": "Ended permission to use people's accounts",
+  // Each person's own key for a server (decision 72); never the key.
+  "person_secret.create": "Entered a key for a server",
+  "person_secret.rotate": "Replaced a key for a server",
+  "person_secret.revoke": "Removed a key for a server",
+  "person_secret.agents_update": "Changed whether agents may use a key",
+  "mcp_server.person_secrets_reset": "Deleted people's keys for a server",
   // Agent platforms (decisions 65 and 66, docs/agent-platforms.md).
   "agent_platform.create": "Trusted an agent platform",
   "agent_platform.update": "Changed a trusted agent platform",
@@ -111,6 +117,7 @@ export const payloadViewVia: Record<string, string> = { team: "on the team's pag
 /** Why an account was disconnected (provider_connection.revoke, metadata.reason). */
 export const connectionRevokeReasons: Record<string, string> = {
   user: "by its person",
+  self: "by its person",
   admin: "by a platform admin",
   provider_deleted: "when its provider was deleted",
   server_auth_changed: "when its MCP server's sign-in changed",
@@ -121,6 +128,14 @@ export const connectionRevokeReasons: Record<string, string> = {
 export const grantsResetReasons: Record<string, string> = {
   origin_changed: "after its URL moved to another host",
   provider_changed: "after the account it requires changed",
+  server_deleted: "when it was deleted",
+};
+
+/** Why people's keys for a server were deleted (mcp_server.person_secrets_reset, metadata.reason). */
+export const secretsResetReasons: Record<string, string> = {
+  origin_changed: "after its URL moved to another host",
+  mode_changed: "after it stopped asking for them",
+  placement_changed: "after they are sent another way",
   server_deleted: "when it was deleted",
 };
 
@@ -144,7 +159,7 @@ export const oauthRevokeReasons: Record<string, string> = {
 export function actionLabel(action: string, entry?: Partial<Pick<AuditEntry, "after" | "metadata">>) {
   const known = actionLabels[action];
   // A disconnection says why, when the reason is one we know ("Disconnected app after the person was suspended").
-  const withReason = ["oauth.revoke", "provider_connection.revoke", "mcp_server.publish_request", "mcp_server.provider_grants_reset"];
+  const withReason = ["oauth.revoke", "provider_connection.revoke", "person_secret.revoke", "mcp_server.publish_request", "mcp_server.provider_grants_reset", "mcp_server.person_secrets_reset"];
   const reason = withReason.includes(action) ? entry?.metadata?.reason : undefined;
   const reasons =
     action === "oauth.revoke"
@@ -153,7 +168,9 @@ export function actionLabel(action: string, entry?: Partial<Pick<AuditEntry, "af
         ? publishRequestReasons
         : action === "mcp_server.provider_grants_reset"
           ? grantsResetReasons
-          : connectionRevokeReasons;
+          : action === "mcp_server.person_secrets_reset"
+            ? secretsResetReasons
+            : connectionRevokeReasons;
   if (known && typeof reason === "string" && reasons[reason]) return `${known} ${reasons[reason]}`;
   const via = action === "mcp_call.payload_view" ? entry?.metadata?.via : undefined;
   if (known && typeof via === "string" && payloadViewVia[via]) return `${known} ${payloadViewVia[via]}`;
@@ -170,6 +187,7 @@ export const actionGroups: { prefix: string; label: string; platform?: boolean }
   { prefix: "team.", label: "Team and members" },
   { prefix: "mcp_server.", label: "MCP servers" },
   { prefix: "mcp_capability.", label: "Capability approvals" },
+  { prefix: "person_secret.", label: "People's own keys" },
   { prefix: "gateway.", label: "Gateways" },
   { prefix: "service_account.", label: "Service accounts" },
   { prefix: "service_account_key.", label: "Service account keys" },
@@ -275,6 +293,7 @@ export const targetTypeLabels: Record<string, string> = {
   oauth_grant: "Connected app",
   auth_provider: "Auth provider",
   provider_connection: "Connected account",
+  person_secret: "Person's key",
   mcp_call: "Call",
   notification_destination: "Webhook destination",
   automation_token: "Automation token",

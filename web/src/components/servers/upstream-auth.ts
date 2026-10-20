@@ -10,6 +10,7 @@
 import type { Schemas } from "../../api/client";
 import { scopesProblem, type TokenAuthMethod } from "../providers/labels";
 import { type McpServer, urlHost } from "./labels";
+import { blankSecret, type SecretForm, secretFormOf } from "./person-secret";
 
 export type AuthMode = Schemas["McpServerAuthMode"];
 export type DetectResult = Schemas["DetectAuthResult"];
@@ -22,12 +23,15 @@ export const authModeLabels: Record<AuthMode, string> = {
   none: "None",
   static_header: "Static credential",
   oauth: "Sign-in with OAuth, per person",
+  person_secret: "Each person's own key",
 };
 
 export const authModeHelp: Record<AuthMode, string> = {
   none: "No credential of its own: calls carry the portal's signed identity token, unless you turn that off below.",
   static_header: "Headers, a token, Basic or a query key with fixed values, such as an API key, sent with every request.",
   oauth: "Each person signs in to the server's own service once; every call carries their own token. Clients and models never see it.",
+  person_secret:
+    "Each person pastes their own API key or token once, under Account › My connections. It is stored encrypted, shown only as its last four characters, and sent as you choose below, only to this server's address.",
 };
 
 export const registrationLabels: Record<Registration, string> = {
@@ -92,8 +96,8 @@ export function splitChoice(c: RegistrationChoice): { registration: Registration
 /** The OAuth settings as edited. clientId empty keeps the stored one (edits); the secret is kept apart (replace-only). */
 export type OAuthForm = { registration: RegistrationChoice; clientId: string; tokenAuthMethod: TokenAuthMethod; scopes: string[]; sendResource: boolean; authorizationServer: string };
 
-/** How the portal authenticates, as edited: the mode, the OAuth settings and the identity switch. */
-export type UpstreamForm = { mode: AuthMode; oauth: OAuthForm; sendIdentity: boolean };
+/** How the portal authenticates, as edited: the mode, the OAuth settings, the person secret's settings and the identity switch. */
+export type UpstreamForm = { mode: AuthMode; oauth: OAuthForm; secret: SecretForm; sendIdentity: boolean };
 
 const blankOAuth: OAuthForm = { registration: "manual", clientId: "", tokenAuthMethod: "client_secret_post", scopes: [], sendResource: true, authorizationServer: "" };
 
@@ -104,6 +108,7 @@ export function upstreamFormOf(s?: McpServer): UpstreamForm {
     oauth: o
       ? { registration: choiceOf(o.registration, o.platformProvider?.id), clientId: "", tokenAuthMethod: o.tokenAuthMethod, scopes: o.scopes, sendResource: o.sendResource, authorizationServer: o.authorizationServer }
       : blankOAuth,
+    secret: s ? secretFormOf(s) : blankSecret,
     sendIdentity: s ? sendsIdentity(s) : true,
   };
 }
@@ -212,7 +217,7 @@ const authServerAfter = (f: OAuthForm, stored?: OAuthConfig, detected?: DetectRe
 
 export type AuthChange = {
   /** Under approval_required a published server goes back to review: a switch to oauth, another authorization server, or a new scope. */
-  review?: "switch" | "server" | "scopes";
+  review?: "switch" | "server" | "scopes" | "secret";
   /** What happens to people's sign-ins to the server: erased (sign in again) or deleted (leaving oauth). */
   connections?: "reset" | "deleted";
 };
@@ -222,6 +227,12 @@ export function authChange(server: McpServer, f: UpstreamForm, opts: { urlChange
   const before = authModeOf(server);
   const stored = server.oauth;
   const signedIn = (stored?.connectionCount ?? 0) > 0;
+  if (f.mode === "person_secret" || before === "person_secret") {
+    // Another mode or another way of sending the key sends a published server back to review; everyone's keys are deleted by the same changes.
+    const sp = server.personSecret;
+    const moved = before !== f.mode || !sp || sp.placement !== f.secret.placement || (sp.name ?? "") !== f.secret.name.trim() || sp.prefix !== f.secret.prefix;
+    return { review: f.mode === "person_secret" && moved ? "secret" : undefined, ...(before === "oauth" && f.mode !== "oauth" && signedIn ? { connections: "deleted" as const } : {}) };
+  }
   if (f.mode !== "oauth") return before === "oauth" && signedIn ? { connections: "deleted" } : {};
   if (before !== "oauth" || !stored) return { review: "switch" };
   const otherServer = authServerAfter(f.oauth, stored, opts.detected) !== stored.authorizationServer;

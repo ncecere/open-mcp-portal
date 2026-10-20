@@ -40,8 +40,15 @@ export function PendingChangesBadge({ count }: { count: number }) {
   );
 }
 
-/** "Sign-in per person" for a server in oauth mode (each person signs in to its own service); nothing otherwise. */
+/** "Sign-in per person" for a server in oauth mode (each person signs in to its own service), "Own key per person" for person_secret; nothing otherwise. */
 export function SignInBadge({ authMode }: { authMode?: Schemas["McpServerAuthMode"] }) {
+  if (authMode === "person_secret") {
+    return (
+      <Badge size="sm" tone="info" title="Each person enters their own API key for the server before calling it.">
+        Own key per person
+      </Badge>
+    );
+  }
   if (authMode !== "oauth") return null;
   return (
     <Badge size="sm" tone="info" title="Each person signs in to the server's own service (OAuth) before calling it.">

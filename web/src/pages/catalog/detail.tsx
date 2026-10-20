@@ -74,6 +74,11 @@ export function CatalogServerPage() {
           {`The first time someone calls it, their AI client shows a link to sign in to ${server.name}'s own service, once. The portal then sends their own token with each call. ${serviceAccountsCant}`}
         </Alert>
       )}
+      {server.authMode === "person_secret" && (
+        <Alert tone="info" title={`Each person enters their own key for ${server.name}`}>
+          {`The first time someone calls it, their AI client shows a link to paste their own API key for ${server.name}, once. The portal keeps it encrypted, sends it only to this server, and never shows it again. ${serviceAccountsCant}`}
+        </Alert>
+      )}
       {server.capturePayloads && (
         <Alert tone="warning" title="This server's team records call contents">
           {`Calls to its capabilities, through any gateway, are recorded with their arguments and results (secrets removed first). ${captureWho.replace("the team's", `${server.teamName}'s`)}`}

@@ -3,14 +3,17 @@
  * the mode, the credential parts, the OAuth settings with a replace-only secret, the
  * identity switch), and what it does before it's saved: back to review
  * under approval_required (a switch to OAuth, another authorization server,
- * a new scope), everyone signed out of the server (a new URL, authorization
- * server or client), or their sign-ins deleted (leaving OAuth).
+ * a new scope, or another way of sending each person's own key), everyone
+ * signed out of the server (a new URL, authorization server or client), their
+ * sign-ins deleted (leaving OAuth), or their keys deleted (a new URL, another
+ * placement, leaving the own-key mode).
  */
 import type { Schemas } from "../../api/client";
 import { plural } from "../../lib/format";
 import { Alert } from "@/components/ui/alert/alert";
 import type { McpServer } from "./labels";
 import { credentialsBody, type PartForm, setsAuthorization } from "./credentials";
+import { secretChanged, secretInput } from "./person-secret";
 import { type AuthChange, authModeOf, type DetectResult, oauthChanges, oauthInput, sendsIdentity, type UpstreamForm } from "./upstream-auth";
 
 type Update = Schemas["McpServerUpdate"];
@@ -25,6 +28,17 @@ export function settingsAuthBody(server: McpServer, f: { upstream: UpstreamForm 
     const credentials = credentialsBody(parts, server);
     return { ...identity, ...(before !== "static_header" ? { authMode: "static_header" } : {}), ...(credentials ? { credentials } : {}) };
   }
+  if (u.mode === "person_secret") {
+    // Parts of the server's own credential may stay next to each person's key; they're sent only when edited.
+    const credentials = credentialsBody(parts, server);
+    const changed = before !== "person_secret" || secretChanged(server, u.secret);
+    return {
+      ...identity,
+      ...(before !== "person_secret" ? { authMode: "person_secret" } : {}),
+      ...(changed ? { personSecret: secretInput(u.secret) } : {}),
+      ...(credentials ? { credentials } : {}),
+    };
+  }
   if (before !== "oauth" || !server.oauth) {
     // OAuth sends each person's token in Authorization: a static part that sets it goes (other parts may stay).
     const credentials = credentialsBody(parts.filter((p) => !setsAuthorization(p)), server);
@@ -36,6 +50,7 @@ export function settingsAuthBody(server: McpServer, f: { upstream: UpstreamForm 
 
 const reviewWords: Record<NonNullable<AuthChange["review"]>, string> = {
   switch: "a switch to OAuth sign-in",
+  secret: "another way of sending each person's own key",
   server: "another authorization server",
   scopes: "a scope it didn't ask for before",
 };

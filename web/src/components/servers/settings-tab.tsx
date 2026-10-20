@@ -43,6 +43,7 @@ import { CredentialFields } from "./credential-fields";
 import { credentialsBody, partProblems, type PartForm, partsOf } from "./credentials";
 import { EnabledSwitch, type ServerForm, serverFieldErrors, serverProblems, TimeoutField, UrlField, urlProblem } from "./server-fields";
 import { sameOrigin } from "./origin";
+import { deletesText, keysDeleted, secretProblems } from "./person-secret";
 import { AuthChangeNotes, settingsAuthBody } from "./settings-auth";
 import { applyDetection, authChange, authModeOf, type DetectResult, oauthProblems, upstreamFormOf, type UpstreamForm } from "./upstream-auth";
 
@@ -113,7 +114,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
     mutationFn: async (_: { before: McpServer; urlChanged: boolean }) => {
       const authBody = settingsAuthBody(server, form, parts, secret, detected);
       // OAuth replaces a requirement (one credential per call): switching removes it.
-      const requirement = form.upstream.mode === "oauth" ? (server.requirement ? null : undefined) : requirementBody(form.requirement, server);
+      const requirement = form.upstream.mode === "oauth" || form.upstream.mode === "person_secret" ? (server.requirement ? null : undefined) : requirementBody(form.requirement, server);
       return unwrap(
         await api.PATCH("/v1/teams/{team}/mcp-servers/{serverId}", {
           params: { path: { team: server.teamSlug, serverId: server.id }, header: ifMatch(server.revision) },
@@ -146,22 +147,29 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   // Turned off, the provider and scopes left in the fields don't count.
   const requirement = form.requirement.on ? form.requirement : saved.requirement.on ? { on: false, providerId: "", scopes: [] } : saved.requirement;
   // Only the chosen mode's fields count.
-  const upstream = form.upstream.mode === "oauth" ? form.upstream : { ...form.upstream, oauth: saved.upstream.oauth };
+  const upstream = {
+    ...form.upstream,
+    oauth: form.upstream.mode === "oauth" ? form.upstream.oauth : saved.upstream.oauth,
+    secret: form.upstream.mode === "person_secret" ? form.upstream.secret : saved.upstream.secret,
+  };
   const dirty =
     JSON.stringify({ ...form, name: form.name.trim(), url: form.url.trim(), requirement, upstream }) !== JSON.stringify(saved) ||
-    (form.upstream.mode === "static_header" && credentialsBody(parts, server) !== undefined) ||
+    ((form.upstream.mode === "static_header" || form.upstream.mode === "person_secret") && credentialsBody(parts, server) !== undefined) ||
     Boolean(secret);
-  const staticMode = form.upstream.mode === "static_header";
+  const ownKeys = form.upstream.mode === "person_secret";
+  // Parts of the server's own credential: required in static mode, optional (and only shown while some are stored) next to each person's key.
+  const staticMode = form.upstream.mode === "static_header" || (ownKeys && parts.length > 0);
   // Another origin never keeps a stored value (F-1): every part is entered again.
   const originMoved = !sameOrigin(server.url, form.url.trim());
   const partErrors = staticMode ? partProblems(parts, { originMoved }) : {};
-  const noParts = staticMode && parts.length === 0;
+  const noParts = form.upstream.mode === "static_header" && parts.length === 0;
   const problems = {
     ...serverProblems(form, { dev }),
     ...oauthProblems(form.upstream, { server, detected, secret }),
   };
   const reqErrors = requirementErrors(form.requirement, save.error, submitted);
-  const invalid = Object.keys(problems).length > 0 || Object.keys(partErrors).length > 0 || noParts || Object.keys(requirementErrors(form.requirement, null, true)).length > 0;
+  const secretErrors = ownKeys ? secretProblems(form.upstream.secret) : {};
+  const invalid = Object.keys(problems).length > 0 || Object.keys(secretErrors).length > 0 || Object.keys(partErrors).length > 0 || noParts || Object.keys(requirementErrors(form.requirement, null, true)).length > 0;
   const shown = submitted ? problems : {};
   const refused = serverFieldErrors(save.error).url;
   const errors = { ...shown, url: shown.url ?? refused };
@@ -181,8 +189,10 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   }, [save.error]);
   const change = authChange(server, form.upstream, { urlChanged, detected });
   const oauthMode = form.upstream.mode === "oauth";
+  // OAuth and each person's own key both send one credential per call: no User authorization next to them.
+  const noRequirement = oauthMode || ownKeys;
   const relaxesPresence = relaxesServerSwitch(saved.requiresPresentPerson, form.requiresPresentPerson, caps.data);
-  const leavesCatalog = canEdit && reviewedAgain(server) && (urlChanged || (!oauthMode && requirementWidens) || Boolean(change.review) || relaxesPresence);
+  const leavesCatalog = canEdit && reviewedAgain(server) && (urlChanged || (!noRequirement && requirementWidens) || Boolean(change.review) || relaxesPresence);
   const providerChanges = Boolean(server.requirement) && (!form.requirement.on || form.requirement.providerId !== server.requirement?.providerId);
   const resetsOverrides = providerChanges ? (caps.data ?? []).filter((c) => !c.goneAt && c.requirementOverride.mode === "scopes").length : 0;
 
@@ -252,6 +262,9 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
           secret={secret}
           setSecret={setSecret}
           errors={submitted ? problems : {}}
+          secretErrors={submitted ? secretErrors : {}}
+          deletesKeys={keysDeleted(server, form.upstream.secret, originMoved, form.upstream.mode) ? deletesText(server) : undefined}
+          staticAlso={parts.length > 0}
           disabled={!canEdit}
           headerFields={<CredentialFields parts={parts} setParts={setParts} errors={submitted ? partErrors : {}} disabled={!canEdit} noParts={submitted && noParts} />}
           notes={canEdit && <AuthChangeNotes server={server} change={change} leavesCatalog={leavesCatalog} />}
@@ -261,10 +274,10 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
         title="User authorization"
         description="Whether calls to this server carry each caller's own token for another service, such as GitHub. Each capability can override it on the Capabilities tab."
       >
-        {oauthMode ? (
-          <Alert tone="info" title="Not with OAuth sign-in">
-            Each call already carries the person&apos;s own token for this server, so it can&apos;t carry another account too.
-            {server.requirement && authModeOf(server) !== "oauth" ? ` Saving removes the requirement (${server.requirement.providerName}).` : ""}
+        {noRequirement ? (
+          <Alert tone="info" title={ownKeys ? "Not with each person's own key" : "Not with OAuth sign-in"}>
+            {ownKeys ? "Each call already carries the person's own key for this server, so it can't carry another account too." : "Each call already carries the person's own token for this server, so it can't carry another account too."}
+            {server.requirement && authModeOf(server) !== form.upstream.mode ? ` Saving removes the requirement (${server.requirement.providerName}).` : ""}
           </Alert>
         ) : (
           <RequirementFields
@@ -279,7 +292,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
             resetsOverrides={resetsOverrides}
           />
         )}
-        {leavesCatalog && !oauthMode && requirementWidens && (
+        {leavesCatalog && !noRequirement && requirementWidens && (
           <Alert tone="warning" title="The server will leave the catalog">
             Your team needs approval to publish, and this sends more to the server than before (a provider, another provider or a new scope), so it&apos;s reviewed
             again: once you save, {server.name} is out of the company catalog until a platform admin approves it. Removing or narrowing a requirement never needs a

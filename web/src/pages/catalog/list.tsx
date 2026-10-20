@@ -49,7 +49,7 @@ const columns = (narrow: boolean): DataTableColumn<Server>[] => [
                 <CaptureBadge />
               </>
             )}
-            {x.authMode === "oauth" && (
+            {(x.authMode === "oauth" || x.authMode === "person_secret") && (
               <>
                 {" "}
                 <SignInBadge authMode={x.authMode} />

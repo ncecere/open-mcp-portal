@@ -157,18 +157,18 @@ func CheckPersonSecretValue(v string) error {
 func personSecretConflicts(cfg PersonSecretInput, statics []CredentialView, requirement bool) error {
 	if requirement {
 		return unprocessable("auth_conflict", "A server whose callers each enter their own secret can't also have a user authorization requirement",
-			map[string]any{"reason": "requirement"})
+			map[string]any{"reason": "requirement", "mode": AuthPersonSecret})
 	}
 	onAuthz := cfg.Placement == PlaceBearer || (cfg.Placement == PlaceHeader && strings.EqualFold(cfg.Name, "Authorization"))
 	for _, v := range statics {
 		switch {
 		case onAuthz && occupiesAuthorization(v.Kind, v.Name):
 			return unprocessable("auth_conflict", "The secret is sent as the Authorization header, which the server's own credential already sets",
-				map[string]any{"reason": "static_authorization"})
+				map[string]any{"reason": "static_authorization", "mode": AuthPersonSecret})
 		case cfg.Placement == PlaceHeader && v.Kind == CredHeader && strings.EqualFold(v.Name, cfg.Name),
 			cfg.Placement == PlaceQuery && v.Kind == CredQuery && strings.EqualFold(v.Name, cfg.Name):
 			return unprocessable("auth_conflict", "The server's own credential already sets "+cfg.Name+": the person's secret would replace it",
-				map[string]any{"reason": "static_duplicate"})
+				map[string]any{"reason": "static_duplicate", "mode": AuthPersonSecret})
 		}
 	}
 	return nil
@@ -466,14 +466,15 @@ func withSecretConfig(row dbgen.McpServer, cfg *PersonSecretInput) dbgen.McpServ
 }
 
 // secretAuthChanged reports whether an update changed what a published server
-// sends people's own secrets as: into or out of person_secret mode, or another
+// sends people's own secrets as: into person_secret mode, or another
 // placement, name or prefix. Such a change goes back to review under
-// approval_required, as another auth mode does.
+// approval_required, as another auth mode does. Leaving the mode sends less
+// and needs none.
 func secretAuthChanged(cur, row dbgen.McpServer) bool {
-	before, bok := PersonSecretConfig(cur)
 	after, aok := PersonSecretConfig(row)
-	if bok != aok {
-		return true
+	if !aok {
+		return false
 	}
-	return aok && (before.Placement != after.Placement || before.Name != after.Name || before.Prefix != after.Prefix)
+	before, bok := PersonSecretConfig(cur)
+	return !bok || before.Placement != after.Placement || before.Name != after.Name || before.Prefix != after.Prefix
 }

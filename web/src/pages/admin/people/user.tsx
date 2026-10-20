@@ -12,6 +12,7 @@ import { api, ifMatch, unwrap, type Schemas } from "@/api/client";
 import { adminUserQuery } from "@/api/queries";
 import { ConnectedApps } from "@/components/oauth/connected-apps";
 import { ProviderConnections } from "@/components/providers/connections";
+import { ServerSecrets } from "@/components/secrets/server-secrets";
 import { ActionMenu } from "@/components/templates/action-menu";
 import { Time } from "@/components/ui/time/time";
 import { isNotFound, NotFoundState } from "@/components/not-found";
@@ -122,6 +123,12 @@ export function AdminUserPage() {
           }`}
         >
           <ProviderConnections owner={{ self: false, userId: user.id, name }} canDisconnect={isAdmin} />
+        </Card>
+        <Card
+          title="Keys for servers"
+          description={`Keys ${self ? "you" : name} entered for servers that ask each person for their own. The keys are never shown.${isAdmin ? " Removing one deletes it at once." : ""}`}
+        >
+          <ServerSecrets owner={{ self: false, userId: user.id, name }} canRevoke={isAdmin} />
         </Card>
         <Card title="Activity" description={`Changes ${name} made, newest first, from the audit log.`}>
           <UserActivity user={user} />
