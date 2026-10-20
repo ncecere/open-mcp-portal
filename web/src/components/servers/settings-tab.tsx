@@ -12,7 +12,8 @@
  * call contents" is for the team's owners and admins (editors read it; it's
  * only sent when changed) and asks first when turned on. Authentication
  * (auth-mode-fields.tsx, settings-auth.tsx) switches between None, a static
- * header and each person's OAuth sign-in, with the same review warnings.
+ * header, each person's OAuth sign-in and the portal's own OAuth client
+ * (machine-auth.ts), with the same review warnings.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -43,8 +44,9 @@ import { CredentialFields } from "./credential-fields";
 import { credentialsBody, partProblems, type PartForm, partsOf } from "./credentials";
 import { EnabledSwitch, type ServerForm, serverFieldErrors, serverProblems, TimeoutField, UrlField, urlProblem } from "./server-fields";
 import { sameOrigin } from "./origin";
+import { machineProblems } from "./machine-auth";
 import { AuthChangeNotes, settingsAuthBody } from "./settings-auth";
-import { applyDetection, authChange, authModeOf, type DetectResult, oauthProblems, upstreamFormOf, type UpstreamForm } from "./upstream-auth";
+import { applyDetection, authChange, authModeOf, countedUpstream, type DetectResult, oauthProblems, upstreamFormOf, type UpstreamForm } from "./upstream-auth";
 
 type SettingsForm = ServerForm & { requirement: RequirementForm; capturePayloads: boolean; upstream: UpstreamForm; requiresPresentPerson: boolean };
 
@@ -101,6 +103,8 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   const dev = Boolean(useAuthConfig().data?.devAuthEnabled);
   const saved = formOf(server);
   const [form, setForm, revision] = useRevisionForm(saved, server.revision, { labels });
+  // OAuth sign-in and the portal's own OAuth client each replace a requirement (one credential per call).
+  const oneCredential = form.upstream.mode === "oauth" || form.upstream.mode === "machine_oauth";
   const providers = useQuery(authProvidersQuery());
   const caps = useQuery(capabilitiesQuery(scope, server.id));
   const [parts, setParts] = useState<PartForm[]>(() => partsOf(server));
@@ -113,7 +117,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
     mutationFn: async (_: { before: McpServer; urlChanged: boolean }) => {
       const authBody = settingsAuthBody(server, form, parts, secret, detected);
       // OAuth replaces a requirement (one credential per call): switching removes it.
-      const requirement = form.upstream.mode === "oauth" ? (server.requirement ? null : undefined) : requirementBody(form.requirement, server);
+      const requirement = oneCredential ? (server.requirement ? null : undefined) : requirementBody(form.requirement, server);
       return unwrap(
         await api.PATCH("/v1/teams/{team}/mcp-servers/{serverId}", {
           params: { path: { team: server.teamSlug, serverId: server.id }, header: ifMatch(server.revision) },
@@ -146,7 +150,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   // Turned off, the provider and scopes left in the fields don't count.
   const requirement = form.requirement.on ? form.requirement : saved.requirement.on ? { on: false, providerId: "", scopes: [] } : saved.requirement;
   // Only the chosen mode's fields count.
-  const upstream = form.upstream.mode === "oauth" ? form.upstream : { ...form.upstream, oauth: saved.upstream.oauth };
+  const upstream = countedUpstream(form.upstream, saved.upstream);
   const dirty =
     JSON.stringify({ ...form, name: form.name.trim(), url: form.url.trim(), requirement, upstream }) !== JSON.stringify(saved) ||
     (form.upstream.mode === "static_header" && credentialsBody(parts, server) !== undefined) ||
@@ -159,6 +163,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   const problems = {
     ...serverProblems(form, { dev }),
     ...oauthProblems(form.upstream, { server, detected, secret }),
+    ...machineProblems(form.upstream.mode, form.upstream.machine, { server, secret, url: form.url }),
   };
   const reqErrors = requirementErrors(form.requirement, save.error, submitted);
   const invalid = Object.keys(problems).length > 0 || Object.keys(partErrors).length > 0 || noParts || Object.keys(requirementErrors(form.requirement, null, true)).length > 0;
@@ -180,9 +185,8 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
     return d ? new Error(d.title ? `${d.title}. ${d.message}` : d.message) : undefined;
   }, [save.error]);
   const change = authChange(server, form.upstream, { urlChanged, detected });
-  const oauthMode = form.upstream.mode === "oauth";
   const relaxesPresence = relaxesServerSwitch(saved.requiresPresentPerson, form.requiresPresentPerson, caps.data);
-  const leavesCatalog = canEdit && reviewedAgain(server) && (urlChanged || (!oauthMode && requirementWidens) || Boolean(change.review) || relaxesPresence);
+  const leavesCatalog = canEdit && reviewedAgain(server) && (urlChanged || (!oneCredential && requirementWidens) || Boolean(change.review) || relaxesPresence);
   const providerChanges = Boolean(server.requirement) && (!form.requirement.on || form.requirement.providerId !== server.requirement?.providerId);
   const resetsOverrides = providerChanges ? (caps.data ?? []).filter((c) => !c.goneAt && c.requirementOverride.mode === "scopes").length : 0;
 
@@ -261,9 +265,11 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
         title="User authorization"
         description="Whether calls to this server carry each caller's own token for another service, such as GitHub. Each capability can override it on the Capabilities tab."
       >
-        {oauthMode ? (
-          <Alert tone="info" title="Not with OAuth sign-in">
-            Each call already carries the person&apos;s own token for this server, so it can&apos;t carry another account too.
+        {oneCredential ? (
+          <Alert tone="info" title={form.upstream.mode === "oauth" ? "Not with OAuth sign-in" : "Not with the portal's own OAuth client"}>
+            {form.upstream.mode === "oauth"
+              ? "Each call already carries the person's own token for this server, so it can't carry another account too."
+              : "Each call already carries the portal's own token for this server, so it can't carry another account too."}
             {server.requirement && authModeOf(server) !== "oauth" ? ` Saving removes the requirement (${server.requirement.providerName}).` : ""}
           </Alert>
         ) : (
@@ -279,7 +285,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
             resetsOverrides={resetsOverrides}
           />
         )}
-        {leavesCatalog && !oauthMode && requirementWidens && (
+        {leavesCatalog && !oneCredential && requirementWidens && (
           <Alert tone="warning" title="The server will leave the catalog">
             Your team needs approval to publish, and this sends more to the server than before (a provider, another provider or a new scope), so it&apos;s reviewed
             again: once you save, {server.name} is out of the company catalog until a platform admin approves it. Removing or narrowing a requirement never needs a

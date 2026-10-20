@@ -1,7 +1,8 @@
 /*
  * The Authentication section of Add and Settings: Detect sign-in, the mode
  * (None, Static header, Sign-in with OAuth per person; OAuth only once a
- * detection found it usable, or when the server uses it already), the
+ * detection found it usable, or when the server uses it already; or the
+ * portal's own OAuth client, which needs no detection), the
  * mode's fields, and whether the server receives the identity token
  * (decision 45, recommended off for servers run outside the company).
  */
@@ -11,6 +12,8 @@ import { type RadioOption, RadioGroup } from "@/components/ui/radio-group/radio-
 import { Switch } from "@/components/ui/switch/switch";
 import { DetectSignIn } from "./detect-auth";
 import type { McpServer } from "./labels";
+import { machineFromDetection } from "./machine-auth";
+import { MachineFields } from "./machine-fields";
 import { OAuthFields } from "./oauth-fields";
 import { type AuthMode, authModeHelp, authModeLabels, type DetectResult, type OAuthErrors, oauthUsable, otherHost, type UpstreamForm } from "./upstream-auth";
 import m from "./servers.module.css";
@@ -42,7 +45,7 @@ export const identityHelp =
 
 export function AuthModeFields({ team, url, urlError, value, onChange, detected, onDetected, onUseUrl, server, secret, setSecret, errors, disabled, headerFields, notes, identityNote }: Props) {
   const canOAuth = oauthUsable(detected) || server?.authMode === "oauth";
-  const options: RadioOption<AuthMode>[] = (["none", "static_header", "oauth"] as AuthMode[]).map((mode) => ({
+  const options: RadioOption<AuthMode>[] = (["none", "static_header", "oauth", "machine_oauth"] as AuthMode[]).map((mode) => ({
     value: mode,
     label: authModeLabels[mode],
     description: mode === "oauth" && !canOAuth ? `${authModeHelp.oauth} Press Detect sign-in first.` : authModeHelp[mode],
@@ -56,7 +59,12 @@ export function AuthModeFields({ team, url, urlError, value, onChange, detected,
         legend="How the portal authenticates"
         options={options}
         value={value.mode}
-        onValueChange={(mode) => onChange({ ...value, mode })}
+        onValueChange={(mode) => {
+          // A secret typed for one mode isn't carried into another.
+          if (mode !== value.mode) setSecret("");
+          // A detection that found the authorization server's token endpoint fills it in where nothing was typed.
+          onChange({ ...value, mode, ...(mode === "machine_oauth" && detected ? { machine: machineFromDetection(detected, value.machine) } : {}) });
+        }}
         error={errors.mode}
         disabled={disabled}
       />
@@ -67,6 +75,19 @@ export function AuthModeFields({ team, url, urlError, value, onChange, detected,
           onChange={(oauth) => onChange({ ...value, oauth })}
           detected={detected}
           server={server}
+          secret={secret}
+          setSecret={setSecret}
+          errors={errors}
+          disabled={disabled}
+        />
+      )}
+      {value.mode === "machine_oauth" && (
+        <MachineFields
+          value={value.machine}
+          onChange={(machine) => onChange({ ...value, machine })}
+          detected={detected}
+          server={server}
+          url={url}
           secret={secret}
           setSecret={setSecret}
           errors={errors}

@@ -42,7 +42,7 @@ function ServerReceives({ server, scope }: { server: McpServer; scope: ServerSco
         <strong>What the server receives</strong>
       </p>
       <SignInSummary server={server} />
-      {authModeOf(server) !== "oauth" && (
+      {authModeOf(server) !== "oauth" && authModeOf(server) !== "machine_oauth" && (
         <>
           <p>
             <strong>On behalf of callers</strong>

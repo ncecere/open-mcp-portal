@@ -11,6 +11,7 @@ import { plural } from "../../lib/format";
 import { Alert } from "@/components/ui/alert/alert";
 import type { McpServer } from "./labels";
 import { credentialsBody, type PartForm, setsAuthorization } from "./credentials";
+import { machineChanges, machineInput } from "./machine-auth";
 import { type AuthChange, authModeOf, type DetectResult, oauthChanges, oauthInput, sendsIdentity, type UpstreamForm } from "./upstream-auth";
 
 type Update = Schemas["McpServerUpdate"];
@@ -25,6 +26,15 @@ export function settingsAuthBody(server: McpServer, f: { upstream: UpstreamForm 
     const credentials = credentialsBody(parts, server);
     return { ...identity, ...(before !== "static_header" ? { authMode: "static_header" } : {}), ...(credentials ? { credentials } : {}) };
   }
+  if (u.mode === "machine_oauth") {
+    // The portal's own token goes in Authorization: a static part that sets it goes (other parts may stay).
+    if (before !== "machine_oauth" || !server.machineOAuth) {
+      const credentials = credentialsBody(parts.filter((p) => !setsAuthorization(p)), server);
+      return { ...identity, authMode: "machine_oauth", machineOAuth: machineInput(u.machine, secret), ...(credentials ? { credentials } : {}) };
+    }
+    const changes = machineChanges(u.machine, secret, server.machineOAuth);
+    return { ...identity, ...(changes ? { machineOAuth: changes } : {}) };
+  }
   if (before !== "oauth" || !server.oauth) {
     // OAuth sends each person's token in Authorization: a static part that sets it goes (other parts may stay).
     const credentials = credentialsBody(parts.filter((p) => !setsAuthorization(p)), server);
@@ -38,6 +48,10 @@ const reviewWords: Record<NonNullable<AuthChange["review"]>, string> = {
   switch: "a switch to OAuth sign-in",
   server: "another authorization server",
   scopes: "a scope it didn't ask for before",
+  machine: "a switch to the portal's own OAuth client",
+  machine_client: "another token endpoint or client",
+  machine_scopes: "a scope it didn't ask for before",
+  machine_target: "another audience or resource",
 };
 
 /** The warnings before a save: back to review, and what happens to the people signed in. */
@@ -48,7 +62,7 @@ export function AuthChangeNotes({ server, change, leavesCatalog }: { server: Mcp
       {leavesCatalog && change.review && (
         <Alert tone="warning" title="The server will leave the catalog">
           Your team needs approval to publish, and this is {reviewWords[change.review]}, so it&apos;s reviewed again: once you save, {server.name} is out of the company
-          catalog until a platform admin approves it. Narrowing scopes, changing the client or leaving OAuth never needs a review.
+          catalog until a platform admin approves it. Narrowing scopes, a new secret or leaving OAuth never needs a review.
         </Alert>
       )}
       {change.connections === "reset" && (

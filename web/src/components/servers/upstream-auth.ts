@@ -1,7 +1,8 @@
 /*
  * How the portal authenticates to an MCP server (decisions 39-45,
  * docs/phase7-upstream-oauth.md): none, one static header, or each person's
- * own OAuth sign-in to the server. The words, the form as edited (Add and
+ * own OAuth sign-in to the server, or the portal's own OAuth client
+ * (machine_oauth, machine-auth.ts). The words, the form as edited (Add and
  * Settings), what a save sends, and when a save sends a published server
  * back to review or signs everyone out. The rules mirror the server's
  * (api/openapi.yaml); the server still decides, and it runs the discovery
@@ -10,6 +11,7 @@
 import type { Schemas } from "../../api/client";
 import { scopesProblem, type TokenAuthMethod } from "../providers/labels";
 import { type McpServer, urlHost } from "./labels";
+import { blankMachine, machineFormOf, type MachineErrors, type MachineForm, machineFromDetection, type MachineReview, machineReview } from "./machine-auth";
 
 export type AuthMode = Schemas["McpServerAuthMode"];
 export type DetectResult = Schemas["DetectAuthResult"];
@@ -22,12 +24,14 @@ export const authModeLabels: Record<AuthMode, string> = {
   none: "None",
   static_header: "Static credential",
   oauth: "Sign-in with OAuth, per person",
+  machine_oauth: "The portal's own OAuth client",
 };
 
 export const authModeHelp: Record<AuthMode, string> = {
   none: "No credential of its own: calls carry the portal's signed identity token, unless you turn that off below.",
   static_header: "Headers, a token, Basic or a query key with fixed values, such as an API key, sent with every request.",
   oauth: "Each person signs in to the server's own service once; every call carries their own token. Clients and models never see it.",
+  machine_oauth: "For a server that authenticates the portal itself: the portal gets a token with its own client ID and secret and sends it with every request, for everyone alike.",
 };
 
 export const registrationLabels: Record<Registration, string> = {
@@ -92,8 +96,8 @@ export function splitChoice(c: RegistrationChoice): { registration: Registration
 /** The OAuth settings as edited. clientId empty keeps the stored one (edits); the secret is kept apart (replace-only). */
 export type OAuthForm = { registration: RegistrationChoice; clientId: string; tokenAuthMethod: TokenAuthMethod; scopes: string[]; sendResource: boolean; authorizationServer: string };
 
-/** How the portal authenticates, as edited: the mode, the OAuth settings and the identity switch. */
-export type UpstreamForm = { mode: AuthMode; oauth: OAuthForm; sendIdentity: boolean };
+/** How the portal authenticates, as edited: the mode, the OAuth settings, the machine client and the identity switch. */
+export type UpstreamForm = { mode: AuthMode; oauth: OAuthForm; machine: MachineForm; sendIdentity: boolean };
 
 const blankOAuth: OAuthForm = { registration: "manual", clientId: "", tokenAuthMethod: "client_secret_post", scopes: [], sendResource: true, authorizationServer: "" };
 
@@ -104,9 +108,17 @@ export function upstreamFormOf(s?: McpServer): UpstreamForm {
     oauth: o
       ? { registration: choiceOf(o.registration, o.platformProvider?.id), clientId: "", tokenAuthMethod: o.tokenAuthMethod, scopes: o.scopes, sendResource: o.sendResource, authorizationServer: o.authorizationServer }
       : blankOAuth,
+    machine: s ? machineFormOf(s) : blankMachine,
     sendIdentity: s ? sendsIdentity(s) : true,
   };
 }
+
+/** The form with only the chosen mode's fields counting: the others stay as they were saved (dirty checks, what a save sends). */
+export const countedUpstream = (f: UpstreamForm, saved: UpstreamForm): UpstreamForm => ({
+  ...f,
+  oauth: f.mode === "oauth" ? f.oauth : saved.oauth,
+  machine: f.mode === "machine_oauth" ? f.machine : saved.machine,
+});
 
 /** The token method a manual client starts with: client_secret_post when listed (or nothing is), else the first listed. */
 function manualMethod(r: DetectResult): TokenAuthMethod {
@@ -135,15 +147,17 @@ export function modeFromDetection(r: DetectResult, current: AuthMode): AuthMode 
 
 /**
  * The form after a detection: the suggested mode and, for OAuth, the suggested settings. A server that's in oauth
- * mode already keeps its settings (a detection only shows what the server offers now).
+ * mode already keeps its settings (a detection only shows what the server offers now). In machine mode a detection
+ * only fills the token endpoint and resource that are still empty.
  */
 export function applyDetection(u: UpstreamForm, r: DetectResult, stored?: OAuthConfig | null): UpstreamForm {
+  if (u.mode === "machine_oauth") return { ...u, machine: machineFromDetection(r, u.machine) };
   if (stored && u.mode === "oauth" && oauthUsable(r)) return u;
   const mode = modeFromDetection(r, u.mode);
   return { ...u, mode, oauth: mode === "oauth" ? oauthFromDetection(r, u.oauth) : u.oauth };
 }
 
-export type OAuthErrors = Partial<Record<"mode" | "registration" | "clientId" | "clientSecret" | "scopes", string>>;
+export type OAuthErrors = Partial<Record<"mode" | "registration" | "clientId" | "clientSecret" | "scopes", string>> & MachineErrors;
 
 type ProblemContext = {
   /** The server as saved (edits): a stored client ID and secret can be kept. */
@@ -212,7 +226,7 @@ const authServerAfter = (f: OAuthForm, stored?: OAuthConfig, detected?: DetectRe
 
 export type AuthChange = {
   /** Under approval_required a published server goes back to review: a switch to oauth, another authorization server, or a new scope. */
-  review?: "switch" | "server" | "scopes";
+  review?: "switch" | "server" | "scopes" | MachineReview;
   /** What happens to people's sign-ins to the server: erased (sign in again) or deleted (leaving oauth). */
   connections?: "reset" | "deleted";
 };
@@ -222,6 +236,7 @@ export function authChange(server: McpServer, f: UpstreamForm, opts: { urlChange
   const before = authModeOf(server);
   const stored = server.oauth;
   const signedIn = (stored?.connectionCount ?? 0) > 0;
+  if (f.mode === "machine_oauth") return { review: machineReview(server, f.machine), ...(before === "oauth" && signedIn ? { connections: "deleted" as const } : {}) };
   if (f.mode !== "oauth") return before === "oauth" && signedIn ? { connections: "deleted" } : {};
   if (before !== "oauth" || !stored) return { review: "switch" };
   const otherServer = authServerAfter(f.oauth, stored, opts.detected) !== stored.authorizationServer;
