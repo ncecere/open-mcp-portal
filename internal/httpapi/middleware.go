@@ -70,7 +70,11 @@ func chain(mux *http.ServeMux, d Deps) http.Handler {
 		start := time.Now()
 		proxies.Observe(r.Context(), r)
 		reqID := httpx.NewID(12)
-		r = r.WithContext(httpx.WithRequestID(r.Context(), reqID))
+		// The request's server span (off: no span, nothing read); /mcp/ requests
+		// are traced by the gateway.
+		ctx, span := observability.StartHTTP(r)
+		ctx, slot := observability.WithTraceSlot(ctx)
+		r = r.WithContext(httpx.WithRequestID(ctx, reqID))
 
 		h := w.Header()
 		h.Set("X-Request-ID", reqID)
@@ -96,13 +100,14 @@ func chain(mux *http.ServeMux, d Deps) http.Handler {
 				rec.status = httpx.StatusClientClosedRequest
 			}
 			observability.ObserveHTTP(r.Pattern, r.Method, rec.status, time.Since(start))
+			span.End(r.Pattern, rec.status)
 			level := slog.LevelInfo
 			if quietRoutes[r.Pattern] {
 				level = slog.LevelDebug
 			}
 			// ServeMux sets r.Pattern on the request it routes; the route
 			// pattern (never the raw path, which holds IDs) is logged.
-			log.Log(r.Context(), level, "http request",
+			log.Log(slot.LogContext(r.Context()), level, "http request",
 				"method", r.Method, "route", r.Pattern, "status", rec.status,
 				"duration_ms", time.Since(start).Milliseconds(), "request_id", reqID,
 				"client_ip", httpx.ClientIP(r, d.Config.TrustedProxies))

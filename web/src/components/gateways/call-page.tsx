@@ -149,6 +149,20 @@ export function CallPage({ scope, callId, canViewPayload, elsewhere }: Props) {
             { label: "Size", value: `${bytes(c.requestBytes)} in · ${bytes(c.responseBytes)} out` },
             ...(c.clientName ? [{ label: "Client", value: c.clientName }] : []),
             { label: "Request ID", value: <code className={s.mono}>{c.requestId}</code> },
+            ...(c.traceId
+              ? [
+                  {
+                    label: "Trace",
+                    value: c.traceUrl ? (
+                      <TextLink href={c.traceUrl} target="_blank" rel="noreferrer noopener">
+                        <code className={s.mono}>{c.traceId}</code>
+                      </TextLink>
+                    ) : (
+                      <code className={s.mono}>{c.traceId}</code>
+                    ),
+                  },
+                ]
+              : []),
           ]}
         />
       </Card>

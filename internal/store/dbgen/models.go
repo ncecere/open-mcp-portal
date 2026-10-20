@@ -249,6 +249,7 @@ type McpCall struct {
 	ViaPlatformID        uuid.NullUUID
 	ViaPlatformName      *string
 	PersonPresent        *bool
+	TraceID              *string
 }
 
 type McpCallPayload struct {

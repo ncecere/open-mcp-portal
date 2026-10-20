@@ -123,6 +123,8 @@ jobs:
           go-version-file: go.mod
       - name: Render and validate the Kustomize base and overlays
         run: make k8s-validate
+      - name: Prometheus alert rules (promtool check and unit tests)
+        run: make prom-check
 
   docker:
     runs-on: ubuntu-latest

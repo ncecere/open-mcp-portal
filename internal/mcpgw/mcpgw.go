@@ -62,6 +62,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ncecere/open-mcp-portal/internal/agentidentity"
 	"github.com/ncecere/open-mcp-portal/internal/apikeys"
@@ -259,6 +260,10 @@ func refuse(w http.ResponseWriter, status int, msg string) {
 // ServeHTTP handles every method on /mcp/{slug}.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
+	// Tracing (trace.go): nil, and w unchanged, when it is off. finish gets
+	// the request as it is when the handler returns (it carries the span).
+	tr, w := newReqTrace(w, r, start)
+	defer func() { tr.finish(r) }()
 	if r.Method != http.MethodPost {
 		// Stateless: no server stream (GET) and no session to end (DELETE).
 		w.Header().Set("Allow", "POST")
@@ -272,7 +277,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusForbidden, "Origin not allowed")
 		return
 	}
+	authStart := time.Now()
 	principal, ok := h.authenticate(w, r, slug)
+	tr.authenticated(authStart, principal.kind, ok)
 	if !ok {
 		return
 	}
@@ -308,6 +315,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeRPC(w, http.StatusBadRequest, msg.ID, nil, &rpcError{Code: codeInvalidRequest, Message: "Not a JSON-RPC 2.0 request"})
 		return
 	}
+	// The request's span (a child of the traceparent header or _meta).
+	r = tr.begin(r, &msg)
 	era, eerr := detectEra(msg, r.Header)
 	if eerr != nil {
 		writeRPC(w, eerr.status, msg.ID, nil, &rpcError{Code: eerr.code, Message: eerr.message, Data: eerr.data})
@@ -324,7 +333,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	rc := &request{h: h, w: w, r: r, start: start, msg: msg, principal: principal, requestBytes: int64(len(body)),
 		modern: era.modern, clientCaps: era.caps}
-	if !rc.resolveGateway(slug) {
+	if tr != nil {
+		tr.rc = rc
+	}
+	sp := rc.span("mcp.resolve_gateway", trace.SpanKindInternal)
+	resolved := rc.resolveGateway(slug)
+	sp.End()
+	if !resolved {
 		return
 	}
 	defer rc.observe()
@@ -540,7 +555,14 @@ func (rc *request) rateLimit() bool {
 		}
 		sub.GatewayTeam = &t
 	}
+	sp := rc.span("mcp.rate_limit", trace.SpanKindInternal)
 	d, err := h.Limits.Check(ctx, h.RateStore, sub)
+	if err != nil {
+		observability.Fail(sp, "error")
+	} else if d.Exceeded != "" {
+		observability.Annotate(sp, observability.AttrRateLimit.String(d.Exceeded))
+	}
+	sp.End()
 	if err != nil {
 		rc.internal(err)
 		return false
@@ -726,6 +748,7 @@ func (rc *request) record(c calls.Call, responseBytes int64) {
 		c.UserID = p.user.ID
 	}
 	c.ClientName = rc.clientName()
+	c.TraceID = observability.SampledTraceID(rc.r.Context())
 	if rc.stream != nil {
 		responseBytes = rc.stream.bytes() // progress events and the response
 	}
@@ -893,7 +916,9 @@ func (rc *request) capabilities() (map[string]any, error) {
 
 // offers reads what the caller may use of kind now, by exposed name.
 func (rc *request) offers(kind string) ([]gateways.Offer, error) {
+	sp := rc.span("mcp.authorize", trace.SpanKindInternal)
 	all, err := rc.h.Gateways.Offers(rc.r.Context(), rc.gateway, rc.caller)
+	sp.End()
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,105 @@
+# Unit tests of omp-alerts.yaml: `make prom-check` (promtool test rules).
+rule_files:
+  - omp-alerts.yaml
+evaluation_interval: 1m
+
+tests:
+  # Every replica is down: critical after 5 minutes. One replica down while
+  # another answers is only the warning.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="open-mcp-portal", instance="a:9090"}'
+        values: '1 1 0x20'
+      - series: 'up{job="open-mcp-portal", instance="b:9090"}'
+        values: '1x22'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: OMPDown
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: OMPReplicaDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: open-mcp-portal
+              instance: "a:9090"
+            exp_annotations:
+              summary: A portal replica is not being scraped
+              description: "a:9090 has not answered its /metrics scrape for 10 minutes."
+              runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompreplicadown
+  - interval: 1m
+    input_series:
+      - series: 'up{job="open-mcp-portal", instance="a:9090"}'
+        values: '1 1 0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: OMPDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: Open MCP Portal is down
+              description: No replica of the portal has been scraped successfully for 5 minutes.
+              runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompdown
+
+  # Servers failing their health checks for 15 minutes.
+  - interval: 1m
+    input_series:
+      - series: 'omp_mcp_servers{state="failing", instance="a:9090"}'
+        values: '0 0 2x30'
+      - series: 'omp_mcp_servers{state="healthy", instance="a:9090"}'
+        values: '5x32'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: OMPServersFailing
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: OMPServersFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Enabled MCP servers are failing their health checks
+              description: "2 enabled MCP server(s) failed their latest health check, for 15 minutes."
+              runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompserversfailing
+
+  # Upstream errors: over 20% of tool calls, with enough traffic to mean it.
+  - interval: 1m
+    input_series:
+      # 6 calls a minute, half of them failing.
+      - series: 'omp_mcp_requests_total{method="tools/call", outcome="ok", instance="a:9090"}'
+        values: '0+3x40'
+      - series: 'omp_mcp_requests_total{method="tools/call", outcome="upstream_error", instance="a:9090"}'
+        values: '0+3x40'
+      # Failing, but a trickle: no alert.
+      - series: 'omp_mcp_requests_total{method="tools/call", outcome="timeout", instance="b:9090"}'
+        values: '0+0.001x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: OMPUpstreamErrorRatioHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Over 20% of tool calls fail at the MCP servers
+              description: "50.01% of tool calls over the last 10 minutes ended as upstream_error, timeout or too_large."
+              runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompupstreamerrorratiohigh
+
+  # Retention stops succeeding for one kind.
+  - interval: 1m
+    input_series:
+      - series: 'omp_retention_last_success_timestamp_seconds{kind="calls", instance="a:9090"}'
+        values: '0x100'
+      - series: 'omp_retention_last_success_timestamp_seconds{kind="audit", instance="a:9090"}'
+        values: '0+60x100'
+    alert_rule_test:
+      - eval_time: 1h30m
+        alertname: OMPRetentionStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              kind: calls
+            exp_annotations:
+              summary: Retention has not purged a kind of data for over an hour
+              description: "Nothing has purged calls successfully for 1h 30m 0s (it runs every RETENTION_INTERVAL, 15 minutes by default)."
+              runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompretentionstale

@@ -85,3 +85,26 @@ func TestTraceFromMeta(t *testing.T) {
 		t.Fatalf("an empty trace added %v", m)
 	}
 }
+
+// WithParent puts the portal's own span in place of the client's context, and
+// leaves everything as it is when there is none: tracing off, or a span that
+// is not sampled, passes the client's through exactly as before.
+func TestTraceWithParent(t *testing.T) {
+	const client = "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01"
+	const portal = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+	in := Trace{Traceparent: client, Tracestate: "congo=t61rcWkgMzE", Baggage: "userId=alice"}
+	if got := in.WithParent("", ""); got != in {
+		t.Errorf("no portal span changed the client's context: %+v", got)
+	}
+	if got := in.WithParent("nonsense", "a=b"); got != in {
+		t.Errorf("a malformed traceparent was used: %+v", got)
+	}
+	got := in.WithParent(portal, "congo=t61rcWkgMzE,rojo=00f067aa0ba902b7")
+	if got.Traceparent != portal || got.Tracestate != "congo=t61rcWkgMzE,rojo=00f067aa0ba902b7" || got.Baggage != "userId=alice" {
+		t.Errorf("%+v", got)
+	}
+	// A tracestate that is not valid is dropped, baggage is never made up.
+	if got := (Trace{}).WithParent(portal, "BAD KEY=x"); got != (Trace{Traceparent: portal}) {
+		t.Errorf("%+v", got)
+	}
+}

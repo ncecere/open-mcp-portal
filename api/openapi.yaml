@@ -8670,6 +8670,14 @@ components:
           format: int64
         requestId:
           type: string
+        traceId:
+          type: string
+          description: The request's OpenTelemetry trace ID (32 hex digits), present when the portal had tracing on and the
+            trace was sampled (decision 71). Absent otherwise, and for calls recorded before v0.3.1
+        traceUrl:
+          type: string
+          description: Where to open the trace, from the deployment's TRACE_LINK_TEMPLATE; absent when no template is set
+            or the call has no traceId
         captured:
           type: boolean
           description: A captured payload is stored that the caller may open (team views; captured under this team's

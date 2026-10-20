@@ -29,6 +29,7 @@ func (c Config) Validate(mode string) error {
 	errs = append(errs, c.validateProcess()...)
 	errs = append(errs, c.validateSecrets()...)
 	errs = append(errs, c.validateNotifications()...)
+	errs = append(errs, c.Tracing.validate()...)
 	errs = append(errs, c.Instance.validate()...)
 	errs = append(errs, c.validateWeb()...)
 	return errors.Join(errs...)

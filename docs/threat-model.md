@@ -173,7 +173,7 @@ Each entry gives the STRIDE category (S, T, R, I, D, E), the attack, the mitigat
 
 ### 6.7 Supply chain, operations, secrets
 
-Covered in 7.8, 7.11 and 7.12.
+Covered in 7.8, 7.11 and 7.12. Telemetry (tracing, trace-correlated logs and metrics) is in 6.9.
 
 ### 6.8 The agent platform relay (decisions 65 to 67)
 
@@ -213,6 +213,19 @@ An agent platform (Pi Durable Platform) relays its agents' calls through a team 
 - **I-4** A refused token leaves no call record or audit entry, only `omp_agent_token_total{result}` and a warning in the log, so a team's admins can't see failed tokens on their relay in Calls.
 - **I-6** The address guard classifies 6to4 (`2002::/16`) as "private", so an internal-networks entry that covers it makes an embedded loopback such as `2002:7f00:1::` reachable (pre-existing, `netpolicy`; an administrator's own broad entry, not reachable without it).
 - **I-7** A token's `jti` is spent when the token verifies, before the content type, body, rate limit and gateway are checked, so a request that then fails (415, 429, 404) can't be retried with the same token; PDP sends a fresh token with every request.
+
+### 6.9 Telemetry (decision 71)
+
+Telemetry is a data path out of the portal: spans go to a collector the operator chose, trace IDs go to every MCP
+server and into call records and logs. Tracing is off by default.
+
+| ID | STRIDE | Attack | Mitigation (code; tests) | Residual |
+| --- | --- | --- | --- | --- |
+| TL-1 | I | Spans, logs or metrics carry a person, a credential, arguments or results to the collector | Span attributes are a fixed allow-list (`observability.allowedAttributes`): `Start` and `Annotate` drop any other key, so a new call site cannot add one; errors are recorded as a class, never `err.Error()`; no span events; no `otelhttp` (its URL, client address and user-agent attributes are not wanted); the HTTP span is named by route pattern. Tests: `TestSpanAttributesAreAllowListed` (the key list is pinned), `TestTracingCallTrace` (a call with sentinel arguments, key, email and a bad credential: every span's name, attributes, status, events, links and resource are scanned), `TestTracingUpstreamFailure`, `TestServerSpan` (a sentinel in the path, query and headers) | Gateway, server and provider slugs are exported (not bounded like metric labels); they name your objects. Tool names are not exported. The collector and its backend see every sampled span and must be trusted like the logs |
+| TL-2 | I | The export credentials (`OTEL_EXPORTER_OTLP_HEADERS`) leak | A secret setting (`_FILE` works); never logged (the start-up line and `doctor` show the collector's host and sampler only); a malformed value is refused without echoing it; the URL may not hold credentials. Tests: `TestTracingHeadersAreSecret`, `TestDoctorReportsTracing`, `TestInitTracingExportsOTLP` | Over `http://` the headers and spans cross the network in clear text: use https outside the cluster |
+| TL-3 | I | Trace context discloses to third-party servers | The portal's trace ID and span ID go to every server it calls when its span is sampled (decision 71): they identify a trace in the operator's own backend and say nothing else; `tracestate` only if it was the client's and valid; baggage only as the client sent it, validated, never added. Unsampled traces pass the client's context unchanged. Tests: `TestTracingCallTrace`, `TestTraceContextPassthrough`, `TestTraceWithParent` | A third party can correlate calls it receives that carry the same trace ID. Turn tracing off, or lower the sampler, to send fewer |
+| TL-4 | D, T | A client forces sampling or injects a trace ID | A parent-based sampler follows a sampled parent: anyone who can send a request can have it traced. The cost is bounded (about ten spans a request, a bounded export queue that drops the excess, the rate limits). The `traceparent` and `tracestate` are validated (W3C format, size) before use; a forged trace ID can only attach spans to the forger's own trace id. Use `traceidratio` to ignore the parent. Tests: `TestServerSpan`, `TestTracingCallTrace` (a malformed or unsampled parent) | A trace's backend may show spans under a trace ID a client chose; call records keep the ID of sampled calls only |
+| TL-5 | R | Trace IDs in call records and logs outlive the traces | `mcp_calls.trace_id` is an identifier (no personal data) deleted with the call by retention; logs carry `trace_id` and `span_id` for sampled requests only | A trace backend's own retention is separate |
 
 ## 7. Specific analyses
 
@@ -318,7 +331,7 @@ Revocation timing: every `/mcp` request goes back to PostgreSQL for the credenti
 
 ### 7.9 Logging, audit and payload capture
 
-- **Logs.** JSON via `slog`; the access log records the route pattern, never the raw path or headers (`httpapi/middleware.go`). Upstream error text is redacted before logging (`Target.safe`). CIMD fetches log host, status and outcome only. No test found that greps logs for tokens across *every* route; sentinels exist for the MCP, provider and capture paths.
+- **Logs.** JSON via `slog`; the access log records the route pattern, never the raw path or headers (`httpapi/middleware.go`). With tracing on, a sampled request's records also carry `trace_id` and `span_id` (6.9). Upstream error text is redacted before logging (`Target.safe`). CIMD fetches log host, status and outcome only. No test found that greps logs for tokens across *every* route; sentinels exist for the MCP, provider and capture paths.
 - **Audit.** Mutations and audit are one transaction (BR-10). The retention loop purges audit after 30–3650 days (default 400); a platform admin can lower it, and every setting change is itself audited before the purge. No off-host export.
 - **Capture.** Opt-in per gateway or server; redaction of keys by name, built-in patterns, admin RE2 patterns and exact values; 16 KiB truncation; sealed; viewing audited (`mcpgw/capture.go`, `capture/redact.go`). A secret that is not matched by a rule or an exact value is stored. Tests: `TestPayloadCapture`, `TestBuiltInRules`, `TestCompileRefusals`.
 - **Log injection.** Structured fields are quoted by the handler; free text from servers is clipped and redacted. No raw `fmt` logging of request data found.

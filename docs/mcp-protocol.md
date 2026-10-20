@@ -301,7 +301,15 @@ the client's own token), then the JSON-RPC response as the last event, then the 
 server's `_meta` when they are well-formed (W3C Trace Context and Baggage: `traceparent` exactly
 `vv-<32 hex>-<16 hex>-<2 hex>` in lowercase, not version `ff`, not all-zero ids; `tracestate` at most 512 characters and 32 members and only
 with a valid `traceparent`; `baggage` at most 2048 characters and 64 members). Anything else is dropped, and when the
-client sent none, none is sent. No other client `_meta` entry is passed on. The portal's own tracing is v0.3.
+client sent none, none is sent. No other client `_meta` entry is passed on.
+
+With **tracing off** (the default; [deploy.md](deploy.md#tracing)) that is all the portal does. With tracing on, the
+portal is a hop of the trace: the parent of its span is the request's HTTP `traceparent` header when it has a valid one,
+else the valid `traceparent` in `params._meta` (an invalid value starts a new trace), and, when its span is sampled, the
+`traceparent` it sends to the server (both eras, every server) names the portal's span as the parent, with the
+client's `tracestate` (still only when valid); the trace ID stays the client's. `baggage` is always the client's own,
+validated as above, and is never added. When the trace is not sampled, the client's `traceparent` and `tracestate` go on
+unchanged, as with tracing off. The portal's spans carry no `_meta`, argument or result content.
 
 ### Authorization of upstream servers
 

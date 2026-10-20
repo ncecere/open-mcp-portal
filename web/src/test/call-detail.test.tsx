@@ -132,6 +132,31 @@ describe("A call's page", () => {
     expect(payloads(calls, "/v1/admin/calls/501/payload")).toHaveLength(1);
   });
 
+  it("shows the trace of a sampled call, as a link when the deployment has a trace viewer", async () => {
+    const traceId = "0af7651916cd43dd8448eb211c80319c";
+    const url = `https://traces.example.com/trace/${traceId}`;
+    mockApi(teamRoutes("owner", "none", { [`GET ${teamApi}/calls/501`]: () => mcpCall({ traceId, traceUrl: url }) }));
+    renderApp(`/teams/${team.slug}/calls/501`);
+    const link = await screen.findByRole("link", { name: traceId });
+    expect(link).toHaveAttribute("href", url);
+    expect(link).toHaveAttribute("rel", expect.stringContaining("noreferrer"));
+  });
+
+  it("shows only the trace ID without a link template, and nothing for an untraced call", async () => {
+    const traceId = "0af7651916cd43dd8448eb211c80319c";
+    mockApi(teamRoutes("owner", "none", { [`GET ${teamApi}/calls/501`]: () => mcpCall({ traceId }) }));
+    renderApp(`/teams/${team.slug}/calls/501`);
+    expect(await screen.findByText(traceId)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: traceId })).toBeNull();
+  });
+
+  it("has no Trace row for a call without a trace", async () => {
+    mockApi(teamRoutes("owner"));
+    renderApp(`/teams/${team.slug}/calls/501`);
+    await screen.findByText("req-call-1");
+    expect(screen.queryByText("Trace")).toBeNull();
+  });
+
   it("isn't found for an unknown call", async () => {
     mockApi({ ...shellRoutes("platform_admin", null), "GET /v1/admin/calls/9": () => Reply.error(404, "call_not_found") });
     renderApp("/admin/calls/9");

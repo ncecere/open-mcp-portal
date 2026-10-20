@@ -49,6 +49,8 @@ done
 # Files kept beside an overlay as alternatives (not in its resources).
 validate "overlays/example/httproute.yaml" "${root}/overlays/example/httproute.yaml"
 validate "overlays/example/servicemonitor.yaml" "${root}/overlays/example/servicemonitor.yaml"
+validate "overlays/example/prometheusrule.yaml" "${root}/overlays/example/prometheusrule.yaml"
+validate "overlays/example/networkpolicy-otlp.yaml" "${root}/overlays/example/networkpolicy-otlp.yaml"
 
 # open-mcp-portal-config must be hashed and referenced by both containers.
 check_config_refs() { # name, rendered file

@@ -3829,6 +3829,12 @@ type McpCall struct {
 	RequestId     string   `json:"requestId"`
 	ResponseBytes int64    `json:"responseBytes"`
 	Server        *CallRef `json:"server,omitempty"`
+
+	// TraceId The request's OpenTelemetry trace ID (32 hex digits), present when the portal had tracing on and the trace was sampled (decision 71). Absent otherwise, and for calls recorded before v0.3.1
+	TraceId *string `json:"traceId,omitempty"`
+
+	// TraceUrl Where to open the trace, from the deployment's TRACE_LINK_TEMPLATE; absent when no template is set or the call has no traceId
+	TraceUrl *string `json:"traceUrl,omitempty"`
 }
 
 // McpCallOutcome ok: answered. tool_error: the tool reported an error. denied: refused by policy (logged; the client saw not found, or for a service account calling a capability that requires an account, a clear refusal). upstream_error: unreachable, refused or malformed (also provider_unavailable: the provider's token endpoint failed). bad_request: the client's request was invalid. needs_authorization: not forwarded because the person must connect or reconnect an account; the client got a consent link (JSON-RPC -32042), or, for a call from an agent, a tool error without a link (errorClass needs_connection). rate_limited: not forwarded because a rate limit was exceeded (HTTP 429, JSON-RPC -32029; errorClass names the limit: person_per_minute, credential_per_minute, service_account_per_minute or gateway_per_minute).

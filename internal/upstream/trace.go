@@ -110,6 +110,22 @@ func TraceFromMeta(meta map[string]json.RawMessage) Trace {
 	return t
 }
 
+// WithParent is the trace context to send when the portal's own span
+// (traceparent, tracestate) is the parent of the call: its traceparent and
+// tracestate replace the client's, and the client's baggage stays as it was
+// sent (the portal adds none). A traceparent that is not well-formed (or empty:
+// the span is not sampled, or tracing is off) changes nothing.
+func (t Trace) WithParent(traceparent, tracestate string) Trace {
+	if !ValidTraceparent(traceparent) {
+		return t
+	}
+	t.Traceparent, t.Tracestate = traceparent, ""
+	if ValidTracestate(tracestate) {
+		t.Tracestate = tracestate
+	}
+	return t
+}
+
 func (t Trace) addTo(meta map[string]any) {
 	if t.Traceparent != "" {
 		meta["traceparent"] = t.Traceparent

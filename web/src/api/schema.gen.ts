@@ -4110,6 +4110,10 @@ export interface components {
             /** Format: int64 */
             responseBytes: number;
             requestId: string;
+            /** @description The request's OpenTelemetry trace ID (32 hex digits), present when the portal had tracing on and the trace was sampled (decision 71). Absent otherwise, and for calls recorded before v0.3.1 */
+            traceId?: string;
+            /** @description Where to open the trace, from the deployment's TRACE_LINK_TEMPLATE; absent when no template is set or the call has no traceId */
+            traceUrl?: string;
             /** @description A captured payload is stored that the caller may open (team views; captured under this team's gateway or server switch; admin views; any). Absent from servers before Phase 6. */
             captured?: boolean;
             /** @description Set when a trusted agent platform relayed the call (docs/agent-platforms.md); the principal is then the relay service account. Absent from servers before v0.3 */

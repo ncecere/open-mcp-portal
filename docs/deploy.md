@@ -69,6 +69,7 @@ file named by `OMP_CONFIG_FILE`. Each secret can also be read from a file named 
 | `API_KEY_PEPPER` | yes (secret) | 32 random bytes, base64. Keys the HMAC that stores API keys, service account keys and connected apps' tokens. Rotate it with `API_KEY_PEPPER_PREVIOUS`, never by just replacing it. |
 | `API_KEY_PEPPER_PREVIOUS` | while rotating (secret) | The old pepper: keys and tokens made with it keep working, and keys are re-digested on use. |
 | `METRICS_ADDR` | optional | Prometheus `/metrics` on its own listener, for example `:9090` (empty: off). See [Metrics](#metrics). |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` and the other `OTEL_*` settings, `TRACE_LINK_TEMPLATE` | optional | OpenTelemetry tracing, off unless an endpoint is set. See [Tracing](#tracing). `OTEL_EXPORTER_OTLP_HEADERS` is a secret (`_FILE` works). |
 | `RETENTION_INTERVAL`, `RETENTION_BATCH_SIZE` | optional | How often old data is deleted (default 15m) and rows per transaction (1000). Periods are set in Admin › Retention. |
 | `OAUTH_MAX_REGISTERED_CLIENTS` | optional | Cap on live OAuth clients registered through the open `POST /oauth/register` (default `1000`; `0` = no cap; 0 to 1000000). Counts registrations used in the last 30 days; over it, registration answers `503 temporarily_unavailable` until one expires. Apps that identify themselves with a metadata document aren't counted. An admin can also turn open registration off (Admin › Trusted clients). |
 | `OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS` | optional | How many registrations that have not received tokens yet one source address can hold (default `20`; `0` = no cap). The answer past it is `429 slow_down`. Registrations that sign in stop counting; unused ones leave after 24 hours. Behind an ingress, set `TRUSTED_PROXIES`, or every caller shares one address. |
@@ -418,9 +419,104 @@ objects (at most `METRICS_MAX_OBJECTS`, default 200 each, then `other`) and drop
 | `omp_usage_rollup_last_success_timestamp_seconds`, `omp_loop_leader` | `loop` |
 | `omp_db_pool_*` | |
 
-Plus the Go and process collectors. Useful alerts: `omp_payload_capture_errors_total` increasing; no replica with
-`omp_loop_leader{loop="retention"} == 1` for an hour; `omp_mcp_servers{state="failing"} > 0`; a high rate of
-`omp_mcp_rate_limited_total`.
+Plus the Go and process collectors.
+
+### Dashboards and alerts
+
+Five Grafana dashboards are committed under [`deploy/grafana/dashboards/`](../deploy/grafana/dashboards) (MCP traffic,
+MCP servers, providers and tokens, notifications, platform). Import each JSON file in Grafana (Dashboards › New ›
+Import), or provision the directory with a file provider; each asks for a Prometheus data source through its
+`datasource` variable. Alert rules are in [`deploy/prometheus/omp-alerts.yaml`](../deploy/prometheus/omp-alerts.yaml)
+(load it with `rule_files:`) and, for the Prometheus Operator, as a `PrometheusRule` in
+`deploy/kubernetes/overlays/example/prometheusrule.yaml` beside the `ServiceMonitor` (neither is in the overlay's
+resources: they need the operator's CRDs, so add them when the cluster has them). The alerts are: the portal or a
+replica down, server errors, a saturated database pool, tool calls failing at the servers, slow calls, sustained rate
+limiting, failing MCP servers, a provider refusing refreshes, payload capture errors, stale retention or usage rollup, no
+loop leader and failed notifications. Each links to its entry in the
+[alert runbook](phase6-operations.md#alert-runbook). The two "down" alerts match `job="open-mcp-portal"`, the name the
+example `ServiceMonitor` gives; change it if your scrape configuration names the job otherwise.
+
+Every metric and label the dashboards and rules use is checked against the registry by a test, so a renamed metric
+fails CI instead of leaving an empty panel. `make prom-check` runs `promtool check rules` and the rules' unit tests
+(`omp-alerts.test.yaml`) with a local `promtool` or the pinned `prom/prometheus` image through Docker.
+
+## Tracing
+
+Tracing shows where a slow call spent its time: in the portal, in the database, in a provider's token refresh or at the
+MCP server. It is **off** unless you configure an exporter, and then costs only the spans of the requests that are
+sampled. Off, the portal creates no spans, reads no trace headers and sends nothing; a client's `traceparent`,
+`tracestate` and `baggage` in `_meta` pass through to the server exactly as they always did
+([MCP protocol](mcp-protocol.md#trace-context)).
+
+### Enabling it
+
+Set the standard OpenTelemetry variables (the YAML file takes the lower-case names; `OTEL_EXPORTER_OTLP_HEADERS` may be
+read from `OTEL_EXPORTER_OTLP_HEADERS_FILE`):
+
+| Setting | Default | Notes |
+|---|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | empty (off) | The collector's OTLP/HTTP base URL, for example `http://otel-collector.observability:4318`; `/v1/traces` is added. Tracing is on when this (or the next) is set. No credentials, query or fragment in the URL. |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | empty | The full traces URL, used as it is, for backends that give one. Wins over the base URL. |
+| `OTEL_TRACES_EXPORTER` | empty | `otlp` turns tracing on with the OpenTelemetry default endpoint `http://localhost:4318` when none is set; `none` turns it off whatever else is set. Nothing else is supported. |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | The only protocol spoken; another value is refused at start-up (no gRPC exporter is built in). |
+| `OTEL_EXPORTER_OTLP_HEADERS` | empty (secret) | `key=value,key=value` sent with every export, for a collector or SaaS backend that needs a token. Never logged or reported by `doctor`. |
+| `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG` | `parentbased_traceidratio`, `0.1` | See [Sampling](#sampling). |
+| `OTEL_SERVICE_NAME` | `open-mcp-portal` | The `service.name` of the spans. |
+| `TRACE_LINK_TEMPLATE` | empty | A URL containing `{trace_id}` once, for example `https://grafana.example.com/explore?left=%7B%22datasource%22:%22tempo%22,%22queries%22:%5B%7B%22query%22:%22{trace_id}%22%7D%5D%7D` (your Grafana's own Explore link for a Tempo trace). A call's page shows its trace ID as a link to it. |
+
+The SDK also reads the standard `OTEL_EXPORTER_OTLP_CERTIFICATE`, `_TIMEOUT`, `_COMPRESSION` and the matching
+`_TRACES_` variables from the process environment (not from the YAML file). `OTEL_RESOURCE_ATTRIBUTES` is not read.
+`open-mcp-portal doctor` reports whether tracing is on, the collector's host and the sampler (never the path or the
+headers); it does not contact the collector. Spans are exported in the background in batches: a collector that is down
+or slow loses spans (the queue is bounded and drops the excess), never requests. On shutdown the portal flushes what is
+queued within `SHUTDOWN_TIMEOUT`.
+
+On Kubernetes the base's default-deny egress also blocks the collector: add
+`overlays/example/networkpolicy-otlp.yaml` (patch the namespace and pod labels to your collector) and, in the overlay's
+`configMapGenerator`, `OTEL_EXPORTER_OTLP_ENDPOINT=http://<collector>.<namespace>:4318`. Use a collector (the
+OpenTelemetry Collector, Grafana Alloy, a vendor agent) and let it forward to Tempo, Jaeger or a SaaS backend; the portal
+speaks OTLP/HTTP only. Prefer `https://` to a collector outside the cluster: spans are not secret, but they name your
+gateways and servers.
+
+### What a trace holds
+
+One trace per sampled request. For `/mcp/{slug}` the root is `MCP <method>` (server span) with these children:
+`mcp.authenticate`, `mcp.resolve_gateway`, `mcp.rate_limit`, `mcp.authorize` (what the caller may use),
+`mcp.provider_credential` (a provider token refresh happens inside it) and `mcp.upstream.forward` (a client span around
+the call to the server; one per attempt). Every other request to the management API is one server span named by its
+route pattern (`GET /v1/teams/{team}/gateways`). The registry's probes (the scheduled health check, **Test** and
+**Refresh**) are `registry.probe` spans with the server's slug and the result. Health probes of the scheduled loop start
+their own traces. Database queries are not spans.
+
+**Attributes are limited to a fixed list**: the MCP method, the gateway, server and provider slugs (the same objects the
+metrics label), the outcome, the principal kind (`api_key`, `oauth`, `service_account`), the protocol era, an error or
+rate-limit class, the HTTP method, the route pattern and the status code. The code drops any other key. Spans never
+carry a person, an email, a key or its name, a tool, prompt or resource name, arguments, results, headers, paths,
+client addresses or tokens, have no events, and a failure is a class (`timeout`, `auth`, ...), not the error's text; a
+test makes a call with sentinel secrets and scans every span. See the [threat model](threat-model.md#69-telemetry-decision-71).
+
+### Trace context and the MCP servers
+
+The parent of the portal's span is the request's HTTP `traceparent` header, else the `traceparent` in `params._meta`
+(validated as before). With the portal's span sampled, the call to the MCP server carries a `traceparent` whose parent
+is the portal's `mcp.upstream.forward` span, **to every server, third-party ones included** (a trace ID is not
+sensitive), with the client's `tracestate`. `baggage` is passed exactly as the client sent it; the portal never adds
+any. If the trace is not sampled, or tracing is off, the client's own context is passed on unchanged.
+
+Logs of a sampled request carry `trace_id` and `span_id` beside `request_id`, and the call record keeps the trace ID
+(Calls shows it, as a link when `TRACE_LINK_TEMPLATE` is set; the API's `McpCall.traceId` and `traceUrl`). Calls recorded
+before v0.3.1, calls of requests the sampler dropped, and any call with tracing off have none.
+
+### Sampling
+
+The default, `parentbased_traceidratio` at `0.1`, follows a sampled or unsampled parent (a client that traces its own
+requests decides) and samples one request in ten of the rest. Raise `OTEL_TRACES_SAMPLER_ARG` while you investigate and
+lower it afterwards; `always_on` traces every request and `always_off` none (`always_on`, `always_off`, `traceidratio`
+and the `parentbased_` forms are accepted). A parent-based sampler also means **anyone who can send a request can ask
+for it to be sampled** with a `traceparent` whose flag is `01`: the cost is bounded (about ten small spans a request,
+a bounded export queue that drops the excess, and rate limits apply as always), but if the portal is reachable by
+untrusted clients use `traceidratio`, which ignores the parent, and accept that a client's sampled trace is then
+recorded in part.
 
 ## Notifications and automation tokens
 
@@ -504,7 +600,7 @@ recomputed without the key, so rotation happens on use:
 
 ## Not covered yet
 
-- No dashboards, alert rules or tracing (metrics: [Metrics](#metrics)). Logs are JSON on stdout.
+- No OTLP export of logs or metrics, no exemplars, no database spans and no trace viewer (tracing: [Tracing](#tracing); metrics, dashboards and alerts: [Metrics](#metrics)). Logs are JSON on stdout.
 - No in-cluster PostgreSQL component, backup CronJob or restore procedure. Bring your own Postgres and backups.
 - The kind smoke test ([Smoke test](#smoke-test)) does not cover ingress, TLS, OIDC, the default CNI's (kindnet) NetworkPolicy enforcement, zones, upgrades between releases or restores.
 - Images are published only for releases (`v*` tags), not for every commit on `main`. The example overlay pins the digest of the release it names: use the digest from the release you install.

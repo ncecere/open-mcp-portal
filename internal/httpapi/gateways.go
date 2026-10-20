@@ -630,7 +630,7 @@ func callFilter(w http.ResponseWriter, r *http.Request) (calls.Filter, int32, bo
 	return f, limit, true
 }
 
-func writeCallPage(w http.ResponseWriter, r *http.Request, rows []calls.Row, err error, limit int32) {
+func (a *api) writeCallPage(w http.ResponseWriter, r *http.Request, rows []calls.Row, err error, limit int32) {
 	if failed(w, r, err) {
 		return
 	}
@@ -640,7 +640,7 @@ func writeCallPage(w http.ResponseWriter, r *http.Request, rows []calls.Row, err
 		page.NextCursor = encodeCursor(strconv.FormatInt(rows[len(rows)-1].ID, 10))
 	}
 	for _, c := range rows {
-		page.Items = append(page.Items, toAPICall(c))
+		page.Items = append(page.Items, a.toAPICall(c))
 	}
 	httpx.JSON(w, http.StatusOK, page)
 }
@@ -651,7 +651,7 @@ func (a *api) listTeamCalls(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := a.Calls.ListTeam(r.Context(), a.actor(r), r.PathValue("team"), f)
-	writeCallPage(w, r, rows, err, limit)
+	a.writeCallPage(w, r, rows, err, limit)
 }
 
 func (a *api) adminListCalls(w http.ResponseWriter, r *http.Request) {
@@ -667,5 +667,5 @@ func (a *api) adminListCalls(w http.ResponseWriter, r *http.Request) {
 		f.Team = v
 	}
 	rows, err := a.Calls.AdminList(r.Context(), a.actor(r), f)
-	writeCallPage(w, r, rows, err, limit)
+	a.writeCallPage(w, r, rows, err, limit)
 }

@@ -20,6 +20,10 @@ resources:
   - networkpolicy-metrics.yaml
   # With the Prometheus Operator's CRDs installed, add:
   # - servicemonitor.yaml
+  # - prometheusrule.yaml
+  # With tracing on (OTEL_EXPORTER_OTLP_ENDPOINT), the portal may reach the
+  # collector only if a policy says so:
+  # - networkpolicy-otlp.yaml
 
 # Pin by digest (never a mutable tag). Take the digest of the release you deploy from its GitHub Release
 # (open-mcp-portal-<tag>.digest.txt) and verify the signature first (docs/deploy.md).
