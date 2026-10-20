@@ -114,6 +114,22 @@ type AuthProvider struct {
 	IssParamSupported     bool
 	ClientSecretExpiresAt *time.Time
 	DiscoveredAt          *time.Time
+	AccessMode            string
+	NarrowOnRefresh       bool
+}
+
+type AuthProviderServer struct {
+	ProviderID uuid.UUID
+	ServerID   uuid.UUID
+	AddedAt    time.Time
+	AddedBy    uuid.NullUUID
+}
+
+type AuthProviderTeam struct {
+	ProviderID uuid.UUID
+	TeamID     uuid.UUID
+	AddedAt    time.Time
+	AddedBy    uuid.NullUUID
 }
 
 type AutomationToken struct {

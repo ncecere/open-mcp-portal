@@ -203,6 +203,24 @@ func (e AuthProviderScopeSeparator) Valid() bool {
 	}
 }
 
+// Defines values for AuthProviderAccessMode.
+const (
+	Open       AuthProviderAccessMode = "open"
+	Restricted AuthProviderAccessMode = "restricted"
+)
+
+// Valid indicates whether the value is a known member of the AuthProviderAccessMode enum.
+func (e AuthProviderAccessMode) Valid() bool {
+	switch e {
+	case Open:
+		return true
+	case Restricted:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AuthProviderCreateScopeSeparator.
 const (
 	AuthProviderCreateScopeSeparatorEmpty AuthProviderCreateScopeSeparator = " "
@@ -2540,6 +2558,9 @@ type AuthConfig struct {
 
 // AuthProvider An OAuth app configured by platform admins. The client secret is never returned
 type AuthProvider struct {
+	// AccessMode open - any team's server may require the provider. restricted - only a server of a listed team, or a listed server
+	AccessMode AuthProviderAccessMode `json:"accessMode"`
+
 	// AuthorizationUrl Example: https://github.com/login/oauth/authorize
 	AuthorizationUrl string `json:"authorizationUrl"`
 	ClientId         string `json:"clientId"`
@@ -2567,6 +2588,9 @@ type AuthProvider struct {
 
 	// Name Example: GitHub
 	Name string `json:"name"`
+
+	// NarrowOnRefresh Calls carry a token refreshed with only the scopes the call needs (RFC 6749 section 6), kept in memory and never stored; the stored token, which holds every scope granted, is not sent. Only where the provider honours scope on refresh (the Microsoft preset documents it; the others do not) and for connections that hold a refresh token; the rest keep sending the stored token
+	NarrowOnRefresh bool `json:"narrowOnRefresh"`
 
 	// Pkce Send a PKCE S256 challenge (on unless the provider rejects it)
 	Pkce   bool                    `json:"pkce"`
@@ -2612,6 +2636,43 @@ type AuthProvider struct {
 // AuthProviderScopeSeparator defines model for AuthProvider.ScopeSeparator.
 type AuthProviderScopeSeparator string
 
+// AuthProviderAccess Who may use an auth provider (decision 69)
+type AuthProviderAccess struct {
+	// AccessMode open - any team's server may require the provider. restricted - only a server of a listed team, or a listed server
+	AccessMode AuthProviderAccessMode `json:"accessMode"`
+
+	// Blocked Up to 20 servers that require the provider though a restricted list excludes them (their calls are refused until a team or the server is added)
+	Blocked      []ConnectServer `json:"blocked"`
+	BlockedCount int64           `json:"blockedCount"`
+
+	// Revision Increases on every change. Send it back in If-Match.
+	Revision Revision `json:"revision"`
+
+	// Servers Servers that may require a restricted provider whatever their team, by name
+	Servers []ConnectServer `json:"servers"`
+
+	// Teams Teams whose servers may require a restricted provider, by name
+	Teams []AuthProviderAccessTeam `json:"teams"`
+}
+
+// AuthProviderAccessInput defines model for AuthProviderAccessInput.
+type AuthProviderAccessInput struct {
+	// AccessMode open - any team's server may require the provider. restricted - only a server of a listed team, or a listed server
+	AccessMode AuthProviderAccessMode `json:"accessMode"`
+	ServerIds  []openapi_types.UUID   `json:"serverIds"`
+	TeamIds    []openapi_types.UUID   `json:"teamIds"`
+}
+
+// AuthProviderAccessMode open - any team's server may require the provider. restricted - only a server of a listed team, or a listed server
+type AuthProviderAccessMode string
+
+// AuthProviderAccessTeam defines model for AuthProviderAccessTeam.
+type AuthProviderAccessTeam struct {
+	Id   openapi_types.UUID `json:"id"`
+	Name string             `json:"name"`
+	Slug string             `json:"slug"`
+}
+
 // AuthProviderCreate defines model for AuthProviderCreate.
 type AuthProviderCreate struct {
 	AuthorizationUrl string `json:"authorizationUrl"`
@@ -2630,7 +2691,10 @@ type AuthProviderCreate struct {
 	// LogoUrl An https URL or a same-origin path
 	LogoUrl *string `json:"logoUrl,omitempty"`
 	Name    string  `json:"name"`
-	Pkce    *bool   `json:"pkce,omitempty"`
+
+	// NarrowOnRefresh See AuthProvider.narrowOnRefresh. A new provider is always restricted (accessMode) with empty lists; change that with adminSetAuthProviderAccess
+	NarrowOnRefresh *bool `json:"narrowOnRefresh,omitempty"`
+	Pkce            *bool `json:"pkce,omitempty"`
 
 	// Preset Which built-in preset the provider started from; only used for its icon and help text
 	Preset         *AuthProviderPresetName           `json:"preset,omitempty"`
@@ -2665,6 +2729,9 @@ type AuthProviderPreset struct {
 
 	// Name Example: GitHub
 	Name string `json:"name"`
+
+	// NarrowOnRefresh Pre-fills the narrowing switch; true only where the provider documents that a refresh request's scope narrows the new access token
+	NarrowOnRefresh bool `json:"narrowOnRefresh"`
 
 	// Notes Provider quirks worth knowing, shown in the form
 	Notes *string `json:"notes,omitempty"`
@@ -2740,11 +2807,14 @@ type AuthProviderUpdate struct {
 	Enabled       *bool      `json:"enabled,omitempty"`
 
 	// ExtraAuthorizeParams Replaces the whole set
-	ExtraAuthorizeParams *map[string]string      `json:"extraAuthorizeParams,omitempty"`
-	LogoUrl              *string                 `json:"logoUrl,omitempty"`
-	Name                 *string                 `json:"name,omitempty"`
-	Pkce                 *bool                   `json:"pkce,omitempty"`
-	Preset               *AuthProviderPresetName `json:"preset,omitempty"`
+	ExtraAuthorizeParams *map[string]string `json:"extraAuthorizeParams,omitempty"`
+	LogoUrl              *string            `json:"logoUrl,omitempty"`
+	Name                 *string            `json:"name,omitempty"`
+
+	// NarrowOnRefresh See AuthProvider.narrowOnRefresh
+	NarrowOnRefresh *bool                   `json:"narrowOnRefresh,omitempty"`
+	Pkce            *bool                   `json:"pkce,omitempty"`
+	Preset          *AuthProviderPresetName `json:"preset,omitempty"`
 
 	// RevocationUrl null removes it
 	RevocationUrl  *string                           `json:"revocationUrl,omitempty"`
@@ -3683,7 +3753,7 @@ type McpCall struct {
 	// ClientName clientInfo.name from initialize, when sent
 	ClientName *string `json:"clientName,omitempty"`
 
-	// ErrorClass Why a call was denied or failed, for example no_access, role, unknown, key_scope (the API key is limited to other gateways), gateway_disabled or an unavailability reason. For capabilities that require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or server_not_allowed (connected, but the person hasn't allowed this server, at its current address, to use the account); denied with service_account, provider_disabled, person_not_present (an agent's call whose server or capability requires a present person) or, for an agent's call for a person, person_no_account or person_suspended; needs_authorization with needs_connection for an agent's call (the person must connect an account; the answer was a tool error with no link); upstream_error with provider_unavailable.
+	// ErrorClass Why a call was denied or failed, for example no_access, role, unknown, key_scope (the API key is limited to other gateways), gateway_disabled or an unavailability reason. For capabilities that require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or server_not_allowed (connected, but the person hasn't allowed this server, at its current address, to use the account); denied with service_account, provider_disabled, provider_not_allowed (the provider is restricted and its access list excludes the server), person_not_present (an agent's call whose server or capability requires a present person) or, for an agent's call for a person, person_no_account or person_suspended; needs_authorization with needs_connection for an agent's call (the person must connect an account; the answer was a tool error with no link); upstream_error with provider_unavailable.
 	ErrorClass *string `json:"errorClass,omitempty"`
 
 	// ExposedName The tool or prompt name, or the exposed resource URI, the client used (absent for list calls)
@@ -4796,8 +4866,11 @@ type ProviderConnection struct {
 	Id        openapi_types.UUID `json:"id"`
 
 	// LastUsedAt When a token was last sent to an MCP server
-	LastUsedAt *time.Time  `json:"lastUsedAt"`
-	Provider   ProviderRef `json:"provider"`
+	LastUsedAt *time.Time `json:"lastUsedAt"`
+
+	// NarrowsScopes A call carries a token refreshed with only the scopes that call needs. False means the token an allowed server receives holds every scope in scopes (the provider is not set to narrow, or no refresh token is held)
+	NarrowsScopes bool        `json:"narrowsScopes"`
+	Provider      ProviderRef `json:"provider"`
 
 	// Refreshable The portal holds a refresh token
 	Refreshable bool       `json:"refreshable"`
@@ -5746,6 +5819,12 @@ type AdminUpdateAuthProviderParams struct {
 	IfMatch IfMatchHeader `json:"If-Match"`
 }
 
+// AdminSetAuthProviderAccessParams defines parameters for AdminSetAuthProviderAccess.
+type AdminSetAuthProviderAccessParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
 // AdminListCallsParams defines parameters for AdminListCalls.
 type AdminListCallsParams struct {
 	// Gateway Gateway ID
@@ -5987,6 +6066,15 @@ type AdminUpdateUserParams struct {
 	IfMatch IfMatchHeader `json:"If-Match"`
 }
 
+// ListAuthProvidersParams defines parameters for ListAuthProviders.
+type ListAuthProvidersParams struct {
+	// Team A team slug or ID; limits the list to providers servers of this team may require
+	Team *string `form:"team,omitempty" json:"team,omitempty"`
+
+	// ServerId With team, a server of that team; also counts providers that list this server
+	ServerId *openapi_types.UUID `form:"serverId,omitempty" json:"serverId,omitempty"`
+}
+
 // ListCatalogServersParams defines parameters for ListCatalogServers.
 type ListCatalogServersParams struct {
 	// Q Case-insensitive substring match
@@ -6214,6 +6302,9 @@ type AdminCreateAuthProviderJSONRequestBody = AuthProviderCreate
 
 // AdminUpdateAuthProviderJSONRequestBody defines body for AdminUpdateAuthProvider for application/json ContentType.
 type AdminUpdateAuthProviderJSONRequestBody = AuthProviderUpdate
+
+// AdminSetAuthProviderAccessJSONRequestBody defines body for AdminSetAuthProviderAccess for application/json ContentType.
+type AdminSetAuthProviderAccessJSONRequestBody = AuthProviderAccessInput
 
 // AdminCreateAutomationTokenJSONRequestBody defines body for AdminCreateAutomationToken for application/json ContentType.
 type AdminCreateAutomationTokenJSONRequestBody = AutomationTokenCreate

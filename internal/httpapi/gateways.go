@@ -518,7 +518,7 @@ func (a *api) getMyGateway(w http.ResponseWriter, r *http.Request) {
 		if req := o.Requires; req != nil {
 			// Connected: a call would carry the token now (the person also
 			// allowed this capability's server, at its current address).
-			connected := ready(req, o.Server.ID, o.Server.URL)
+			connected := ready(req, o.Server)
 			out.Capabilities[i].Requires = toAPIRequirement(req, &connected)
 		}
 	}

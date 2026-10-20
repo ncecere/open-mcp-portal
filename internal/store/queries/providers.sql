@@ -5,11 +5,11 @@
 INSERT INTO auth_providers (
     id, slug, name, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce,
     authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator,
-    token_response_format, extra_authorize_params, logo_url, created_by, updated_by
+    token_response_format, extra_authorize_params, logo_url, created_by, updated_by, access_mode, narrow_on_refresh
 ) VALUES (
     @id, @slug, @name, @preset, @enabled, @client_id, @client_secret_cipher, @client_secret_hint, @token_auth_method, @pkce,
     @authorization_url, @token_url, @revocation_url, @userinfo_url, @default_scopes, @scope_param, @scope_separator,
-    @token_response_format, @extra_authorize_params, @logo_url, @created_by, @created_by
+    @token_response_format, @extra_authorize_params, @logo_url, @created_by, @created_by, @access_mode, @narrow_on_refresh
 )
 RETURNING *;
 
@@ -37,10 +37,113 @@ SET name = @name, preset = @preset, enabled = @enabled, client_id = @client_id, 
     authorization_url = @authorization_url, token_url = @token_url, revocation_url = @revocation_url,
     userinfo_url = @userinfo_url, default_scopes = @default_scopes, scope_param = @scope_param,
     scope_separator = @scope_separator, token_response_format = @token_response_format,
-    extra_authorize_params = @extra_authorize_params, logo_url = @logo_url,
+    extra_authorize_params = @extra_authorize_params, logo_url = @logo_url, narrow_on_refresh = @narrow_on_refresh,
     revision = revision + 1, updated_by = @updated_by, updated_at = now()
 WHERE id = @id
 RETURNING *;
+
+-- name: SetAuthProviderAccessMode :one
+-- The access list changed (decision 69): the provider's revision moves, so
+-- an admin editing the provider elsewhere sees a conflict.
+UPDATE auth_providers
+SET access_mode = @access_mode, revision = revision + 1, updated_by = @updated_by, updated_at = now()
+WHERE id = @id
+RETURNING *;
+
+-- name: ListAuthProviderTeams :many
+SELECT t.id AS team_id, t.slug AS team_slug, t.name AS team_name, pt.added_at
+FROM auth_provider_teams pt JOIN teams t ON t.id = pt.team_id
+WHERE pt.provider_id = @provider_id
+ORDER BY t.name, t.id;
+
+-- name: ListAuthProviderServers :many
+SELECT s.id AS server_id, s.slug AS server_slug, s.name AS server_name, t.slug AS team_slug, t.name AS team_name, ps.added_at
+FROM auth_provider_servers ps
+JOIN mcp_servers s ON s.id = ps.server_id
+JOIN teams t ON t.id = s.team_id
+WHERE ps.provider_id = @provider_id
+ORDER BY s.name, s.id;
+
+-- name: ClearAuthProviderTeams :exec
+DELETE FROM auth_provider_teams WHERE provider_id = $1;
+
+-- name: ClearAuthProviderServers :exec
+DELETE FROM auth_provider_servers WHERE provider_id = $1;
+
+-- name: AddAuthProviderTeams :exec
+INSERT INTO auth_provider_teams (provider_id, team_id, added_by)
+SELECT @provider_id, t, @added_by FROM unnest(@team_ids::uuid[]) AS t;
+
+-- name: AddAuthProviderServers :exec
+INSERT INTO auth_provider_servers (provider_id, server_id, added_by)
+SELECT @provider_id, s, @added_by FROM unnest(@server_ids::uuid[]) AS s;
+
+-- name: CountExistingTeams :one
+SELECT count(*)::bigint FROM teams WHERE id = ANY(@ids::uuid[]);
+
+-- name: CountExistingServers :one
+SELECT count(*)::bigint FROM mcp_servers WHERE id = ANY(@ids::uuid[]);
+
+-- name: ProviderAllowsTeam :one
+-- Whether a team's servers may require the provider: it is open, or lists the team.
+SELECT (p.access_mode = 'open'
+        OR EXISTS (SELECT 1 FROM auth_provider_teams pt WHERE pt.provider_id = p.id AND pt.team_id = @team_id))::boolean AS allowed
+FROM auth_providers p WHERE p.id = @provider_id;
+
+-- name: ProviderAllowsServer :one
+-- Whether a server may require the provider: it is open, or lists the
+-- server's team or the server itself.
+SELECT (p.access_mode = 'open'
+        OR EXISTS (SELECT 1 FROM auth_provider_servers ps WHERE ps.provider_id = p.id AND ps.server_id = @server_id)
+        OR EXISTS (SELECT 1 FROM auth_provider_teams pt JOIN mcp_servers s ON s.team_id = pt.team_id
+                   WHERE pt.provider_id = p.id AND s.id = @server_id))::boolean AS allowed
+FROM auth_providers p WHERE p.id = @provider_id;
+
+-- name: ListProviderAccessEntries :many
+-- Every restricted provider's listed teams and servers (the "connected" mark
+-- of My gateways and the allowable-servers list read them once): one
+-- 'restricted' row per restricted provider, then its 'team' and 'server' rows.
+SELECT p.id AS provider_id, 'restricted'::text AS kind, p.id AS target_id
+FROM auth_providers p WHERE p.access_mode = 'restricted'
+UNION ALL
+SELECT p.id, 'team'::text, pt.team_id
+FROM auth_providers p JOIN auth_provider_teams pt ON pt.provider_id = p.id
+WHERE p.access_mode = 'restricted'
+UNION ALL
+SELECT p.id, 'server'::text, ps.server_id
+FROM auth_providers p JOIN auth_provider_servers ps ON ps.provider_id = p.id
+WHERE p.access_mode = 'restricted';
+
+-- name: ServersOutsideProviderAccess :many
+-- Servers that require a restricted provider although neither their team nor
+-- they are listed: their calls are refused (-32010 provider_not_allowed).
+SELECT s.id, s.slug, s.name, t.slug AS team_slug, t.name AS team_name
+FROM mcp_servers s
+JOIN teams t ON t.id = s.team_id
+JOIN auth_providers p ON p.id = s.auth_provider_id
+WHERE p.id = @provider_id AND p.access_mode = 'restricted'
+  AND NOT EXISTS (SELECT 1 FROM auth_provider_servers ps WHERE ps.provider_id = p.id AND ps.server_id = s.id)
+  AND NOT EXISTS (SELECT 1 FROM auth_provider_teams pt WHERE pt.provider_id = p.id AND pt.team_id = s.team_id)
+ORDER BY s.name, s.id
+LIMIT @page_size;
+
+-- name: RotateProviderConnectionRefreshToken :exec
+-- A narrowed refresh (decision 69) may rotate the refresh token; the stored
+-- access token is left as it is.
+UPDATE provider_connections SET refresh_token_cipher = @refresh_token_cipher, refreshed_at = now(), last_error_class = NULL
+WHERE id = @id AND status = 'active';
+
+-- name: ListConnectionsDueForRefresh :many
+-- Active, refreshable connections to platform providers whose access token
+-- expires before @expires_before and that were used since @used_since (the
+-- background refresh).
+SELECT pc.* FROM provider_connections pc
+JOIN auth_providers p ON p.id = pc.provider_id
+WHERE pc.status = 'active' AND pc.refresh_token_cipher IS NOT NULL AND pc.expires_at IS NOT NULL
+  AND pc.expires_at < @expires_before::timestamptz AND pc.last_used_at IS NOT NULL AND pc.last_used_at > @used_since::timestamptz
+  AND p.enabled AND p.kind = 'oauth2'
+ORDER BY pc.expires_at, pc.id
+LIMIT @page_size;
 
 -- name: DeleteAuthProvider :exec
 DELETE FROM auth_providers WHERE id = $1;
@@ -185,7 +288,7 @@ DELETE FROM provider_connections WHERE id = $1;
 -- A person's connections with their providers (and, for a server-bound
 -- provider, its server and team), by provider name.
 SELECT sqlc.embed(pc), p.slug AS provider_slug, p.name AS provider_name, p.preset AS provider_preset,
-       p.logo_url AS provider_logo_url, p.kind AS provider_kind, s.id AS server_id, s.slug AS server_slug,
+       p.logo_url AS provider_logo_url, p.kind AS provider_kind, p.narrow_on_refresh AS provider_narrows, s.id AS server_id, s.slug AS server_slug,
        s.name AS server_name, t.slug AS server_team_slug
 FROM provider_connections pc
 JOIN auth_providers p ON p.id = pc.provider_id

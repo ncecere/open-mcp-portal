@@ -187,3 +187,16 @@ export function RequestFields({ form, set, errors, disabled }: FieldsProps) {
     </>
   );
 }
+
+/** Whether a call gets a token narrowed to the scopes it needs (decision 69). */
+export function NarrowingFields({ form, set, disabled }: FieldsProps) {
+  return (
+    <Switch
+      label="Narrow tokens per call"
+      description="A call carries a token refreshed with only the scopes it needs, kept in memory for its lifetime, instead of the stored token that holds every scope a person ever granted. Turn it on only if the provider honours a scope on refresh: the Microsoft preset documents it, while GitHub, Google, Atlassian, Slack and GitLab don't, and a provider that ignores it sends its full token anyway. It needs a refresh token: a connection without one keeps sending the stored token, and My connections says so."
+      disabled={disabled}
+      checked={form.narrowOnRefresh}
+      onCheckedChange={(v) => set({ narrowOnRefresh: v })}
+    />
+  );
+}

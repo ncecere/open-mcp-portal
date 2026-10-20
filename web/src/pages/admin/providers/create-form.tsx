@@ -23,7 +23,7 @@ import { TextLink } from "@/components/ui/text-link/text-link";
 import { toast } from "@/components/ui/toast/toast";
 import m from "@/components/servers/servers.module.css";
 import { useAuthConfig } from "@/session";
-import { AppFields, EndpointFields, IdentityFields, RequestFields } from "./fields";
+import { AppFields, EndpointFields, IdentityFields, NarrowingFields, RequestFields } from "./fields";
 import { createBody, emptyForm, formFromPreset, type ProviderForm, providerProblems, serverProblems } from "./form";
 
 const presetsKey = [...adminAuthProvidersKey, "presets"];
@@ -162,6 +162,12 @@ function DetailsStep({ initial, preset, onBack, onClose }: DetailsProps) {
       <FormSection title="Authorization request">
         <RequestFields {...fields} />
       </FormSection>
+      <FormSection title="Token scopes per call">
+        <NarrowingFields {...fields} />
+      </FormSection>
+      <Alert tone="info" title="Starts restricted">
+        A new provider is restricted: no team or server may require it until you list them under Access on its page, after you add it.
+      </Alert>
       <ErrorAlert error={Object.keys(refused).length ? undefined : create.error} title="Couldn't add the provider" />
     </FormPage>
   );

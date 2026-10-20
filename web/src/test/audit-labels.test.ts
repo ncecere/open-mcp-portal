@@ -45,6 +45,24 @@ describe("audit labels", () => {
     expect(valueText(changedRows(auditChange(e))[0]?.after)).toBe("10.20.0.0/16, *.corp.example.com (http) · Wiki");
   });
 
+  it("words a provider's access list change (decision 69)", () => {
+    expect(actionLabel("auth_provider.access_update")).toBe("Changed who may use an auth provider");
+    const e = {
+      action: "auth_provider.access_update",
+      before: { accessMode: "open", teams: [], servers: [] },
+      after: {
+        accessMode: "restricted",
+        teams: [{ id: "t1", slug: "platform", name: "Platform tools" }],
+        servers: [{ id: "s1", slug: "wiki", name: "Wiki", teamSlug: "docs" }],
+      },
+    };
+    expect(changedRows(auditChange(e))).toEqual([
+      { field: "Access", before: "Open to every team", after: "Restricted to the listed teams and servers" },
+      { field: "Teams", before: [], after: ["Platform tools (platform)"] },
+      { field: "Servers", before: [], after: ["Wiki (docs)"] },
+    ]);
+  });
+
   it("names the agent platform actions (decisions 65 and 66) and their changes", () => {
     expect(actionLabel("agent_platform.create")).toBe("Trusted an agent platform");
     expect(actionLabel("agent_platform.delete")).toBe("Stopped trusting an agent platform");

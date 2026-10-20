@@ -360,7 +360,8 @@ also checks their checksums). Other settings: `SMOKE_CLUSTER` (name, must start 
 - The portal is stateless, so scale the Deployment horizontally. All shared state is in PostgreSQL.
 - Background loops:
   - The MCP server health checks (`HEALTH_CHECK_INTERVAL`, default 5m), the signing-key rotation, the retention loop
-    (`RETENTION_INTERVAL`, default 15m) and the usage rollup (every 5 minutes) take a PostgreSQL advisory lock, so one
+    (`RETENTION_INTERVAL`, default 15m), the usage rollup (every 5 minutes) and the optional background refresh of
+    connected accounts' tokens (`PROVIDER_REFRESH_INTERVAL`, default `0`: off) take a PostgreSQL advisory lock, so one
     replica runs each at a time (`omp_loop_leader` says which).
   - Session cleanup and the deletion of old rate limit windows run on every replica. Their deletes are idempotent.
 - Each replica holds a pgx connection pool. Size Postgres `max_connections` (or a pooler) for replicas × pool size.

@@ -180,6 +180,12 @@ func TestValidate(t *testing.T) {
 		{"health interval too short", func(c *Config) {
 			c.AppURL, c.DevAuth, c.HealthCheckInterval = "http://localhost:8088", true, time.Second
 		}, "serve", "HEALTH_CHECK_INTERVAL"},
+		{"provider refresh too short", func(c *Config) {
+			c.AppURL, c.DevAuth, c.ProviderRefreshInterval = "http://localhost:8088", true, time.Second
+		}, "serve", "PROVIDER_REFRESH_INTERVAL"},
+		{"provider refresh on", func(c *Config) {
+			c.AppURL, c.DevAuth, c.ProviderRefreshInterval = "http://localhost:8088", true, 10*time.Minute
+		}, "serve", ""},
 		{"health interval off", func(c *Config) { c.AppURL, c.DevAuth, c.HealthCheckInterval = "http://localhost:8088", true, 0 }, "serve", ""},
 	}
 	for _, tc := range cases {
@@ -343,5 +349,13 @@ func TestOAuthMaxUnusedClientsPerAddress(t *testing.T) {
 	}
 	if _, err := LoadFrom("", env(map[string]string{"OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS": "-1"})); err == nil {
 		t.Fatal("a negative value was accepted")
+	}
+}
+
+// The background refresh of connected accounts' tokens is off unless an
+// operator sets PROVIDER_REFRESH_INTERVAL (decision 69).
+func TestProviderRefreshIsOffByDefault(t *testing.T) {
+	if got := Defaults().ProviderRefreshInterval; got != 0 {
+		t.Fatalf("ProviderRefreshInterval = %v, want 0 (off)", got)
 	}
 }

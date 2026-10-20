@@ -6,6 +6,8 @@
  * ?missing= each, or space- or comma-separated), so the tool may ask again. denied:
  * the person said no at the provider. expired and wrong_person: the attempt
  * can't finish (a state older than 10 minutes, or another browser session).
+ * not_allowed: connected, but the provider's access list excludes the server
+ * the link was for (decision 69), so no server was allowed.
  * Anything else: a generic failure. The page only reads the address: it
  * never starts anything, and works whether or not the person is signed in.
  * The address is untrusted (anyone can link here): the provider is named
@@ -27,9 +29,9 @@ import { TextLink } from "@/components/ui/text-link/text-link";
 import styles from "../oauth/consent.module.css";
 import c from "./connect.module.css";
 
-export type ConnectResult = "connected" | "missing_scopes" | "denied" | "expired" | "wrong_person" | "error";
+export type ConnectResult = "connected" | "missing_scopes" | "denied" | "expired" | "not_allowed" | "wrong_person" | "error";
 
-const results: ConnectResult[] = ["connected", "missing_scopes", "denied", "expired", "wrong_person", "error"];
+const results: ConnectResult[] = ["connected", "missing_scopes", "denied", "expired", "not_allowed", "wrong_person", "error"];
 
 /** The result's words: a title, what to do next, and its tone. */
 export function resultText(result: ConnectResult, provider: string): { title: string; text: string; tone: "success" | "warning" | "danger" } {
@@ -46,6 +48,12 @@ export function resultText(result: ConnectResult, provider: string): { title: st
       return { tone: "danger", title: "Not connected", text: `Access wasn't allowed at ${provider}, so nothing was connected. To try again, run the tool again and open its new link.` };
     case "expired":
       return { tone: "danger", title: "This attempt expired", text: "Connecting has to finish within 10 minutes. Run the tool again and open its new link." };
+    case "not_allowed":
+      return {
+        tone: "warning",
+        title: `Connected to ${provider}, but the server can't use it`,
+        text: "A platform admin hasn't opened this account to the server's team, so nothing was allowed and the tool still can't use it. Ask a platform admin to add the team or server to the provider's access list.",
+      };
     case "wrong_person":
       return {
         tone: "danger",

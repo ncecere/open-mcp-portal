@@ -27,7 +27,7 @@ import { CellText, type DataTableColumn } from "@/components/ui/data-table/data-
 import { toast } from "@/components/ui/toast/toast";
 import s from "../../pages/shared.module.css";
 import { AllowServersDialog } from "./allow-servers";
-import { connectedReturnTo, connectionName, connectionStatusLabels, connectionStatusTone, isServerSignIn, type ProviderConnection, scopesText, serverWithTeam } from "./labels";
+import { connectedReturnTo, connectionName, connectionStatusLabels, connectionStatusTone, isServerSignIn, narrowingText, type ProviderConnection, scopesText, serverWithTeam } from "./labels";
 import { useStartConnection } from "./requires";
 
 /** Whose accounts: the signed-in person's, or a person's on their admin page. */
@@ -120,6 +120,25 @@ function columns(): DataTableColumn<ProviderConnection>[] {
           <span className={s.muted}>None yet</span>
         ) : (
           <CellText wrap="anywhere" primary={c.allowedServers.map((g) => serverWithTeam(g.server)).join(", ")} secondary={c.allowedServers.map((g) => `${g.server.name}: ${g.origin}`).join(" · ")} />
+        ),
+    },
+    {
+      // What a server that may use the account receives (decision 69): only the scopes its call needs, or the stored token with every scope granted.
+      id: "tokens",
+      header: "Token sent",
+      accessor: (c) => (isServerSignIn(c.provider) ? "" : narrowingText(c)),
+      defaultHiddenNarrow: true,
+      cell: (c) =>
+        isServerSignIn(c.provider) ? (
+          <span className={s.muted}>—</span>
+        ) : c.narrowsScopes ? (
+          <span>{narrowingText(c)}</span>
+        ) : (
+          <span className={s.badges} title="This token holds all the scopes granted, whichever server it goes to">
+            <Badge size="sm" variant="outline">
+              All granted scopes
+            </Badge>
+          </span>
         ),
     },
     {

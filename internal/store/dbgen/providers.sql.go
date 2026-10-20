@@ -13,6 +13,38 @@ import (
 	"github.com/google/uuid"
 )
 
+const addAuthProviderServers = `-- name: AddAuthProviderServers :exec
+INSERT INTO auth_provider_servers (provider_id, server_id, added_by)
+SELECT $1, s, $2 FROM unnest($3::uuid[]) AS s
+`
+
+type AddAuthProviderServersParams struct {
+	ProviderID uuid.UUID
+	AddedBy    uuid.NullUUID
+	ServerIds  []uuid.UUID
+}
+
+func (q *Queries) AddAuthProviderServers(ctx context.Context, arg AddAuthProviderServersParams) error {
+	_, err := q.db.Exec(ctx, addAuthProviderServers, arg.ProviderID, arg.AddedBy, arg.ServerIds)
+	return err
+}
+
+const addAuthProviderTeams = `-- name: AddAuthProviderTeams :exec
+INSERT INTO auth_provider_teams (provider_id, team_id, added_by)
+SELECT $1, t, $2 FROM unnest($3::uuid[]) AS t
+`
+
+type AddAuthProviderTeamsParams struct {
+	ProviderID uuid.UUID
+	AddedBy    uuid.NullUUID
+	TeamIds    []uuid.UUID
+}
+
+func (q *Queries) AddAuthProviderTeams(ctx context.Context, arg AddAuthProviderTeamsParams) error {
+	_, err := q.db.Exec(ctx, addAuthProviderTeams, arg.ProviderID, arg.AddedBy, arg.TeamIds)
+	return err
+}
+
 const authProviderStats = `-- name: AuthProviderStats :many
 SELECT p.id AS provider_id,
        ((SELECT count(*) FROM mcp_servers s WHERE s.auth_provider_id = p.id)
@@ -57,6 +89,24 @@ func (q *Queries) AuthProviderStats(ctx context.Context, ids []uuid.UUID) ([]Aut
 	return items, nil
 }
 
+const clearAuthProviderServers = `-- name: ClearAuthProviderServers :exec
+DELETE FROM auth_provider_servers WHERE provider_id = $1
+`
+
+func (q *Queries) ClearAuthProviderServers(ctx context.Context, providerID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearAuthProviderServers, providerID)
+	return err
+}
+
+const clearAuthProviderTeams = `-- name: ClearAuthProviderTeams :exec
+DELETE FROM auth_provider_teams WHERE provider_id = $1
+`
+
+func (q *Queries) ClearAuthProviderTeams(ctx context.Context, providerID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearAuthProviderTeams, providerID)
+	return err
+}
+
 const countAuthProviders = `-- name: CountAuthProviders :one
 SELECT count(*)::bigint FROM auth_providers WHERE kind = 'oauth2'
 `
@@ -64,6 +114,28 @@ SELECT count(*)::bigint FROM auth_providers WHERE kind = 'oauth2'
 // Platform providers (the limit of 100 doesn't count server-bound ones).
 func (q *Queries) CountAuthProviders(ctx context.Context) (int64, error) {
 	row := q.db.QueryRow(ctx, countAuthProviders)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countExistingServers = `-- name: CountExistingServers :one
+SELECT count(*)::bigint FROM mcp_servers WHERE id = ANY($1::uuid[])
+`
+
+func (q *Queries) CountExistingServers(ctx context.Context, ids []uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countExistingServers, ids)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countExistingTeams = `-- name: CountExistingTeams :one
+SELECT count(*)::bigint FROM teams WHERE id = ANY($1::uuid[])
+`
+
+func (q *Queries) CountExistingTeams(ctx context.Context, ids []uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countExistingTeams, ids)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -212,7 +284,7 @@ func (q *Queries) FindOpenConnectRequest(ctx context.Context, arg FindOpenConnec
 }
 
 const getAuthProvider = `-- name: GetAuthProvider :one
-SELECT id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at FROM auth_providers WHERE id = $1
+SELECT id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at, access_mode, narrow_on_refresh FROM auth_providers WHERE id = $1
 `
 
 func (q *Queries) GetAuthProvider(ctx context.Context, id uuid.UUID) (AuthProvider, error) {
@@ -257,6 +329,8 @@ func (q *Queries) GetAuthProvider(ctx context.Context, id uuid.UUID) (AuthProvid
 		&i.IssParamSupported,
 		&i.ClientSecretExpiresAt,
 		&i.DiscoveredAt,
+		&i.AccessMode,
+		&i.NarrowOnRefresh,
 	)
 	return i, err
 }
@@ -370,7 +444,7 @@ func (q *Queries) GetProviderServerGrant(ctx context.Context, arg GetProviderSer
 }
 
 const getServerProvider = `-- name: GetServerProvider :one
-SELECT id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at FROM auth_providers WHERE server_id = $1
+SELECT id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at, access_mode, narrow_on_refresh FROM auth_providers WHERE server_id = $1
 `
 
 func (q *Queries) GetServerProvider(ctx context.Context, serverID uuid.NullUUID) (AuthProvider, error) {
@@ -415,6 +489,8 @@ func (q *Queries) GetServerProvider(ctx context.Context, serverID uuid.NullUUID)
 		&i.IssParamSupported,
 		&i.ClientSecretExpiresAt,
 		&i.DiscoveredAt,
+		&i.AccessMode,
+		&i.NarrowOnRefresh,
 	)
 	return i, err
 }
@@ -449,13 +525,13 @@ const insertAuthProvider = `-- name: InsertAuthProvider :one
 INSERT INTO auth_providers (
     id, slug, name, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce,
     authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator,
-    token_response_format, extra_authorize_params, logo_url, created_by, updated_by
+    token_response_format, extra_authorize_params, logo_url, created_by, updated_by, access_mode, narrow_on_refresh
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
     $11, $12, $13, $14, $15, $16, $17,
-    $18, $19, $20, $21, $21
+    $18, $19, $20, $21, $21, $22, $23
 )
-RETURNING id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at
+RETURNING id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at, access_mode, narrow_on_refresh
 `
 
 type InsertAuthProviderParams struct {
@@ -480,6 +556,8 @@ type InsertAuthProviderParams struct {
 	ExtraAuthorizeParams json.RawMessage
 	LogoUrl              *string
 	CreatedBy            uuid.NullUUID
+	AccessMode           string
+	NarrowOnRefresh      bool
 }
 
 // Delegated credentials (internal/providers): auth providers, people's
@@ -507,6 +585,8 @@ func (q *Queries) InsertAuthProvider(ctx context.Context, arg InsertAuthProvider
 		arg.ExtraAuthorizeParams,
 		arg.LogoUrl,
 		arg.CreatedBy,
+		arg.AccessMode,
+		arg.NarrowOnRefresh,
 	)
 	var i AuthProvider
 	err := row.Scan(
@@ -548,6 +628,8 @@ func (q *Queries) InsertAuthProvider(ctx context.Context, arg InsertAuthProvider
 		&i.IssParamSupported,
 		&i.ClientSecretExpiresAt,
 		&i.DiscoveredAt,
+		&i.AccessMode,
+		&i.NarrowOnRefresh,
 	)
 	return i, err
 }
@@ -725,7 +807,7 @@ INSERT INTO auth_providers (
     $16, $17, $18, $19, $20, $21,
     $22, now(), $23, $23
 )
-RETURNING id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at
+RETURNING id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at, access_mode, narrow_on_refresh
 `
 
 type InsertServerProviderParams struct {
@@ -821,12 +903,14 @@ func (q *Queries) InsertServerProvider(ctx context.Context, arg InsertServerProv
 		&i.IssParamSupported,
 		&i.ClientSecretExpiresAt,
 		&i.DiscoveredAt,
+		&i.AccessMode,
+		&i.NarrowOnRefresh,
 	)
 	return i, err
 }
 
 const linkedServerProviders = `-- name: LinkedServerProviders :many
-SELECT id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at FROM auth_providers WHERE link_provider_id = $1 ORDER BY id
+SELECT id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at, access_mode, narrow_on_refresh FROM auth_providers WHERE link_provider_id = $1 ORDER BY id
 `
 
 // Server-bound providers that use a platform provider's client.
@@ -878,6 +962,8 @@ func (q *Queries) LinkedServerProviders(ctx context.Context, linkProviderID uuid
 			&i.IssParamSupported,
 			&i.ClientSecretExpiresAt,
 			&i.DiscoveredAt,
+			&i.AccessMode,
+			&i.NarrowOnRefresh,
 		); err != nil {
 			return nil, err
 		}
@@ -890,7 +976,7 @@ func (q *Queries) LinkedServerProviders(ctx context.Context, linkProviderID uuid
 }
 
 const listAllAuthProviders = `-- name: ListAllAuthProviders :many
-SELECT id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at FROM auth_providers ORDER BY name, id
+SELECT id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at, access_mode, narrow_on_refresh FROM auth_providers ORDER BY name, id
 `
 
 // Every provider, platform and server-bound (requirements and the runtime).
@@ -942,6 +1028,145 @@ func (q *Queries) ListAllAuthProviders(ctx context.Context) ([]AuthProvider, err
 			&i.IssParamSupported,
 			&i.ClientSecretExpiresAt,
 			&i.DiscoveredAt,
+			&i.AccessMode,
+			&i.NarrowOnRefresh,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuthProviderServers = `-- name: ListAuthProviderServers :many
+SELECT s.id AS server_id, s.slug AS server_slug, s.name AS server_name, t.slug AS team_slug, t.name AS team_name, ps.added_at
+FROM auth_provider_servers ps
+JOIN mcp_servers s ON s.id = ps.server_id
+JOIN teams t ON t.id = s.team_id
+WHERE ps.provider_id = $1
+ORDER BY s.name, s.id
+`
+
+type ListAuthProviderServersRow struct {
+	ServerID   uuid.UUID
+	ServerSlug string
+	ServerName string
+	TeamSlug   string
+	TeamName   string
+	AddedAt    time.Time
+}
+
+func (q *Queries) ListAuthProviderServers(ctx context.Context, providerID uuid.UUID) ([]ListAuthProviderServersRow, error) {
+	rows, err := q.db.Query(ctx, listAuthProviderServers, providerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAuthProviderServersRow{}
+	for rows.Next() {
+		var i ListAuthProviderServersRow
+		if err := rows.Scan(
+			&i.ServerID,
+			&i.ServerSlug,
+			&i.ServerName,
+			&i.TeamSlug,
+			&i.TeamName,
+			&i.AddedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuthProviderTeams = `-- name: ListAuthProviderTeams :many
+SELECT t.id AS team_id, t.slug AS team_slug, t.name AS team_name, pt.added_at
+FROM auth_provider_teams pt JOIN teams t ON t.id = pt.team_id
+WHERE pt.provider_id = $1
+ORDER BY t.name, t.id
+`
+
+type ListAuthProviderTeamsRow struct {
+	TeamID   uuid.UUID
+	TeamSlug string
+	TeamName string
+	AddedAt  time.Time
+}
+
+func (q *Queries) ListAuthProviderTeams(ctx context.Context, providerID uuid.UUID) ([]ListAuthProviderTeamsRow, error) {
+	rows, err := q.db.Query(ctx, listAuthProviderTeams, providerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAuthProviderTeamsRow{}
+	for rows.Next() {
+		var i ListAuthProviderTeamsRow
+		if err := rows.Scan(
+			&i.TeamID,
+			&i.TeamSlug,
+			&i.TeamName,
+			&i.AddedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listConnectionsDueForRefresh = `-- name: ListConnectionsDueForRefresh :many
+SELECT pc.id, pc.user_id, pc.provider_id, pc.status, pc.scopes, pc.account_label, pc.access_token_cipher, pc.refresh_token_cipher, pc.expires_at, pc.connected_at, pc.refreshed_at, pc.last_used_at, pc.last_error_class FROM provider_connections pc
+JOIN auth_providers p ON p.id = pc.provider_id
+WHERE pc.status = 'active' AND pc.refresh_token_cipher IS NOT NULL AND pc.expires_at IS NOT NULL
+  AND pc.expires_at < $1::timestamptz AND pc.last_used_at IS NOT NULL AND pc.last_used_at > $2::timestamptz
+  AND p.enabled AND p.kind = 'oauth2'
+ORDER BY pc.expires_at, pc.id
+LIMIT $3
+`
+
+type ListConnectionsDueForRefreshParams struct {
+	ExpiresBefore time.Time
+	UsedSince     time.Time
+	PageSize      int32
+}
+
+// Active, refreshable connections to platform providers whose access token
+// expires before @expires_before and that were used since @used_since (the
+// background refresh).
+func (q *Queries) ListConnectionsDueForRefresh(ctx context.Context, arg ListConnectionsDueForRefreshParams) ([]ProviderConnection, error) {
+	rows, err := q.db.Query(ctx, listConnectionsDueForRefresh, arg.ExpiresBefore, arg.UsedSince, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProviderConnection{}
+	for rows.Next() {
+		var i ProviderConnection
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ProviderID,
+			&i.Status,
+			&i.Scopes,
+			&i.AccountLabel,
+			&i.AccessTokenCipher,
+			&i.RefreshTokenCipher,
+			&i.ExpiresAt,
+			&i.ConnectedAt,
+			&i.RefreshedAt,
+			&i.LastUsedAt,
+			&i.LastErrorClass,
 		); err != nil {
 			return nil, err
 		}
@@ -954,7 +1179,7 @@ func (q *Queries) ListAllAuthProviders(ctx context.Context) ([]AuthProvider, err
 }
 
 const listPlatformAuthProviders = `-- name: ListPlatformAuthProviders :many
-SELECT id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at FROM auth_providers WHERE kind = 'oauth2' ORDER BY name, id
+SELECT id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at, access_mode, narrow_on_refresh FROM auth_providers WHERE kind = 'oauth2' ORDER BY name, id
 `
 
 func (q *Queries) ListPlatformAuthProviders(ctx context.Context) ([]AuthProvider, error) {
@@ -1005,7 +1230,51 @@ func (q *Queries) ListPlatformAuthProviders(ctx context.Context) ([]AuthProvider
 			&i.IssParamSupported,
 			&i.ClientSecretExpiresAt,
 			&i.DiscoveredAt,
+			&i.AccessMode,
+			&i.NarrowOnRefresh,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProviderAccessEntries = `-- name: ListProviderAccessEntries :many
+SELECT p.id AS provider_id, 'restricted'::text AS kind, p.id AS target_id
+FROM auth_providers p WHERE p.access_mode = 'restricted'
+UNION ALL
+SELECT p.id, 'team'::text, pt.team_id
+FROM auth_providers p JOIN auth_provider_teams pt ON pt.provider_id = p.id
+WHERE p.access_mode = 'restricted'
+UNION ALL
+SELECT p.id, 'server'::text, ps.server_id
+FROM auth_providers p JOIN auth_provider_servers ps ON ps.provider_id = p.id
+WHERE p.access_mode = 'restricted'
+`
+
+type ListProviderAccessEntriesRow struct {
+	ProviderID uuid.UUID
+	Kind       string
+	TargetID   uuid.UUID
+}
+
+// Every restricted provider's listed teams and servers (the "connected" mark
+// of My gateways and the allowable-servers list read them once): one
+// 'restricted' row per restricted provider, then its 'team' and 'server' rows.
+func (q *Queries) ListProviderAccessEntries(ctx context.Context) ([]ListProviderAccessEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listProviderAccessEntries)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProviderAccessEntriesRow{}
+	for rows.Next() {
+		var i ListProviderAccessEntriesRow
+		if err := rows.Scan(&i.ProviderID, &i.Kind, &i.TargetID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1056,7 +1325,7 @@ func (q *Queries) ListProviderConnectionsForProvider(ctx context.Context, provid
 
 const listProviderConnectionsForUser = `-- name: ListProviderConnectionsForUser :many
 SELECT pc.id, pc.user_id, pc.provider_id, pc.status, pc.scopes, pc.account_label, pc.access_token_cipher, pc.refresh_token_cipher, pc.expires_at, pc.connected_at, pc.refreshed_at, pc.last_used_at, pc.last_error_class, p.slug AS provider_slug, p.name AS provider_name, p.preset AS provider_preset,
-       p.logo_url AS provider_logo_url, p.kind AS provider_kind, s.id AS server_id, s.slug AS server_slug,
+       p.logo_url AS provider_logo_url, p.kind AS provider_kind, p.narrow_on_refresh AS provider_narrows, s.id AS server_id, s.slug AS server_slug,
        s.name AS server_name, t.slug AS server_team_slug
 FROM provider_connections pc
 JOIN auth_providers p ON p.id = pc.provider_id
@@ -1073,6 +1342,7 @@ type ListProviderConnectionsForUserRow struct {
 	ProviderPreset     *string
 	ProviderLogoUrl    *string
 	ProviderKind       string
+	ProviderNarrows    bool
 	ServerID           uuid.NullUUID
 	ServerSlug         *string
 	ServerName         *string
@@ -1109,6 +1379,7 @@ func (q *Queries) ListProviderConnectionsForUser(ctx context.Context, userID uui
 			&i.ProviderPreset,
 			&i.ProviderLogoUrl,
 			&i.ProviderKind,
+			&i.ProviderNarrows,
 			&i.ServerID,
 			&i.ServerSlug,
 			&i.ServerName,
@@ -1179,7 +1450,7 @@ func (q *Queries) ListProviderServerGrantsForUser(ctx context.Context, userID uu
 }
 
 const lockAuthProvider = `-- name: LockAuthProvider :one
-SELECT id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at FROM auth_providers WHERE id = $1 FOR UPDATE
+SELECT id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at, access_mode, narrow_on_refresh FROM auth_providers WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockAuthProvider(ctx context.Context, id uuid.UUID) (AuthProvider, error) {
@@ -1224,6 +1495,8 @@ func (q *Queries) LockAuthProvider(ctx context.Context, id uuid.UUID) (AuthProvi
 		&i.IssParamSupported,
 		&i.ClientSecretExpiresAt,
 		&i.DiscoveredAt,
+		&i.AccessMode,
+		&i.NarrowOnRefresh,
 	)
 	return i, err
 }
@@ -1354,6 +1627,47 @@ func (q *Queries) MarkProviderConnectionsReconsent(ctx context.Context, provider
 	return result.RowsAffected(), nil
 }
 
+const providerAllowsServer = `-- name: ProviderAllowsServer :one
+SELECT (p.access_mode = 'open'
+        OR EXISTS (SELECT 1 FROM auth_provider_servers ps WHERE ps.provider_id = p.id AND ps.server_id = $1)
+        OR EXISTS (SELECT 1 FROM auth_provider_teams pt JOIN mcp_servers s ON s.team_id = pt.team_id
+                   WHERE pt.provider_id = p.id AND s.id = $1))::boolean AS allowed
+FROM auth_providers p WHERE p.id = $2
+`
+
+type ProviderAllowsServerParams struct {
+	ServerID   uuid.UUID
+	ProviderID uuid.UUID
+}
+
+// Whether a server may require the provider: it is open, or lists the
+// server's team or the server itself.
+func (q *Queries) ProviderAllowsServer(ctx context.Context, arg ProviderAllowsServerParams) (bool, error) {
+	row := q.db.QueryRow(ctx, providerAllowsServer, arg.ServerID, arg.ProviderID)
+	var allowed bool
+	err := row.Scan(&allowed)
+	return allowed, err
+}
+
+const providerAllowsTeam = `-- name: ProviderAllowsTeam :one
+SELECT (p.access_mode = 'open'
+        OR EXISTS (SELECT 1 FROM auth_provider_teams pt WHERE pt.provider_id = p.id AND pt.team_id = $1))::boolean AS allowed
+FROM auth_providers p WHERE p.id = $2
+`
+
+type ProviderAllowsTeamParams struct {
+	TeamID     uuid.UUID
+	ProviderID uuid.UUID
+}
+
+// Whether a team's servers may require the provider: it is open, or lists the team.
+func (q *Queries) ProviderAllowsTeam(ctx context.Context, arg ProviderAllowsTeamParams) (bool, error) {
+	row := q.db.QueryRow(ctx, providerAllowsTeam, arg.TeamID, arg.ProviderID)
+	var allowed bool
+	err := row.Scan(&allowed)
+	return allowed, err
+}
+
 const reconnectProviderConnection = `-- name: ReconnectProviderConnection :one
 UPDATE provider_connections
 SET status = 'active', scopes = $1, account_label = COALESCE($2::text, account_label),
@@ -1438,8 +1752,25 @@ func (q *Queries) ResetProviderConnections(ctx context.Context, arg ResetProvide
 	return result.RowsAffected(), nil
 }
 
+const rotateProviderConnectionRefreshToken = `-- name: RotateProviderConnectionRefreshToken :exec
+UPDATE provider_connections SET refresh_token_cipher = $1, refreshed_at = now(), last_error_class = NULL
+WHERE id = $2 AND status = 'active'
+`
+
+type RotateProviderConnectionRefreshTokenParams struct {
+	RefreshTokenCipher []byte
+	ID                 uuid.UUID
+}
+
+// A narrowed refresh (decision 69) may rotate the refresh token; the stored
+// access token is left as it is.
+func (q *Queries) RotateProviderConnectionRefreshToken(ctx context.Context, arg RotateProviderConnectionRefreshTokenParams) error {
+	_, err := q.db.Exec(ctx, rotateProviderConnectionRefreshToken, arg.RefreshTokenCipher, arg.ID)
+	return err
+}
+
 const serverProviders = `-- name: ServerProviders :many
-SELECT p.id, p.slug, p.name, p.kind, p.preset, p.enabled, p.client_id, p.client_secret_cipher, p.client_secret_hint, p.token_auth_method, p.pkce, p.authorization_url, p.token_url, p.revocation_url, p.userinfo_url, p.default_scopes, p.scope_param, p.scope_separator, p.token_response_format, p.extra_authorize_params, p.logo_url, p.revision, p.created_by, p.created_at, p.updated_by, p.updated_at, p.server_id, p.link_provider_id, p.registration, p.resource, p.resource_metadata_url, p.authorization_server, p.issuer, p.scopes_supported, p.send_resource, p.iss_param_supported, p.client_secret_expires_at, p.discovered_at, (SELECT count(*) FROM provider_connections pc WHERE pc.provider_id = p.id)::bigint AS connection_count
+SELECT p.id, p.slug, p.name, p.kind, p.preset, p.enabled, p.client_id, p.client_secret_cipher, p.client_secret_hint, p.token_auth_method, p.pkce, p.authorization_url, p.token_url, p.revocation_url, p.userinfo_url, p.default_scopes, p.scope_param, p.scope_separator, p.token_response_format, p.extra_authorize_params, p.logo_url, p.revision, p.created_by, p.created_at, p.updated_by, p.updated_at, p.server_id, p.link_provider_id, p.registration, p.resource, p.resource_metadata_url, p.authorization_server, p.issuer, p.scopes_supported, p.send_resource, p.iss_param_supported, p.client_secret_expires_at, p.discovered_at, p.access_mode, p.narrow_on_refresh, (SELECT count(*) FROM provider_connections pc WHERE pc.provider_id = p.id)::bigint AS connection_count
 FROM auth_providers p
 WHERE p.server_id = ANY($1::uuid[])
 `
@@ -1498,7 +1829,62 @@ func (q *Queries) ServerProviders(ctx context.Context, serverIds []uuid.UUID) ([
 			&i.AuthProvider.IssParamSupported,
 			&i.AuthProvider.ClientSecretExpiresAt,
 			&i.AuthProvider.DiscoveredAt,
+			&i.AuthProvider.AccessMode,
+			&i.AuthProvider.NarrowOnRefresh,
 			&i.ConnectionCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const serversOutsideProviderAccess = `-- name: ServersOutsideProviderAccess :many
+SELECT s.id, s.slug, s.name, t.slug AS team_slug, t.name AS team_name
+FROM mcp_servers s
+JOIN teams t ON t.id = s.team_id
+JOIN auth_providers p ON p.id = s.auth_provider_id
+WHERE p.id = $1 AND p.access_mode = 'restricted'
+  AND NOT EXISTS (SELECT 1 FROM auth_provider_servers ps WHERE ps.provider_id = p.id AND ps.server_id = s.id)
+  AND NOT EXISTS (SELECT 1 FROM auth_provider_teams pt WHERE pt.provider_id = p.id AND pt.team_id = s.team_id)
+ORDER BY s.name, s.id
+LIMIT $2
+`
+
+type ServersOutsideProviderAccessParams struct {
+	ProviderID uuid.UUID
+	PageSize   int32
+}
+
+type ServersOutsideProviderAccessRow struct {
+	ID       uuid.UUID
+	Slug     string
+	Name     string
+	TeamSlug string
+	TeamName string
+}
+
+// Servers that require a restricted provider although neither their team nor
+// they are listed: their calls are refused (-32010 provider_not_allowed).
+func (q *Queries) ServersOutsideProviderAccess(ctx context.Context, arg ServersOutsideProviderAccessParams) ([]ServersOutsideProviderAccessRow, error) {
+	rows, err := q.db.Query(ctx, serversOutsideProviderAccess, arg.ProviderID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ServersOutsideProviderAccessRow{}
+	for rows.Next() {
+		var i ServersOutsideProviderAccessRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.TeamSlug,
+			&i.TeamName,
 		); err != nil {
 			return nil, err
 		}
@@ -1558,6 +1944,69 @@ func (q *Queries) ServersRequiringProvider(ctx context.Context, arg ServersRequi
 		return nil, err
 	}
 	return items, nil
+}
+
+const setAuthProviderAccessMode = `-- name: SetAuthProviderAccessMode :one
+UPDATE auth_providers
+SET access_mode = $1, revision = revision + 1, updated_by = $2, updated_at = now()
+WHERE id = $3
+RETURNING id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at, access_mode, narrow_on_refresh
+`
+
+type SetAuthProviderAccessModeParams struct {
+	AccessMode string
+	UpdatedBy  uuid.NullUUID
+	ID         uuid.UUID
+}
+
+// The access list changed (decision 69): the provider's revision moves, so
+// an admin editing the provider elsewhere sees a conflict.
+func (q *Queries) SetAuthProviderAccessMode(ctx context.Context, arg SetAuthProviderAccessModeParams) (AuthProvider, error) {
+	row := q.db.QueryRow(ctx, setAuthProviderAccessMode, arg.AccessMode, arg.UpdatedBy, arg.ID)
+	var i AuthProvider
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.Kind,
+		&i.Preset,
+		&i.Enabled,
+		&i.ClientID,
+		&i.ClientSecretCipher,
+		&i.ClientSecretHint,
+		&i.TokenAuthMethod,
+		&i.Pkce,
+		&i.AuthorizationUrl,
+		&i.TokenUrl,
+		&i.RevocationUrl,
+		&i.UserinfoUrl,
+		&i.DefaultScopes,
+		&i.ScopeParam,
+		&i.ScopeSeparator,
+		&i.TokenResponseFormat,
+		&i.ExtraAuthorizeParams,
+		&i.LogoUrl,
+		&i.Revision,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedBy,
+		&i.UpdatedAt,
+		&i.ServerID,
+		&i.LinkProviderID,
+		&i.Registration,
+		&i.Resource,
+		&i.ResourceMetadataUrl,
+		&i.AuthorizationServer,
+		&i.Issuer,
+		&i.ScopesSupported,
+		&i.SendResource,
+		&i.IssParamSupported,
+		&i.ClientSecretExpiresAt,
+		&i.DiscoveredAt,
+		&i.AccessMode,
+		&i.NarrowOnRefresh,
+	)
+	return i, err
 }
 
 const setProviderConnectionRefreshed = `-- name: SetProviderConnectionRefreshed :one
@@ -1670,10 +2119,10 @@ SET name = $1, preset = $2, enabled = $3, client_id = $4, client_secret_cipher =
     authorization_url = $9, token_url = $10, revocation_url = $11,
     userinfo_url = $12, default_scopes = $13, scope_param = $14,
     scope_separator = $15, token_response_format = $16,
-    extra_authorize_params = $17, logo_url = $18,
-    revision = revision + 1, updated_by = $19, updated_at = now()
-WHERE id = $20
-RETURNING id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at
+    extra_authorize_params = $17, logo_url = $18, narrow_on_refresh = $19,
+    revision = revision + 1, updated_by = $20, updated_at = now()
+WHERE id = $21
+RETURNING id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at, access_mode, narrow_on_refresh
 `
 
 type UpdateAuthProviderParams struct {
@@ -1695,6 +2144,7 @@ type UpdateAuthProviderParams struct {
 	TokenResponseFormat  string
 	ExtraAuthorizeParams json.RawMessage
 	LogoUrl              *string
+	NarrowOnRefresh      bool
 	UpdatedBy            uuid.NullUUID
 	ID                   uuid.UUID
 }
@@ -1719,6 +2169,7 @@ func (q *Queries) UpdateAuthProvider(ctx context.Context, arg UpdateAuthProvider
 		arg.TokenResponseFormat,
 		arg.ExtraAuthorizeParams,
 		arg.LogoUrl,
+		arg.NarrowOnRefresh,
 		arg.UpdatedBy,
 		arg.ID,
 	)
@@ -1762,6 +2213,8 @@ func (q *Queries) UpdateAuthProvider(ctx context.Context, arg UpdateAuthProvider
 		&i.IssParamSupported,
 		&i.ClientSecretExpiresAt,
 		&i.DiscoveredAt,
+		&i.AccessMode,
+		&i.NarrowOnRefresh,
 	)
 	return i, err
 }
@@ -1777,7 +2230,7 @@ SET name = $1, client_id = $2, client_secret_cipher = $3, client_secret_hint = $
     client_secret_expires_at = $19, discovered_at = now(),
     revision = revision + 1, updated_by = $20, updated_at = now()
 WHERE id = $21 AND kind = 'mcp_server'
-RETURNING id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at
+RETURNING id, slug, name, kind, preset, enabled, client_id, client_secret_cipher, client_secret_hint, token_auth_method, pkce, authorization_url, token_url, revocation_url, userinfo_url, default_scopes, scope_param, scope_separator, token_response_format, extra_authorize_params, logo_url, revision, created_by, created_at, updated_by, updated_at, server_id, link_provider_id, registration, resource, resource_metadata_url, authorization_server, issuer, scopes_supported, send_resource, iss_param_supported, client_secret_expires_at, discovered_at, access_mode, narrow_on_refresh
 `
 
 type UpdateServerProviderParams struct {
@@ -1868,6 +2321,8 @@ func (q *Queries) UpdateServerProvider(ctx context.Context, arg UpdateServerProv
 		&i.IssParamSupported,
 		&i.ClientSecretExpiresAt,
 		&i.DiscoveredAt,
+		&i.AccessMode,
+		&i.NarrowOnRefresh,
 	)
 	return i, err
 }

@@ -143,7 +143,9 @@ The fake Gmail accepts any bearer token. Its search understands plain words, `fr
    The portal shows this URI on the provider record and on the preset. Keep the client ID and secret.
 4. **Add the provider in the portal** (platform admin). Go to Admin › Auth providers › New, choose the **Google**
    preset (it fills in the endpoints, `access_type=offline`, `prompt=consent` and `include_granted_scopes=true`), set
-   the slug to `google` (or pass your slug with `-provider`), and paste the client ID and secret.
+   the slug to `google` (or pass your slug with `-provider`), and paste the client ID and secret. A new provider
+   starts **restricted**: open its **Access** tab and list the team that registers the server (or open it to every
+   team) before the team sets the requirement.
 5. **Run the server** where the portal can reach it, over https in production (a private address must be on the
    gateway's internal-network allowlist; see [registry.md](../../docs/registry.md#security)):
 

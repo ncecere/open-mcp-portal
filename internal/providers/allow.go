@@ -101,10 +101,17 @@ func (s *Service) ListAllowable(ctx context.Context, a authz.Actor, connectionID
 	if err != nil {
 		return nil, err
 	}
+	ix, err := s.loadAccess(ctx)
+	if err != nil {
+		return nil, err
+	}
 	out := []Allowable{}
 	for _, r := range reach {
 		i := slices.IndexFunc(r.Needs, func(n gateways.ProviderNeed) bool { return n.Provider.ID == p.ID })
-		if i < 0 {
+		if i < 0 || !ix.allows(p.ID, r.Server.TeamID, r.Server.ID) {
+			// Not a server of this account's provider, or one the provider's
+			// access list excludes: it could not receive the token, so it
+			// is not offered (decision 69).
 			continue
 		}
 		scopes, origin := nonNil(r.Needs[i].Scopes), registry.OriginOf(r.Server.URL)
@@ -162,6 +169,11 @@ func (s *Service) AllowServer(ctx context.Context, a authz.Actor, connectionID u
 	need := slices.IndexFunc(reach[ri].Needs, func(n gateways.ProviderNeed) bool { return n.Provider.ID == p.ID })
 	if need < 0 {
 		return Confirmed{}, errNotRequired
+	}
+	if ok, err := allowsServer(ctx, s.q, p.ID, in.ServerID); err != nil {
+		return Confirmed{}, err
+	} else if !ok {
+		return Confirmed{}, registry.ErrProviderNotAllowed
 	}
 	required := nonNil(reach[ri].Needs[need].Scopes)
 	if registry.OriginOf(reach[ri].Server.URL) != in.Origin || !Covers(in.Scopes, required) {

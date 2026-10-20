@@ -10,8 +10,9 @@ import { Link } from "@tanstack/react-router";
 import { KeySquare, Plus } from "lucide-react";
 import { api, unwrap } from "@/api/client";
 import { adminAuthProvidersKey } from "@/api/queries";
-import { type AuthProvider, presetLabels } from "@/components/providers/labels";
+import { accessModeLabels, type AuthProvider, presetLabels } from "@/components/providers/labels";
 import { EnabledBadge } from "@/components/servers/badges";
+import { Badge } from "@/components/ui/badge/badge";
 import { useFormParam } from "@/components/templates/form-page";
 import { ListPage, timeColumn } from "@/components/templates/list-page";
 import { Button } from "@/components/ui/button/button";
@@ -47,6 +48,14 @@ const columns: DataTableColumn<AuthProvider>[] = [
     ),
   },
   { id: "enabled", header: "Status", accessor: (p) => (p.enabled ? "Enabled" : "Disabled"), sortable: true, cell: (p) => <EnabledBadge enabled={p.enabled} /> },
+  {
+    id: "access",
+    header: "Access",
+    accessor: (p) => accessModeLabels[p.accessMode],
+    sortable: true,
+    // Every provider that existed before the list stays open: flagged until an admin restricts it.
+    cell: (p) => <Badge tone={p.accessMode === "open" ? "warning" : "neutral"}>{accessModeLabels[p.accessMode]}</Badge>,
+  },
   {
     id: "servers",
     header: "Servers",

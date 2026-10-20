@@ -78,6 +78,7 @@ function requirementErrors(r: RequirementForm, err: unknown, shown: boolean) {
   const scopes = r.on ? scopesProblem(r.scopes) : undefined;
   if (shown && scopes) out.scopes = scopes;
   if (err instanceof ApiError && err.code === "provider_not_found") out.provider = "This provider was turned off or removed. Choose another.";
+  if (err instanceof ApiError && err.code === "provider_not_allowed") out.provider = "This provider isn't open to this team. Choose another, or ask a platform admin to add the team or server to its access list.";
   if (err instanceof ApiError && err.code === "invalid_scope") out.scopes = invalidScopeText(err.details);
   return out;
 }
@@ -158,7 +159,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   const shown = submitted ? problems : {};
   const refused = serverFieldErrors(save.error).url;
   const errors = { ...shown, url: shown.url ?? refused };
-  const reqRefused = save.error instanceof ApiError && (save.error.code === "provider_not_found" || save.error.code === "invalid_scope");
+  const reqRefused = save.error instanceof ApiError && (save.error.code === "provider_not_found" || save.error.code === "provider_not_allowed" || save.error.code === "invalid_scope");
   const set = (patch: Partial<SettingsForm>) => {
     // The refusal was for the URL that was sent: editing it clears it.
     if (patch.url !== undefined && refused) save.reset();

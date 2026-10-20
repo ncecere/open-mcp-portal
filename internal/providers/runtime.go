@@ -69,6 +69,9 @@ type Credential struct {
 	AccessToken string
 	Resource    string
 	Refreshable bool
+	// Narrowed: the token was refreshed for this call's scopes alone
+	// (decision 69), not the connection's stored token.
+	Narrowed bool
 }
 
 // ConsentNeeded: the person must connect (or reconnect) an account; URL is
@@ -98,8 +101,9 @@ func (e *UnavailableError) Error() string { return "providers: provider unavaila
 var errReconsent = errors.New("providers: reconsent")
 
 // Credential returns the person's token for a call that requires req, or
-// a *ConsentNeeded (a consent link was made or reused), ErrProviderDisabled
-// or an *UnavailableError. Nothing is sent anywhere but the provider's own
+// a *ConsentNeeded (a consent link was made or reused), ErrProviderDisabled,
+// ErrProviderNotAllowed (the provider's access list excludes the server) or
+// an *UnavailableError. Nothing is sent anywhere but the provider's own
 // token endpoint.
 func (s *Service) Credential(ctx context.Context, req *registry.Requirement, cc CallContext) (Credential, error) {
 	p, err := s.q.GetAuthProvider(ctx, req.Provider.ID)
@@ -114,6 +118,16 @@ func (s *Service) Credential(ctx context.Context, req *registry.Requirement, cc 
 	if p.Kind == KindMCPServer && s.linkUsable(ctx, p) != nil {
 		// The platform provider whose client the server uses is off.
 		return Credential{}, ErrProviderDisabled
+	}
+	if p.Kind != KindMCPServer {
+		// The provider's access list, checked on every call: removing a
+		// team stops delivery at once, and no consent link is made for a
+		// server that could not use the account anyway.
+		if ok, err := allowsServer(ctx, s.q, p.ID, cc.ServerID); err != nil {
+			return Credential{}, err
+		} else if !ok {
+			return Credential{}, ErrProviderNotAllowed
+		}
 	}
 	prov := registry.ProviderOf(p)
 	c, err := s.q.GetProviderConnection(ctx, dbgen.GetProviderConnectionParams{UserID: cc.User.ID, ProviderID: p.ID})
@@ -137,6 +151,20 @@ func (s *Service) Credential(ctx context.Context, req *registry.Requirement, cc 
 		} else if !ok {
 			return Credential{}, s.needConsent(ctx, prov, req.Scopes, cc, ReasonServerNotAllowed)
 		}
+	}
+	if narrows(p, c, req.Scopes) {
+		// Only what the call needs: the stored token (every scope the
+		// person granted) is not sent.
+		token, err := s.narrowedToken(ctx, p, c, req.Scopes)
+		if errors.Is(err, errReconsent) {
+			return Credential{}, s.needConsent(ctx, prov, req.Scopes, cc, ReasonNeedsReconsent)
+		} else if err != nil {
+			return Credential{}, err
+		}
+		if err := s.q.TouchProviderConnection(ctx, c.ID); err != nil {
+			s.Log.WarnContext(ctx, "could not record a connection's use", "err", err)
+		}
+		return Credential{Provider: prov, AccessToken: token, Resource: deref(p.Resource), Refreshable: true, Narrowed: true}, nil
 	}
 	if c.ExpiresAt != nil && c.ExpiresAt.Before(s.now().Add(RefreshAhead)) {
 		c, err = s.refreshConnection(ctx, p, c)
@@ -392,6 +420,12 @@ func observeRefresh(provider string, err error) {
 // erases the tokens (needs_reconsent; errReconsent); a provider that can't
 // be reached keeps the connection (*UnavailableError).
 func (s *Service) refreshConnection(ctx context.Context, p dbgen.AuthProvider, conn dbgen.ProviderConnection) (dbgen.ProviderConnection, error) {
+	return s.refreshConnectionAhead(ctx, p, conn, RefreshAhead)
+}
+
+// refreshConnectionAhead is refreshConnection for a token expiring within
+// ahead (the background refresh looks further ahead than a call does).
+func (s *Service) refreshConnectionAhead(ctx context.Context, p dbgen.AuthProvider, conn dbgen.ProviderConnection, ahead time.Duration) (dbgen.ProviderConnection, error) {
 	var out dbgen.ProviderConnection
 	var outcome error
 	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
@@ -406,7 +440,7 @@ func (s *Service) refreshConnection(ctx context.Context, p dbgen.AuthProvider, c
 		case c.Status != StatusActive:
 			outcome = errReconsent
 			return nil
-		case c.ExpiresAt == nil || !c.ExpiresAt.Before(s.now().Add(RefreshAhead)):
+		case c.ExpiresAt == nil || !c.ExpiresAt.Before(s.now().Add(ahead)):
 			out = c // another request refreshed it meanwhile
 			return nil
 		}

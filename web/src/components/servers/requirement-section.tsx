@@ -1,9 +1,11 @@
 /*
  * A server's "User authorization" settings (decision 26): whether its
  * capabilities need each caller's own account with an auth provider, which
- * provider (from GET /v1/auth-providers: enabled ones only; a turned-off one
- * already chosen can be kept) and which scopes (none: the provider's
- * defaults). Part of the server's settings form, saved with it.
+ * provider (from GET /v1/auth-providers for this team and server: enabled
+ * ones that are open to the team, or restricted ones that list the team or
+ * the server, decision 69; one already chosen that was turned off, or that
+ * stopped being open to the server, can be kept but not newly chosen) and
+ * which scopes (none: the provider's defaults). Part of the server's settings form, saved with it.
  */
 import { useQuery } from "@tanstack/react-query";
 import { authProvidersQuery } from "../../api/queries";
@@ -28,10 +30,10 @@ type Props = {
 };
 
 export function RequirementFields({ server, value, onChange, errors, disabled, resetsOverrides }: Props) {
-  const providers = useQuery(authProvidersQuery());
+  const providers = useQuery(authProvidersQuery({ team: server.teamSlug, serverId: server.id }));
   const list = providers.data ?? [];
   const current = server.requirement;
-  // A turned-off provider the server already names stays choosable (it can be kept, not newly chosen).
+  // A provider the server already names that was turned off, or that is no longer open to it, stays choosable (it can be kept, not newly chosen).
   const keptOff = current && !list.some((p) => p.id === current.providerId) ? current : null;
   const chosen = list.find((p) => p.id === value.providerId);
   const defaults = chosen ? scopesText(chosen.defaultScopes, "none") : undefined;
@@ -48,12 +50,17 @@ export function RequirementFields({ server, value, onChange, errors, disabled, r
       {value.on && (
         <>
           {providers.data && list.length === 0 && !keptOff && (
-            <Alert tone="info">No auth providers are set up yet. Platform admins add them in Admin › Auth providers.</Alert>
+            <Alert tone="info">No auth provider is open to this team yet. Platform admins add providers, and the teams that may use them, in Admin › Auth providers.</Alert>
+          )}
+          {keptOff?.providerEnabled && keptOff.providerId === value.providerId && (
+            <Alert tone="warning" title={`${keptOff.providerName} isn't open to this team`}>
+              Calls to this server that need it are refused until a platform admin adds the team or this server to the provider&apos;s access list. Choose another provider to change it.
+            </Alert>
           )}
           <Field label="Provider" description="The service the token is for. Platform admins configure the providers." error={errors.provider}>
             <NativeSelect disabled={disabled} value={value.providerId} onChange={(e) => onChange({ ...value, providerId: e.target.value })}>
               {!value.providerId && <option value="">Choose a provider</option>}
-              {keptOff && <option value={keptOff.providerId}>{`${keptOff.providerName} (turned off)`}</option>}
+              {keptOff && <option value={keptOff.providerId}>{`${keptOff.providerName} (${keptOff.providerEnabled ? "not open to this team" : "turned off"})`}</option>}
               {list.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}

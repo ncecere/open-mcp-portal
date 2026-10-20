@@ -73,6 +73,13 @@ func requestServer(ctx context.Context, q *dbgen.Queries, r dbgen.ProviderConnec
 // provider_connection.server_allow (no token).
 func (s *Service) recordGrant(ctx context.Context, q *dbgen.Queries, a authz.Actor, u dbgen.User, p dbgen.AuthProvider,
 	conn dbgen.ProviderConnection, sv dbgen.McpServer, scopes []string, viaRequest bool) (dbgen.ProviderServerGrant, error) {
+	// A person cannot allow a server the provider's access list excludes
+	// (decision 69); the check is here so every way of allowing one passes it.
+	if ok, err := allowsServer(ctx, q, p.ID, sv.ID); err != nil {
+		return dbgen.ProviderServerGrant{}, err
+	} else if !ok {
+		return dbgen.ProviderServerGrant{}, registry.ErrProviderNotAllowed
+	}
 	origin := registry.OriginOf(sv.URL)
 	merged := nonNil(scopes)
 	cur, err := q.LockProviderServerGrant(ctx, dbgen.LockProviderServerGrantParams{ConnectionID: conn.ID, ServerID: sv.ID})
@@ -168,8 +175,9 @@ func (s *Service) ConfirmRequest(ctx context.Context, a authz.Actor, id string) 
 // Ready answers, for one person, whether a call of a capability would be
 // forwarded with their token now (the "connected" mark of My gateways): an
 // active connection covering the scopes and, for a platform provider, a
-// grant for the capability's server at the origin its URL has now.
-type Ready func(req *registry.Requirement, serverID uuid.UUID, serverURL string) bool
+// grant for the capability's server at the origin its URL has now, and the
+// provider's access list permits the server.
+type Ready func(req *registry.Requirement, server dbgen.McpServer) bool
 
 // ReadyFor loads what Ready needs for a person.
 func (s *Service) ReadyFor(ctx context.Context, userID uuid.UUID) (Ready, error) {
@@ -181,8 +189,16 @@ func (s *Service) ReadyFor(ctx context.Context, userID uuid.UUID) (Ready, error)
 	if err != nil {
 		return nil, err
 	}
-	return func(req *registry.Requirement, serverID uuid.UUID, serverURL string) bool {
+	ix, err := s.loadAccess(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return func(req *registry.Requirement, server dbgen.McpServer) bool {
 		if req == nil || !req.Provider.Enabled {
+			return false
+		}
+		serverID, serverURL := server.ID, server.URL
+		if !req.Provider.ServerBound() && !ix.allows(req.Provider.ID, server.TeamID, serverID) {
 			return false
 		}
 		for _, r := range rows {

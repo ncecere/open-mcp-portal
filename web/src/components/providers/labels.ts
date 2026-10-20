@@ -23,6 +23,18 @@ export type ConnectRequest = Schemas["ConnectRequest"];
 export type ProviderRef = Schemas["ProviderRef"];
 export type ConnectServer = Schemas["ConnectServer"];
 export type ProviderServerGrant = Schemas["ProviderServerGrant"];
+export type AuthProviderAccess = Schemas["AuthProviderAccess"];
+export type AccessMode = Schemas["AuthProviderAccessMode"];
+
+export const accessModeLabels: Record<AccessMode, string> = { open: "Open to every team", restricted: "Restricted" };
+
+/** What a provider's access list says in one line (the list and the overview). */
+export const accessSummary = (p: Pick<AuthProvider, "accessMode">) =>
+  p.accessMode === "open" ? "Any team's server may require it" : "Only the listed teams and servers may require it";
+
+/** Said wherever a connection's token is described: whether a server gets only what its call needs (decision 69). */
+export const narrowingText = (c: Pick<ProviderConnection, "narrowsScopes">) =>
+  c.narrowsScopes ? "Each call gets a token for only the scopes it needs" : "Servers get a token with every scope granted";
 
 /** "Status (Platform tools)": the server a person is asked to allow, with its team (F-3, decision 60). */
 export const serverWithTeam = (s: Pick<ConnectServer, "name" | "teamName">) => `${s.name} (${s.teamName})`;

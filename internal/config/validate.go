@@ -88,6 +88,9 @@ func (c Config) validateSecrets() []error {
 	if c.HealthCheckInterval != 0 && c.HealthCheckInterval < 30*time.Second {
 		errs = append(errs, errors.New("HEALTH_CHECK_INTERVAL must be 0 (off) or at least 30s"))
 	}
+	if c.ProviderRefreshInterval != 0 && c.ProviderRefreshInterval < time.Minute {
+		errs = append(errs, errors.New("PROVIDER_REFRESH_INTERVAL must be 0 (off) or at least 1m"))
+	}
 	return errs
 }
 

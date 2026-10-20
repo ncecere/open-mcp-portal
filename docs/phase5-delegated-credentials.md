@@ -105,6 +105,8 @@ with an effective requirement:
 1. **Service account:** JSON-RPC `-32010` "This tool needs a person's GitHub account; service accounts can't use it".
    `data.reason` is `service_account`. Recorded as `denied`, class `service_account`. Lists still show the tool.
 2. **Provider turned off:** `-32010`, `data.reason` `provider_disabled`. Recorded as `denied`, class `provider_disabled`.
+   **Provider restricted and the server not on its list** (decision 69): `-32010`, `data.reason` `provider_not_allowed`;
+   recorded as `denied`, class `provider_not_allowed`; no consent link is made (see "Who may use a provider").
 3. **No active connection, granted scopes that don't cover the required ones, or (platform providers) no grant for
    this server:** the gateway creates (or reuses for the same person, capability, scopes, server and server origin) a
    connect request and answers `-32042`. Nothing is forwarded. Recorded as `needs_authorization` with class
@@ -137,14 +139,75 @@ the scopes they were shown:
   and deleting a person delete their grants by cascade.
 - A server that widens its requirement needs consent again for the new scopes (the grant covers what the person was
   shown); a grant is widened, never narrowed, by a later consent for the same server and origin.
-- **Not changed:** the connection is still one token per person and provider, and **still holds the union** of every
-  scope the person ever granted (the provider round trip asks for `union(granted, asked, required)`; downscoping is not
-  part of this fix). A server the person allowed therefore receives all of those scopes, not only the ones it asked
-  for, and keeps receiving the token until they disconnect or its origin changes. Per-call scope minimisation and a
-  per-provider list of teams or servers allowed to require a provider are hardening H-5 in
-  [threat-model.md](threat-model.md), not done.
+- **Not changed by F-3:** the connection is still one token per person and provider, and **still holds the union** of
+  every scope the person ever granted (the provider round trip asks for `union(granted, asked, required)`). Before
+  v0.3.1 a server the person allowed received all of those scopes, not only the ones it asked for, and kept receiving
+  the token until they disconnected or its origin changed. Hardening H-5 ([threat-model.md](threat-model.md)) is done
+  in v0.3.1 as below.
 - `oauth`-mode (server-bound) providers have no grants: their connection is for one server and URL already
   ([phase 7](phase7-upstream-oauth.md)).
+
+#### Who may use a provider, and narrower tokens (decision 69, v0.3.1, H-5)
+
+**The access list.** A platform provider is **open** (any team's server may require it) or **restricted** (only a
+server of a listed team, or a listed server). Every provider that existed at the upgrade (migration `00021`) stays
+open, and Admin › Auth providers flags it (a badge in the list and on the record); a provider created afterwards
+starts **restricted with nobody listed**, so nobody can require it until a platform admin lists teams or servers in its
+**Access** tab (`GET` and `PUT /v1/admin/auth-providers/{id}/access`, browser session only, `If-Match` on the provider's
+revision, audited `auth_provider.access_update` with the lists before and after). It is checked:
+
+- **when a requirement is saved** (create or change a server): a *newly chosen* provider the list excludes is
+  `422 provider_not_allowed`. A server that already requires a provider keeps it when the list stops covering it, so
+  its other settings stay editable; its calls are refused until the list is fixed, and the access tab lists such
+  servers (`blocked`). The requirement picker (`GET /v1/auth-providers?team=&serverId=`) offers only providers the
+  team or the server may use; that is a convenience, the save checks again;
+- **when a person allows a server**: a consent link's confirm step (`422 provider_not_allowed`), the consent callback
+  (the account is connected, nothing is allowed, the browser ends at `/connect/done?result=not_allowed`) and
+  Account › My connections › Allow servers (decision 68: such a server is not listed, and allowing it by ID is
+  `422 provider_not_allowed`);
+- **on every call** (`Credential`, before the connection is read): a server the list excludes gets `-32010` with
+  `data.reason` `provider_not_allowed`, recorded `denied` with that error class, no consent link, nothing sent to the
+  server. An agent's relayed call (decision 66) is refused the same way, and My gateways stops showing the capability as
+  connected. Removing a team therefore stops delivery on the next call; people's grants and connections are kept, so
+  listing the team again restores it.
+
+An oauth server that links a platform provider's **client** (registration `platform_provider`) is not gated by the list:
+it shares the client, never the connections.
+
+**Narrowing on refresh.** Each provider has a switch, `narrow_on_refresh` (default off; Settings › Token scopes per
+call). When on, a call does not carry the stored token: the portal refreshes with `scope` set to the call's requirement
+(RFC 6749 section 6; the provider's scope separator) and sends that short-lived token. It is kept **in memory** only,
+per (connection, consent, scope set), until 60 s before it expires (at most 2048 entries; each replica has its own), and
+is never stored, logged or audited. The refresh runs under the connection's row lock, and a rotated refresh token
+is stored in the same transaction, so a provider that rotates never sees one used twice; the stored access token and
+the connection's scopes are untouched. It applies only to a connection that holds a refresh token (a GitHub OAuth app's
+tokens do not expire and come with none); the others keep sending the stored token, and My connections says which
+(`narrowsScopes`; an "All granted scopes" badge otherwise). A provider that answers `invalid_scope` is not worked around
+with the full token: the call is refused (`provider_unavailable`) and the log says to turn narrowing off. A provider
+that ignores `scope` returns its full token: the portal cannot tell (it logs when the answer's `scope` holds more than
+was asked), so the switch is the admin's claim that the provider honours it.
+
+**Which presets support it** (checked against each provider's documentation in October 2026; none was run against a
+live account):
+
+| Preset | `scope` on refresh | Pre-filled |
+| --- | --- | --- |
+| Microsoft Entra ID | **Documented**: "The scopes requested in this leg must be equivalent to or a subset of the scopes requested in the original authorization_code request leg"; a token is issued for the resource of the first scope, so keep Graph scopes together | **On** |
+| GitHub | Not documented (OAuth apps have no refresh; GitHub Apps' refresh takes only `client_id`, `client_secret`, `grant_type`, `refresh_token`, and their tokens carry permissions, not scopes) | Off |
+| Google | Not documented (the refresh request lists `client_id`, `client_secret`, `grant_type`, `refresh_token`) | Off |
+| Atlassian | Not documented (`grant_type`, `client_id`, `client_secret`, `refresh_token`); refresh tokens rotate | Off |
+| Slack | Not documented (`client_id`, `client_secret`, `grant_type`, `refresh_token`); rotation is opt-in | Off |
+| GitLab | Not in GitLab's documentation. Its OAuth library (Doorkeeper) accepts a narrower `scope` on refresh in its current source; GitLab's own version was not confirmed | Off (try it on a test instance first) |
+
+The fake provider (`internal/testutil/FakeOAuth`, `cmd/fakeoauth -honour-refresh-scope`) can honour it, which is how the
+behaviour is tested; the real providers are the unverified part.
+
+**Background refresh (optional).** `PROVIDER_REFRESH_INTERVAL` (default `0`: off; at least `1m`) starts a leader-elected
+loop (advisory lock `omp.provider-refresh`) that refreshes active, refreshable connections whose access token expires
+before the next pass and that were used in the last 7 days, so a grant the provider revoked turns `needs_reconsent` (and
+the person is told, audited `provider_connection.refresh_failed` by the system) before a call finds out. It uses
+`refreshConnection`'s row lock with the expiry checked again inside it, so a connection is never refreshed twice for one
+expiry, whichever replica or call gets there. It refreshes the stored token, also for providers with narrowing on.
 - **After the upgrade nobody has a grant** (no backfill, deliberately: a backfill would grandfather any malicious
   server). Each person sees one consent prompt per server the first time they call it, and confirms once.
 

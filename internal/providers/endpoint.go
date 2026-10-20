@@ -323,7 +323,17 @@ func (s *Service) exchange(ctx context.Context, p dbgen.AuthProvider, code, veri
 // refresh uses a refresh token (the redirect URI is sent too: GitLab wants
 // it, and authorization servers ignore parameters they don't know).
 func (s *Service) refresh(ctx context.Context, p dbgen.AuthProvider, refreshToken string) (tokenSet, *endpointError) {
+	return s.refreshScoped(ctx, p, refreshToken, nil)
+}
+
+// refreshScoped is refresh with a scope parameter (RFC 6749 section 6: the
+// scopes of the new access token, which may not exceed what was granted),
+// joined with the provider's scope separator; none: the grant's own scopes.
+func (s *Service) refreshScoped(ctx context.Context, p dbgen.AuthProvider, refreshToken string, scopes []string) (tokenSet, *endpointError) {
 	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}, "redirect_uri": {s.RedirectURI()}}
+	if len(scopes) > 0 {
+		form.Set("scope", strings.Join(scopes, p.ScopeSeparator))
+	}
 	resourceParam(p, form)
 	status, mt, body, ee := s.postForm(ctx, p, p.TokenUrl, form)
 	if ee != nil {

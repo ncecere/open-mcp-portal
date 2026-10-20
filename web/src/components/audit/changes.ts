@@ -38,6 +38,10 @@ const clientKindLabels: Record<string, string> = { metadata: "Yes (metadata docu
 /** Extra authorization parameters as words: "access_type=offline". */
 const params: Format = (v) => (v && typeof v === "object" && !Array.isArray(v) ? Object.entries(v as Record<string, unknown>).map(([k, x]) => `${k}=${String(x)}`) : v);
 
+const accessModeWords: Record<string, string> = { open: "Open to every team", restricted: "Restricted to the listed teams and servers" };
+/** A provider's listed teams or servers as words: "Platform tools (platform)", "Wiki (docs)". */
+const listed: Format = (v) => (Array.isArray(v) ? v.map((e: { name?: string; slug?: string; teamSlug?: string }) => `${e.name ?? e.slug ?? ""} (${e.teamSlug ?? e.slug ?? ""})`) : v);
+
 /** Whether a disconnected account was revoked at the provider too. */
 const revoked: Format = (v) => (v === true ? "Yes" : v === false ? "No (failed)" : v === "not_supported" ? "Not supported by the provider" : v);
 
@@ -172,10 +176,14 @@ function fieldsFor(action: string): Fields | undefined {
         gatewayId: null,
         userId: null,
       };
+    case "auth_provider.access_update":
+      return { accessMode: ["Access", label(accessModeWords)], teams: ["Teams", (v) => (Array.isArray(v) ? v.map((t: { name?: string; slug?: string }) => `${t.name ?? ""} (${t.slug ?? ""})`) : v)], servers: ["Servers", listed] };
     case "auth_provider.create":
     case "auth_provider.update":
     case "auth_provider.delete":
       return {
+        accessMode: ["Access", label(accessModeWords)],
+        narrowOnRefresh: ["Narrow tokens per call", onOff],
         enabled: ["Enabled", onOff],
         pkce: ["PKCE", onOff],
         clientId: ["Client ID"],
