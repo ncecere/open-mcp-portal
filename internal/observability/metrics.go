@@ -75,6 +75,13 @@ var (
 		Help: "Refreshes of people's provider tokens by provider slug and result (ok, refused, unavailable).",
 	}, []string{"provider", "result"})
 
+	// MachineTokenRequests counts requests to a token endpoint for a server in
+	// machine_oauth mode (decision 73), not cache hits.
+	MachineTokenRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "omp_machine_token_requests_total",
+		Help: "Machine OAuth token requests (client credentials grant) by result (ok, refused, unavailable); cache hits are not counted.",
+	}, []string{"result"})
+
 	ServerHealthChecks = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "omp_server_health_checks_total",
 		Help: "Scheduled health checks of MCP servers by result (healthy, failing).",
@@ -110,7 +117,7 @@ var (
 
 func appCollectors() []prometheus.Collector {
 	return append([]prometheus.Collector{BuildInfo, MCPRequests, MCPRequestDuration, MCPCallDuration, MCPRateLimited, PayloadCaptures,
-		PayloadRedactions, PayloadCaptureErrors, ProviderTokenRefresh, ServerHealthChecks, HTTPRequests, HTTPRequestDuration,
+		PayloadRedactions, PayloadCaptureErrors, ProviderTokenRefresh, MachineTokenRequests, ServerHealthChecks, HTTPRequests, HTTPRequestDuration,
 		RetentionDeleted, RetentionLastSuccess, UsageRollupLastSuccess, LoopLeader}, v02Collectors()...)
 }
 
