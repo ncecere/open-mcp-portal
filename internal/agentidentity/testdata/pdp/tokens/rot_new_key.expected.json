@@ -1,0 +1,29 @@
+{
+  "description": "Key rotation: signed by the NEW key one hour after rotation began, the old key still published (overlap). A portal that only has the pre-rotation set refuses it as an unknown kid (and would refetch).",
+  "pdpScenario": "signed by the NEW key after it started signing; the old key is still published (retired < 1h)",
+  "checks": [
+    {
+      "name": "new key signs, old key still listed",
+      "at": "2026-10-20T13:11:00Z",
+      "jwks": "jwks-overlap",
+      "accept": true,
+      "reason": "",
+      "identity": {
+        "agentName": "Mail assistant",
+        "teamKind": "personal",
+        "visibility": "private",
+        "tool": "search_mail",
+        "hasPerson": true,
+        "personPresent": true,
+        "personEmail": ""
+      }
+    },
+    {
+      "name": "stale pre-rotation set, no newer one",
+      "at": "2026-10-20T13:11:00Z",
+      "jwks": "jwks-single",
+      "accept": false,
+      "reason": "unknown_kid"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "description": "A shared team's agent in a private thread started by a member: person without email (identityEmail off), team kind 'team'.",
+  "pdpScenario": "team agent, private thread started by a member",
+  "checks": [
+    {
+      "name": "at iat",
+      "at": "2026-10-20T12:00:00Z",
+      "jwks": "jwks-single",
+      "accept": true,
+      "reason": "",
+      "identity": {
+        "agentName": "Triage bot",
+        "teamKind": "team",
+        "visibility": "private",
+        "tool": "create_issue",
+        "hasPerson": true,
+        "personPresent": true,
+        "personEmail": ""
+      }
+    }
+  ]
+}

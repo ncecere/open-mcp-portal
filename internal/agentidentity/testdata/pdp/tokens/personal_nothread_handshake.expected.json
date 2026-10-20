@@ -1,0 +1,22 @@
+{
+  "description": "A personal workspace's agent on a request that belongs to no thread (initialize / tools/list): owner named, person_present false, thread_visibility none, no tool claim.",
+  "pdpScenario": "personal workspace, no thread (initialize/tools/list): owner, person_present false, visibility none, no tool",
+  "checks": [
+    {
+      "name": "at iat",
+      "at": "2026-10-20T12:00:00Z",
+      "jwks": "jwks-single",
+      "accept": true,
+      "reason": "",
+      "identity": {
+        "agentName": "Mail assistant",
+        "teamKind": "personal",
+        "visibility": "none",
+        "tool": "",
+        "hasPerson": true,
+        "personPresent": false,
+        "personEmail": ""
+      }
+    }
+  ]
+}

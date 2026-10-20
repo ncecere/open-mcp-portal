@@ -1,0 +1,30 @@
+{
+  "header": {
+    "alg": "ES256",
+    "kid": "eW3yTXJ5P71s_cCuWnHN9dOAIdqt8Tn0lzYWvM8mO2M",
+    "typ": "JWT"
+  },
+  "payload": {
+    "aud": "https://mcp.example.com",
+    "exp": 1792497900,
+    "iat": 1792497600,
+    "iss": "https://agents.example.com",
+    "jti": "26k15Co7Xsnudzhn-VkzuA",
+    "name": "Triage bot",
+    "nbf": 1792497570,
+    "person": {
+      "iss": "https://login.example.org/application/o/pdp/",
+      "sub": "5b7e19c0d2a84e66"
+    },
+    "person_present": true,
+    "principal_type": "agent",
+    "sub": "58374bb1-af98-4001-8fdc-2abd11a0ba95",
+    "team": {
+      "id": "73cd50f3-fa10-4d90-8d73-7a40b0405695",
+      "kind": "team",
+      "slug": "platform-tools"
+    },
+    "thread_visibility": "private",
+    "tool": "create_issue"
+  }
+}

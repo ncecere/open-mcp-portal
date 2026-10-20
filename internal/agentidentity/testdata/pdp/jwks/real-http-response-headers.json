@@ -1,0 +1,19 @@
+{
+  "contentLength": 216,
+  "headers": {
+    "Cache-Control": [
+      "public, max-age=300"
+    ],
+    "Content-Length": [
+      "216"
+    ],
+    "Content-Type": [
+      "application/jwk-set+json"
+    ],
+    "Date": [
+      "Tue, 20 Oct 2026 13:03:54 GMT"
+    ]
+  },
+  "status": 200,
+  "transferEncoding": null
+}

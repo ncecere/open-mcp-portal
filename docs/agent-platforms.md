@@ -52,7 +52,7 @@ The token's `name`, `team.slug`, `thread_visibility` and `tool` are informationa
 | A token with any credential that isn't a relay account's key (a personal API key, a connected app, a service account that is not a relay) | **Ignored**: the call is that credential's own. Counted (`omp_agent_token_total{result="ignored_not_relay"}`) and logged (a warning, at most once a minute per credential). A key alone is never changed by a token it can't use |
 | A token on a relay account's request that fails a check, or is another platform's | **The request is refused**: HTTP 403, JSON-RPC code `-32001`, "The agent identity token was refused (reason). The request was not run." Counted as `rejected_<reason>` (`malformed`, `algorithm`, `key_id`, `type`, `untrusted_issuer`, `disabled_issuer`, `unknown_kid`, `jwks_unavailable`, `signature`, `audience`, `principal_type`, `claims`, `person_issuer`, `expired`, `not_yet_valid`, `lifetime`, `replay`, `other_platform`) and logged with the reason, never the token. Nothing runs: the portal doesn't fall back to the account's own call, because that would turn a person's call into the team's |
 | A relay account's request with no token | The account's own call, as before |
-| A valid token that names nobody (a shared thread, background work with no thread) | The account's own call; the agent and platform are recorded, and the downstream token has no `act` |
+| A valid token that names nobody (a team agent's shared thread, or a team agent's work with no thread; in a personal workspace PDP names the owner even then, with `person_present` false for work with no thread) | The account's own call; the agent and platform are recorded, and the downstream token has no `act` |
 | A valid token naming a person the portal doesn't know, or who is suspended | A tool error ("This agent acts for a person who has no active Open MCP Portal account…" or "…whose account is suspended"); other methods answer `-32010`; recorded as denied (`person_no_account`, `person_suspended`). **Never** the account's own call |
 
 The person is read from the database on **every** call. Suspending them, or removing them from a team, takes effect on their agents' next call; there is no cache of who a person is. In-flight calls aren't cancelled.
@@ -148,7 +148,7 @@ curl -s http://localhost:8088/mcp/<gateway> -H "Authorization: Bearer omp_sa_...
 
 ## What is not covered
 
-- **A real PDP instance** (above): the token format follows its design note and the fake issuer signs exactly that, but nothing here ran against PDP's code.
+- **A running PDP instance** (above). On 2026-10-20 the verifier was checked against tokens signed by PDP v0.4.0's real signer and key sets served by its real JWKS handler: `internal/agentidentity/testdata/pdp/` holds them (with a README on how they were made, and no private key) and `contract_pdp_test.go` checks them, including key rotation and tampering. **Not checked:** PDP's gateway and runtime end to end (which token it attaches to which request, and what it puts in `tool`), and a live deployment (real DNS and TLS, your identity provider's `iss` spelling, clock skew). The portal's side after the verifier (relay marks, person lookup, the call) is covered by the fake issuer's tests only.
 - **Several replicas** are tested as separate service instances sharing one database (a jti is accepted by exactly one of four racing instances), not as separate processes behind a balancer.
 - **Clock skew between the portal and PDP** is tested with a controllable clock, not with a real skewed host.
 - **A browser:** the admin pages are tested with the component test harness, not in a real browser.
@@ -161,7 +161,7 @@ curl -s http://localhost:8088/mcp/<gateway> -H "Authorization: Bearer omp_sa_...
 |---|---|
 | Calls through the relay work but ignore the person (no `act`) | The token isn't sent (PDP's Send identity is off), names nobody (a shared thread), or the key's account isn't marked as a relay (look for `ignored_not_relay` in the metrics and a warning in the logs) |
 | `403 … (untrusted_issuer)` | The issuer isn't added, or differs from PDP's `iss` by a character (a trailing slash) |
-| `(audience)` | PDP's `identityAudience` isn't the platform's audience (default `APP_URL`) |
+| `(audience)` | PDP's `identityAudience` isn't the platform's audience (default `APP_URL`). A PDP server **without** an `identityAudience` gets tokens whose `aud` is that server's own URL (for the portal's gateway: `<APP_URL>/mcp/<slug>`); the portal refuses them unless the platform's audience is set to exactly that URL. Set `identityAudience` to `APP_URL` in PDP instead |
 | `(person_issuer)` | The person's `iss` isn't `OIDC_ISSUER`: PDP and the portal sign people in with different providers, or issuer spellings |
 | `(unknown_kid)` or `(signature)` | The key set the portal sees isn't the one PDP signs with: Test the keys; check PDP's rotation |
 | `(jwks_unavailable)` | The platform's keys can't be fetched and the cached ones are older than 15 minutes past expiry: Test the keys; the address may need an entry in Admin › Internal networks |

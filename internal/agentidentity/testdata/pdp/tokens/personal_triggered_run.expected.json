@@ -1,0 +1,22 @@
+{
+  "description": "A personal workspace's agent in a thread working on a triggered run: owner named, person_present false.",
+  "pdpScenario": "personal workspace, thread working on a triggered run: owner, person_present false",
+  "checks": [
+    {
+      "name": "at iat",
+      "at": "2026-10-20T12:00:00Z",
+      "jwks": "jwks-single",
+      "accept": true,
+      "reason": "",
+      "identity": {
+        "agentName": "Mail assistant",
+        "teamKind": "personal",
+        "visibility": "private",
+        "tool": "search_mail",
+        "hasPerson": true,
+        "personPresent": false,
+        "personEmail": ""
+      }
+    }
+  ]
+}
