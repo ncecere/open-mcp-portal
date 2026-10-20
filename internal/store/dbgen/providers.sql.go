@@ -1129,15 +1129,15 @@ const listConnectionsDueForRefresh = `-- name: ListConnectionsDueForRefresh :man
 SELECT pc.id, pc.user_id, pc.provider_id, pc.status, pc.scopes, pc.account_label, pc.access_token_cipher, pc.refresh_token_cipher, pc.expires_at, pc.connected_at, pc.refreshed_at, pc.last_used_at, pc.last_error_class FROM provider_connections pc
 JOIN auth_providers p ON p.id = pc.provider_id
 WHERE pc.status = 'active' AND pc.refresh_token_cipher IS NOT NULL AND pc.expires_at IS NOT NULL
-  AND pc.expires_at < $1 AND pc.last_used_at IS NOT NULL AND pc.last_used_at > $2
+  AND pc.expires_at < $1::timestamptz AND pc.last_used_at IS NOT NULL AND pc.last_used_at > $2::timestamptz
   AND p.enabled AND p.kind = 'oauth2'
 ORDER BY pc.expires_at, pc.id
 LIMIT $3
 `
 
 type ListConnectionsDueForRefreshParams struct {
-	ExpiresBefore *time.Time
-	UsedSince     *time.Time
+	ExpiresBefore time.Time
+	UsedSince     time.Time
 	PageSize      int32
 }
 
@@ -1844,7 +1844,7 @@ func (q *Queries) ServerProviders(ctx context.Context, serverIds []uuid.UUID) ([
 }
 
 const serversOutsideProviderAccess = `-- name: ServersOutsideProviderAccess :many
-SELECT s.id, s.slug, s.name, t.slug AS team_slug
+SELECT s.id, s.slug, s.name, t.slug AS team_slug, t.name AS team_name
 FROM mcp_servers s
 JOIN teams t ON t.id = s.team_id
 JOIN auth_providers p ON p.id = s.auth_provider_id
@@ -1865,6 +1865,7 @@ type ServersOutsideProviderAccessRow struct {
 	Slug     string
 	Name     string
 	TeamSlug string
+	TeamName string
 }
 
 // Servers that require a restricted provider although neither their team nor
@@ -1883,6 +1884,7 @@ func (q *Queries) ServersOutsideProviderAccess(ctx context.Context, arg ServersO
 			&i.Slug,
 			&i.Name,
 			&i.TeamSlug,
+			&i.TeamName,
 		); err != nil {
 			return nil, err
 		}

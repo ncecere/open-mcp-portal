@@ -147,8 +147,9 @@ func TestGatewayDelegatedGmailEndToEnd(t *testing.T) {
 
 	// A platform admin adds the provider.
 	var provider struct {
-		ID   string `json:"id"`
-		Slug string `json:"slug"`
+		ID       string `json:"id"`
+		Slug     string `json:"slug"`
+		Revision int    `json:"revision"`
 	}
 	admin.must("POST", "/v1/admin/auth-providers", map[string]any{
 		"slug": "google-test", "name": "Google (test)", "preset": "google", "clientId": oauth.ClientID, "clientSecret": oauth.ClientSecret,
@@ -158,7 +159,16 @@ func TestGatewayDelegatedGmailEndToEnd(t *testing.T) {
 
 	// The team registers the server with its requirement; discovery runs
 	// without an identity token.
-	admin.must("POST", "/v1/admin/teams", map[string]any{"slug": "mail-team", "name": "Mail team", "ownerEmail": "admin@localhost"}, nil, 201)
+	var team struct {
+		Team struct {
+			ID string `json:"id"`
+		} `json:"team"`
+	}
+	admin.must("POST", "/v1/admin/teams", map[string]any{"slug": "mail-team", "name": "Mail team", "ownerEmail": "admin@localhost"}, &team, 201)
+	// A new provider is restricted until an admin lists who may use it.
+	admin.must("PUT", "/v1/admin/auth-providers/"+provider.ID+"/access", map[string]any{"accessMode": "restricted",
+		"teamIds": []string{team.Team.ID}, "serverIds": []string{}}, nil, 200,
+		map[string]string{"If-Match": fmt.Sprintf("%q", fmt.Sprint(provider.Revision))})
 	var created struct {
 		Server struct {
 			ID       string `json:"id"`

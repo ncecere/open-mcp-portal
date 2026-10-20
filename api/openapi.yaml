@@ -839,7 +839,8 @@ paths:
         (details.reason invalid, too_long, userinfo, query, fragment, scheme, private_address or blocked_address;
         private_address can be allowed by a platform admin in Internal networks). The server is created even when
         discovery fails; refresh then says why. requirement (optional) names an enabled auth provider (422
-        provider_not_found otherwise) and its scopes (400 invalid_scope, details.scope). 400 invalid_auth_header also
+        provider_not_found otherwise) that is open to the team (422 provider_not_allowed when the provider is restricted and
+        lists neither the team nor, for a server that exists, the server) and its scopes (400 invalid_scope, details.scope). 400 invalid_auth_header also
         for the reserved MCP-Gateway-Identity, MCP-Gateway-Provider and MCP-Gateway-Provider-Token.
 
         authMode oauth (docs/phase7-upstream-oauth.md) needs oauth. The portal runs the sign-in discovery again itself
@@ -1012,8 +1013,10 @@ paths:
       - servers:write
       summary: Change a server's settings (editors and above); the slug never changes
       description: 'requirement: omit to keep, null to remove (capability overrides with mode scopes go back to inherit;
-        so do they when the provider changes). A newly chosen provider must be enabled (422 provider_not_found); a
-        turned-off one can be kept. 400 invalid_scope (details.scope). Under approval_required, a published server
+        so do they when the provider changes). A newly chosen provider must be enabled (422 provider_not_found) and open to the
+        server (422 provider_not_allowed: restricted, and neither the server''s team nor the server is on its access
+        list); a turned-off one, or one that stopped being open to the server, can be kept (its calls are refused until
+        the list is fixed). 400 invalid_scope (details.scope). Under approval_required, a published server
         goes back to pending when its URL changes or its requirement widens what any capability receives (a provider
         where there was none, another provider, or a scope not in effect before), audited as mcp_server.publish_request
         with reason url_changed or requirement_changed. Removing or narrowing a requirement never needs review.
@@ -3570,7 +3573,25 @@ paths:
       operationId: listAuthProviders
       summary: Auth providers a server's team can require (any active signed-in person)
       description: Enabled providers only, ordered by name, with the fields needed to pick one. Never a client ID,
-        secret or endpoint.
+        secret or endpoint. With team (a team the caller can see; 404 team_not_found otherwise) only the providers a
+        server of that team may require are listed (open ones, and restricted ones that list the team or, with serverId
+        (a server of that team), that server). That is a convenience for the picker; saving a requirement and every call
+        check the provider's access list again. Without team every enabled provider is listed (connecting an account is
+        not limited by it).
+      parameters:
+      - name: team
+        in: query
+        required: false
+        description: A team slug or ID; limits the list to providers servers of this team may require
+        schema:
+          type: string
+      - name: serverId
+        in: query
+        required: false
+        description: With team, a server of that team; also counts providers that list this server
+        schema:
+          type: string
+          format: uuid
       responses:
         '200':
           description: Providers ordered by name
@@ -3586,6 +3607,8 @@ paths:
                     items:
                       $ref: '#/components/schemas/AuthProviderSummary'
         '401':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
           $ref: '#/components/responses/ErrorReply'
   /v1/admin/auth-providers:
     get:
@@ -3754,6 +3777,89 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorReply'
         '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/auth-providers/{providerId}/access:
+    parameters:
+    - $ref: '#/components/parameters/ProviderIdParam'
+    get:
+      tags:
+      - admin
+      - auth-providers
+      operationId: adminGetAuthProviderAccess
+      summary: Who may use an auth provider (platform admins and auditors)
+      description: 'Browser session only, like the change: an automation token never sees or decides who may use a
+        credential provider (decision 58). The provider''s access mode, its listed teams and servers, and (blocked, blockedCount) the servers
+        that require the provider although the list excludes them: their calls are refused (-32010
+        provider_not_allowed) until a team or the server is added. Server-bound providers (kind mcp_server) are not
+        reachable here (404 provider_not_found).'
+      responses:
+        '200':
+          description: The access list
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AuthProviderAccess'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+    put:
+      tags:
+      - admin
+      - auth-providers
+      operationId: adminSetAuthProviderAccess
+      summary: Replace who may use an auth provider (platform admins; browser session only)
+      description: 'Replaces the mode and both lists. open: any team''s server may require the provider (the lists are
+        kept but not consulted). restricted: only a server of a listed team, or a listed server, may; it is checked when
+        a requirement is saved (422 provider_not_allowed), when a person allows a server to use their account (a consent
+        link or My connections) and on every call, so removing a team stops delivery on the next call (also an
+        agent''s relayed call). Providers created after the upgrade start restricted with empty lists; existing ones
+        stay open. The provider''s revision (If-Match) must match and moves. 422 team_not_found or server_not_found
+        for an ID that does not exist; 422 too_many_entries (500 each); 400 invalid_access_mode. Session only: an
+        automation token never decides who may use a credential provider (decision 58). Audited as
+        auth_provider.access_update with the list before and after.'
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthProviderAccessInput'
+      responses:
+        '200':
+          description: The new access list
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AuthProviderAccess'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
           $ref: '#/components/responses/ErrorReply'
   /v1/admin/auth-provider-presets:
     get:
@@ -3942,7 +4048,8 @@ paths:
       description: 'Browser session only (403 session_required with an API key). Servers that require this connection''s
         provider and that the caller may use through a gateway now: their teams'' servers on gateways they can use and
         published servers with approved capabilities on gateways they have access to, the same rule a call is judged by
-        (a server nobody can reach through a gateway is not listed, and neither is another team''s private server).
+        (a server nobody can reach through a gateway is not listed, and neither is another team''s private server, nor
+        one a restricted provider''s access list excludes).
         Each carries the address it has now and the scopes its capabilities ask of the account; covered says the
         connection is active and already has them (otherwise allowing needs a round trip to the provider:
         startMyConnection with those scopes), and allowed that the server is already allowed at this address for those
@@ -3984,7 +4091,8 @@ paths:
         viaRequest false) for the server''s address now and the scopes its capabilities require; nothing is sent to the
         provider. The request names the address and scopes the person was shown (listAllowableServers). 404
         connection_not_found (unknown, or another person''s); 404 server_not_found (no such server, or one the caller
-        may not use through a gateway); 422 server_does_not_require_provider; 409 connect_required (not connected, needs
+        may not use through a gateway); 422 server_does_not_require_provider; 422 provider_not_allowed (the provider is
+        restricted and its access list excludes the server: nobody can allow it); 409 connect_required (not connected, needs
         reconnecting, or the account lacks the server''s scopes: details.scopes names them, continue to the provider
         with startMyConnection); 409 server_changed (the address differs from the one shown, or the server asks for
         scopes that weren''t shown: reload); 409 not_platform_provider; 404 provider_not_found (turned off); 400
@@ -4063,7 +4171,8 @@ paths:
         sign-in has nothing to allow); 404 connect_request_not_found (unknown, or another person''s); 410
         connect_request_expired (expired or used, or made before the grants existed); 410
         connect_request_server_changed (the server''s address or required account changed since the link was made);
-        404 provider_not_found (turned off).'
+        404 provider_not_found (turned off); 422 provider_not_allowed (the provider is restricted and its access list
+        excludes the server).'
       responses:
         '200':
           description: The server is allowed
@@ -8443,7 +8552,8 @@ components:
             require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or
             server_not_allowed (connected, but the person hasn''t allowed this server, at its current address, to use
             the account); denied with
-            service_account, provider_disabled, person_not_present (an agent''s call whose server or capability requires
+            service_account, provider_disabled, provider_not_allowed (the provider is restricted and its access list
+            excludes the server), person_not_present (an agent''s call whose server or capability requires
             a present person) or, for an agent''s call for a person, person_no_account or person_suspended; needs_authorization
             with needs_connection for an agent''s call (the person must connect an account; the answer was a tool error
             with no link); upstream_error with provider_unavailable.'
@@ -8972,6 +9082,82 @@ components:
         logoUrl:
           type: string
           nullable: true
+    AuthProviderAccessMode:
+      type: string
+      enum:
+      - open
+      - restricted
+      description: open - any team's server may require the provider. restricted - only a server of a listed team, or a
+        listed server
+    AuthProviderAccessTeam:
+      type: object
+      required:
+      - id
+      - slug
+      - name
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+    AuthProviderAccess:
+      type: object
+      description: Who may use an auth provider (decision 69)
+      required:
+      - accessMode
+      - teams
+      - servers
+      - blocked
+      - blockedCount
+      - revision
+      properties:
+        accessMode:
+          $ref: '#/components/schemas/AuthProviderAccessMode'
+        teams:
+          type: array
+          description: Teams whose servers may require a restricted provider, by name
+          items:
+            $ref: '#/components/schemas/AuthProviderAccessTeam'
+        servers:
+          type: array
+          description: Servers that may require a restricted provider whatever their team, by name
+          items:
+            $ref: '#/components/schemas/ConnectServer'
+        blocked:
+          type: array
+          description: Up to 20 servers that require the provider though a restricted list excludes them (their calls are
+            refused until a team or the server is added)
+          items:
+            $ref: '#/components/schemas/ConnectServer'
+        blockedCount:
+          type: integer
+          format: int64
+        revision:
+          $ref: '#/components/schemas/Revision'
+    AuthProviderAccessInput:
+      type: object
+      required:
+      - accessMode
+      - teamIds
+      - serverIds
+      properties:
+        accessMode:
+          $ref: '#/components/schemas/AuthProviderAccessMode'
+        teamIds:
+          type: array
+          maxItems: 500
+          items:
+            type: string
+            format: uuid
+        serverIds:
+          type: array
+          maxItems: 500
+          items:
+            type: string
+            format: uuid
     AuthProvider:
       type: object
       description: An OAuth app configured by platform admins. The client secret is never returned
@@ -9000,6 +9186,8 @@ components:
       - redirectUri
       - serverCount
       - connectionCount
+      - accessMode
+      - narrowOnRefresh
       - revision
       - createdAt
       - updatedAt
@@ -9082,6 +9270,14 @@ components:
         connectionCount:
           type: integer
           format: int64
+        accessMode:
+          $ref: '#/components/schemas/AuthProviderAccessMode'
+        narrowOnRefresh:
+          type: boolean
+          description: Calls carry a token refreshed with only the scopes the call needs (RFC 6749 section 6), kept in
+            memory and never stored; the stored token, which holds every scope granted, is not sent. Only where the
+            provider honours scope on refresh (the Microsoft preset documents it; the others do not) and for
+            connections that hold a refresh token; the rest keep sending the stored token
         revision:
           $ref: '#/components/schemas/Revision'
         createdAt:
@@ -9170,6 +9366,11 @@ components:
           type: string
           maxLength: 500
           description: An https URL or a same-origin path
+        narrowOnRefresh:
+          type: boolean
+          default: false
+          description: See AuthProvider.narrowOnRefresh. A new provider is always restricted (accessMode) with empty
+            lists; change that with adminSetAuthProviderAccess
     AuthProviderUpdate:
       type: object
       properties:
@@ -9235,6 +9436,9 @@ components:
           type: string
           maxLength: 500
           nullable: true
+        narrowOnRefresh:
+          type: boolean
+          description: See AuthProvider.narrowOnRefresh
     AuthProviderUrlParameter:
       type: object
       required:
@@ -9270,6 +9474,7 @@ components:
       - extraAuthorizeParams
       - urlParameters
       - docsUrl
+      - narrowOnRefresh
       properties:
         preset:
           $ref: '#/components/schemas/AuthProviderPresetName'
@@ -9321,6 +9526,10 @@ components:
         notes:
           type: string
           description: Provider quirks worth knowing, shown in the form
+        narrowOnRefresh:
+          type: boolean
+          description: Pre-fills the narrowing switch; true only where the provider documents that a refresh request's
+            scope narrows the new access token
     ProviderRef:
       type: object
       required:
@@ -9456,6 +9665,7 @@ components:
       - lastUsedAt
       - expiresAt
       - refreshable
+      - narrowsScopes
       - allowedServers
       properties:
         id:
@@ -9495,6 +9705,11 @@ components:
         refreshable:
           type: boolean
           description: The portal holds a refresh token
+        narrowsScopes:
+          type: boolean
+          description: A call carries a token refreshed with only the scopes that call needs. False means the token an
+            allowed server receives holds every scope in scopes (the provider is not set to narrow, or no refresh token
+            is held)
         allowedServers:
           type: array
           description: 'The MCP servers this account may be used by: the person allowed each one (for the scopes listed,

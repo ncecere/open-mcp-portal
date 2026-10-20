@@ -378,6 +378,13 @@ var matrixPolicies = map[string]policy{
 	"adminUpdateAuthProvider": {own: padmin, build: func(c *mctx) request {
 		return patch("/v1/admin/auth-providers/"+c.authProvider(), map[string]any{"name": "Renamed"}).h(rev1)
 	}},
+	"adminGetAuthProviderAccess": {own: platform, build: func(c *mctx) request {
+		return get("/v1/admin/auth-providers/" + c.e.provider + "/access")
+	}},
+	"adminSetAuthProviderAccess": {own: padmin, build: func(c *mctx) request {
+		return put("/v1/admin/auth-providers/"+c.authProvider()+"/access",
+			map[string]any{"accessMode": "open", "teamIds": []string{}, "serverIds": []string{}}).h(rev1)
+	}},
 	"adminDeleteAuthProvider":      {own: padmin, build: func(c *mctx) request { return del("/v1/admin/auth-providers/" + c.authProvider()) }},
 	"adminListAuthProviderPresets": {own: platform, build: func(*mctx) request { return get("/v1/admin/auth-provider-presets") }},
 	"adminListUserConnections": {own: platform, build: func(c *mctx) request {

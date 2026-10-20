@@ -82,6 +82,12 @@ type Config struct {
 	// (0: never; one replica at a time).
 	HealthCheckInterval time.Duration
 
+	// ProviderRefreshInterval is how often a background pass refreshes the
+	// access tokens of connected accounts that are about to expire and were
+	// used lately, which finds a revoked grant before a call does (0: never,
+	// the default; one replica at a time).
+	ProviderRefreshInterval time.Duration
+
 	// SMTP is the operator's mail server for notification email (off
 	// without SMTP_HOST); NotificationInterval is the dispatcher's tick
 	// (docs/notifications.md).

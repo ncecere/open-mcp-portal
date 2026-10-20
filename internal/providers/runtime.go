@@ -420,6 +420,12 @@ func observeRefresh(provider string, err error) {
 // erases the tokens (needs_reconsent; errReconsent); a provider that can't
 // be reached keeps the connection (*UnavailableError).
 func (s *Service) refreshConnection(ctx context.Context, p dbgen.AuthProvider, conn dbgen.ProviderConnection) (dbgen.ProviderConnection, error) {
+	return s.refreshConnectionAhead(ctx, p, conn, RefreshAhead)
+}
+
+// refreshConnectionAhead is refreshConnection for a token expiring within
+// ahead (the background refresh looks further ahead than a call does).
+func (s *Service) refreshConnectionAhead(ctx context.Context, p dbgen.AuthProvider, conn dbgen.ProviderConnection, ahead time.Duration) (dbgen.ProviderConnection, error) {
 	var out dbgen.ProviderConnection
 	var outcome error
 	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
@@ -434,7 +440,7 @@ func (s *Service) refreshConnection(ctx context.Context, p dbgen.AuthProvider, c
 		case c.Status != StatusActive:
 			outcome = errReconsent
 			return nil
-		case c.ExpiresAt == nil || !c.ExpiresAt.Before(s.now().Add(RefreshAhead)):
+		case c.ExpiresAt == nil || !c.ExpiresAt.Before(s.now().Add(ahead)):
 			out = c // another request refreshed it meanwhile
 			return nil
 		}

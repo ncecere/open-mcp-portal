@@ -117,7 +117,7 @@ WHERE p.access_mode = 'restricted';
 -- name: ServersOutsideProviderAccess :many
 -- Servers that require a restricted provider although neither their team nor
 -- they are listed: their calls are refused (-32010 provider_not_allowed).
-SELECT s.id, s.slug, s.name, t.slug AS team_slug
+SELECT s.id, s.slug, s.name, t.slug AS team_slug, t.name AS team_name
 FROM mcp_servers s
 JOIN teams t ON t.id = s.team_id
 JOIN auth_providers p ON p.id = s.auth_provider_id
@@ -140,7 +140,7 @@ WHERE id = @id AND status = 'active';
 SELECT pc.* FROM provider_connections pc
 JOIN auth_providers p ON p.id = pc.provider_id
 WHERE pc.status = 'active' AND pc.refresh_token_cipher IS NOT NULL AND pc.expires_at IS NOT NULL
-  AND pc.expires_at < @expires_before AND pc.last_used_at IS NOT NULL AND pc.last_used_at > @used_since
+  AND pc.expires_at < @expires_before::timestamptz AND pc.last_used_at IS NOT NULL AND pc.last_used_at > @used_since::timestamptz
   AND p.enabled AND p.kind = 'oauth2'
 ORDER BY pc.expires_at, pc.id
 LIMIT @page_size;

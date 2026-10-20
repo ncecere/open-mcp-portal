@@ -104,7 +104,7 @@ func (s *Service) access(ctx context.Context, q *dbgen.Queries, p dbgen.AuthProv
 		if i == 20 {
 			break
 		}
-		out.Blocked = append(out.Blocked, ServerRef{ID: b.ID, Slug: b.Slug, Name: b.Name, TeamSlug: b.TeamSlug})
+		out.Blocked = append(out.Blocked, ServerRef{ID: b.ID, Slug: b.Slug, Name: b.Name, TeamSlug: b.TeamSlug, TeamName: b.TeamName})
 	}
 	return out, nil
 }

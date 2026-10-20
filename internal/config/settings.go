@@ -168,6 +168,7 @@ var settings = []setting{
 	{key: "OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS", apply: integer(func(c *Config) *int { return &c.OAuthMaxUnusedClientsPerAddress }, 0, 1_000_000)},
 	{key: "OAUTH_REFRESH_ABSOLUTE_TTL", apply: daysOrDuration(func(c *Config) *time.Duration { return &c.OAuthRefreshAbsoluteTTL }, time.Hour, 10*365*24*time.Hour)},
 	{key: "HEALTH_CHECK_INTERVAL", apply: duration(func(c *Config) *time.Duration { return &c.HealthCheckInterval }, 0, 24*time.Hour)},
+	{key: "PROVIDER_REFRESH_INTERVAL", apply: duration(func(c *Config) *time.Duration { return &c.ProviderRefreshInterval }, 0, 24*time.Hour)},
 	{key: "SIGNING_KEY_PREPUBLISH", apply: duration(func(c *Config) *time.Duration { return &c.SigningKeyPrepublish }, 0, 7*24*time.Hour)},
 	{key: "SESSION_TTL", apply: duration(func(c *Config) *time.Duration { return &c.SessionTTL }, 5*time.Minute, 30*24*time.Hour)},
 	{key: "TRUSTED_PROXIES", apply: trustedProxies},

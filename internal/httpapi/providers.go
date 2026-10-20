@@ -44,6 +44,8 @@ func (a *api) providerRoutes() []route {
 		{"GET", admin + "/{providerId}", a.admin(a.adminGetAuthProvider)},
 		{"PATCH", admin + "/{providerId}", a.admin(a.adminUpdateAuthProvider)},
 		{"DELETE", admin + "/{providerId}", a.admin(a.adminDeleteAuthProvider)},
+		{"GET", admin + "/{providerId}/access", a.admin(a.adminGetAuthProviderAccess)},
+		{"PUT", admin + "/{providerId}/access", a.admin(a.adminSetAuthProviderAccess)},
 		{"GET", "/v1/admin/auth-provider-presets", a.admin(a.adminListAuthProviderPresets)},
 		{"GET", "/v1/admin/users/{userId}/connections", a.admin(a.adminListUserConnections)},
 		{"DELETE", "/v1/admin/users/{userId}/connections/{connectionId}", a.admin(a.adminRevokeUserConnection)},
@@ -101,8 +103,9 @@ func (a *api) toAPIAuthProvider(v providers.View) apitypes.AuthProvider {
 		TokenAuthMethod: apitypes.AuthProviderTokenAuthMethod(p.TokenAuthMethod), Pkce: p.Pkce,
 		AuthorizationUrl: p.AuthorizationUrl, TokenUrl: p.TokenUrl, RevocationUrl: p.RevocationUrl, UserinfoUrl: p.UserinfoUrl,
 		DefaultScopes: nonNilStrings(p.DefaultScopes), ScopeParam: p.ScopeParam,
-		ScopeSeparator:       apitypes.AuthProviderScopeSeparator(p.ScopeSeparator),
-		TokenResponseFormat:  apitypes.AuthProviderTokenResponseFormat(p.TokenResponseFormat),
+		ScopeSeparator:      apitypes.AuthProviderScopeSeparator(p.ScopeSeparator),
+		TokenResponseFormat: apitypes.AuthProviderTokenResponseFormat(p.TokenResponseFormat),
+		AccessMode:          apitypes.AuthProviderAccessMode(p.AccessMode), NarrowOnRefresh: p.NarrowOnRefresh,
 		ExtraAuthorizeParams: v.ExtraParams, LogoUrl: p.LogoUrl, RedirectUri: a.Providers.RedirectURI(),
 		ServerCount: v.ServerCount, ConnectionCount: v.ConnectionCount, Revision: p.Revision,
 		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt, CreatedByName: nonEmpty(v.CreatedByName),
@@ -127,7 +130,7 @@ func toAPIPreset(p providers.Preset) apitypes.AuthProviderPreset {
 		TokenAuthMethod: apitypes.AuthProviderTokenAuthMethod(p.TokenAuthMethod), Pkce: p.PKCE, ScopeParam: p.ScopeParam,
 		ScopeSeparator:      apitypes.AuthProviderPresetScopeSeparator(p.ScopeSeparator),
 		TokenResponseFormat: apitypes.AuthProviderTokenResponseFormat(p.RespFormat), ExtraAuthorizeParams: p.ExtraParams,
-		UrlParameters: params, DocsUrl: p.DocsURL, Notes: nonEmpty(p.Notes),
+		UrlParameters: params, DocsUrl: p.DocsURL, Notes: nonEmpty(p.Notes), NarrowOnRefresh: p.NarrowOnRefresh,
 	}
 }
 
@@ -154,7 +157,8 @@ func toAPIConnection(c providers.Connection) apitypes.ProviderConnection {
 	return apitypes.ProviderConnection{
 		Id: pc.ID, Provider: toAPIProviderRef(c.Provider), AccountLabel: pc.AccountLabel, Scopes: nonNilStrings(pc.Scopes),
 		Status: apitypes.ProviderConnectionStatus(pc.Status), ConnectedAt: pc.ConnectedAt, RefreshedAt: pc.RefreshedAt,
-		LastUsedAt: pc.LastUsedAt, ExpiresAt: pc.ExpiresAt, Refreshable: c.Refreshable(), AllowedServers: toAPIGrants(c.Servers),
+		LastUsedAt: pc.LastUsedAt, ExpiresAt: pc.ExpiresAt, Refreshable: c.Refreshable(), NarrowsScopes: c.NarrowsScopes,
+		AllowedServers: toAPIGrants(c.Servers),
 	}
 }
 
@@ -206,7 +210,28 @@ func fromAPIRequirement(in *apitypes.McpServerRequirementInput) *registry.Requir
 }
 
 func (a *api) listAuthProviders(w http.ResponseWriter, r *http.Request) {
-	ps, err := a.Providers.List(r.Context())
+	team := r.URL.Query().Get("team")
+	if team == "" {
+		ps, err := a.Providers.List(r.Context())
+		writeList(w, r, ps, err, toAPIProviderSummary)
+		return
+	}
+	// The picker of a team's server: only what the team (or the server) may
+	// require. The caller must be able to see the team.
+	var serverID uuid.UUID
+	if v := r.URL.Query().Get("serverId"); v != "" {
+		id, err := uuid.Parse(v)
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, "invalid_id", "serverId must be a UUID")
+			return
+		}
+		serverID = id
+	}
+	ta, err := a.Teams.Get(r.Context(), a.actor(r), team)
+	if failed(w, r, err) {
+		return
+	}
+	ps, err := a.Providers.Pickable(r.Context(), ta.Team.ID, serverID)
 	writeList(w, r, ps, err, toAPIProviderSummary)
 }
 
@@ -245,7 +270,7 @@ func (a *api) adminCreateAuthProvider(w http.ResponseWriter, r *http.Request) {
 		TokenAuthMethod: strPtr(in.TokenAuthMethod), PKCE: in.Pkce, AuthorizationURL: in.AuthorizationUrl, TokenURL: in.TokenUrl,
 		RevocationURL: in.RevocationUrl, UserinfoURL: in.UserinfoUrl, LogoURL: in.LogoUrl, DefaultScopes: in.DefaultScopes,
 		ScopeParam: in.ScopeParam, ScopeSeparator: strPtr(in.ScopeSeparator), RespFormat: strPtr(in.TokenResponseFormat),
-		ExtraParams: in.ExtraAuthorizeParams,
+		ExtraParams: in.ExtraAuthorizeParams, NarrowOnRefresh: in.NarrowOnRefresh,
 	})
 	if failed(w, r, err) {
 		return
@@ -273,6 +298,7 @@ func (a *api) adminUpdateAuthProvider(w http.ResponseWriter, r *http.Request) {
 		ClearRevocationURL: isNull(keys, "revocationUrl"), ClearUserinfoURL: isNull(keys, "userinfoUrl"),
 		ClearLogoURL: isNull(keys, "logoUrl"), LogoURL: in.LogoUrl, DefaultScopes: in.DefaultScopes, ScopeParam: in.ScopeParam,
 		ScopeSeparator: strPtr(in.ScopeSeparator), RespFormat: strPtr(in.TokenResponseFormat), ExtraParams: in.ExtraAuthorizeParams,
+		NarrowOnRefresh: in.NarrowOnRefresh,
 	}, rev)
 	if failed(w, r, err) {
 		return
@@ -286,6 +312,56 @@ func (a *api) adminDeleteAuthProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeOK(w, r, a.Providers.Delete(r.Context(), a.actor(r), id))
+}
+
+func toAPIAccess(ac providers.Access) apitypes.AuthProviderAccess {
+	teams := make([]apitypes.AuthProviderAccessTeam, len(ac.Teams))
+	for i, t := range ac.Teams {
+		teams[i] = apitypes.AuthProviderAccessTeam{Id: t.ID, Slug: t.Slug, Name: t.Name}
+	}
+	servers := make([]apitypes.ConnectServer, len(ac.Servers))
+	for i, sv := range ac.Servers {
+		servers[i] = toAPIConnectServer(sv)
+	}
+	blocked := make([]apitypes.ConnectServer, len(ac.Blocked))
+	for i, sv := range ac.Blocked {
+		blocked[i] = toAPIConnectServer(sv)
+	}
+	return apitypes.AuthProviderAccess{AccessMode: apitypes.AuthProviderAccessMode(ac.Mode), Teams: teams, Servers: servers,
+		Blocked: blocked, BlockedCount: ac.BlockedCount, Revision: ac.Provider.Revision}
+}
+
+func (a *api) adminGetAuthProviderAccess(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathUUID(w, r, "providerId")
+	if !ok {
+		return
+	}
+	ac, err := a.Providers.AdminAccess(r.Context(), a.actor(r), id)
+	if failed(w, r, err) {
+		return
+	}
+	writeRevised(w, http.StatusOK, ac.Provider.Revision, toAPIAccess(ac))
+}
+
+func (a *api) adminSetAuthProviderAccess(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathUUID(w, r, "providerId")
+	if !ok {
+		return
+	}
+	rev, ok := ifMatch(w, r)
+	if !ok {
+		return
+	}
+	var in apitypes.AuthProviderAccessInput
+	if !httpx.Decode(w, r, &in) {
+		return
+	}
+	ac, err := a.Providers.SetAccess(r.Context(), a.actor(r), id, providers.AccessInput{Mode: string(in.AccessMode),
+		TeamIDs: in.TeamIds, ServerIDs: in.ServerIds}, rev)
+	if failed(w, r, err) {
+		return
+	}
+	writeRevised(w, http.StatusOK, ac.Provider.Revision, toAPIAccess(ac))
 }
 
 func (a *api) adminListAuthProviderPresets(w http.ResponseWriter, r *http.Request) {

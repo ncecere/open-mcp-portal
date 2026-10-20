@@ -58,8 +58,38 @@ func newProvEnvHook(t *testing.T, hook func(*httpapi.Deps)) *provEnv {
 	return e
 }
 
-// createProvider configures a provider at a fake OAuth provider.
+// createProvider configures a provider at a fake OAuth provider and opens it
+// to every team: a new provider starts restricted with an empty list
+// (decision 69), which the tests of the access list use (createRestrictedProvider).
 func (e *provEnv) createProvider(slug string, f *testutil.FakeOAuth, extra map[string]any) apitypes.AuthProvider {
+	e.t.Helper()
+	return e.setAccess(e.createRestrictedProvider(slug, f, extra), "open", nil, nil)
+}
+
+// setAccess replaces a provider's access list (as an admin, in a browser
+// session) and returns the provider as it is after.
+func (e *provEnv) setAccess(p apitypes.AuthProvider, mode string, teams, servers []string) apitypes.AuthProvider {
+	e.t.Helper()
+	code, ec := e.admin.call("PUT", providersBase+"/"+p.Id.String()+"/access",
+		map[string]any{"accessMode": mode, "teamIds": nonNilIDs(teams), "serverIds": nonNilIDs(servers)}, nil, ifMatch(p.Revision))
+	mustCode(e.t, "set access", code, ec, 200, "")
+	var out apitypes.AuthProvider
+	if code := e.admin.get(providersBase+"/"+p.Id.String(), &out); code != 200 {
+		e.t.Fatalf("get provider = %d", code)
+	}
+	return out
+}
+
+func nonNilIDs(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+// createRestrictedProvider is createProvider as the API leaves it: restricted,
+// with nobody listed.
+func (e *provEnv) createRestrictedProvider(slug string, f *testutil.FakeOAuth, extra map[string]any) apitypes.AuthProvider {
 	e.t.Helper()
 	body := map[string]any{
 		"slug": slug, "name": strings.ToUpper(slug[:1]) + slug[1:], "preset": "github", "clientId": f.ClientID, "clientSecret": f.ClientSecret,
