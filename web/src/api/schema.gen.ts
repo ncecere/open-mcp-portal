@@ -1956,6 +1956,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/connections/{connectionId}/allowable-servers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: components["parameters"]["ConnectionIdParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The servers the caller may allow to use this connected account (they require the account's provider)
+         * @description Browser session only (403 session_required with an API key). Servers that require this connection's provider and that the caller may use through a gateway now: their teams' servers on gateways they can use and published servers with approved capabilities on gateways they have access to, the same rule a call is judged by (a server nobody can reach through a gateway is not listed, and neither is another team's private server). Each carries the address it has now and the scopes its capabilities ask of the account; covered says the connection is active and already has them (otherwise allowing needs a round trip to the provider: startMyConnection with those scopes), and allowed that the server is already allowed at this address for those scopes. 404 connection_not_found (unknown, or another person's); 404 provider_not_found (turned off); 409 not_platform_provider (an MCP server's own sign-in has nothing to allow).
+         */
+        get: operations["listAllowableServers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/connections/{connectionId}/allow-server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: components["parameters"]["ConnectionIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Allow a server to use the connected account, without a consent link
+         * @description Browser session only (403 session_required with an API key; automation tokens and service accounts are refused). Records the same grant as confirmConnectRequest (audited as provider_connection.server_allow, viaRequest false) for the server's address now and the scopes its capabilities require; nothing is sent to the provider. The request names the address and scopes the person was shown (listAllowableServers). 404 connection_not_found (unknown, or another person's); 404 server_not_found (no such server, or one the caller may not use through a gateway); 422 server_does_not_require_provider; 409 connect_required (not connected, needs reconnecting, or the account lacks the server's scopes: details.scopes names them, continue to the provider with startMyConnection); 409 server_changed (the address differs from the one shown, or the server asks for scopes that weren't shown: reload); 409 not_platform_provider; 404 provider_not_found (turned off); 400 invalid_allow (no address). 429 slow_down (20 a minute per person, shared with revokeAllowedServer).
+         */
+        post: operations["allowConnectionServer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/connections/{connectionId}/allowed-servers/{serverId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: components["parameters"]["ConnectionIdParam"];
+                serverId: components["parameters"]["ServerIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Take back the allowance of one server; the connection stays
+         * @description Browser session only (403 session_required with an API key). Deletes the grant of one server (ProviderConnection. allowedServers); the account stays connected, and the next call of that server asks to allow it again. Audited as provider_connection.server_revoke. 404 connection_not_found (unknown, or another person's); 404 server_grant_not_found (the server isn't allowed). 429 slow_down.
+         */
+        delete: operations["revokeAllowedServer"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/connect/requests/{requestId}/confirm": {
         parameters: {
             query?: never;
@@ -4491,6 +4558,30 @@ export interface components {
             scopes: components["schemas"]["ScopeList"];
             /** Format: date-time */
             consentedAt: string;
+        };
+        /** @description A server a person may allow to use a connected account, as the Allow button shows it */
+        AllowableServer: {
+            server: components["schemas"]["ConnectServer"];
+            /**
+             * @description The scheme, host and port of the server's URL now; an allowance is bound to it
+             * @example https://tools.example.com
+             */
+            origin: string;
+            /** @description What the server's capabilities, as the person may use them, ask of the account */
+            scopes: components["schemas"]["ScopeList"];
+            /** @description The connection is active and already has every one of scopes */
+            covered: boolean;
+            /** @description Already allowed at this origin for these scopes */
+            allowed: boolean;
+        };
+        /** @description The server to allow, with the address and scopes the person was shown */
+        AllowServerRequest: {
+            /** Format: uuid */
+            serverId: string;
+            /** @description The origin listAllowableServers returned; refused (409 server_changed) when the server has another now */
+            origin: string;
+            /** @description The scopes listAllowableServers returned; refused when the server asks for any that are not here */
+            scopes: components["schemas"]["ScopeList"];
         };
         ConnectConfirmed: {
             provider: components["schemas"]["ProviderRef"];
@@ -9475,6 +9566,88 @@ export interface operations {
             200: components["responses"]["OkReply"];
             401: components["responses"]["ErrorReply"];
             404: components["responses"]["ErrorReply"];
+        };
+    };
+    listAllowableServers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: components["parameters"]["ConnectionIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Servers by name */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AllowableServer"][];
+                    };
+                };
+            };
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+        };
+    };
+    allowConnectionServer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: components["parameters"]["ConnectionIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AllowServerRequest"];
+            };
+        };
+        responses: {
+            /** @description The server is allowed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ConnectConfirmed"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            422: components["responses"]["ErrorReply"];
+            429: components["responses"]["ErrorReply"];
+        };
+    };
+    revokeAllowedServer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: components["parameters"]["ConnectionIdParam"];
+                serverId: components["parameters"]["ServerIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            429: components["responses"]["ErrorReply"];
         };
     };
     confirmConnectRequest: {

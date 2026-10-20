@@ -60,8 +60,8 @@ export function MyConnectionsPage() {
           <>
             <ConnectedNotice />
             <Alert tone="info">
-              A tool that needs an account you haven&apos;t connected answers with a link: open it, check what it asks for, and connect. Then run the tool again. These
-              are different from <TextLink render={<Link to="/settings/connected-apps" />}>{terms.connectedApps}</TextLink>, the AI clients you let use gateways as you.
+              A tool that needs an account you haven&apos;t connected answers with a link: open it, check what it asks for, and connect. Then run the tool again. An agent
+              acting for you can&apos;t open links: connect the account here, then choose Allow servers… on it to allow the servers your agent uses. These are different from <TextLink render={<Link to="/settings/connected-apps" />}>{terms.connectedApps}</TextLink>, the AI clients you let use gateways as you.
             </Alert>
           </>
         }

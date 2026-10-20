@@ -27,6 +27,9 @@ export type ProviderServerGrant = Schemas["ProviderServerGrant"];
 /** "Status (Platform tools)": the server a person is asked to allow, with its team (F-3, decision 60). */
 export const serverWithTeam = (s: Pick<ConnectServer, "name" | "teamName">) => `${s.name} (${s.teamName})`;
 
+/** Where connecting from Account › My connections comes back to: the page, saying which provider was connected. */
+export const connectedReturnTo = (providerSlug: string) => `/settings/connections?connected=${encodeURIComponent(providerSlug)}`;
+
 /** An MCP server's own sign-in (docs/phase7-upstream-oauth.md): a server-bound provider, named after its server. */
 export const isServerSignIn = (p: Pick<ProviderRef, "kind">) => p.kind === "mcp_server";
 

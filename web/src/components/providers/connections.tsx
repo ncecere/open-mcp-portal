@@ -8,12 +8,14 @@
  * Admin › Users › person shows anyone's, where platform admins disconnect
  * and auditors read. Tokens are never shown anywhere. "Allowed servers" lists
  * the MCP servers the person allowed to use a platform provider's account
- * (name and team; read-only: disconnecting removes them all). A sign-in to an MCP
+ * (name and team); on My connections, "Allow servers…" opens the dialog that
+ * allows a server (with no call and no link: an agent can't open one) and takes
+ * a single server back (allow-servers.tsx); disconnecting removes them all. A sign-in to an MCP
  * server in oauth mode (provider.kind mcp_server) is named after the server,
  * with an "MCP server" badge and its team.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, RefreshCw, Unplug } from "lucide-react";
+import { KeyRound, RefreshCw, ShieldCheck, Unplug } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { api, errorMessage, unwrap } from "../../api/client";
 import { myConnectionsKey } from "../../api/queries";
@@ -24,7 +26,8 @@ import { Badge, StatusBadge } from "@/components/ui/badge/badge";
 import { CellText, type DataTableColumn } from "@/components/ui/data-table/data-table";
 import { toast } from "@/components/ui/toast/toast";
 import s from "../../pages/shared.module.css";
-import { connectionName, connectionStatusLabels, connectionStatusTone, isServerSignIn, type ProviderConnection, scopesText, serverWithTeam } from "./labels";
+import { AllowServersDialog } from "./allow-servers";
+import { connectedReturnTo, connectionName, connectionStatusLabels, connectionStatusTone, isServerSignIn, type ProviderConnection, scopesText, serverWithTeam } from "./labels";
 import { useStartConnection } from "./requires";
 
 /** Whose accounts: the signed-in person's, or a person's on their admin page. */
@@ -32,8 +35,7 @@ export type ConnectionsOwner = { self: true } | { self: false; userId: string; n
 
 export const connectionsKey = (owner: ConnectionsOwner) => (owner.self ? myConnectionsKey : ["admin", "user", owner.userId, "connections"]);
 
-/** Where connecting from Account › My connections comes back to: the page, saying which provider was connected. */
-export const connectedReturnTo = (providerSlug: string) => `/settings/connections?connected=${encodeURIComponent(providerSlug)}`;
+export { connectedReturnTo };
 
 export function useConnections(owner: ConnectionsOwner) {
   return useQuery({
@@ -159,6 +161,9 @@ type Props = {
 export function ProviderConnections({ owner, canDisconnect, title, description, primaryAction, notices, emptyAction }: Props) {
   const connections = useConnections(owner);
   const [target, setTarget] = useState<ProviderConnection | null>(null);
+  // The connection whose servers are being allowed (the dialog reads its allowed servers from the list, so it stays current).
+  const [allowingId, setAllowingId] = useState<string | null>(null);
+  const allowing = connections.data?.find((c) => c.id === allowingId);
   const disconnect = useDisconnect(owner, () => setTarget(null));
   const start = useStartConnection();
   const reconnect = (c: ProviderConnection) =>
@@ -191,6 +196,13 @@ export function ProviderConnections({ owner, canDisconnect, title, description, 
             disabled: start.isPending || start.isSuccess,
             onSelect: () => reconnect(c),
           },
+          {
+            label: "Allow servers…",
+            icon: <ShieldCheck aria-hidden />,
+            // A platform provider's account only; an MCP server's own sign-in is for that server alone.
+            hidden: !owner.self || isServerSignIn(c.provider),
+            onSelect: () => setAllowingId(c.id),
+          },
           { label: "Disconnect…", icon: <Unplug aria-hidden />, danger: true, hidden: !canDisconnect, onSelect: () => setTarget(c) },
         ]}
         empty={{
@@ -203,6 +215,7 @@ export function ProviderConnections({ owner, canDisconnect, title, description, 
         }}
         tableProps={{ columnsMenuMin: 5 }}
       />
+      {allowing && <AllowServersDialog connection={allowing} onClose={() => setAllowingId(null)} />}
       <ConfirmMutationDialog
         target={target}
         onClose={() => setTarget(null)}
