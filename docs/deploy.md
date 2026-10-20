@@ -18,12 +18,12 @@ Released images are `ghcr.io/ncecere/open-mcp-portal:vX.Y.Z` (and `latest` for f
 (linux/amd64 and linux/arm64) with SBOM and provenance attestations, signed with cosign (keyless, GitHub Actions OIDC):
 
 ```sh
-docker pull ghcr.io/ncecere/open-mcp-portal:v0.2.2
-docker run --rm ghcr.io/ncecere/open-mcp-portal:v0.2.2 version     # open-mcp-portal 0.2.2 (<commit>)
+docker pull ghcr.io/ncecere/open-mcp-portal:v0.3.0
+docker run --rm ghcr.io/ncecere/open-mcp-portal:v0.3.0 version     # open-mcp-portal 0.3.0 (<commit>)
 
 # Pin the digest from the GitHub Release, and verify it first (cosign v3 or newer):
 cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:<digest> \
-  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.2.2 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.3.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
@@ -177,13 +177,13 @@ pins it), `SHUTDOWN_DELAY=10s`, `SHUTDOWN_TIMEOUT=125s`, and placeholders for `A
 
 ### Image
 
-The base references `ghcr.io/ncecere/open-mcp-portal` and sets its tag to `v0.2.2` through a Kustomize `images:` entry.
+The base references `ghcr.io/ncecere/open-mcp-portal` and sets its tag to `v0.3.0` through a Kustomize `images:` entry.
 A tag can move, so pin the digest of the release you verified in your overlay (the digest wins over the tag):
 
 ```yaml
 images:
   - name: ghcr.io/ncecere/open-mcp-portal
-    newTag: v0.2.2
+    newTag: v0.3.0
     digest: sha256:<digest from the GitHub Release>
 ```
 
@@ -259,9 +259,9 @@ tokens), audit entries and access logs all name the proxy, so one noisy caller c
 - **`open-mcp-portal doctor`** prints an info line (`configuration / trusted proxies`) when `APP_URL` is https and
   `TRUSTED_PROXIES` is empty. It cannot see traffic, so ignore it when nothing sits in front of the portal.
 - **Sign-in cookie.** On https the sign-in state cookie is `__Host-omp_oidc_state` (host-only, `Secure`, `Path=/`), like
-  the session cookie `__Host-omp_session`; over the development http origin the names have no prefix. For one release
-  (v0.2.2) the old name `omp_oidc_state` is still accepted, so a person who started signing in just before an upgrade is
-  not sent back to the start.
+  the session cookie `__Host-omp_session`; over the development http origin the names have no prefix. The old
+  name `omp_oidc_state` was accepted on https for one release (v0.2.2) and is not read any more (v0.3.0): a person who
+  started signing in just before the upgrade to v0.3.0 starts again.
 
 ### Health checks
 

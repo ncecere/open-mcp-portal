@@ -6,7 +6,7 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
-## Unreleased
+## [0.3.0] - 2026-10-20
 
 Calls from agents as the person's calls (roadmap #55 to #58 and #60, [decisions](docs/decisions.md) 65 to 68). Migration `00020` (expand-only).
 
@@ -24,6 +24,7 @@ Calls from agents as the person's calls (roadmap #55 to #58 and #60, [decisions]
   - **Names from the token lose Unicode format characters** (I-8): right-to-left overrides, zero-width spaces and joiners, the byte order mark and the soft hyphen are removed from the agent's name and the other texts shown to people, as control characters already were; the agent, team and token IDs may contain none. The stale-keys warning is logged at most once a minute per platform (I-3). The unused `request.intersect` is removed (I-5).
   - **Documented, no code:** a server with Send identity off receives the person's provider token on a relayed call and no `act` claim; leave Send identity on for servers that must tell agents from people (L-3, [upstream-identity.md](docs/upstream-identity.md#calls-from-agents)). Accepted limits I-1, I-2, I-4, I-6 and I-7 are one line each in the threat model.
 - **Contract fixtures from Pi Durable Platform v0.4.0** ([agent-platforms.md](docs/agent-platforms.md#what-is-not-covered)). `internal/agentidentity/testdata/pdp/` holds 8 tokens and 5 key sets produced on 2026-10-20 by PDP's real signer and JWKS handler, with fixed timestamps and a README (no private key: public JWK members only), and `contract_pdp_test.go` checks that the verifier accepts or refuses each exactly as recorded, including key rotation (prepublish, overlap, drop), clock-skew edges, replay and tampering. The docs now say that a team agent's shared thread or background work names nobody, a personal workspace names its owner even with no thread (`person_present` false), and that a PDP server without `identityAudience` gets tokens whose `aud` is the server's own URL, which the portal refuses unless the platform's audience is set to it. Not checked: PDP's gateway and runtime end to end, and a live deployment.
+- **The old sign-in state cookie name is no longer read** (as announced in v0.2.2). On https only `__Host-omp_oidc_state` is accepted; a person who started signing in just before the upgrade starts again.
 - **Tests:** `TestIdentitySentMigrationKeepsWhatExists` named "the newest migration" and failed once `00020` existed; it now goes down to migration 18 and up to 19 explicitly. The relay tests use TLS issuers (the test app trusts the test certificate) and mint tokens whose `tool` is the tool called.
 
 Documentation: the [roadmap](docs/roadmap.md) is rewritten around what v0.2.1 shipped and what is still open, with an [issue](https://github.com/ncecere/open-mcp-portal/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap) and implementation plan for each item; the threat model's hardening table links its issues and no longer lists Trivy as open.

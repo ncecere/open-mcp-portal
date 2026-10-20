@@ -103,24 +103,20 @@ func TestOIDCStateCookieIsHostPrefixedOnHTTPS(t *testing.T) {
 	}
 }
 
-// A person who started signing in before the upgrade holds the plain name on
-// an https origin: the callback still works for one release.
-func TestOIDCStateCookieUpgradeMidSignIn(t *testing.T) {
+// The plain cookie name that v0.2.2 still accepted on https for one release
+// is no longer read (v0.3.0): a sign-in that carries only the old name fails
+// with a clear error, and the old name is still cleared.
+func TestOIDCStateCookieOldNameNotAcceptedOnHTTPS(t *testing.T) {
 	app, p := httpsApp(t)
 	l := startSignIn(t, app, p)
 	issued := cookieNamed(l.cookies, "__Host-omp_oidc_state")
 	legacy := &http.Cookie{Name: "omp_oidc_state", Value: issued.Value, Path: "/", Secure: true, HttpOnly: true}
-	res := callbackWith(t, app, l, legacy)
-	if res.StatusCode != http.StatusSeeOther || cookieNamed(res.Cookies(), "__Host-omp_session") == nil {
-		t.Fatalf("callback with the old cookie name = %d", res.StatusCode)
-	}
-	// The old name is cleared too, so it doesn't linger.
-	if c := cookieNamed(res.Cookies(), "omp_oidc_state"); c == nil || c.MaxAge >= 0 {
-		t.Errorf("old cookie not cleared: %+v", c)
+	if res := callbackWith(t, app, l, legacy); res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("callback with only the old cookie name = %d, want 400", res.StatusCode)
 	}
 
-	// The current name wins: a wrong value under it is not rescued by a right
-	// value under the old name, and the state is single-use.
+	// The current name works, and a wrong current value is not rescued by a
+	// right value under the old name; the state is single-use.
 	l2 := startSignIn(t, app, p)
 	right := cookieNamed(l2.cookies, "__Host-omp_oidc_state").Value
 	wrong := &http.Cookie{Name: "__Host-omp_oidc_state", Value: strings.Repeat("x", len(right))}
@@ -133,8 +129,8 @@ func TestOIDCStateCookieUpgradeMidSignIn(t *testing.T) {
 	}
 }
 
-// Over plain http (the development origin) the plain name is kept, and
-// the __Host- name (which a browser would not accept there) is still read.
+// Over plain http (the development origin) the plain name is kept; the
+// __Host- name (which a browser would not accept there) is not read.
 func TestOIDCStateCookieOnPlainHTTP(t *testing.T) {
 	app, p := oidcApp(t, nil)
 	l := startSignIn(t, app, p)
@@ -150,7 +146,7 @@ func TestOIDCStateCookieOnPlainHTTP(t *testing.T) {
 	}
 	l = startSignIn(t, app, p)
 	other := &http.Cookie{Name: "__Host-omp_oidc_state", Value: cookieNamed(l.cookies, "omp_oidc_state").Value}
-	if res := callbackWith(t, app, l, other); res.StatusCode != http.StatusSeeOther {
-		t.Fatalf("callback with the other name = %d", res.StatusCode)
+	if res := callbackWith(t, app, l, other); res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("callback with only the other name = %d, want 400", res.StatusCode)
 	}
 }

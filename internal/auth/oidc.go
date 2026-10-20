@@ -139,16 +139,12 @@ func (s *Service) Callback(w http.ResponseWriter, r *http.Request) {
 }
 
 // stateCookie reads this browser's sign-in state: the cookie under the
-// current name, else under the other one. A sign-in started before an upgrade
-// to v0.2.2 carries the plain name on https; accepting it for one release
-// (v0.2.2; remove in v0.3) keeps that person's sign-in from failing. The
-// current name always wins when both are present.
+// current name only. (v0.2.2 also accepted the plain name on https for one
+// release so a sign-in started during that upgrade didn't fail; that
+// allowance ended in v0.3.0. A plain-named cookie is still cleared below.)
 func (s *Service) stateCookie(r *http.Request) (string, bool) {
-	secure := s.cfg.SecureCookies()
-	for _, name := range []string{StateCookieName(secure), StateCookieName(!secure)} {
-		if c, err := r.Cookie(name); err == nil && c.Value != "" {
-			return c.Value, true
-		}
+	if c, err := r.Cookie(StateCookieName(s.cfg.SecureCookies())); err == nil && c.Value != "" {
+		return c.Value, true
 	}
 	return "", false
 }
