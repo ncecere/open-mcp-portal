@@ -93,8 +93,10 @@ provider where possible.
 *Calls an agent platform relays for a person (decision 66, [agent-platforms.md](agent-platforms.md)) use the person's
 connection as below, but an agent has no browser: where step 3 gives a consent link, such a call answers a tool error
 (a prompt or resource read: `-32010`) naming the provider and saying to connect under Account › My connections, makes no
-consent request, and is recorded `needs_authorization` with class `needs_connection`. A service account that is the
-relay itself, with no person named, is a service account here too (step 1).*
+consent request, and is recorded `needs_authorization` with class `needs_connection`. For `server_not_allowed` the
+message names the server and says to allow it under Account › My connections ("Allow servers…", see "Allowing a server
+from My connections" below); it never holds a link. A service account that is the relay itself, with no person named,
+is a service account here too (step 1).*
 
 The existing checks (credential, person active, gateway, grant, selection, role, availability) run first, so anything
 not allowed still looks like "not found". Then, for `tools/call`, `prompts/get` and `resources/read` of a capability
@@ -191,6 +193,29 @@ Client          Gateway /mcp/{slug}            Browser (person)          Provide
   provider (`409 connect_required` when the account no longer covers the scopes; the page then offers the provider).
   A link is for one server at one origin: it can allow only that server, and once the server moved to another origin
   (or requires another provider) the link answers `410 connect_request_server_changed` everywhere.
+- **Allowing a server from My connections (decision 68, #60).** An agent's call never returns a consent link, so the
+  person can allow a server with no call of their own: Account › My connections › a connection › **Allow servers…**.
+  - `GET /v1/me/connections/{id}/allowable-servers` lists the servers that **require the connection's provider** and
+    that the person **may use through a gateway now** (`gateways.ReachableServers`: the offers of the gateways they can
+    use, so their teams' servers on their teams' gateways and published servers with approved capabilities on gateways
+    granted to them; another team's private server, or a server on no gateway they can use, is not listed). Each item
+    has the server and its team, the origin its URL has now, the scopes its capabilities ask of the account (the union
+    over the capabilities the person may use), `covered` (the connection is active and already has them) and `allowed`.
+  - `POST /v1/me/connections/{id}/allow-server {serverId, origin, scopes}` records the same `provider_server_grants`
+    row as the confirm step, bound to the **server's origin now** and **the scopes it requires** (the grant is
+    widened, never narrowed, as for a link), with nothing sent to the provider. `origin` and `scopes` are what the list
+    showed: `409 server_changed` when the origin differs or the server asks for a scope that wasn't shown (a narrower
+    requirement is fine). Other refusals: `404 connection_not_found`; `404 server_not_found` (no such server, or one the
+    person may not use; the same answer for both); `422 server_does_not_require_provider`; `409 connect_required` (the
+    connection isn't active or lacks the scopes; `details.scopes` names them, and the page starts the provider round
+    trip as for a link); `409 not_platform_provider`; `400 invalid_allow`. The server row is locked while the grant is
+    written, so an edit of its address or provider (which deletes its grants) can't slip between the check and the
+    write. Audited as `provider_connection.server_allow` with `viaRequest` false.
+  - `DELETE /v1/me/connections/{id}/allowed-servers/{serverId}` takes back one server's allowance (`404
+    server_grant_not_found` when there is none); the connection stays. Audited as `provider_connection.server_revoke`.
+  - All three are the person's own, in a browser session only (no `x-omp-token-scopes`: automation tokens get `403
+    token_not_allowed`; API keys and service-account keys are not accepted on `/v1`), and allow and take back share
+    one limit of 20 a minute per person (`429 slow_down`).
 - **Start** asks for the union of the granted scopes (if active), the request's or caller's scopes, and, with neither,
   the provider defaults. A new token therefore replaces the old one without losing scopes. It stores a single-use
   state (256-bit, digest stored) bound to the **session digest, person, provider, request and return path**. With
@@ -249,7 +274,9 @@ Client          Gateway /mcp/{slug}            Browser (person)          Provide
 - `provider_connection.create` (`scopes`, `reconnect`, `viaRequest`), `provider_connection.refresh_failed` (system
   actor; `reason`), and `provider_connection.revoke` (`reason` `user`/`admin`/`provider_deleted`, `providerRevoked`).
   These use target `provider_connection` with label "person · provider". `provider_connection.server_allow` (F-3:
-  `server`, `serverId`, `origin`, `scopes`, `viaRequest`) records a person allowing a server;
+  `server`, `serverId`, `origin`, `scopes`, `viaRequest`: true for a consent link's confirm or callback, false from My connections)
+  records a person allowing a server and `provider_connection.server_revoke` (`server`, `serverId`, `origin`, `scopes`)
+  taking one back;
   `mcp_server.provider_grants_reset` (target `mcp_server`, in the team's log; `reason` `origin_changed`,
   `provider_changed` or `server_deleted`, `grantsDeleted`, and `oldOrigin`/`newOrigin`) records grants ending.
 - `mcp_capability.requirement_set`; `mcp_server.update` carries the requirement before and after.
@@ -290,6 +317,11 @@ Client          Gateway /mcp/{slug}            Browser (person)          Provide
   link for one server can't allow another (or a server that moved; another person's, used and expired links), confirm
   without a request to the provider, the three consent answer shapes for `server_not_allowed`, resets on provider
   change, removal and delete, cascades, the connections list, and the secret sentinel.
+- Allow from My connections (`allow_server_integration_test.go`): the list and the grant without a call, bound to the
+  current origin and scopes like a link's (rows and audit compared), a moved server and a widened requirement refused, a
+  server that doesn't require the provider, another team's private server, the catalog path through a gateway granted to
+  the person, a connection that doesn't cover the scopes, take back, session-only and the rate limit, and an agent's
+  relayed call that gets the link-free message before and succeeds after.
 - Reserved header names refused on servers. Vitest for every new screen, including the confirm page's scope list
   and wrong-person state.
 

@@ -78,7 +78,11 @@ An agent has nobody to open a link. For a relayed person call the portal **never
 
 This covers a missing, lapsed or too narrow connection, an MCP server's own sign-in (in `oauth` mode, including an upstream `401` that can't be refreshed and a `403 insufficient_scope`), and a server the person hasn't allowed to use their account (F-3 `server_not_allowed`). The call record is `needs_authorization` with error class `needs_connection`. If a server asks for input (an elicitation) while serving a relayed call, the call fails with a tool error: an agent can't answer it.
 
-**A gap to know about.** A person can allow a *server* to use a connection only through a consent link that a call of their own gives them. Account › My connections shows the servers they allowed but doesn't start that. When an agent's call fails with "allow STATUS (tools) to use your Github account", the person runs one of that server's tools once from their own MCP client (it shows the link) and allows it. A way to do it from the portal is a possible follow-up.
+**Allowing a server without a call (decision 68, #60).** A person allows a *server* to use a connection in Account › My connections: on the connection, **Allow servers…** lists the servers that require that provider and that they may use through a gateway now (their team's servers on gateways they can use, and published servers on gateways they have access to), each with its team, address and the scopes it asks for, and **Allow**. No call of their own and no link is needed. When an agent's call fails with "allow STATUS (tools) to use your Github account", the person does exactly that; the message is link-free:
+
+> `github__create_issue needs you to allow STATUS (tools) to use your Github account (repo), which you haven't. Allow STATUS under Account › My connections in Open MCP Portal, then try again.`
+
+Allowing records the same grant as a consent link's confirm step (the server's address now, the scopes it requires), is the person's own act in a browser session (an API key, automation token, service account or agent can't), and is audited. A server that is not on a gateway the person can use is not listed and can't be allowed. If the account doesn't have the scopes yet, the dialog offers **Grant more access** (the normal provider round trip). **Take back** deletes one server's allowance without disconnecting.
 
 ## Calls that need the person there
 
