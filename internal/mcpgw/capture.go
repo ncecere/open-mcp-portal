@@ -17,7 +17,7 @@ import (
 // gateway or its server captures payloads (docs/phase6-operations.md
 // "Payload capture"). args are the call's arguments (or {"uri": ...} for a
 // read). The values the gateway handles for the call (the identity token,
-// the provider token, the server's static header value and the client's own
+// the provider token, the server's credential parts and the client's own
 // credential) are redacted wherever they appear; they are never stored.
 func (rc *request) captureCall(o gateways.Offer, args []byte, target upstream.Target, token string, cred *providers.Credential) {
 	rc.forwarded = true
@@ -28,7 +28,9 @@ func (rc *request) captureCall(o gateways.Offer, args []byte, target upstream.Ta
 	if len(args) == 0 || bytes.Equal(args, []byte("null")) {
 		args = []byte("{}")
 	}
-	secrets := []string{token, target.HeaderValue, target.IdentityValue}
+	// Every part of the server's own credential, the base64 form of Basic and
+	// the identity token (target.Secrets), and the token as signed.
+	secrets := append([]string{token}, target.Secrets()...)
 	if _, bearer, ok := strings.Cut(rc.r.Header.Get("Authorization"), " "); ok {
 		secrets = append(secrets, strings.TrimSpace(bearer))
 	}

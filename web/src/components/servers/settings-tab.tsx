@@ -1,7 +1,7 @@
 /*
  * A server's Settings tab: one form over the server (If-Match on its
  * revision; edits survive a change made elsewhere, AD-01), the replace-only
- * header value, and Delete in the Danger zone (owners and admins). Members
+ * credential values, and Delete in the Danger zone (owners and admins). Members
  * and Admin read it: Admin never changes a team's server settings.
  *
  * A new URL is read again at once. User authorization (requirement-section.tsx)
@@ -39,7 +39,10 @@ import type { McpServer } from "./labels";
 import { type RequirementForm, requirementBody, requirementFormOf, reviewedAgain, serverChangeWidens } from "./requirement";
 import { RequirementFields } from "./requirement-section";
 import { capabilitiesQuery, invalidateServer, type ServerAbilities, type ServerScope, storeServer } from "./scope";
-import { type AuthEdit, AuthFields, EnabledSwitch, type ServerForm, serverFieldErrors, serverProblems, TimeoutField, UrlField, urlProblem } from "./server-fields";
+import { CredentialFields } from "./credential-fields";
+import { credentialsBody, partProblems, type PartForm, partsOf } from "./credentials";
+import { EnabledSwitch, type ServerForm, serverFieldErrors, serverProblems, TimeoutField, UrlField, urlProblem } from "./server-fields";
+import { sameOrigin } from "./origin";
 import { AuthChangeNotes, settingsAuthBody } from "./settings-auth";
 import { applyDetection, authChange, authModeOf, type DetectResult, oauthProblems, upstreamFormOf, type UpstreamForm } from "./upstream-auth";
 
@@ -49,7 +52,6 @@ const formOf = (x: McpServer): SettingsForm => ({
   name: x.name,
   description: x.description,
   url: x.url,
-  authHeaderName: x.authHeaderName ?? "",
   timeoutSeconds: x.timeoutSeconds,
   enabled: x.enabled,
   requirement: requirementFormOf(x),
@@ -61,7 +63,6 @@ const labels = {
   name: "Name",
   description: "Description",
   url: "URL",
-  authHeaderName: "Header name",
   timeoutSeconds: "Timeout (seconds)",
   enabled: "Enabled",
   requirement: "User authorization",
@@ -69,7 +70,6 @@ const labels = {
   upstream: "Authentication",
   requiresPresentPerson: "Require a present person",
 };
-const noAuthEdit: AuthEdit = { value: "", remove: false };
 
 /** The requirement's field errors: the form's own, or the server's refusal. */
 function requirementErrors(r: RequirementForm, err: unknown, shown: boolean) {
@@ -103,7 +103,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   const [form, setForm, revision] = useRevisionForm(saved, server.revision, { labels });
   const providers = useQuery(authProvidersQuery());
   const caps = useQuery(capabilitiesQuery(scope, server.id));
-  const [auth, setAuth] = useState<AuthEdit>(noAuthEdit);
+  const [parts, setParts] = useState<PartForm[]>(() => partsOf(server));
   const [secret, setSecret] = useState("");
   const [detected, setDetected] = useState<DetectResult>();
   const [submitted, setSubmitted] = useState(false);
@@ -111,7 +111,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   const kept = useCaptureRetention(server.teamSlug, false);
   const save = useMutation({
     mutationFn: async (_: { before: McpServer; urlChanged: boolean }) => {
-      const authBody = settingsAuthBody(server, form, auth, secret, detected);
+      const authBody = settingsAuthBody(server, form, parts, secret, detected);
       // OAuth replaces a requirement (one credential per call): switching removes it.
       const requirement = form.upstream.mode === "oauth" ? (server.requirement ? null : undefined) : requirementBody(form.requirement, server);
       return unwrap(
@@ -133,7 +133,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
     },
     onSuccess: (updated, { before, urlChanged }) => {
       setConfirmingCapture(null);
-      setAuth(noAuthEdit);
+      setParts(partsOf(updated));
       setSecret("");
       setSubmitted(false);
       storeServer(qc, updated);
@@ -148,14 +148,20 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   // Only the chosen mode's fields count.
   const upstream = form.upstream.mode === "oauth" ? form.upstream : { ...form.upstream, oauth: saved.upstream.oauth };
   const dirty =
-    JSON.stringify({ ...form, name: form.name.trim(), url: form.url.trim(), requirement, upstream }) !== JSON.stringify(saved) || Boolean(auth.value) || auth.remove || Boolean(secret);
+    JSON.stringify({ ...form, name: form.name.trim(), url: form.url.trim(), requirement, upstream }) !== JSON.stringify(saved) ||
+    (form.upstream.mode === "static_header" && credentialsBody(parts, server) !== undefined) ||
+    Boolean(secret);
   const staticMode = form.upstream.mode === "static_header";
+  // Another origin never keeps a stored value (F-1): every part is entered again.
+  const originMoved = !sameOrigin(server.url, form.url.trim());
+  const partErrors = staticMode ? partProblems(parts, { originMoved }) : {};
+  const noParts = staticMode && parts.length === 0;
   const problems = {
-    ...serverProblems(staticMode ? form : { ...form, authHeaderName: "" }, staticMode ? auth : noAuthEdit, { dev, hasAuth: server.hasAuth }),
+    ...serverProblems(form, { dev }),
     ...oauthProblems(form.upstream, { server, detected, secret }),
   };
   const reqErrors = requirementErrors(form.requirement, save.error, submitted);
-  const invalid = Object.keys(problems).length > 0 || Object.keys(requirementErrors(form.requirement, null, true)).length > 0;
+  const invalid = Object.keys(problems).length > 0 || Object.keys(partErrors).length > 0 || noParts || Object.keys(requirementErrors(form.requirement, null, true)).length > 0;
   const shown = submitted ? problems : {};
   const refused = serverFieldErrors(save.error).url;
   const errors = { ...shown, url: shown.url ?? refused };
@@ -200,7 +206,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
       }}
       onDiscard={() => {
         setForm(saved);
-        setAuth(noAuthEdit);
+        setParts(partsOf(server));
         setSecret("");
         setDetected(undefined);
         setSubmitted(false);
@@ -216,7 +222,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
         </Field>
         <CopyField label="Slug" name="server slug" value={server.slug} description="Can't be changed. Gateways name the server's tools slug__tool." />
       </SettingsSection>
-      <SettingsSection title="Connection" description="A new URL is read again when you save. After changing only the header, press Refresh on the Overview tab.">
+      <SettingsSection title="Connection" description="A new URL is read again when you save. After changing only the credential, press Refresh on the Overview tab.">
         <UrlField {...fields} />
         {leavesCatalog && urlChanged && (
           <Alert tone="warning" title="The server will leave the catalog">
@@ -226,7 +232,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
         <TimeoutField {...fields} />
         <EnabledSwitch {...fields} />
       </SettingsSection>
-      <SettingsSection title="Authentication" description="How the portal proves itself to the server: nothing, one static header (stored encrypted), or each person's own OAuth sign-in.">
+      <SettingsSection title="Authentication" description="How the portal proves itself to the server: nothing, a static credential of headers, a token, Basic or a query key (stored encrypted), or each person's own OAuth sign-in.">
         <AuthModeFields
           team={server.teamSlug}
           url={form.url}
@@ -247,7 +253,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
           setSecret={setSecret}
           errors={submitted ? problems : {}}
           disabled={!canEdit}
-          headerFields={<AuthFields {...fields} auth={auth} setAuth={setAuth} hasAuth={server.hasAuth} hint={server.authValueHint} />}
+          headerFields={<CredentialFields parts={parts} setParts={setParts} errors={submitted ? partErrors : {}} disabled={!canEdit} noParts={submitted && noParts} />}
           notes={canEdit && <AuthChangeNotes server={server} change={change} leavesCatalog={leavesCatalog} />}
         />
       </SettingsSection>

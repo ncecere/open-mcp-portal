@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"strings"
 
@@ -52,17 +53,44 @@ var errAuthValueRequired = unprocessable("auth_value_required",
 	"The URL moves to another host, so the stored header value can't be reused. Enter the header's value again, or remove the header.",
 	map[string]any{"field": "authValue"})
 
-// requireValueForOrigin refuses an update that would send the stored header
-// value to another origin: a different origin than cur's needs a new value
-// in the same request, or the header removed (or authMode none, which
-// removes it). mode is the auth mode after the update.
-func requireValueForOrigin(cur dbgen.McpServer, newURL string, in UpdateInput, mode string) error {
+// errPartValueRequired is the same refusal for one part of a server's
+// credential list: details.field is credentials[i], and kind and name say which.
+func errPartValueRequired(i int, kind, name string) error {
+	d := map[string]any{"field": fmt.Sprintf("credentials[%d]", i), "kind": kind}
+	if name != "" {
+		d["name"] = name
+	}
+	return unprocessable("auth_value_required",
+		"The URL moves to another host, so the stored credential values can't be reused. Enter every credential value again, or remove the credential.", d)
+}
+
+// requireValueForOrigin refuses an update that would send a stored credential
+// value to another origin (F-1): a different origin than cur's needs every
+// part's value entered again in the same request, or the credential removed
+// (or authMode none, which removes it). That covers a header, a bearer, a
+// basic part (user and password) and a query part alike: a query value is sent
+// to the origin it was entered for, like a header. stored is cur's credential
+// as it is now; mode is the auth mode after the update.
+func requireValueForOrigin(cur dbgen.McpServer, stored storedCredentials, newURL string, in UpdateInput, mode string) error {
+	if mode == AuthNone || sameOrigin(cur.URL, newURL) {
+		return nil
+	}
+	if in.Credentials != nil {
+		// Each part of the new list must come with its own values: keeping
+		// one is keeping a value for the old host.
+		for i, c := range *in.Credentials {
+			if c.Keep || c.Value == "" || (c.Kind == CredBasic && c.Secondary == "") {
+				return errPartValueRequired(i, c.Kind, c.Name)
+			}
+		}
+		return nil
+	}
 	switch {
-	case mode == AuthNone, cur.AuthValueCipher == nil, in.AuthValue != nil:
+	case len(stored.rows) > 0:
+		return errPartValueRequired(0, stored.rows[0].Kind, deref(stored.rows[0].Name))
+	case !stored.any(), in.AuthValue != nil:
 		return nil
 	case in.AuthHeaderName != nil && *in.AuthHeaderName == "":
-		return nil
-	case sameOrigin(cur.URL, newURL):
 		return nil
 	}
 	return errAuthValueRequired

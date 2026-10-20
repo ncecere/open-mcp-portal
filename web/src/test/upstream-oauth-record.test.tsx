@@ -138,7 +138,7 @@ describe("OAuth server › Settings", () => {
     const published = mcpServer({ url: githubUrl, publishState: "published", requirement: serverRequirement() });
     const calls = mockApi(routes("editor", published, { [`POST ${base}/detect-auth`]: () => detectResult(), [`PATCH ${base}/${serverId}`]: () => oauthServer({ publishState: "pending", revision: 5 }) }));
     renderApp(`${record}?tab=settings`);
-    expect(await screen.findByRole("radio", { name: /^Static header/ })).toBeChecked();
+    expect(await screen.findByRole("radio", { name: /^Static credential/ })).toBeChecked();
     expect(screen.getByRole("radio", { name: "Sign-in with OAuth, per person" })).toHaveAttribute("aria-disabled", "true");
     await u.click(screen.getByRole("button", { name: "Detect sign-in" }));
     await waitFor(() => expect(screen.getByRole("radio", { name: "Sign-in with OAuth, per person" })).toBeChecked());
@@ -151,7 +151,7 @@ describe("OAuth server › Settings", () => {
     await waitFor(() => expect(patches(calls)).toHaveLength(1));
     expect(patches(calls)[0]!.body).toMatchObject({
       authMode: "oauth",
-      authHeaderName: "",
+      credentials: [],
       requirement: null,
       oauth: { registration: "manual", clientId: "Iv1.c0ffee", clientSecret: "s3cret", tokenAuthMethod: "client_secret_post", scopes: ["repo", "read:org", "read:user"], sendResource: true },
     });

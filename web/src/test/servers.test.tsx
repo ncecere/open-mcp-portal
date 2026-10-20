@@ -78,18 +78,18 @@ describe("Add MCP server", () => {
     // None by default; a static header is one choice of how the portal authenticates.
     expect(screen.getByRole("radio", { name: /^None/ })).toBeChecked();
     expect(screen.queryByRole("textbox", { name: /Header name/ })).toBeNull();
-    await u.click(screen.getByRole("radio", { name: /^Static header/ }));
+    await u.click(screen.getByRole("radio", { name: /^Static credential/ }));
     await u.type(screen.getByRole("textbox", { name: /Header name/ }), "Authorization");
     await u.click(screen.getByRole("button", { name: "Add server" }));
     // https, or http where the server allows it (loopback in development, allowlisted internal hosts).
     expect(await screen.findByText("Use an https address.")).toBeInTheDocument();
-    expect(screen.getByText("Enter the header's value, or clear the header name.")).toBeInTheDocument();
+    expect(screen.getByText("Enter the value.")).toBeInTheDocument();
     expect(calls.some((c) => c.method === "POST")).toBe(false);
 
     const url = screen.getByRole("textbox", { name: "URL" });
     await u.clear(url);
     await u.type(url, "https://status.example.com/mcp");
-    await u.type(screen.getByLabelText("Header value"), "Bearer s3cret");
+    await u.type(screen.getByLabelText("Value"), "Bearer s3cret");
     await u.click(screen.getByRole("button", { name: "Add server" }));
     await waitFor(() =>
       expect(calls.find((c) => c.method === "POST")?.body).toEqual({
@@ -97,8 +97,7 @@ describe("Add MCP server", () => {
         name: "Service Status!",
         url: "https://status.example.com/mcp",
         authMode: "static_header",
-        authHeaderName: "Authorization",
-        authValue: "Bearer s3cret",
+        credentials: [{ kind: "header", name: "Authorization", value: "Bearer s3cret" }],
         sendIdentity: true,
         timeoutSeconds: 30,
         enabled: true,
@@ -308,7 +307,7 @@ describe("MCP server › Health and Settings", () => {
     const calls = mockApi(routes("editor", mcpServer(), { [`PATCH ${base}/${serverId}`]: () => mcpServer({ name: "Status", revision: 5 }) }));
     const { container } = renderApp(`${record}?tab=settings`);
     const name = await screen.findByRole("textbox", { name: "Name" });
-    expect(screen.getByText(/The stored value ends in x9Kz/)).toBeInTheDocument();
+    expect(screen.getByText(/Header: Authorization \(value ends in x9Kz\)/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete server" })).toBeNull();
     expect(await axe(container)).toHaveNoViolations();
     await u.clear(name);
@@ -317,9 +316,9 @@ describe("MCP server › Health and Settings", () => {
     await waitFor(() => expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ name: "Status", description: mcpServer().description, url: mcpServer().url, timeoutSeconds: 30, enabled: true }));
     expect(calls.find((c) => c.method === "PATCH")?.headers.get("If-Match")).toBe('"4"');
 
-    await u.type(screen.getByLabelText("Replace header value"), "Bearer new");
+    await u.type(screen.getByLabelText("Replace value"), "Bearer new");
     await u.click(screen.getByRole("button", { name: "Save settings" }));
-    await waitFor(() => expect(calls.filter((c) => c.method === "PATCH").at(-1)?.body).toMatchObject({ authHeaderName: "Authorization", authValue: "Bearer new" }));
+    await waitFor(() => expect(calls.filter((c) => c.method === "PATCH").at(-1)?.body).toMatchObject({ credentials: [{ kind: "header", name: "Authorization", value: "Bearer new" }] }));
   });
 
   it("is read-only for members, and owners delete after confirming", async () => {

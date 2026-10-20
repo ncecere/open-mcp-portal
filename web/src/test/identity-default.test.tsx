@@ -100,7 +100,7 @@ describe("Add server › Send identity token follows the address", () => {
     renderApp(`/teams/${team.slug}/servers?form=new`);
     await enter(u, "https://mcp.deepwiki.example.com/mcp");
     await screen.findByText(/This address is public/);
-    await u.click(screen.getByRole("radio", { name: /^Static header/ }));
+    await u.click(screen.getByRole("radio", { name: /^Static credential/ }));
     expect(screen.getByText(/Servers that use a header or their own sign-in start with this on/)).toBeInTheDocument();
     expect(identitySwitch()).toBeChecked();
     expect(calls.filter((c) => c.url === `${base}/identity-default`)).toHaveLength(1);

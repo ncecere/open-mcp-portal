@@ -282,12 +282,11 @@ func (e *exchange) lastChallenge() []string {
 // ErrResponseTooLarge: a response body passed MaxResponseBytes.
 var ErrResponseTooLarge = errors.New("upstream: response too large")
 
-// headerTransport adds the static header, records error statuses and caps
-// response bodies.
+// headerTransport adds the server's credential parts, records error statuses
+// and caps response bodies.
 type headerTransport struct {
 	next          http.RoundTripper
-	header        string
-	value         string
+	creds         []Credential
 	identity      string
 	identityValue string
 	provider      string
@@ -299,7 +298,8 @@ type headerTransport struct {
 }
 
 func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if t.header != "" || t.identity != "" || t.providerToken != "" || t.bearer != "" || len(t.params) > 0 {
+	orig := req
+	if len(t.creds) > 0 || t.identity != "" || t.providerToken != "" || t.bearer != "" || len(t.params) > 0 {
 		req = req.Clone(req.Context())
 	}
 	if len(t.params) > 0 && isToolsCall(req) {
@@ -307,17 +307,15 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			req.Header.Set(k, v)
 		}
 	}
-	if t.header != "" {
-		req.Header.Set(t.header, t.value)
-	}
+	applyCredentials(req, t.creds)
 	// An oauth server's own token for the person (the registry refuses a
 	// static Authorization header in oauth mode).
 	if t.bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+t.bearer)
 	}
 	// The identity never replaces the server's own header: the caller picks
-	// a different header name when the static one is Authorization.
-	if t.identity != "" && !strings.EqualFold(t.identity, t.header) {
+	// a different header name when a credential part is Authorization.
+	if t.identity != "" && !t.occupied(t.identity) {
 		req.Header.Set(t.identity, t.identityValue)
 	}
 	// A static header can't use these names (the registry refuses them).
@@ -329,6 +327,10 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The response keeps the request as the caller made it: a query part
+	// exists only on the copy that went out, so nothing that prints
+	// res.Request.URL (the SDK's errors included) can show it.
+	res.Request = orig
 	t.ex.setStatus(res.StatusCode, res.Header)
 	if res.StatusCode >= 400 && res.Body != nil {
 		// Keep the start of an error body to explain the failure, and hand
@@ -344,6 +346,16 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	res.Body = &cappedBody{ReadCloser: res.Body, left: t.maxResponse}
 	return res, nil
+}
+
+// occupied reports whether a credential part sets the header.
+func (t *headerTransport) occupied(header string) bool {
+	for _, c := range t.creds {
+		if c.occupies(header) {
+			return true
+		}
+	}
+	return false
 }
 
 // isToolsCall reports whether a request posts a JSON-RPC tools/call (the
@@ -406,7 +418,7 @@ func (c *Client) httpClient(t Target, ex *exchange) (client *http.Client, done f
 		IdleConnTimeout:       30 * time.Second,
 	}
 	return &http.Client{
-		Transport: &headerTransport{next: tr, header: t.HeaderName, value: t.HeaderValue, identity: t.IdentityHeader,
+		Transport: &headerTransport{next: tr, creds: t.Credentials, identity: t.IdentityHeader,
 			identityValue: t.IdentityValue, provider: t.Provider, providerToken: t.ProviderToken, bearer: t.BearerToken,
 			params: t.ParamHeaders, maxResponse: c.bodyCap(t), ex: ex},
 		CheckRedirect: func(*http.Request, []*http.Request) error {

@@ -345,6 +345,18 @@ type McpServer struct {
 	RequiresPresentPerson bool
 }
 
+type McpServerCredential struct {
+	ID              uuid.UUID
+	ServerID        uuid.UUID
+	Position        int16
+	Kind            string
+	Name            *string
+	ValueCipher     []byte
+	SecondaryCipher []byte
+	Hint            string
+	CreatedAt       time.Time
+}
+
 type NetworkSetting struct {
 	ID        int16
 	Entries   json.RawMessage

@@ -15,7 +15,8 @@ function problemsOf(details: Record<string, unknown> | undefined): string {
 }
 
 const conflictReasons: Record<string, string> = {
-  static_authorization: "OAuth sign-in sends each person's token in the Authorization header, so the server can't also have a static Authorization header. Remove the header, or use another header name.",
+  static_authorization: "OAuth sign-in sends each person's token in the Authorization header, so the server can't also have a static Authorization header. Remove that part, or use another header name.",
+  authorization_twice: "Only one part of the credential can set the Authorization header: a header named Authorization, a bearer token or Basic. Remove one of them.",
   requirement: "OAuth sign-in replaces User authorization: each call carries the person's own token for this server. Remove the server's requirement first.",
 };
 
@@ -31,7 +32,15 @@ export function describeAuthError(err: unknown): Described | undefined {
         title: "The authorization server refused to register the portal",
         message: "Nothing was saved. Try again, or create an OAuth app at the authorization server and enter its client ID and secret instead.",
       };
+    case "auth_value_required":
+      return {
+        title: "Enter the credential values again",
+        message: "Nothing was saved. The URL moves to another host, so stored values can't be reused there: enter every part's value again, or remove the credential.",
+      };
+    case "credentials_in_use":
+      return { title: "The credential has several parts", message: "Reload the page: this server's credential is a list of parts, edited as a list." };
     case "auth_conflict":
+      if (reason === "authorization_twice") return { title: "Two parts set Authorization", message: conflictReasons[reason] ?? "" };
       return { title: "OAuth sign-in can't be combined with this", message: conflictReasons[reason] ?? "OAuth sign-in excludes a static Authorization header and a User authorization requirement." };
     case "registration_unavailable":
       return { title: "That registration isn't offered", message: "The authorization server no longer offers this kind of registration. Press Detect sign-in again and choose another." };

@@ -166,6 +166,9 @@ func (a *api) createTeamMcpServer(w http.ResponseWriter, r *http.Request) {
 	setIf(&ci.Description, in.Description)
 	setIf(&ci.AuthHeaderName, in.AuthHeaderName)
 	setIf(&ci.AuthValue, in.AuthValue)
+	if in.Credentials != nil {
+		ci.Credentials = fromAPICredentials(*in.Credentials)
+	}
 	setIf(&ci.TimeoutSeconds, in.TimeoutSeconds)
 	setIf(&ci.Enabled, in.Enabled)
 	setIf(&ci.CapturePayloads, in.CapturePayloads)
@@ -192,6 +195,29 @@ func (a *api) createTeamMcpServer(w http.ResponseWriter, r *http.Request) {
 		out.RefreshError = &tr
 	}
 	writeRevised(w, http.StatusCreated, res.View.Server.Revision, out)
+}
+
+// fromAPICredentials reads a request's credential parts.
+func fromAPICredentials(in []apitypes.McpServerCredentialInput) []registry.CredentialInput {
+	out := make([]registry.CredentialInput, len(in))
+	for i, c := range in {
+		out[i] = registry.CredentialInput{Kind: string(c.Kind)}
+		setIf(&out[i].Name, c.Name)
+		setIf(&out[i].Value, c.Value)
+		setIf(&out[i].Secondary, c.Secondary)
+		setIf(&out[i].Keep, c.Keep)
+	}
+	return out
+}
+
+// fromAPICredentialsPtr is nil when the request doesn't send the list (keep
+// the stored parts); an empty list removes them.
+func fromAPICredentialsPtr(in *[]apitypes.McpServerCredentialInput) *[]registry.CredentialInput {
+	if in == nil {
+		return nil
+	}
+	out := fromAPICredentials(*in)
+	return &out
 }
 
 func setIf[T any](dst *T, v *T) {
@@ -231,6 +257,7 @@ func (a *api) updateTeamMcpServer(w http.ResponseWriter, r *http.Request) {
 	_, setRequirement := keys["requirement"]
 	v, err := a.Registry.Update(r.Context(), a.actor(r), r.PathValue("team"), id, registry.UpdateInput{
 		Name: in.Name, Description: in.Description, URL: in.Url, AuthHeaderName: in.AuthHeaderName, AuthValue: in.AuthValue,
+		Credentials:    fromAPICredentialsPtr(in.Credentials),
 		TimeoutSeconds: in.TimeoutSeconds, Enabled: in.Enabled, SetRequirement: setRequirement, Requirement: fromAPIRequirement(in.Requirement),
 		CapturePayloads: in.CapturePayloads, AuthMode: strPtr(in.AuthMode), OAuth: fromAPIOAuthInput(in.Oauth), SendIdentity: in.SendIdentity,
 		RequiresPresentPerson: in.RequiresPresentPerson,

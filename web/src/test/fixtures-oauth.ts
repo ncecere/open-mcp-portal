@@ -112,6 +112,7 @@ export const oauthServer = (extra: Partial<Schemas["McpServer"]> = {}, oauth: Pa
     authHeaderName: undefined,
     hasAuth: false,
     authValueHint: "",
+    credentials: [],
     authMode: "oauth",
     oauth: oauthConfig(oauth),
     sendIdentity: false,

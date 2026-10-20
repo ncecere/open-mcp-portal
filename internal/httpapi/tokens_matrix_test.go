@@ -394,6 +394,7 @@ func TestTokenFieldRules(t *testing.T) {
 		"url":            {"url": "https://attacker.example.com/mcp"},
 		"authHeaderName": {"authHeaderName": "Authorization"},
 		"authValue":      {"authValue": "x"},
+		"credentials":    {"credentials": []any{map[string]any{"kind": "query", "name": "api_key", "value": "x"}}},
 		"authMode":       {"authMode": "none"},
 		"requirement":    {"requirement": nil},
 		"sendIdentity":   {"sendIdentity": false},
@@ -421,6 +422,33 @@ func TestTokenFieldRules(t *testing.T) {
 	}
 	if got := e.exec(`SELECT auth_header_name FROM mcp_servers WHERE id = $1`, srv); got != "X-Api-Key" {
 		t.Errorf("the header was changed: %s", got)
+	}
+	// A server whose credential is a list of parts is as protected: a token
+	// can neither change nor empty the list (decision 70).
+	e.run(`UPDATE mcp_servers SET auth_header_name = NULL, auth_value_cipher = NULL, auth_value_hint = '', auth_mode = 'static_header' WHERE id = $1`, srv)
+	e.run(`INSERT INTO mcp_server_credentials (server_id, position, kind, name, value_cipher) VALUES ($1, 0, 'query', 'api_key', '\x00')`, srv)
+	for name, change := range map[string]map[string]any{
+		"replace the list": {"credentials": []any{map[string]any{"kind": "header", "name": "X-Other", "value": "x"}}},
+		"empty the list":   {"credentials": []any{}},
+		"keep the list":    {"credentials": []any{map[string]any{"kind": "query", "name": "api_key", "keep": true}}},
+	} {
+		code, _, body := e.bearer(pub.secret, patch(path, change).h(rev()))
+		var env struct {
+			Error struct {
+				Code    string
+				Details struct{ Field string }
+			}
+		}
+		_ = json.Unmarshal(body, &env)
+		if code != 403 || env.Error.Code != "token_not_allowed" || env.Error.Details.Field != "credentials" {
+			t.Errorf("%s on a server with credential parts: %d %s", name, code, body)
+		}
+	}
+	if got := e.exec(`SELECT count(*)::text FROM mcp_server_credentials WHERE server_id = $1`, srv); got != "1" {
+		t.Errorf("a token changed the parts: %s", got)
+	}
+	if code, _, body := e.bearer(pub.secret, patch(path, map[string]any{"description": "parts stay"}).h(rev())); code != 200 {
+		t.Errorf("description on a server with parts: %d %s", code, body)
 	}
 }
 

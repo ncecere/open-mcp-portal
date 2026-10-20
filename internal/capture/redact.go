@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -117,18 +118,27 @@ func Compile(ps []Pattern) ([]*regexp.Regexp, *PatternError) {
 type Redactor struct {
 	patterns []*regexp.Regexp
 	// secrets are exact values the gateway handled for this call (identity
-	// JWT, provider token, the server's static header value).
+	// JWT, provider token, every part of the server's own credential).
 	secrets []string
 }
 
 // NewRedactor returns a redactor with compiled admin patterns and the
-// call's secrets (values shorter than 6 characters are ignored).
+// call's secrets (values shorter than 6 characters are ignored). Each secret
+// is also redacted in its URL-encoded forms (a query string or a path shows a
+// value that way), so a server's credential in a query part is caught in a URL
+// an upstream error or a result echoes.
 func NewRedactor(patterns []*regexp.Regexp, secrets ...string) *Redactor {
 	r := &Redactor{patterns: patterns}
-	for _, s := range secrets {
+	add := func(s string) {
 		if len(s) >= 6 && !slices.Contains(r.secrets, s) {
 			r.secrets = append(r.secrets, s)
 		}
+	}
+	for _, s := range secrets {
+		add(s)
+		add(url.QueryEscape(s))
+		add(strings.ReplaceAll(url.QueryEscape(s), "+", "%20"))
+		add(url.PathEscape(s))
 	}
 	// Longest first, so a value containing another is replaced whole.
 	slices.SortFunc(r.secrets, func(a, b string) int { return len(b) - len(a) })

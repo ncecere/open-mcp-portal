@@ -459,6 +459,7 @@ export interface paths {
         /**
          * Register a remote MCP server (editors and above); reads its capabilities at once
          * @description 409 slug_taken when another server uses the slug. 422 url_not_allowed when the URL is refused (details.reason invalid, too_long, userinfo, query, fragment, scheme, private_address or blocked_address; private_address can be allowed by a platform admin in Internal networks). The server is created even when discovery fails; refresh then says why. requirement (optional) names an enabled auth provider (422 provider_not_found otherwise) that is open to the team (422 provider_not_allowed when the provider is restricted and lists neither the team nor, for a server that exists, the server) and its scopes (400 invalid_scope, details.scope). 400 invalid_auth_header also for the reserved MCP-Gateway-Identity, MCP-Gateway-Provider and MCP-Gateway-Provider-Token.
+         *     credentials (decision 70) is the server's own credential as up to eight parts (header, bearer, basic, query), instead of authHeaderName and authValue (400 invalid_auth_header when both are sent). 400 too_many_credentials, invalid_credential_kind, invalid_auth_header (a header part's name), invalid_auth_query (a query part's name: 1-64 of letters, digits, dot, hyphen and underscore, never mcp-*), invalid_auth_value and invalid_credential (a duplicate kind and name, or a name on a bearer or basic part), each with details.field credentials[i]. 422 auth_conflict when two parts set Authorization (a header named Authorization, a bearer, a basic part; details.reason authorization_twice) or one does on a server in oauth mode (static_authorization). The values are sealed and never returned; the saved URL is still refused when it has a query (a query part is added to each request to the server, never to the URL).
          *     authMode oauth (docs/phase7-upstream-oauth.md) needs oauth. The portal runs the sign-in discovery again itself (it never trusts endpoints sent by the browser) and, for registration dcr (or auto resolving to it), registers its client before saving: 422 oauth_discovery_failed (details.problems as in DetectAuthResult) or 502 oauth_registration_failed, and nothing is saved. 422 auth_conflict when oauth is combined with a static Authorization header or a requirement (details.reason static_authorization or requirement). 422 registration_unavailable (the chosen or auto registration isn't offered; details.options). 422 client_required (manual without clientId, or without clientSecret unless tokenAuthMethod none). 422 provider_mismatch (platform_provider whose authorization and token endpoints differ from the discovered ones, or turned off). In oauth mode the first capability discovery is skipped (refresh and refreshError null, setupRequired true): someone signs in with authorizeTeamMcpServerSetup first. Audited as mcp_server.create and mcp_server.auth_update (never a secret).
          */
         post: operations["createTeamMcpServer"];
@@ -539,7 +540,7 @@ export interface paths {
          *
          *     authMode and oauth (docs/phase7-upstream-oauth.md): omit to keep. Fields omitted inside oauth keep their stored values; clientSecret is replace-only. Errors as for create. Switching to oauth, choosing another authorization server, or adding a scope not asked for before sends a published server back to review under approval_required (mcp_server.publish_request, reason upstream_auth_changed). Leaving oauth, a URL change, another authorization server or another client ID erases the tokens of every connection to the server (needs_reconsent; leaving oauth deletes them, revoked where possible). Audited as mcp_server.auth_update (before/after, clientIdChanged, clientSecretChanged, connectionsReset; never a secret).
          *
-         *     A URL with another origin (scheme, host or port; case, a trailing slash and the path don't count) never keeps the stored static header value, which nobody but its author can read: 422 auth_value_required (details.field authValue) unless the same request sends a new authValue, removes the header (authHeaderName "") or sets authMode none. Nothing changes and nothing is sent to the new host. In oauth mode another origin also erases every connection's tokens and sends the server back to the setup sign-in (as above). The audit entry names oldOrigin and newOrigin.
+         *     A URL with another origin (scheme, host or port; case, a trailing slash and the path don't count) never keeps the stored static header value, which nobody but its author can read: 422 auth_value_required (details.field authValue) unless the same request sends a new authValue, removes the header (authHeaderName "") or sets authMode none. The same holds for every part of credentials (a header, a bearer, a basic user and password, a query value): a request that moves the URL to another origin must send credentials with every part's value entered again (no keep), or an empty list, or authMode none; otherwise 422 auth_value_required with details.field credentials[i] and details.kind and details.name of the part (the first stored part when the request doesn't send credentials). Nothing changes and nothing is sent to the new host. In oauth mode another origin also erases every connection's tokens and sends the server back to the setup sign-in (as above). The audit entry names oldOrigin and newOrigin.
          */
         patch: operations["updateTeamMcpServer"];
         trace?: never;
@@ -3332,11 +3333,14 @@ export interface components {
             url: string;
             /** @enum {string} */
             transport: "streamable_http";
-            /** @description The static header sent with every request (absent: none) */
+            /** @description The static header sent with every request, for a server whose credential is still its single header (absent: none, or the credential is the list credentials) */
             authHeaderName?: string;
+            /** @description Whether the server has any credential part (the single header or credentials) */
             hasAuth: boolean;
-            /** @description Last 4 characters of the header value, or empty */
+            /** @description Last 4 characters of the single header's value, or empty */
             authValueHint: string;
+            /** @description The parts of the server's own credential, in order, with no values. The single header of a server that has not been saved with the list shows here as one header part */
+            credentials?: components["schemas"]["McpServerCredential"][];
             /** Format: int32 */
             timeoutSeconds: number;
             enabled: boolean;
@@ -3387,6 +3391,31 @@ export interface components {
             items: components["schemas"]["McpServer"][];
             nextCursor?: string | null;
         };
+        /** @description One part of a server's own credential. Values are sealed and never returned */
+        McpServerCredential: {
+            /**
+             * @description header sends name as a header; bearer sends Authorization Bearer; basic sends Authorization Basic (user and password); query adds name as a query parameter to each request to the server
+             * @enum {string}
+             */
+            kind: "header" | "bearer" | "basic" | "query";
+            /** @description The header or query parameter name (absent for bearer and basic) */
+            name?: string;
+            /** @description Last 4 characters of the value (of the password for basic), or empty when it has fewer than 8 */
+            hint: string;
+        };
+        /** @description One part of a server's own credential in a request */
+        McpServerCredentialInput: {
+            /** @enum {string} */
+            kind: "header" | "bearer" | "basic" | "query";
+            /** @description The header name (header) or the query parameter name (query); omit for bearer and basic */
+            name?: string;
+            /** @description The header value, token, Basic user name or query value. Stored encrypted, never returned */
+            value?: string;
+            /** @description The Basic password (basic only). Stored encrypted, never returned */
+            secondary?: string;
+            /** @description Keep the stored part of this kind and name with its values (update only; sends no value; not allowed when the URL moves to another origin) */
+            keep?: boolean;
+        };
         McpServerCreate: {
             /** @description Unique across the platform, immutable */
             slug: string;
@@ -3398,6 +3427,8 @@ export interface components {
             authHeaderName?: string;
             /** @description Stored encrypted, never returned */
             authValue?: string;
+            /** @description The server's own credential as parts, instead of authHeaderName and authValue (decision 70) */
+            credentials?: components["schemas"]["McpServerCredentialInput"][];
             /**
              * Format: int32
              * @default 30
@@ -3426,6 +3457,8 @@ export interface components {
             authHeaderName?: string;
             /** @description Omit to keep the stored value */
             authValue?: string;
+            /** @description Omit to keep. The server's whole list of parts. Each one keeps its stored values (keep) or has new ones, and a part left out is removed; an empty list removes the credential. It replaces the single header (the legacy columns are cleared when it is stored). Not together with authHeaderName or authValue (400 invalid_auth_header), which can't change a server whose credential is a list (422 credentials_in_use). Adding, changing or removing parts is not a review trigger (nothing new is sent to a new origin), but the review digest covers the kinds and names, so a reviewer's earlier look is stale. Audited in mcp_server.update (kind and name of each part, authValueChanged; never a value). A publisher automation token can't send it for a server that has a credential (403 token_not_allowed) */
+            credentials?: components["schemas"]["McpServerCredentialInput"][];
             /** Format: int32 */
             timeoutSeconds?: number;
             enabled?: boolean;

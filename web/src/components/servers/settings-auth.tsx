@@ -1,6 +1,6 @@
 /*
  * The Settings tab's Authentication: what a save sends (only what changed:
- * the mode, the header, the OAuth settings with a replace-only secret, the
+ * the mode, the credential parts, the OAuth settings with a replace-only secret, the
  * identity switch), and what it does before it's saved: back to review
  * under approval_required (a switch to OAuth, another authorization server,
  * a new scope), everyone signed out of the server (a new URL, authorization
@@ -10,27 +10,25 @@ import type { Schemas } from "../../api/client";
 import { plural } from "../../lib/format";
 import { Alert } from "@/components/ui/alert/alert";
 import type { McpServer } from "./labels";
-import type { AuthEdit } from "./server-fields";
+import { credentialsBody, type PartForm, setsAuthorization } from "./credentials";
 import { type AuthChange, authModeOf, type DetectResult, oauthChanges, oauthInput, sendsIdentity, type UpstreamForm } from "./upstream-auth";
 
 type Update = Schemas["McpServerUpdate"];
 
 /** The PATCH's authentication fields; empty when nothing about it changed. */
-export function settingsAuthBody(server: McpServer, f: { authHeaderName: string; upstream: UpstreamForm }, auth: AuthEdit, secret: string, detected?: DetectResult): Update {
+export function settingsAuthBody(server: McpServer, f: { upstream: UpstreamForm }, parts: PartForm[], secret: string, detected?: DetectResult): Update {
   const before = authModeOf(server);
   const u = f.upstream;
   const identity = u.sendIdentity !== sendsIdentity(server) ? { sendIdentity: u.sendIdentity } : {};
   if (u.mode === "none") return { ...identity, ...(before !== "none" ? { authMode: "none" } : {}) };
   if (u.mode === "static_header") {
-    const name = f.authHeaderName.trim();
-    const headerChanged = name !== (server.authHeaderName ?? "");
-    const header: Update = auth.remove ? { authHeaderName: "" } : { ...(headerChanged || auth.value ? { authHeaderName: name } : {}), ...(auth.value ? { authValue: auth.value } : {}) };
-    return { ...identity, ...(before !== "static_header" && !auth.remove ? { authMode: "static_header" } : {}), ...header };
+    const credentials = credentialsBody(parts, server);
+    return { ...identity, ...(before !== "static_header" ? { authMode: "static_header" } : {}), ...(credentials ? { credentials } : {}) };
   }
   if (before !== "oauth" || !server.oauth) {
-    // OAuth sends each person's token in Authorization: a static Authorization header goes (other headers may stay).
-    const dropHeader = server.authHeaderName?.toLowerCase() === "authorization" ? { authHeaderName: "" } : {};
-    return { ...identity, authMode: "oauth", oauth: oauthInput(u.oauth, secret, detected), ...dropHeader };
+    // OAuth sends each person's token in Authorization: a static part that sets it goes (other parts may stay).
+    const credentials = credentialsBody(parts.filter((p) => !setsAuthorization(p)), server);
+    return { ...identity, authMode: "oauth", oauth: oauthInput(u.oauth, secret, detected), ...(credentials ? { credentials } : {}) };
   }
   const changes = oauthChanges(u.oauth, secret, server.oauth);
   return { ...identity, ...(changes ? { oauth: changes } : {}) };

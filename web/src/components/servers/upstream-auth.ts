@@ -20,13 +20,13 @@ export type SetupConnection = Schemas["McpServerOAuthSetupConnection"];
 
 export const authModeLabels: Record<AuthMode, string> = {
   none: "None",
-  static_header: "Static header",
+  static_header: "Static credential",
   oauth: "Sign-in with OAuth, per person",
 };
 
 export const authModeHelp: Record<AuthMode, string> = {
   none: "No credential of its own: calls carry the portal's signed identity token, unless you turn that off below.",
-  static_header: "One header with a fixed value, such as an API key, sent with every request.",
+  static_header: "Headers, a token, Basic or a query key with fixed values, such as an API key, sent with every request.",
   oauth: "Each person signs in to the server's own service once; every call carries their own token. Clients and models never see it.",
 };
 

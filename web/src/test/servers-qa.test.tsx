@@ -42,7 +42,7 @@ describe("A refused URL", () => {
     const url = screen.getByRole("textbox", { name: "URL" });
     await u.type(url, "https://status.example.com/mcp?token=1");
     await u.click(screen.getByRole("button", { name: "Add server" }));
-    const refusal = "Remove the query (the part from ?). Send credentials in the header below instead.";
+    const refusal = "Remove the query (the part from ?) from the address. A key that belongs in the query is added as a query parameter part of the credential below instead.";
     expect(await screen.findByText(refusal)).toBeInTheDocument();
 
     await u.clear(url);
@@ -81,6 +81,11 @@ describe("A refused URL", () => {
     await u.clear(url);
     await u.type(url, "https://10.0.0.1/mcp");
     expect(screen.getByText("The server will leave the catalog")).toBeInTheDocument();
+    // Another host never keeps the stored value (F-1): it is entered again, or the save isn't sent.
+    await u.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(await screen.findByText(/The URL moves to another host, so enter this value again/)).toBeInTheDocument();
+    expect(calls.some((c) => c.method === "PATCH")).toBe(false);
+    await u.type(screen.getByLabelText("Replace value"), "Bearer again");
     await u.click(screen.getByRole("button", { name: "Save settings" }));
     const refusal = /Ask a platform admin to allow its network, or use the server's public address/;
     expect(await screen.findByText(refusal)).toBeInTheDocument();

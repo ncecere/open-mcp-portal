@@ -46,6 +46,11 @@ const listed: Format = (v) => (Array.isArray(v) ? v.map((e: { name?: string; slu
 const revoked: Format = (v) => (v === true ? "Yes" : v === false ? "No (failed)" : v === "not_supported" ? "Not supported by the provider" : v);
 
 const presenceWords: Record<string, string> = { inherit: "Same as the server", required: "Needs a present person", not_required: "Doesn't need a present person" };
+/** A server's credential parts as words (never a value): "Header X-Tenant", "Query parameter sig", "Basic". */
+const credentialParts: Format = (v) =>
+  Array.isArray(v)
+    ? v.map((c: { kind?: string; name?: string }) => (c.kind === "bearer" ? "Bearer token" : c.kind === "basic" ? "Basic (user and password)" : `${c.kind === "query" ? "Query parameter" : "Header"} ${c.name ?? ""}`.trim()))
+    : v;
 const authModeWords: Record<string, string> = { none: "None", static_header: "Static header", oauth: "OAuth sign-in per person" };
 const registrationWords: Record<string, string> = {
   dcr: "Automatic (dynamic registration)",
@@ -123,6 +128,7 @@ function fieldsFor(action: string): Fields | undefined {
         sendIdentity: ["Send identity token", onOff],
         requiresPresentPerson: ["Require a present person", onOff],
         authMode: ["Authentication", label(authModeWords)],
+        credentials: ["Credential parts", credentialParts],
       };
     case "mcp_server.auth_update":
       return {
