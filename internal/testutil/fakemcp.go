@@ -64,6 +64,9 @@ type FakeMCP struct {
 	// auths records the credentials of every HTTP request (RequestAuths).
 	rejectAuth int
 	auths      []RequestAuth
+	// queryName and queryValue are RequireQuery's; httpReqs is HTTPRequests'.
+	queryName, queryValue string
+	httpReqs              []HTTPRequest
 
 	gatewayTools bool
 	// echoSecrets adds echo_secrets and image (payload capture tests).
@@ -128,6 +131,33 @@ type RequestAuth struct {
 	// Authorization and Identity are the Authorization and
 	// MCP-Gateway-Identity header values ("": absent).
 	Authorization, Identity string
+}
+
+// QueryHeader is the header the fake puts on each request it hands to its MCP
+// handler, carrying the request's raw query string, so a tool (and ToolCall.Header)
+// can see what query the portal sent.
+const QueryHeader = "X-Fake-Raw-Query"
+
+// HTTPRequest is one HTTP request as the fake received it, whatever it was for.
+type HTTPRequest struct {
+	Path, RawQuery string
+	Header         http.Header
+}
+
+// HTTPRequests are every HTTP request received so far, in order.
+func (f *FakeMCP) HTTPRequests() []HTTPRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]HTTPRequest(nil), f.httpReqs...)
+}
+
+// RequireQuery makes every request need the query parameter name=value. A
+// request without it is answered 401 with a body that repeats the request line
+// (path and query), as a careless server's error page might.
+func (f *FakeMCP) RequireQuery(name, value string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.queryName, f.queryValue = name, value
 }
 
 // RequestAuths are the credentials of every HTTP request received so far,
@@ -387,7 +417,14 @@ func NewFakeMCPHandler() (*FakeMCP, http.Handler) {
 		name, value := f.header, f.value
 		auth, reject := r.Header.Get("Authorization"), f.rejectAuth
 		f.auths = append(f.auths, RequestAuth{Authorization: auth, Identity: r.Header.Get("MCP-Gateway-Identity")})
+		f.httpReqs = append(f.httpReqs, HTTPRequest{Path: r.URL.Path, RawQuery: r.URL.RawQuery, Header: r.Header.Clone()})
+		qname, qvalue := f.queryName, f.queryValue
 		f.mu.Unlock()
+		r.Header.Set(QueryHeader, r.URL.RawQuery)
+		if qname != "" && r.URL.Query().Get(qname) != qvalue {
+			http.Error(w, "unauthorized: GET "+r.URL.RequestURI(), http.StatusUnauthorized)
+			return
+		}
 		if reject != 0 && auth != "" {
 			http.Error(w, "credentials are not accepted here", reject)
 			return
@@ -803,8 +840,8 @@ func (f *FakeMCP) server() *mcp.Server {
 			f.sawCall("echo_secrets", h)
 			_, id := IdentityToken(h)
 			return &mcp.CallToolResult{Content: []mcp.Content{
-				&mcp.TextContent{Text: fmt.Sprintf("identity=%s provider=%s authorization=%s apikey=%s ", id,
-					h.Get("MCP-Gateway-Provider-Token"), h.Get("Authorization"), h.Get("X-Api-Key"))},
+				&mcp.TextContent{Text: fmt.Sprintf("identity=%s provider=%s authorization=%s apikey=%s query=%s ", id,
+					h.Get("MCP-Gateway-Provider-Token"), h.Get("Authorization"), h.Get("X-Api-Key"), h.Get(QueryHeader))},
 				&mcp.TextContent{Text: string(req.Params.Arguments)},
 			}}, nil
 		})

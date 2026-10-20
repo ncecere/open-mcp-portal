@@ -156,3 +156,23 @@ func TestOpenRefusesAutomationTokens(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+// Several call secrets at once (the parts of a server's own credential), each
+// in its raw and URL-encoded forms, inside text and inside JSON strings; short
+// values are still ignored.
+func TestRedactorCallSecretsInEncodedForms(t *testing.T) {
+	r := NewRedactor(nil, "tenant-sentinel-1", "q sentinel&2/x", "Basic-b64-sentinel==", "abc")
+	in := `{"echo":"GET /mcp?key=q+sentinel%262%2Fx&b=1 and key=q%20sentinel%262%2Fx; X-Tenant: tenant-sentinel-1; Basic-b64-sentinel== q sentinel&2/x abc"}`
+	p := r.Redact([]byte(in))
+	for _, secret := range []string{"tenant-sentinel-1", "sentinel%262", "sentinel&2", "q+sentinel", "Basic-b64-sentinel"} {
+		if strings.Contains(p.Content, secret) {
+			t.Errorf("%q survived: %s", secret, p.Content)
+		}
+	}
+	if !strings.Contains(p.Content, "abc") {
+		t.Errorf("a short value was redacted: %s", p.Content)
+	}
+	if p.Rules[RuleCallSecrets] != 5 {
+		t.Errorf("rules = %v", p.Rules)
+	}
+}

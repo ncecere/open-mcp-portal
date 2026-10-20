@@ -137,6 +137,7 @@ func NewRedactor(patterns []*regexp.Regexp, secrets ...string) *Redactor {
 	for _, s := range secrets {
 		add(s)
 		add(url.QueryEscape(s))
+		add(strings.ReplaceAll(url.QueryEscape(s), "+", "%20"))
 		add(url.PathEscape(s))
 	}
 	// Longest first, so a value containing another is replaced whole.

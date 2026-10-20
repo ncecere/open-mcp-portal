@@ -92,6 +92,7 @@ func expandSecrets(secrets []string) []string {
 	for _, s := range secrets {
 		add(s)
 		add(url.QueryEscape(s))
+		add(strings.ReplaceAll(url.QueryEscape(s), "+", "%20")) // percent-encoded, as strict encoders write a space
 		add(url.PathEscape(s))
 	}
 	slices.SortStableFunc(out, func(a, b string) int { return len(b) - len(a) })
