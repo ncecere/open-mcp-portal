@@ -359,7 +359,8 @@ func (s *Service) UsesServer(ctx context.Context, u dbgen.User, serverID uuid.UU
 }
 
 // ProviderNeed is what a server's capabilities a person may use ask of one
-// platform provider: the union of their effective scopes, sorted.
+// platform provider: the union of their effective scopes, in the order
+// they were first asked.
 type ProviderNeed struct {
 	Provider registry.Provider
 	Scopes   []string
@@ -411,11 +412,7 @@ func (s *Service) ReachableServers(ctx context.Context, u dbgen.User) ([]Reachab
 	}
 	out := make([]ReachableServer, 0, len(order))
 	for _, id := range order {
-		rs := byID[id]
-		for i := range rs.Needs {
-			slices.Sort(rs.Needs[i].Scopes)
-		}
-		out = append(out, *rs)
+		out = append(out, *byID[id])
 	}
 	slices.SortFunc(out, func(a, b ReachableServer) int {
 		if c := strings.Compare(a.Server.Name, b.Server.Name); c != 0 {

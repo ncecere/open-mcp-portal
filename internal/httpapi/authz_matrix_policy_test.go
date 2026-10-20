@@ -1,6 +1,10 @@
 package httpapi_test
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/ncecere/open-mcp-portal/internal/registry"
+)
 
 // The authorization matrix's classification of every operation in
 // api/openapi.yaml (SPEC.md §4, §9): who may call it on their own team (team
@@ -387,7 +391,17 @@ var matrixPolicies = map[string]policy{
 		return post("/v1/me/connections/start", map[string]any{"providerId": c.e.provider, "returnTo": "/settings/connections"})
 	}},
 	"revokeMyConnection": {own: signedIn, build: func(c *mctx) request { return del("/v1/me/connections/" + c.connection(true)) }},
-	"getConnectRequest":  {own: signedIn, build: func(c *mctx) request { return get("/v1/connect/requests/" + c.connectRequest()) }},
+	"listAllowableServers": {own: signedIn, build: func(c *mctx) request {
+		return get("/v1/me/connections/" + c.allowTarget(false) + "/allowable-servers")
+	}},
+	"allowConnectionServer": {own: signedIn, build: func(c *mctx) request {
+		return post("/v1/me/connections/"+c.allowTarget(false)+"/allow-server",
+			map[string]any{"serverId": c.e.allowableServer, "origin": registry.OriginOf(c.e.fakeURL), "scopes": []string{"repo"}})
+	}},
+	"revokeAllowedServer": {own: signedIn, build: func(c *mctx) request {
+		return del("/v1/me/connections/" + c.allowTarget(true) + "/allowed-servers/" + c.e.allowableServer)
+	}},
+	"getConnectRequest": {own: signedIn, build: func(c *mctx) request { return get("/v1/connect/requests/" + c.connectRequest()) }},
 	"confirmConnectRequest": {own: signedIn, build: func(c *mctx) request {
 		return post("/v1/connect/requests/"+c.confirmableRequest()+"/confirm", nil)
 	}},

@@ -74,6 +74,10 @@ type matrixEnv struct {
 	// requiringServer is a server of team A that requires provider (a
 	// consent link is for one server).
 	requiringServer string
+	// allowableServer is a published server of team A that requires provider
+	// (repo) with an approved tool on platformGateway: every signed-in caller
+	// may use it, so each may allow it to use their connection.
+	allowableServer string
 	n               int
 }
 
@@ -290,6 +294,11 @@ func newMatrixEnvWith(t *testing.T, mutate func(*testConfig)) *matrixEnv {
 	e.provider = e.newProvider()
 	e.requiringServer = e.newServer(e.a, "private")
 	e.exec(`UPDATE mcp_servers SET auth_provider_id = $1, auth_scopes = '{repo}' WHERE id = $2 RETURNING 'x'`, e.provider, e.requiringServer)
+	e.allowableServer = e.newServer(e.a, "published")
+	e.exec(`UPDATE mcp_servers SET auth_provider_id = $1, auth_scopes = '{repo}' WHERE id = $2 RETURNING 'x'`, e.provider, e.allowableServer)
+	capID := e.exec(`INSERT INTO mcp_capabilities (server_id, kind, name, definition, fingerprint, approved_fingerprint)
+		VALUES ($1, 'tool', 'allow_tool', '{"name":"allow_tool"}', repeat('a', 64), repeat('a', 64)) RETURNING id::text`, e.allowableServer)
+	e.exec(`INSERT INTO gateway_capabilities (gateway_id, capability_id) VALUES ($1, $2) RETURNING gateway_id::text`, e.platformGateway, capID)
 	return e
 }
 
@@ -326,6 +335,20 @@ func (e *matrixEnv) newActiveConnection(userID string) {
 	e.exec(`INSERT INTO provider_connections (user_id, provider_id, status, scopes, access_token_cipher)
 		VALUES ($1, $2, 'active', '{repo}', '\x00') ON CONFLICT (user_id, provider_id) DO UPDATE SET status = 'active' RETURNING id::text`,
 		userID, e.provider)
+}
+
+// allowConnection is a person's connection to the provider (active, with
+// scope repo), and, when withGrant, an existing grant of the allowable
+// server on it.
+func (e *matrixEnv) allowConnection(userID string, withGrant bool) string {
+	e.newActiveConnection(userID)
+	id := e.exec(`SELECT id::text FROM provider_connections WHERE user_id = $1 AND provider_id = $2`, userID, e.provider)
+	if withGrant {
+		e.exec(`INSERT INTO provider_server_grants (connection_id, server_id, origin, scopes) VALUES ($1, $2, $3, '{repo}')
+			ON CONFLICT (connection_id, server_id) DO UPDATE SET origin = EXCLUDED.origin RETURNING server_id::text`,
+			id, e.allowableServer, registry.OriginOf(e.fakeURL))
+	}
+	return id
 }
 
 // mctx is what a request builder sees.
@@ -482,6 +505,17 @@ func (c *mctx) confirmableRequest() string {
 		c.e.newActiveConnection(c.e.userIDs[c.who])
 	}
 	return c.connectRequest()
+}
+
+// allowTarget is a connection of the caller (the call is expected to
+// succeed) or of another person, with the allowable server's grant when
+// withGrant.
+func (c *mctx) allowTarget(withGrant bool) string {
+	owner := c.e.spareUser
+	if c.allowed {
+		owner = c.e.userIDs[c.who]
+	}
+	return c.e.allowConnection(owner, withGrant)
 }
 
 // serverCapability is a server and one of its capabilities: fresh ones (of
