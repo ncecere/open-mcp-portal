@@ -103,6 +103,10 @@ type Call struct {
 	// IdentitySent says whether the identity token was attached to the
 	// request to the server (nil: the call was not forwarded).
 	IdentitySent *bool
+
+	// TraceID is the request's trace when it was sampled (32 hex digits;
+	// empty: tracing off or the request not sampled).
+	TraceID string
 }
 
 // Error classes of calls refused because they came from an agent (decision
@@ -181,7 +185,7 @@ func insertParams(c Call) dbgen.InsertMCPCallParams {
 		LatencyMs: int32(min(c.Latency.Milliseconds(), 1<<31-1)), RequestBytes: max(c.RequestBytes, 0), ResponseBytes: max(c.ResponseBytes, 0),
 		ProviderSlug: clip(c.ProviderSlug, 48), IdentitySent: c.IdentitySent,
 		AgentID: clip(c.AgentID, 128), AgentName: clip(c.AgentName, 200), ViaPlatformID: null(c.ViaPlatformID),
-		ViaPlatformName: clip(c.ViaPlatformName, 100), PersonPresent: c.PersonPresent,
+		ViaPlatformName: clip(c.ViaPlatformName, 100), PersonPresent: c.PersonPresent, TraceID: clip(c.TraceID, 32),
 	}
 	if c.Server != nil {
 		p.ServerID, p.ServerTeamID = null(c.Server.ID), null(c.Server.TeamID)

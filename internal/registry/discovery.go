@@ -8,11 +8,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ncecere/open-mcp-portal/internal/apperr"
 	"github.com/ncecere/open-mcp-portal/internal/audit"
 	"github.com/ncecere/open-mcp-portal/internal/authz"
 	"github.com/ncecere/open-mcp-portal/internal/identity"
+	"github.com/ncecere/open-mcp-portal/internal/observability"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 	"github.com/ncecere/open-mcp-portal/internal/upstream"
@@ -73,6 +75,27 @@ func (s *Service) probe(ctx context.Context, sv dbgen.McpServer, trigger string)
 // or as MCP-Gateway-Identity when the server's own static header is
 // Authorization or it is read with its own sign-in (an oauth server).
 func (s *Service) probeAs(ctx context.Context, sv dbgen.McpServer, trigger, token string) (TestResult, upstream.Discovery, string) {
+	// One span per probe (a scheduled check, a Test or a Refresh): the server's
+	// slug, the trigger and how it ended. Nothing the server answered.
+	ctx, sp := observability.Start(ctx, "registry.probe", trace.SpanKindInternal,
+		observability.AttrServer.String(sv.Slug), observability.AttrTrigger.String(trigger))
+	defer sp.End()
+	res, d, tok := s.probeUntraced(ctx, sv, trigger, token)
+	if res.OK {
+		observability.Annotate(sp, observability.AttrResult.String("healthy"))
+	} else {
+		observability.Annotate(sp, observability.AttrResult.String("failing"))
+		class := "error"
+		if res.Err != nil && res.Err.Class != "" {
+			class = res.Err.Class
+		}
+		observability.Annotate(sp, observability.AttrErrorClass.String(class))
+		observability.Fail(sp, class)
+	}
+	return res, d, tok
+}
+
+func (s *Service) probeUntraced(ctx context.Context, sv dbgen.McpServer, trigger, token string) (TestResult, upstream.Discovery, string) {
 	t, err := s.target(ctx, sv)
 	if err != nil {
 		var e *upstream.Error

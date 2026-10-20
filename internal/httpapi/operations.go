@@ -319,7 +319,7 @@ func (a *api) getTeamCall(w http.ResponseWriter, r *http.Request) {
 	if failed(w, r, err) {
 		return
 	}
-	httpx.JSON(w, http.StatusOK, toAPICall(row))
+	httpx.JSON(w, http.StatusOK, a.toAPICall(row))
 }
 
 func (a *api) adminGetCall(w http.ResponseWriter, r *http.Request) {
@@ -331,7 +331,7 @@ func (a *api) adminGetCall(w http.ResponseWriter, r *http.Request) {
 	if failed(w, r, err) {
 		return
 	}
-	httpx.JSON(w, http.StatusOK, toAPICall(row))
+	httpx.JSON(w, http.StatusOK, a.toAPICall(row))
 }
 
 func toAPIPayloadPart(p capture.PayloadPart) apitypes.CallPayloadPart {

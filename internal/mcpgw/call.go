@@ -6,10 +6,13 @@ import (
 	"errors"
 	"fmt"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/ncecere/open-mcp-portal/internal/calls"
 	"github.com/ncecere/open-mcp-portal/internal/gateways"
 	"github.com/ncecere/open-mcp-portal/internal/identity"
 	"github.com/ncecere/open-mcp-portal/internal/oauth"
+	"github.com/ncecere/open-mcp-portal/internal/observability"
 	"github.com/ncecere/open-mcp-portal/internal/providers"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 	"github.com/ncecere/open-mcp-portal/internal/upstream"
@@ -150,7 +153,15 @@ func (rc *request) forwardCall(o gateways.Offer, rec calls.Call, cred *providers
 	ctx := rc.r.Context()
 	client := rc.h.Registry.Client()
 	out, _, ok := rc.exchange(o, &rec, cred, target, func(t upstream.Target) (any, bool, error) {
-		res, err := client.Forward(ctx, t, fwd)
+		// One client span around the call; with it sampled, the server's
+		// parent is this span (the client's baggage still passes as sent).
+		sp := rc.span("mcp.upstream.forward", trace.SpanKindClient, observability.AttrServer.String(o.Server.Slug),
+			observability.AttrCapability.String(o.Capability.Kind))
+		f := fwd
+		f.Trace = fwd.Trace.WithParent(observability.Outgoing(sp))
+		res, err := client.Forward(ctx, t, f)
+		upstreamAttrs(sp, res, err)
+		sp.End()
 		if err != nil {
 			return nil, false, err
 		}

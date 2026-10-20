@@ -120,6 +120,18 @@ func toAPIKey(v apikeys.View, now time.Time) apitypes.ApiKey {
 	return out
 }
 
+// toAPICall is a call as the API shows it, with the link to its trace when
+// the deployment has TRACE_LINK_TEMPLATE.
+func (a *api) toAPICall(c calls.Row) apitypes.McpCall {
+	out := toAPICall(c)
+	if id := out.TraceId; id != nil {
+		if link := a.Config.Tracing.TraceLink(*id); link != "" {
+			out.TraceUrl = &link
+		}
+	}
+	return out
+}
+
 func toAPICall(c calls.Row) apitypes.McpCall {
 	r := c.ListMCPCallsRow
 	captured := c.Captured
@@ -129,7 +141,7 @@ func toAPICall(c calls.Row) apitypes.McpCall {
 		Gateway:    apitypes.CallRef{Id: r.GatewayID, Slug: r.GatewaySlug, Name: r.GatewayName, Exists: r.GatewayExists},
 		Principal:  toAPICallPrincipal(r),
 		ClientName: r.ClientName, Outcome: apitypes.McpCallOutcome(r.Outcome), ErrorClass: r.ErrorClass, LatencyMs: r.LatencyMs,
-		RequestBytes: r.RequestBytes, ResponseBytes: r.ResponseBytes, RequestId: r.RequestID, ProviderSlug: r.ProviderSlug, IdentitySent: r.IdentitySent,
+		RequestBytes: r.RequestBytes, ResponseBytes: r.ResponseBytes, RequestId: r.RequestID, ProviderSlug: r.ProviderSlug, IdentitySent: r.IdentitySent, TraceId: r.TraceID,
 	}
 	if r.ServerID.Valid {
 		out.Server = &apitypes.CallRef{Id: r.ServerID.UUID, Slug: r.ServerSlug, Name: r.ServerName, Exists: r.ServerExists}

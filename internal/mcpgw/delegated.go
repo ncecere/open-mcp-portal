@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/ncecere/open-mcp-portal/internal/calls"
 	"github.com/ncecere/open-mcp-portal/internal/gateways"
+	"github.com/ncecere/open-mcp-portal/internal/observability"
 	"github.com/ncecere/open-mcp-portal/internal/providers"
 	"github.com/ncecere/open-mcp-portal/internal/registry"
 	"github.com/ncecere/open-mcp-portal/internal/upstream"
@@ -89,7 +92,12 @@ func (rc *request) delegated(o gateways.Offer, rec *calls.Call) (cred *providers
 		rc.providerDisabled(req, rec)
 		return nil, false
 	}
+	sp := rc.span("mcp.provider_credential", trace.SpanKindInternal, observability.AttrProvider.String(req.Provider.Slug))
 	c, err := rc.h.Providers.Credential(rc.r.Context(), req, rc.callContext(o))
+	if err != nil {
+		observability.Fail(sp, "unavailable")
+	}
+	sp.End()
 	var consent *providers.ConsentNeeded
 	var down *providers.UnavailableError
 	switch {
