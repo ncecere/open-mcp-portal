@@ -27,6 +27,16 @@
 //	go run ./cmd/fakeoauth -issuer-path /login/oauth -no-dcr   # like GitHub: path-insertion metadata only, iss, no DCR
 //	go run ./cmd/fakeoauth -cimd -reject-resource
 //
+// For a server that authenticates the portal itself (machine_oauth mode,
+// docs/machine-oauth.md) POST /token also serves the client_credentials grant
+// (client authentication by HTTP Basic or in the form, the scope asked for
+// granted unless -machine-scopes limits it, no refresh token, -ttl as the
+// lifetime, resource and audience recorded) and lists it in the metadata:
+//
+//	go run ./cmd/fakeoauth -ttl 2m -enforce-expiry -machine-scopes "read write"
+//	go run ./cmd/fakeoauth -no-client-credentials        # the grant is refused and not listed
+//	go run ./cmd/fakemcp -protect http://127.0.0.1:8092  # the server that requires the bearer
+//
 // Tokens are logged only as a digest prefix.
 package main
 
@@ -56,6 +66,9 @@ func main() {
 	iss := flag.Bool("iss", true, "send iss in authorization responses (RFC 9207) and say so in the metadata")
 	scopes := flag.String("scopes", "repo read:user write", "scopes_supported in the metadata (space-separated)")
 	honourRefreshScope := flag.Bool("honour-refresh-scope", false, "let a refresh request's scope narrow the new access token (RFC 6749 section 6, like Microsoft)")
+	noCC := flag.Bool("no-client-credentials", false, "refuse the client_credentials grant and leave it out of the metadata")
+	machineScopes := flag.String("machine-scopes", "", "the scopes a client credentials request may ask for (space-separated; empty: any)")
+	enforceExpiry := flag.Bool("enforce-expiry", false, "make an access token inactive (introspection) once -ttl has passed")
 	flag.Parse()
 
 	f, h := testutil.NewFakeOAuthHandler(*clientID, *clientSecret)
@@ -64,6 +77,7 @@ func main() {
 		f.IssuerPath, f.DCR, f.CIMD, f.RejectResource, f.IssParam = *issuerPath, *dcr && !*noDCR, *cimd, *rejectResource, *iss
 		f.ScopesSupported = strings.Fields(*scopes)
 		f.HonourRefreshScope = *honourRefreshScope
+		f.NoClientCredentials, f.MachineScopes, f.EnforceExpiry = *noCC, strings.Fields(*machineScopes), *enforceExpiry
 	})
 	logged := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

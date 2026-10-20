@@ -171,6 +171,7 @@ key, service account or request IDs.
 | `omp_mcp_rate_limited_total` | limit (the four keys) |
 | `omp_payload_captures_total`, `omp_payload_redactions_total`, `omp_payload_capture_errors_total` | rule (redactions only) |
 | `omp_provider_token_refresh_total` | provider (slug), result (`ok`, `refused`, `unavailable`) |
+| `omp_machine_token_requests_total` | result (`ok`, `refused`, `unavailable`): token endpoint requests for servers in `machine_oauth` mode ([machine-oauth.md](machine-oauth.md)), not cache hits |
 | `omp_server_health_checks_total`, `omp_mcp_servers` (gauge) | result / health state |
 | `omp_http_requests_total`, `omp_http_request_duration_seconds` | route (registered pattern), method, code class |
 | `omp_retention_deleted_total`, `omp_retention_last_success_timestamp_seconds` | kind |

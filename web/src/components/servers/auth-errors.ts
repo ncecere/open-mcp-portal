@@ -26,6 +26,18 @@ const secretConflicts: Record<string, string> = {
   requirement: "Each person's own key replaces User authorization: every call carries one credential. Remove the server's requirement first.",
 };
 
+const machineConflictReasons: Record<string, string> = {
+  static_authorization: "The portal's own OAuth client sends its token in the Authorization header, so the server can't also have a static Authorization header. Remove that part, or use another header name.",
+  requirement: "The portal's own OAuth client replaces User authorization: every call carries the portal's token. Remove the server's requirement first.",
+};
+
+const secretReasons: Record<string, string> = {
+  token_url_changed: "the token endpoint changed",
+  client_id_changed: "the client ID changed",
+  origin_changed: "the server's address moves to another host",
+  new: "there is none stored yet",
+};
+
 /** The error's title and message for the sign-in error codes; undefined for any other error. */
 export function describeAuthError(err: unknown): Described | undefined {
   if (!(err instanceof ApiError)) return undefined;
@@ -47,9 +59,17 @@ export function describeAuthError(err: unknown): Described | undefined {
       return { title: "The credential has several parts", message: "Reload the page: this server's credential is a list of parts, edited as a list." };
     case "invalid_person_secret":
       return { title: "Check how the key is sent", message: `Nothing was saved. ${err.message}` };
+    case "client_secret_required":
+      return {
+        title: "Enter the client secret again",
+        message: `Nothing was saved, and nothing was sent anywhere. The secret was entered for the old token endpoint, client and server host; ${secretReasons[reason] ?? "something it belongs to changed"}, so enter it again.`,
+      };
+    case "invalid_machine_oauth":
+      return { title: "The portal's OAuth client is incomplete", message: "Enter the token endpoint, the client ID and the client secret." };
     case "auth_conflict":
       if (err.details?.mode === "person_secret") return { title: "Each person's key can't be combined with this", message: secretConflicts[reason] ?? "" };
       if (reason === "authorization_twice") return { title: "Two parts set Authorization", message: conflictReasons[reason] ?? "" };
+      if (err.message.includes("machine_oauth")) return { title: "The portal's OAuth client can't be combined with this", message: machineConflictReasons[reason] ?? err.message };
       return { title: "OAuth sign-in can't be combined with this", message: conflictReasons[reason] ?? "OAuth sign-in excludes a static Authorization header and a User authorization requirement." };
     case "registration_unavailable":
       return { title: "That registration isn't offered", message: "The authorization server no longer offers this kind of registration. Press Detect sign-in again and choose another." };

@@ -26,7 +26,7 @@ import { PersonSecretCard } from "./person-secret-card";
 import { ProtocolText } from "./protocol";
 import { RequirementCard } from "./requirement-card";
 import { SetupConnectedNotice, SetupNotice } from "./setup";
-import { SignInCard } from "./sign-in-card";
+import { MachineCard, SignInCard } from "./sign-in-card";
 import { partsOf, partSummary } from "./credentials";
 import { authModeLabels, authModeOf } from "./upstream-auth";
 import { type CapabilityKind, countOf, kindTitle, type McpServer } from "./labels";
@@ -69,7 +69,8 @@ export function OverviewTab({ server, scope, abilities }: Props) {
       <ConnectionCard server={server} scope={scope} abilities={abilities} onRun={dismiss} />
       <SignInCard server={server} scope={scope} abilities={abilities} />
       <PersonSecretCard server={server} scope={scope} abilities={abilities} />
-      {authModeOf(server) !== "oauth" && authModeOf(server) !== "person_secret" && <RequirementCard server={server} scope={scope} />}
+      <MachineCard server={server} />
+      {!["oauth", "person_secret", "machine_oauth"].includes(authModeOf(server)) && <RequirementCard server={server} scope={scope} />}
       <CatalogCard server={server} scope={scope} abilities={abilities} />
     </>
   );

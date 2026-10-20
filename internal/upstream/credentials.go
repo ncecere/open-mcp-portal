@@ -29,10 +29,14 @@ type Credential struct {
 const authorization = "Authorization"
 
 // AuthorizationHeader is "Authorization" when one of the credential parts
-// sets that header (a header part with that name, a bearer or a basic part),
-// else "". The caller picks where the identity token goes with it
-// (identity.Header): the token never replaces the server's own header.
+// sets that header (a header part with that name, a bearer or a basic part) or
+// the target carries a bearer token (a person's own token for an oauth server,
+// a machine token), else "". The caller picks where the identity token goes
+// with it (identity.Header): the token never replaces the server's own header.
 func (t Target) AuthorizationHeader() string {
+	if t.BearerToken != "" {
+		return authorization
+	}
 	for _, c := range t.Credentials {
 		if c.occupies(authorization) {
 			return authorization

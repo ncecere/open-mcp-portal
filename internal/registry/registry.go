@@ -76,6 +76,9 @@ type Service struct {
 	notify Notifier
 	// ids signs the identity token a manual Test sends (SetIdentity).
 	ids IdentitySigner
+	// machine fetches and caches the bearer tokens of servers in
+	// machine_oauth mode (machine.go).
+	machine *upstream.MachineTokens
 }
 
 // New returns a Service. client reaches the servers (its AllowPrivate is the
@@ -93,7 +96,7 @@ func New(pool *pgxpool.Pool, box *secrets.Box, client *upstream.Client, log *slo
 			client.Networks = nets
 		}
 	}
-	return &Service{pool: pool, q: dbgen.New(pool), box: box, client: client, nets: nets, log: log}
+	return &Service{pool: pool, q: dbgen.New(pool), box: box, client: client, nets: nets, log: log, machine: upstream.NewMachineTokens(client)}
 }
 
 // ServerAAD binds a server's sealed header value to its row.
@@ -208,6 +211,9 @@ type ServerView struct {
 	Requirement *ServerRequirement
 	// OAuth is the sign-in of a server in oauth mode (nil otherwise).
 	OAuth *OAuthView
+	// Machine is the OAuth client of a server in machine_oauth mode (nil
+	// otherwise): never its secret.
+	Machine *MachineOAuthView
 	// ReviewDigest binds a review to what its reader saw (ReviewDigest).
 	ReviewDigest string
 	// PersonSecret is the settings and state of a server in person_secret
@@ -253,13 +259,18 @@ func views(ctx context.Context, q *dbgen.Queries, rows []dbgen.ListMCPServersRow
 	if err != nil {
 		return nil, err
 	}
-	digest, err := digestsWith(ctx, q, servers, creds)
+	machines, err := machineViews(ctx, q, servers)
+	if err != nil {
+		return nil, err
+	}
+	digest, err := digestsWith(ctx, q, servers, creds, machines)
 	if err != nil {
 		return nil, err
 	}
 	for i := range out {
 		out[i].ReviewDigest = digest[out[i].Server.ID]
 		out[i].Credentials = creds[out[i].Server.ID]
+		out[i].Machine = machines[out[i].Server.ID]
 	}
 	stats, err := q.MCPCapabilityStats(ctx, ids)
 	if err != nil {
@@ -416,6 +427,9 @@ type CreateInput struct {
 	// header, else none); OAuth configures oauth.
 	AuthMode string
 	OAuth    *OAuthInput
+	// MachineOAuth configures machine_oauth (required with it, refused
+	// without it: it carries a secret).
+	MachineOAuth *MachineOAuthInput
 	// SendIdentity sends the identity token (nil: true, except authMode none
 	// on a public or unresolvable host: false; decisions 45 and 64).
 	SendIdentity *bool
@@ -447,6 +461,9 @@ type UpdateInput struct {
 	// the sign-in (fields nil keep their values).
 	AuthMode *string
 	OAuth    *OAuthInput
+	// MachineOAuth changes the machine client (fields nil keep their values;
+	// a new token endpoint, client or server origin needs the secret again).
+	MachineOAuth *MachineOAuthInput
 	// SendIdentity changes whether the identity token is sent (nil keeps it).
 	SendIdentity *bool
 	// RequiresPresentPerson changes whether relayed calls need the person
@@ -624,6 +641,11 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 			return err
 		}
 		p.AuthMode, p.SendIdentity = mode, sendIdentity
+		if mode == AuthMachineOAuth {
+			if err := machineConflicts(createAuthorization(in), p.AuthProviderID.Valid); err != nil {
+				return err
+			}
+		}
 		row, err := q.InsertMCPServer(ctx, p)
 		if apperr.IsUniqueViolation(err, "mcp_servers_slug_key") {
 			return errSlugTaken
@@ -649,10 +671,28 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 		if err := setCapture(ctx, q, ta.role, &row, in.CapturePayloads); err != nil {
 			return err
 		}
+		var machine *machinePlan
+		if mode == AuthMachineOAuth {
+			if machine, err = s.planMachine(ctx, q, row, row.URL, in.MachineOAuth); err != nil {
+				return err
+			}
+			mp := machine.row
+			mp.By = by(a)
+			if _, err := q.UpsertMachineOAuth(ctx, mp); err != nil {
+				return err
+			}
+		}
 		e := a.Audit("mcp_server.create", "mcp_server", id.String())
 		e.TeamID, e.After = ta.team.ID, snapshot(row, parts...)
 		if err := audit.Record(ctx, q, e); err != nil {
 			return err
+		}
+		if machine != nil {
+			ae := a.Audit("mcp_server.auth_update", "mcp_server", id.String())
+			ae.TeamID, ae.After, ae.Metadata = ta.team.ID, machineSnapshot(row, machine.view), machineAuditMeta(row, machine)
+			if err := audit.Record(ctx, q, ae); err != nil {
+				return err
+			}
 		}
 		if plan == nil {
 			return nil
@@ -735,7 +775,7 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 	if err != nil {
 		return ServerView{}, err
 	}
-	var moved bool
+	var moved, forgetMachine bool
 	err = store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
 		ta, err := access(ctx, q, a, ref)
 		if err != nil {
@@ -771,6 +811,15 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 				return err
 			}
 		}
+		var machine *machinePlan
+		if pre.mode == AuthMachineOAuth {
+			if err := machineConflicts(firstNonEmpty(authorizationName(ap.views), deref(p.AuthHeaderName)), p.AuthProviderID.Valid); err != nil {
+				return err
+			}
+			if machine, err = s.planMachine(ctx, q, cur, p.URL, in.MachineOAuth); err != nil {
+				return err
+			}
+		}
 		if in.SendIdentity != nil {
 			p.SendIdentity = *in.SendIdentity
 		}
@@ -778,7 +827,8 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 		curProv := pre.provider
 		planChanged := pre.plan != nil && (curProv == nil || !planUnchanged(*curProv, pre.plan))
 		secretChanged := pre.secret != nil && !samePersonSecret(cur, *pre.secret)
-		if unchanged(cur, p, valueChanged || ap.rewrites(), in.CapturePayloads) && !planChanged && pre.mode == AuthModeOf(cur) && !secretChanged {
+		machineChanged := machine != nil && machine.changed
+		if unchanged(cur, p, valueChanged || ap.rewrites(), in.CapturePayloads) && !planChanged && !machineChanged && pre.mode == AuthModeOf(cur) && !secretChanged {
 			return nil
 		}
 		ps, err := LoadProviders(ctx, q)
@@ -858,6 +908,11 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 		if err != nil {
 			return err
 		}
+		machineReview, err := s.applyMachine(ctx, q, a, cur, row, machine)
+		if err != nil {
+			return err
+		}
+		forgetMachine = machineChanged || (AuthModeOf(cur) == AuthMachineOAuth && AuthModeOf(row) != AuthMachineOAuth)
 		switch {
 		case row.URL != cur.URL:
 			err = s.resubmit(ctx, q, a, ta.team, cur, "url_changed", "The server's URL changed; review it again.")
@@ -865,6 +920,8 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 			err = s.resubmit(ctx, q, a, ta.team, cur, "upstream_auth_changed", noteUpstreamAuthChanged)
 		case secretAuthChanged(cur, row):
 			err = s.resubmit(ctx, q, a, ta.team, cur, "upstream_auth_changed", noteSecretChanged)
+		case machineReview:
+			err = s.resubmit(ctx, q, a, ta.team, cur, "upstream_auth_changed", noteMachineAuthChanged)
 		case widened(before, after):
 			err = s.resubmit(ctx, q, a, ta.team, cur, "requirement_changed", noteRequirementChanged)
 		case relaxed(presenceBefore, presenceAfter):
@@ -879,13 +936,20 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 			}
 		}
 		// A new address or credentials make the stored health meaningless.
-		if valueChanged || ap.rewrites() || row.URL != cur.URL || !equalPtr(row.AuthHeaderName, cur.AuthHeaderName) || AuthModeOf(row) != AuthModeOf(cur) {
+		if valueChanged || ap.rewrites() || machineChanged || row.URL != cur.URL || !equalPtr(row.AuthHeaderName, cur.AuthHeaderName) ||
+			AuthModeOf(row) != AuthModeOf(cur) {
 			return q.ForgetMCPHealthChecks(ctx, id)
 		}
 		return nil
 	})
 	if err != nil {
 		return ServerView{}, err
+	}
+	// A new client, secret or endpoint never reuses the token fetched for the
+	// old one (the cache key covers it; this frees it at once), and a server
+	// that left machine_oauth keeps none.
+	if forgetMachine {
+		s.machine.Forget(id.String())
 	}
 	if moved {
 		// Best effort, like Create: a failure is stored as the refresh error.
@@ -945,12 +1009,12 @@ func (s *Service) prepareUpdate(ctx context.Context, a authz.Actor, ref string, 
 	out := updatePrep{mode: AuthModeOf(cur)}
 	if in.AuthMode != nil {
 		switch *in.AuthMode {
-		case AuthNone, AuthStaticHeader, AuthOAuth, AuthPersonSecret:
+		case AuthNone, AuthStaticHeader, AuthOAuth, AuthPersonSecret, AuthMachineOAuth:
 			out.mode = *in.AuthMode
 		default:
-			return out, apperr.Invalid("invalid_auth_mode", "authMode must be none, static_header, oauth or person_secret")
+			return out, apperr.Invalid("invalid_auth_mode", "authMode must be none, static_header, oauth, person_secret or machine_oauth")
 		}
-	} else if out.mode != AuthOAuth && out.mode != AuthPersonSecret {
+	} else if out.mode != AuthOAuth && out.mode != AuthPersonSecret && out.mode != AuthMachineOAuth {
 		// Without a mode, a credential added or removed decides it.
 		out.mode = AuthNone
 		if _, has := finalAuthorization(cur, stored, in); has {
@@ -975,6 +1039,14 @@ func (s *Service) prepareUpdate(ctx context.Context, a authz.Actor, ref string, 
 			return out, err
 		}
 		out.secret = &cfg
+	}
+	// A machine client carries a secret: it is refused, not ignored, outside
+	// machine_oauth mode, and the mode needs one the first time.
+	if in.MachineOAuth != nil && out.mode != AuthMachineOAuth {
+		return out, apperr.Invalid("invalid_machine_oauth", "machineOAuth is for authMode machine_oauth only")
+	}
+	if out.mode == AuthMachineOAuth && AuthModeOf(cur) != AuthMachineOAuth && in.MachineOAuth == nil {
+		return out, errMachineRequired
 	}
 	if AuthModeOf(cur) == AuthOAuth {
 		p, err := s.q.GetServerProvider(ctx, uuid.NullUUID{UUID: id, Valid: true})
@@ -1086,6 +1158,8 @@ func (s *Service) applyOAuth(ctx context.Context, q *dbgen.Queries, a authz.Acto
 		}
 		return false, authUpdateAudit(ctx, q, a, &cur, prov, row, nil, map[string]any{"connectionsReset": 0,
 			"connectionsDeleted": len(pre.revoked)})
+	case beforeMode == AuthMachineOAuth || afterMode == AuthMachineOAuth:
+		// A machine client's changes are audited with its details (applyMachine).
 	case beforeMode != afterMode || cur.SendIdentity != row.SendIdentity:
 		return false, authUpdateAudit(ctx, q, a, &cur, nil, row, nil, nil)
 	}
@@ -1284,7 +1358,7 @@ func (s *Service) Delete(ctx context.Context, a authz.Actor, ref string, id uuid
 			}
 		}
 	}
-	return store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
+	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
 		ta, err := access(ctx, q, a, ref)
 		if err != nil {
 			return err
@@ -1320,6 +1394,10 @@ func (s *Service) Delete(ctx context.Context, a authz.Actor, ref string, id uuid
 		e.TeamID, e.Before = ta.team.ID, snapshot(cur, stored.views()...)
 		return audit.Record(ctx, q, e)
 	})
+	if err == nil {
+		s.machine.Forget(id.String())
+	}
+	return err
 }
 
 // Target is how to reach a server for a forwarded call (internal/mcpgw):
@@ -1349,6 +1427,17 @@ func (s *Service) target(ctx context.Context, sv dbgen.McpServer) (upstream.Targ
 			return t, err
 		}
 		t.Credentials = creds
+	}
+	if AuthModeOf(sv) == AuthMachineOAuth {
+		// The portal's own token for this server, the same for every caller
+		// (a person, a service account, a health check). A failure is an
+		// *upstream.Error: auth when the client was refused, else
+		// machine_auth_unavailable.
+		tok, uerr := s.machineToken(ctx, sv, "")
+		if uerr != nil {
+			return t, uerr
+		}
+		t.BearerToken = tok
 	}
 	return t, nil
 }

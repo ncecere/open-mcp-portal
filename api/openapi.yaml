@@ -864,6 +864,16 @@ paths:
         ones, or turned off). In oauth mode the first capability discovery is skipped (refresh and refreshError
         null, setupRequired true): someone signs in with authorizeTeamMcpServerSetup first. Audited as
         mcp_server.create and mcp_server.auth_update (never a secret).
+
+        authMode machine_oauth (decision 73, docs/machine-oauth.md) needs machineOAuth: tokenUrl, clientId and
+        clientSecret (400 invalid_machine_oauth; 422 client_secret_required without the secret), and optionally scopes,
+        tokenAuthMethod, audience and resource. The portal gets a token with the client credentials grant and sends it
+        as Authorization: Bearer on every request to the server (discovery, tests, health checks and calls, from
+        everyone alike); the first discovery runs at once with it. 422 auth_conflict (details.reason
+        static_authorization or requirement) as for oauth. 422 url_not_allowed (details.field machineOAuth.tokenUrl)
+        when the token endpoint is refused by the address rules. Audited as mcp_server.create and
+        mcp_server.auth_update (token endpoint, scopes, clientSecretChanged; never a secret or a token). An
+        automation token can't create a server in this mode (403 token_not_allowed).
       requestBody:
         required: true
         content:
@@ -910,8 +920,9 @@ paths:
         the two root forms for an issuer without a path). Every request goes through the address guard and the
         internal-network allowlist (no proxy, no redirects, 5 s each, responses of at most 64 KiB, at most 8
         requests). Nothing is stored or audited. Problems found (resource or issuer mismatch, no PKCE S256, ...)
-        are reported in the result with status 200, not as errors. 422 url_not_allowed as for create. 409
-        team_archived. 429 slow_down (10 a minute per person).
+        are reported in the result with status 200, not as errors. machineOAuth says whether the authorization server
+        lists client_credentials in grant_types_supported, with its token endpoint (for authMode machine_oauth). 422
+        url_not_allowed as for create. 409 team_archived. 429 slow_down (10 a minute per person).
       requestBody:
         required: true
         content:
@@ -1039,6 +1050,13 @@ paths:
         another authorization server or another client ID erases the tokens of every connection to the server
         (needs_reconsent; leaving oauth deletes them, revoked where possible). Audited as mcp_server.auth_update
         (before/after, clientIdChanged, clientSecretChanged, connectionsReset; never a secret).
+
+        machineOAuth (decision 73): see create. Under approval_required a published server goes back to pending
+        (reason upstream_auth_changed) when it switches to machine_oauth, or its token endpoint, client ID, audience or
+        resource changes, or a scope is added; a new secret alone does not. Any change drops the token the portal had
+        for the server. Audited as mcp_server.auth_update (tokenUrlChanged, clientIdChanged, clientSecretChanged; never
+        a secret or a token). A publisher automation token can''t send machineOAuth, or switch a server to this mode
+        (403 token_not_allowed, details.field).
 
 
         A URL with another origin (scheme, host or port; case, a trailing slash and the path don''t count) never keeps the
@@ -7203,6 +7221,12 @@ components:
           nullable: true
           description: How each person's own secret is sent, and how many people have entered one, when authMode is
             person_secret; else null. Absent from servers before v0.3.2
+        machineOAuth:
+          allOf:
+          - $ref: '#/components/schemas/McpServerMachineOAuth'
+          nullable: true
+          description: The portal's own OAuth client for this server when authMode is machine_oauth, else null. The
+            client secret is never returned. Absent from servers before v0.3.2
         requiresPresentPerson:
           type: boolean
           description: 'Refuse calls on a relay service account unless they are for a person the platform says is
@@ -7226,8 +7250,9 @@ components:
         reviewDigest:
           type: string
           readOnly: true
-          description: 'SHA-256 (hex) over the server''s URL, auth mode and requirement and over every listed capability''s
-            kind, name and fingerprint, sorted. It changes when any of them does (a refresh, a new URL ...). Send it back
+          description: 'SHA-256 (hex) over the server''s URL, auth mode and requirement (for machine_oauth also its token
+            endpoint, client ID, token authentication method, scopes, audience and resource, never the secret) and over
+            every listed capability''s kind, name and fingerprint, sorted. It changes when any of them does (a refresh, a new URL ...). Send it back
             as expectedDigest when reviewing (adminReviewMcpServer) or publishing, so what is approved is what was read'
         revision:
           $ref: '#/components/schemas/Revision'
@@ -7354,7 +7379,8 @@ components:
         authMode:
           allOf:
           - $ref: '#/components/schemas/McpServerAuthMode'
-          description: 'Default: static_header when authHeaderName is sent, else none. oauth needs oauth'
+          description: 'Default: static_header when authHeaderName is sent, else none. oauth needs oauth. machine_oauth
+            needs machineOAuth'
         oauth:
           $ref: '#/components/schemas/McpServerOAuthInput'
         personSecret:
@@ -7364,6 +7390,11 @@ components:
             modes. How each person's own secret is sent. Nobody has entered a key yet, so capabilities are not read
             (McpServerCreated.setupRequired); an editor enters theirs under Account > My connections, choosing to read
             the server with it
+        machineOAuth:
+          allOf:
+          - $ref: '#/components/schemas/McpServerMachineOAuthInput'
+          description: Required with authMode machine_oauth (tokenUrl, clientId and clientSecret); refused (400
+            invalid_machine_oauth) with any other mode, because it carries a secret
         sendIdentity:
           type: boolean
           description: Send the signed identity token with forwarded calls (McpServer.sendIdentity). Omit for the default
@@ -7423,7 +7454,7 @@ components:
           allOf:
           - $ref: '#/components/schemas/McpServerAuthMode'
           description: Omit to keep. none removes the static header and the oauth configuration; leaving oauth deletes
-            the server's connections
+            the server's connections; leaving machine_oauth deletes its client and secret
         oauth:
           allOf:
           - $ref: '#/components/schemas/McpServerOAuthInput'
@@ -7437,6 +7468,14 @@ components:
             keeps them. A new mode, placement, name or prefix sends a published server back to review under
             approval_required. A publisher automation token can''t send it, nor switch a server to this mode (403
             token_not_allowed)'
+        machineOAuth:
+          allOf:
+          - $ref: '#/components/schemas/McpServerMachineOAuthInput'
+          description: Only with authMode machine_oauth (sent now or stored; 400 invalid_machine_oauth otherwise).
+            Omitted fields keep their stored values; the first time (switching to the mode) tokenUrl, clientId and
+            clientSecret are required. A new tokenUrl, a new clientId or a URL with another origin needs clientSecret
+            in the same request (422 client_secret_required, details.reason token_url_changed, client_id_changed or
+            origin_changed; nothing is stored and nothing is sent to the new endpoint)
         sendIdentity:
           type: boolean
           description: Omit to keep. Not a review trigger (turning it off sends less). Audited in mcp_server.update
@@ -10245,15 +10284,19 @@ components:
       - static_header
       - oauth
       - person_secret
+      - machine_oauth
       description: 'How the portal authenticates to the server (decision 39). none: only the identity token, in
-        Authorization: Bearer. static_header: one static header (authHeaderName); the identity token moves to
-        MCP-Gateway-Identity when that header is Authorization. oauth: each person''s own token from the server''s
-        authorization server in Authorization: Bearer, and the identity token in MCP-Gateway-Identity. oauth excludes
-        a static Authorization header and a requirement (one credential per call). person_secret: each person''s own
-        API key or token, entered under Account > My connections and sent as the placement in personSecret says (a
-        header, a bearer token or a query parameter; decision 72); a bearer or an Authorization header moves the identity
-        token to MCP-Gateway-Identity. person_secret excludes a requirement and a static part that sets the same header,
-        query parameter or Authorization'
+        Authorization: Bearer. static_header: the static credential (authHeaderName, or credentials); the identity
+        token moves to MCP-Gateway-Identity when it sets Authorization. oauth: each person''s own token from the
+        server''s authorization server in Authorization: Bearer, and the identity token in MCP-Gateway-Identity. oauth
+        excludes a static Authorization header and a requirement (one credential per call). person_secret (decision
+        72): each person''s own API key or token, entered under Account > My connections and sent as the placement
+        in personSecret says (a header, a bearer token or a query parameter); a bearer or an Authorization header
+        moves the identity token to MCP-Gateway-Identity; it excludes a requirement and a static part that sets
+        the same header, query parameter or Authorization. machine_oauth (decision 73): the portal''s own token from
+        the server''s authorization server (the client credentials grant, machineOAuth), the same for every caller,
+        in Authorization: Bearer, and the identity token in MCP-Gateway-Identity; it excludes a static Authorization
+        header and a requirement like oauth does'
     PersonSecretInput:
       type: object
       description: How a server's person secrets travel and how the page where people enter them describes the key
@@ -10645,6 +10688,88 @@ components:
           description: The callback the server's OAuth client uses (<APP_URL>/connect/callback); register it with a
             manual client. Absent before this field was added
           example: https://mcp.example.com/connect/callback
+    McpServerMachineOAuth:
+      type: object
+      description: >-
+        A server's machine OAuth client (decision 73, docs/machine-oauth.md). The portal gets a token with
+        the client credentials grant from tokenUrl and sends it as Authorization: Bearer to the server's URL. The client
+        secret is never returned
+      required:
+      - tokenUrl
+      - clientIdHint
+      - hasClientSecret
+      - clientSecretHint
+      - tokenAuthMethod
+      - scopes
+      - audience
+      - resource
+      properties:
+        tokenUrl:
+          type: string
+          description: The authorization server's token endpoint
+        clientIdHint:
+          type: string
+          description: The last six characters of the client ID (all of a shorter one)
+        hasClientSecret:
+          type: boolean
+          description: Always true (a machine client has a secret)
+        clientSecretHint:
+          type: string
+          description: The last four characters of a secret of eight or more, else empty
+        tokenAuthMethod:
+          type: string
+          enum:
+          - client_secret_basic
+          - client_secret_post
+          description: How the portal authenticates to the token endpoint
+        scopes:
+          $ref: '#/components/schemas/ScopeList'
+        audience:
+          type: string
+          nullable: true
+          description: Sent as the audience parameter when set
+        resource:
+          type: string
+          nullable: true
+          description: Sent as the resource parameter (RFC 8707) when set
+    McpServerMachineOAuthInput:
+      type: object
+      properties:
+        tokenUrl:
+          type: string
+          maxLength: 1000
+          description: The authorization server's token endpoint. The address rules apply as for a server's URL (https
+            unless an internal-network entry allows http; no userinfo, query or fragment; 422 url_not_allowed with
+            details.field machineOAuth.tokenUrl), when saved and at every token request
+        clientId:
+          type: string
+          minLength: 1
+          maxLength: 500
+        clientSecret:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Sealed with ENCRYPTION_KEY, never returned. Replace-only; omit to keep the stored one (not
+            allowed when tokenUrl, clientId or the server's origin changes)
+        tokenAuthMethod:
+          type: string
+          enum:
+          - client_secret_basic
+          - client_secret_post
+          description: 'Default client_secret_basic: the client ID and secret in an HTTP Basic header. client_secret_post
+            sends them in the request body'
+        scopes:
+          $ref: '#/components/schemas/ScopeList'
+        audience:
+          type: string
+          maxLength: 500
+          description: Sent as the audience parameter (some authorization servers want it). An empty string removes it
+        resource:
+          type: string
+          maxLength: 500
+          description: An absolute URI without a fragment, sent as the resource parameter (RFC 8707) so the token is for
+            this server only (authorization servers that ignore it leave the token usable elsewhere). An empty string
+            removes it
     McpServerOAuthInput:
       type: object
       properties:
@@ -10933,6 +11058,37 @@ components:
         latencyMs:
           type: integer
           format: int64
+    DetectAuthMachine:
+      type: object
+      required:
+      - tokenEndpoint
+      - grantTypesListed
+      - clientCredentials
+      - tokenAuthMethods
+      - resource
+      properties:
+        tokenEndpoint:
+          type: string
+          description: The authorization server's token endpoint, to enter as tokenUrl
+        grantTypesListed:
+          type: boolean
+          description: grant_types_supported was in its metadata (RFC 8414 defaults an absent list to authorization_code
+            and implicit, so clientCredentials is false when it is not listed)
+        clientCredentials:
+          type: boolean
+          description: client_credentials is in grant_types_supported
+        tokenAuthMethods:
+          type: array
+          items:
+            type: string
+            enum:
+            - client_secret_basic
+            - client_secret_post
+          description: The token endpoint authentication methods it lists that the portal can use
+        resource:
+          type: string
+          description: The protected resource identifier from the server's metadata, to enter as resource when the
+            authorization server supports RFC 8707 (empty when none was found)
     DetectAuthResult:
       type: object
       required:
@@ -10978,6 +11134,12 @@ components:
           allOf:
           - $ref: '#/components/schemas/DetectAuthRegistration'
           nullable: true
+        machineOAuth:
+          allOf:
+          - $ref: '#/components/schemas/DetectAuthMachine'
+          nullable: true
+          description: Whether the authorization server it found offers the client credentials grant (for authMode
+            machine_oauth); null when no authorization server metadata was found
         suggestedScopes:
           allOf:
           - $ref: '#/components/schemas/ScopeList'

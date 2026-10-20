@@ -650,6 +650,24 @@ func (e ConnectionNeedsReconsentDataReason) Valid() bool {
 	}
 }
 
+// Defines values for DetectAuthMachineTokenAuthMethods.
+const (
+	DetectAuthMachineTokenAuthMethodsClientSecretBasic DetectAuthMachineTokenAuthMethods = "client_secret_basic"
+	DetectAuthMachineTokenAuthMethodsClientSecretPost  DetectAuthMachineTokenAuthMethods = "client_secret_post"
+)
+
+// Valid indicates whether the value is a known member of the DetectAuthMachineTokenAuthMethods enum.
+func (e DetectAuthMachineTokenAuthMethods) Valid() bool {
+	switch e {
+	case DetectAuthMachineTokenAuthMethodsClientSecretBasic:
+		return true
+	case DetectAuthMachineTokenAuthMethodsClientSecretPost:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DetectAuthOutcome.
 const (
 	DetectAuthOutcomeNoAuth      DetectAuthOutcome = "no_auth"
@@ -1165,6 +1183,7 @@ func (e McpServerTransport) Valid() bool {
 
 // Defines values for McpServerAuthMode.
 const (
+	McpServerAuthModeMachineOauth McpServerAuthMode = "machine_oauth"
 	McpServerAuthModeNone         McpServerAuthMode = "none"
 	McpServerAuthModeOauth        McpServerAuthMode = "oauth"
 	McpServerAuthModePersonSecret McpServerAuthMode = "person_secret"
@@ -1174,6 +1193,8 @@ const (
 // Valid indicates whether the value is a known member of the McpServerAuthMode enum.
 func (e McpServerAuthMode) Valid() bool {
 	switch e {
+	case McpServerAuthModeMachineOauth:
+		return true
 	case McpServerAuthModeNone:
 		return true
 	case McpServerAuthModeOauth:
@@ -1229,6 +1250,42 @@ func (e McpServerCredentialInputKind) Valid() bool {
 	case McpServerCredentialInputKindHeader:
 		return true
 	case McpServerCredentialInputKindQuery:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for McpServerMachineOAuthTokenAuthMethod.
+const (
+	McpServerMachineOAuthTokenAuthMethodClientSecretBasic McpServerMachineOAuthTokenAuthMethod = "client_secret_basic"
+	McpServerMachineOAuthTokenAuthMethodClientSecretPost  McpServerMachineOAuthTokenAuthMethod = "client_secret_post"
+)
+
+// Valid indicates whether the value is a known member of the McpServerMachineOAuthTokenAuthMethod enum.
+func (e McpServerMachineOAuthTokenAuthMethod) Valid() bool {
+	switch e {
+	case McpServerMachineOAuthTokenAuthMethodClientSecretBasic:
+		return true
+	case McpServerMachineOAuthTokenAuthMethodClientSecretPost:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for McpServerMachineOAuthInputTokenAuthMethod.
+const (
+	McpServerMachineOAuthInputTokenAuthMethodClientSecretBasic McpServerMachineOAuthInputTokenAuthMethod = "client_secret_basic"
+	McpServerMachineOAuthInputTokenAuthMethodClientSecretPost  McpServerMachineOAuthInputTokenAuthMethod = "client_secret_post"
+)
+
+// Valid indicates whether the value is a known member of the McpServerMachineOAuthInputTokenAuthMethod enum.
+func (e McpServerMachineOAuthInputTokenAuthMethod) Valid() bool {
+	switch e {
+	case McpServerMachineOAuthInputTokenAuthMethodClientSecretBasic:
+		return true
+	case McpServerMachineOAuthInputTokenAuthMethodClientSecretPost:
 		return true
 	default:
 		return false
@@ -3402,6 +3459,27 @@ type DetectAuthChallenge struct {
 	Scope ScopeList `json:"scope"`
 }
 
+// DetectAuthMachine defines model for DetectAuthMachine.
+type DetectAuthMachine struct {
+	// ClientCredentials client_credentials is in grant_types_supported
+	ClientCredentials bool `json:"clientCredentials"`
+
+	// GrantTypesListed grant_types_supported was in its metadata (RFC 8414 defaults an absent list to authorization_code and implicit, so clientCredentials is false when it is not listed)
+	GrantTypesListed bool `json:"grantTypesListed"`
+
+	// Resource The protected resource identifier from the server's metadata, to enter as resource when the authorization server supports RFC 8707 (empty when none was found)
+	Resource string `json:"resource"`
+
+	// TokenAuthMethods The token endpoint authentication methods it lists that the portal can use
+	TokenAuthMethods []DetectAuthMachineTokenAuthMethods `json:"tokenAuthMethods"`
+
+	// TokenEndpoint The authorization server's token endpoint, to enter as tokenUrl
+	TokenEndpoint string `json:"tokenEndpoint"`
+}
+
+// DetectAuthMachineTokenAuthMethods defines model for DetectAuthMachine.TokenAuthMethods.
+type DetectAuthMachineTokenAuthMethods string
+
 // DetectAuthOutcome no_auth: initialize worked without credentials (authMode none). oauth: a Bearer challenge and usable metadata (authMode oauth possible; check problems). other_auth: 401/403 without usable OAuth metadata (use a static header). unreachable: network error, timeout, 5xx or not an MCP endpoint
 type DetectAuthOutcome string
 
@@ -3467,6 +3545,9 @@ type DetectAuthResult struct {
 	AuthorizationServer *DetectAuthServerMetadata `json:"authorizationServer"`
 	Challenge           *DetectAuthChallenge      `json:"challenge"`
 	HttpStatus          *int32                    `json:"httpStatus"`
+
+	// MachineOAuth Whether the authorization server it found offers the client credentials grant (for authMode machine_oauth); null when no authorization server metadata was found
+	MachineOAuth *DetectAuthMachine `json:"machineOAuth,omitempty"`
 
 	// Outcome no_auth: initialize worked without credentials (authMode none). oauth: a Bearer challenge and usable metadata (authMode oauth possible; check problems). other_auth: 401/403 without usable OAuth metadata (use a static header). unreachable: network error, timeout, 5xx or not an MCP endpoint
 	Outcome          DetectAuthOutcome           `json:"outcome"`
@@ -4031,7 +4112,7 @@ type McpServer struct {
 	// AuthHeaderName The static header sent with every request, for a server whose credential is still its single header (absent: none, or the credential is the list credentials)
 	AuthHeaderName *string `json:"authHeaderName,omitempty"`
 
-	// AuthMode How the portal authenticates to the server (decision 39). none: only the identity token, in Authorization: Bearer. static_header: one static header (authHeaderName); the identity token moves to MCP-Gateway-Identity when that header is Authorization. oauth: each person's own token from the server's authorization server in Authorization: Bearer, and the identity token in MCP-Gateway-Identity. oauth excludes a static Authorization header and a requirement (one credential per call). person_secret: each person's own API key or token, entered under Account > My connections and sent as the placement in personSecret says (a header, a bearer token or a query parameter; decision 72); a bearer or an Authorization header moves the identity token to MCP-Gateway-Identity. person_secret excludes a requirement and a static part that sets the same header, query parameter or Authorization
+	// AuthMode How the portal authenticates to the server (decision 39). none: only the identity token, in Authorization: Bearer. static_header: the static credential (authHeaderName, or credentials); the identity token moves to MCP-Gateway-Identity when it sets Authorization. oauth: each person's own token from the server's authorization server in Authorization: Bearer, and the identity token in MCP-Gateway-Identity. oauth excludes a static Authorization header and a requirement (one credential per call). person_secret (decision 72): each person's own API key or token, entered under Account > My connections and sent as the placement in personSecret says (a header, a bearer token or a query parameter); a bearer or an Authorization header moves the identity token to MCP-Gateway-Identity; it excludes a requirement and a static part that sets the same header, query parameter or Authorization. machine_oauth (decision 73): the portal's own token from the server's authorization server (the client credentials grant, machineOAuth), the same for every caller, in Authorization: Bearer, and the identity token in MCP-Gateway-Identity; it excludes a static Authorization header and a requirement like oauth does
 	AuthMode *McpServerAuthMode `json:"authMode,omitempty"`
 
 	// AuthValueHint Last 4 characters of the single header's value, or empty
@@ -4057,6 +4138,9 @@ type McpServer struct {
 	Health           ServerHealth       `json:"health"`
 	Id               openapi_types.UUID `json:"id"`
 	LastRefreshError *string            `json:"lastRefreshError,omitempty"`
+
+	// MachineOAuth The portal's own OAuth client for this server when authMode is machine_oauth, else null. The client secret is never returned. Absent from servers before v0.3.2
+	MachineOAuth *McpServerMachineOAuth `json:"machineOAuth,omitempty"`
 
 	// Name Example: Service status
 	Name string `json:"name"`
@@ -4088,7 +4172,7 @@ type McpServer struct {
 	// RequiresPresentPerson Refuse calls on a relay service account unless they are for a person the platform says is present (person_present true), for every capability without its own override (McpCapability.presentPerson): scheduled or background work, a token that names nobody and a relay key with no token are refused too. Default false. Calls that don't arrive on a relay service account are never affected. Absent from servers before v0.3 (false)
 	RequiresPresentPerson *bool `json:"requiresPresentPerson,omitempty"`
 
-	// ReviewDigest SHA-256 (hex) over the server's URL, auth mode and requirement and over every listed capability's kind, name and fingerprint, sorted. It changes when any of them does (a refresh, a new URL ...). Send it back as expectedDigest when reviewing (adminReviewMcpServer) or publishing, so what is approved is what was read
+	// ReviewDigest SHA-256 (hex) over the server's URL, auth mode and requirement (for machine_oauth also its token endpoint, client ID, token authentication method, scopes, audience and resource, never the secret) and over every listed capability's kind, name and fingerprint, sorted. It changes when any of them does (a refresh, a new URL ...). Send it back as expectedDigest when reviewing (adminReviewMcpServer) or publishing, so what is approved is what was read
 	ReviewDigest *string `json:"reviewDigest,omitempty"`
 
 	// Revision Increases on every change. Send it back in If-Match.
@@ -4115,7 +4199,7 @@ type McpServer struct {
 // McpServerTransport defines model for McpServer.Transport.
 type McpServerTransport string
 
-// McpServerAuthMode How the portal authenticates to the server (decision 39). none: only the identity token, in Authorization: Bearer. static_header: one static header (authHeaderName); the identity token moves to MCP-Gateway-Identity when that header is Authorization. oauth: each person's own token from the server's authorization server in Authorization: Bearer, and the identity token in MCP-Gateway-Identity. oauth excludes a static Authorization header and a requirement (one credential per call). person_secret: each person's own API key or token, entered under Account > My connections and sent as the placement in personSecret says (a header, a bearer token or a query parameter; decision 72); a bearer or an Authorization header moves the identity token to MCP-Gateway-Identity. person_secret excludes a requirement and a static part that sets the same header, query parameter or Authorization
+// McpServerAuthMode How the portal authenticates to the server (decision 39). none: only the identity token, in Authorization: Bearer. static_header: the static credential (authHeaderName, or credentials); the identity token moves to MCP-Gateway-Identity when it sets Authorization. oauth: each person's own token from the server's authorization server in Authorization: Bearer, and the identity token in MCP-Gateway-Identity. oauth excludes a static Authorization header and a requirement (one credential per call). person_secret (decision 72): each person's own API key or token, entered under Account > My connections and sent as the placement in personSecret says (a header, a bearer token or a query parameter); a bearer or an Authorization header moves the identity token to MCP-Gateway-Identity; it excludes a requirement and a static part that sets the same header, query parameter or Authorization. machine_oauth (decision 73): the portal's own token from the server's authorization server (the client credentials grant, machineOAuth), the same for every caller, in Authorization: Bearer, and the identity token in MCP-Gateway-Identity; it excludes a static Authorization header and a requirement like oauth does
 type McpServerAuthMode string
 
 // McpServerCreate defines model for McpServerCreate.
@@ -4123,7 +4207,7 @@ type McpServerCreate struct {
 	// AuthHeaderName A header such as Authorization or X-API-Key; send it with authValue, or neither
 	AuthHeaderName *string `json:"authHeaderName,omitempty"`
 
-	// AuthMode Default: static_header when authHeaderName is sent, else none. oauth needs oauth
+	// AuthMode Default: static_header when authHeaderName is sent, else none. oauth needs oauth. machine_oauth needs machineOAuth
 	AuthMode *McpServerAuthMode `json:"authMode,omitempty"`
 
 	// AuthValue Stored encrypted, never returned
@@ -4136,8 +4220,11 @@ type McpServerCreate struct {
 	Credentials *[]McpServerCredentialInput `json:"credentials,omitempty"`
 	Description *string                     `json:"description,omitempty"`
 	Enabled     *bool                       `json:"enabled,omitempty"`
-	Name        string                      `json:"name"`
-	Oauth       *McpServerOAuthInput        `json:"oauth,omitempty"`
+
+	// MachineOAuth Required with authMode machine_oauth (tokenUrl, clientId and clientSecret); refused (400 invalid_machine_oauth) with any other mode, because it carries a secret
+	MachineOAuth *McpServerMachineOAuthInput `json:"machineOAuth,omitempty"`
+	Name         string                      `json:"name"`
+	Oauth        *McpServerOAuthInput        `json:"oauth,omitempty"`
 
 	// PersonSecret Required with authMode person_secret (400 invalid_person_secret otherwise); ignored for other modes. How each person's own secret is sent. Nobody has entered a key yet, so capabilities are not read (McpServerCreated.setupRequired); an editor enters theirs under Account > My connections, choosing to read the server with it
 	PersonSecret *PersonSecretInput `json:"personSecret,omitempty"`
@@ -4204,6 +4291,61 @@ type McpServerCredentialInput struct {
 
 // McpServerCredentialInputKind defines model for McpServerCredentialInput.Kind.
 type McpServerCredentialInputKind string
+
+// McpServerMachineOAuth A server's machine OAuth client (decision 73, docs/machine-oauth.md). The portal gets a token with the client credentials grant from tokenUrl and sends it as Authorization: Bearer to the server's URL. The client secret is never returned
+type McpServerMachineOAuth struct {
+	// Audience Sent as the audience parameter when set
+	Audience *string `json:"audience"`
+
+	// ClientIdHint The last six characters of the client ID (all of a shorter one)
+	ClientIdHint string `json:"clientIdHint"`
+
+	// ClientSecretHint The last four characters of a secret of eight or more, else empty
+	ClientSecretHint string `json:"clientSecretHint"`
+
+	// HasClientSecret Always true (a machine client has a secret)
+	HasClientSecret bool `json:"hasClientSecret"`
+
+	// Resource Sent as the resource parameter (RFC 8707) when set
+	Resource *string `json:"resource"`
+
+	// Scopes OAuth scopes exactly as the provider names them (RFC 6749 scope characters, no spaces or quotes); duplicates collapse. Use the provider's canonical names (the ones its token response returns), otherwise the gateway can't tell that they were granted.
+	Scopes ScopeList `json:"scopes"`
+
+	// TokenAuthMethod How the portal authenticates to the token endpoint
+	TokenAuthMethod McpServerMachineOAuthTokenAuthMethod `json:"tokenAuthMethod"`
+
+	// TokenUrl The authorization server's token endpoint
+	TokenUrl string `json:"tokenUrl"`
+}
+
+// McpServerMachineOAuthTokenAuthMethod How the portal authenticates to the token endpoint
+type McpServerMachineOAuthTokenAuthMethod string
+
+// McpServerMachineOAuthInput defines model for McpServerMachineOAuthInput.
+type McpServerMachineOAuthInput struct {
+	// Audience Sent as the audience parameter (some authorization servers want it). An empty string removes it
+	Audience *string `json:"audience,omitempty"`
+	ClientId *string `json:"clientId,omitempty"`
+
+	// ClientSecret Sealed with ENCRYPTION_KEY, never returned. Replace-only; omit to keep the stored one (not allowed when tokenUrl, clientId or the server's origin changes)
+	ClientSecret *string `json:"clientSecret,omitempty"`
+
+	// Resource An absolute URI without a fragment, sent as the resource parameter (RFC 8707) so the token is for this server only (authorization servers that ignore it leave the token usable elsewhere). An empty string removes it
+	Resource *string `json:"resource,omitempty"`
+
+	// Scopes OAuth scopes exactly as the provider names them (RFC 6749 scope characters, no spaces or quotes); duplicates collapse. Use the provider's canonical names (the ones its token response returns), otherwise the gateway can't tell that they were granted.
+	Scopes *ScopeList `json:"scopes,omitempty"`
+
+	// TokenAuthMethod Default client_secret_basic: the client ID and secret in an HTTP Basic header. client_secret_post sends them in the request body
+	TokenAuthMethod *McpServerMachineOAuthInputTokenAuthMethod `json:"tokenAuthMethod,omitempty"`
+
+	// TokenUrl The authorization server's token endpoint. The address rules apply as for a server's URL (https unless an internal-network entry allows http; no userinfo, query or fragment; 422 url_not_allowed with details.field machineOAuth.tokenUrl), when saved and at every token request
+	TokenUrl *string `json:"tokenUrl,omitempty"`
+}
+
+// McpServerMachineOAuthInputTokenAuthMethod Default client_secret_basic: the client ID and secret in an HTTP Basic header. client_secret_post sends them in the request body
+type McpServerMachineOAuthInputTokenAuthMethod string
 
 // McpServerOAuth An oauth server's sign-in configuration, as discovered and chosen. The client secret is never returned
 type McpServerOAuth struct {
@@ -4377,7 +4519,7 @@ type McpServerUpdate struct {
 	// AuthHeaderName Omit to keep; an empty string removes the header and its value
 	AuthHeaderName *string `json:"authHeaderName,omitempty"`
 
-	// AuthMode Omit to keep. none removes the static header and the oauth configuration; leaving oauth deletes the server's connections
+	// AuthMode Omit to keep. none removes the static header and the oauth configuration; leaving oauth deletes the server's connections; leaving machine_oauth deletes its client and secret
 	AuthMode *McpServerAuthMode `json:"authMode,omitempty"`
 
 	// AuthValue Omit to keep the stored value
@@ -4390,7 +4532,10 @@ type McpServerUpdate struct {
 	Credentials *[]McpServerCredentialInput `json:"credentials,omitempty"`
 	Description *string                     `json:"description,omitempty"`
 	Enabled     *bool                       `json:"enabled,omitempty"`
-	Name        *string                     `json:"name,omitempty"`
+
+	// MachineOAuth Only with authMode machine_oauth (sent now or stored; 400 invalid_machine_oauth otherwise). Omitted fields keep their stored values; the first time (switching to the mode) tokenUrl, clientId and clientSecret are required. A new tokenUrl, a new clientId or a URL with another origin needs clientSecret in the same request (422 client_secret_required, details.reason token_url_changed, client_id_changed or origin_changed; nothing is stored and nothing is sent to the new endpoint)
+	MachineOAuth *McpServerMachineOAuthInput `json:"machineOAuth,omitempty"`
+	Name         *string                     `json:"name,omitempty"`
 
 	// Oauth Only with authMode oauth (sent now or stored). Omitted fields keep their stored values
 	Oauth *McpServerOAuthInput `json:"oauth,omitempty"`

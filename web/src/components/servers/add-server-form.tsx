@@ -29,6 +29,7 @@ import { CredentialFields } from "./credential-fields";
 import { credentialsBody, newPart, partProblems, type PartForm } from "./credentials";
 import { secretInput, secretProblems } from "./person-secret";
 import { EnabledSwitch, type ServerForm, serverFieldErrors, serverProblems, TimeoutField, UrlField, urlProblem } from "./server-fields";
+import { machineInput, machineProblems } from "./machine-auth";
 import { applyDetection, type DetectResult, oauthInput, oauthProblems, upstreamFormOf, type UpstreamForm } from "./upstream-auth";
 import m from "./servers.module.css";
 
@@ -49,6 +50,7 @@ function authBody(parts: PartForm[], u: UpstreamForm, secret: string, sendIdenti
     ...(credentials?.length ? { credentials } : {}),
     ...(mode === "oauth" ? { oauth: oauthInput(u.oauth, secret, detected) } : {}),
     ...(mode === "person_secret" ? { personSecret: secretInput(u.secret) } : {}),
+    ...(mode === "machine_oauth" ? { machineOAuth: machineInput(u.machine, secret) } : {}),
     ...(sendIdentity === undefined ? {} : { sendIdentity }),
   };
 }
@@ -112,7 +114,7 @@ export function AddServerForm({ team, onClose }: { team: string; onClose: () => 
   const partErrors = staticMode ? partProblems(parts) : {};
   const noParts = staticMode && parts.length === 0;
   const secretErrors = upstream.mode === "person_secret" ? secretProblems(upstream.secret) : {};
-  const allProblems = () => ({ ...serverProblems(form, { dev }), ...oauthProblems(upstream, { detected, secret }) });
+  const allProblems = () => ({ ...serverProblems(form, { dev }), ...oauthProblems(upstream, { detected, secret }), ...machineProblems(upstream.mode, upstream.machine, { secret, url: form.url }) });
   const problems = submitted ? allProblems() : {};
   const fromServer = serverFieldErrors(create.error);
   // A refusal belongs to the value that was sent: editing that field clears it, so the form can be sent again.

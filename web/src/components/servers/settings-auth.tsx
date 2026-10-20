@@ -3,16 +3,17 @@
  * the mode, the credential parts, the OAuth settings with a replace-only secret, the
  * identity switch), and what it does before it's saved: back to review
  * under approval_required (a switch to OAuth, another authorization server,
- * a new scope, or another way of sending each person's own key), everyone
- * signed out of the server (a new URL, authorization server or client), their
- * sign-ins deleted (leaving OAuth), or their keys deleted (a new URL, another
- * placement, leaving the own-key mode).
+ * a new scope, another way of sending each person's own key, or the portal's own
+ * OAuth client or its endpoint), everyone signed out of the server (a new URL,
+ * authorization server or client), their sign-ins deleted (leaving OAuth), or
+ * their keys deleted (a new URL, another placement, leaving the own-key mode).
  */
 import type { Schemas } from "../../api/client";
 import { plural } from "../../lib/format";
 import { Alert } from "@/components/ui/alert/alert";
 import type { McpServer } from "./labels";
 import { credentialsBody, type PartForm, setsAuthorization } from "./credentials";
+import { machineChanges, machineInput } from "./machine-auth";
 import { secretChanged, secretInput } from "./person-secret";
 import { type AuthChange, authModeOf, type DetectResult, oauthChanges, oauthInput, sendsIdentity, type UpstreamForm } from "./upstream-auth";
 
@@ -39,6 +40,15 @@ export function settingsAuthBody(server: McpServer, f: { upstream: UpstreamForm 
       ...(credentials ? { credentials } : {}),
     };
   }
+  if (u.mode === "machine_oauth") {
+    // The portal's own token goes in Authorization: a static part that sets it goes (other parts may stay).
+    if (before !== "machine_oauth" || !server.machineOAuth) {
+      const credentials = credentialsBody(parts.filter((p) => !setsAuthorization(p)), server);
+      return { ...identity, authMode: "machine_oauth", machineOAuth: machineInput(u.machine, secret), ...(credentials ? { credentials } : {}) };
+    }
+    const changes = machineChanges(u.machine, secret, server.machineOAuth);
+    return { ...identity, ...(changes ? { machineOAuth: changes } : {}) };
+  }
   if (before !== "oauth" || !server.oauth) {
     // OAuth sends each person's token in Authorization: a static part that sets it goes (other parts may stay).
     const credentials = credentialsBody(parts.filter((p) => !setsAuthorization(p)), server);
@@ -53,6 +63,10 @@ const reviewWords: Record<NonNullable<AuthChange["review"]>, string> = {
   secret: "another way of sending each person's own key",
   server: "another authorization server",
   scopes: "a scope it didn't ask for before",
+  machine: "a switch to the portal's own OAuth client",
+  machine_client: "another token endpoint or client",
+  machine_scopes: "a scope it didn't ask for before",
+  machine_target: "another audience or resource",
 };
 
 /** The warnings before a save: back to review, and what happens to the people signed in. */
@@ -63,7 +77,7 @@ export function AuthChangeNotes({ server, change, leavesCatalog }: { server: Mcp
       {leavesCatalog && change.review && (
         <Alert tone="warning" title="The server will leave the catalog">
           Your team needs approval to publish, and this is {reviewWords[change.review]}, so it&apos;s reviewed again: once you save, {server.name} is out of the company
-          catalog until a platform admin approves it. Narrowing scopes, changing the client or leaving OAuth never needs a review.
+          catalog until a platform admin approves it. Narrowing scopes, a new secret or leaving OAuth never needs a review.
         </Alert>
       )}
       {change.connections === "reset" && (

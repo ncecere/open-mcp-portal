@@ -126,7 +126,14 @@ ALTER TABLE mcp_servers
     DROP COLUMN secret_prefix,
     DROP COLUMN secret_name,
     DROP COLUMN secret_placement;
-UPDATE mcp_servers SET auth_mode = 'none' WHERE auth_mode = 'person_secret';
+-- Servers in person_secret mode go back to static_header when they still have a
+-- static credential of their own (a header or parts), else to none; the keys
+-- people entered are dropped with their table. Servers in every other mode are
+-- untouched and the check keeps every other value.
+UPDATE mcp_servers SET auth_mode = CASE
+        WHEN auth_header_name IS NOT NULL OR EXISTS (SELECT 1 FROM mcp_server_credentials c WHERE c.server_id = mcp_servers.id)
+        THEN 'static_header' ELSE 'none' END
+ WHERE auth_mode = 'person_secret';
 -- +goose StatementBegin
 DO $$
 DECLARE

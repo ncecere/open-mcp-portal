@@ -457,6 +457,10 @@ type Error struct {
 	// Challenge holds the WWW-Authenticate values of a 401 or 403 answer
 	// (an OAuth-protected server's error and scope; never shown).
 	Challenge []string
+	// Reason is the data.reason of the -32010 answer a call gets when the
+	// failure was the portal's own doing rather than the server's (today only
+	// ReasonMachineAuthUnavailable); empty for every other failure.
+	Reason string
 }
 
 func (e *Error) Error() string { return e.Message }

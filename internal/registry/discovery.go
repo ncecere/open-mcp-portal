@@ -158,6 +158,16 @@ func (s *Service) probeUntraced(ctx context.Context, sv dbgen.McpServer, trigger
 		}
 	}
 	d, err := s.client.Discover(ctx, t)
+	if ue, ok := err.(*upstream.Error); ok && ue.HTTPStatus == http.StatusUnauthorized && AuthModeOf(sv) == AuthMachineOAuth {
+		// The server refused the machine token (a 401 means nothing ran): get
+		// another and read once more; a second refusal is the result.
+		if next, uerr := s.machineToken(ctx, sv, t.BearerToken); uerr != nil {
+			err = uerr
+		} else {
+			t.BearerToken = next
+			d, err = s.client.Discover(ctx, t)
+		}
+	}
 	res.Latency, res.ServerName, res.ServerVersion, res.ProtocolVersion = d.Latency, d.ServerName, d.ServerVersion, d.ProtocolVersion
 	res.Protocol = d.Protocol
 	if err != nil {

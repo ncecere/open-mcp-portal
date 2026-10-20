@@ -413,6 +413,7 @@ objects (at most `METRICS_MAX_OBJECTS`, default 200 each, then `other`) and drop
 | `omp_mcp_rate_limited_total` | `limit` |
 | `omp_payload_captures_total`, `omp_payload_capture_errors_total`, `omp_payload_redactions_total` | `rule` (redactions) |
 | `omp_provider_token_refresh_total` | `provider`, `result` (`ok`, `refused`, `unavailable`) |
+| `omp_machine_token_requests_total` | `result` (`ok`, `refused`, `unavailable`): token requests of `machine_oauth` servers, not cache hits |
 | `omp_server_health_checks_total`, `omp_mcp_servers` | `result` / `state` (`healthy`, `failing`, `unknown`) |
 | `omp_http_requests_total`, `omp_http_request_duration_seconds` | `route` (pattern), `method`, `code` (`2xx`…) |
 | `omp_retention_deleted_total`, `omp_retention_last_success_timestamp_seconds` | `kind` |

@@ -1,8 +1,9 @@
 /*
  * The Authentication section of Add and Settings: Detect sign-in, the mode
- * (None, Static header, Sign-in with OAuth per person; OAuth only once a
- * detection found it usable, or when the server uses it already), the
- * mode's fields, and whether the server receives the identity token
+ * (None, Static credential, each person's own key, the portal's own OAuth
+ * client, or Sign-in with OAuth per person; OAuth only once a detection found
+ * it usable, or when the server uses it already; the others need no
+ * detection), the mode's fields, and whether the server receives the identity token
  * (decision 45, recommended off for servers run outside the company).
  */
 import type { ReactNode } from "react";
@@ -11,6 +12,8 @@ import { type RadioOption, RadioGroup } from "@/components/ui/radio-group/radio-
 import { Switch } from "@/components/ui/switch/switch";
 import { DetectSignIn } from "./detect-auth";
 import type { McpServer } from "./labels";
+import { machineFromDetection } from "./machine-auth";
+import { MachineFields } from "./machine-fields";
 import { OAuthFields } from "./oauth-fields";
 import { PersonSecretFields } from "./person-secret-fields";
 import type { SecretErrors } from "./person-secret";
@@ -50,7 +53,7 @@ export const identityHelp =
 
 export function AuthModeFields({ team, url, urlError, value, onChange, detected, onDetected, onUseUrl, server, secret, setSecret, errors, secretErrors = {}, deletesKeys, disabled, headerFields, staticAlso, notes, identityNote }: Props) {
   const canOAuth = oauthUsable(detected) || server?.authMode === "oauth";
-  const options: RadioOption<AuthMode>[] = (["none", "static_header", "oauth", "person_secret"] as AuthMode[]).map((mode) => ({
+  const options: RadioOption<AuthMode>[] = (["none", "static_header", "person_secret", "machine_oauth", "oauth"] as AuthMode[]).map((mode) => ({
     value: mode,
     label: authModeLabels[mode],
     description: mode === "oauth" && !canOAuth ? `${authModeHelp.oauth} Press Detect sign-in first.` : authModeHelp[mode],
@@ -64,7 +67,12 @@ export function AuthModeFields({ team, url, urlError, value, onChange, detected,
         legend="How the portal authenticates"
         options={options}
         value={value.mode}
-        onValueChange={(mode) => onChange({ ...value, mode })}
+        onValueChange={(mode) => {
+          // A secret typed for one mode isn't carried into another.
+          if (mode !== value.mode) setSecret("");
+          // A detection that found the authorization server's token endpoint fills it in where nothing was typed.
+          onChange({ ...value, mode, ...(mode === "machine_oauth" && detected ? { machine: machineFromDetection(detected, value.machine) } : {}) });
+        }}
         error={errors.mode}
         disabled={disabled}
       />
@@ -89,6 +97,19 @@ export function AuthModeFields({ team, url, urlError, value, onChange, detected,
           Each person&apos;s own key identifies them to the server already. If a third party runs it, turn off Send identity token so their name, email and teams
           aren&apos;t sent too.
         </Alert>
+      )}
+      {value.mode === "machine_oauth" && (
+        <MachineFields
+          value={value.machine}
+          onChange={(machine) => onChange({ ...value, machine })}
+          detected={detected}
+          server={server}
+          url={url}
+          secret={secret}
+          setSecret={setSecret}
+          errors={errors}
+          disabled={disabled}
+        />
       )}
       {notes}
       <Switch label="Send identity token" description={identityHelp} disabled={disabled} checked={value.sendIdentity} onCheckedChange={(sendIdentity) => onChange({ ...value, sendIdentity })} />

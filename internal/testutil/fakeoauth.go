@@ -94,7 +94,28 @@ type FakeOAuth struct {
 	// (invalid_target), as authorization servers without RFC 8707 do.
 	RejectResource bool
 
+	// The client credentials grant (decision 73: a server that authenticates
+	// the portal itself). It is on by default, with the same client and secret
+	// (HTTP Basic or in the form) and AccessTTL as the other grants, and no
+	// refresh token. NoClientCredentials turns it off (unsupported_grant_type,
+	// and the metadata doesn't list it). MachineScopes, when set, are the
+	// scopes the client may ask for (any other: invalid_scope); a request
+	// without scope is granted all of them, else the grant is what was asked.
+	// FailClientCredentials: "" (work), "invalid_client" (401 whatever the
+	// credentials), "unavailable" (503), "invalid_response" (200 without an
+	// access token) or "wrong_type" (token_type DPoP). EnforceExpiry makes
+	// an access token stop being active (Introspect) AccessTTL after it was
+	// issued. TokenDelay delays client credentials answers (concurrency tests).
+	NoClientCredentials   bool
+	MachineScopes         []string
+	FailClientCredentials string
+	EnforceExpiry         bool
+	TokenDelay            time.Duration
+
 	codes   map[string]fakeCode
+	expires map[string]time.Time // access token -> expiry (EnforceExpiry)
+	// machine records every client credentials request.
+	machine []ClientCredentialsRequest
 	access  map[string]fakeGrant // token -> grant
 	refresh map[string]fakeGrant
 	clients map[string]string // registered client ID -> secret
@@ -122,6 +143,16 @@ type fakeGrant struct {
 	resource, clientID string
 }
 
+// ClientCredentialsRequest is one client credentials grant request as the
+// fake received it. ClientAuth is "basic", "post" or "none"; ClientSecret is
+// what the client sent (the test checks it is the secret it stored).
+type ClientCredentialsRequest struct {
+	ClientAuth, ClientID, ClientSecret string
+	Scope, Audience, Resource          string
+	// Authorized says the client credentials were right.
+	Authorized bool
+}
+
 // Introspection is what the fake says about a token (its /introspect).
 type Introspection struct {
 	Active   bool     `json:"active"`
@@ -145,7 +176,7 @@ func NewFakeOAuth(t testing.TB) *FakeOAuth {
 func NewFakeOAuthHandler(clientID, clientSecret string) (*FakeOAuth, http.Handler) {
 	f := &FakeOAuth{ClientID: clientID, ClientSecret: clientSecret, AccessTTL: time.Hour, IssueRefresh: true, RotateRefresh: true,
 		Login: "octocat", codes: map[string]fakeCode{}, access: map[string]fakeGrant{}, refresh: map[string]fakeGrant{},
-		clients: map[string]string{}}
+		clients: map[string]string{}, expires: map[string]time.Time{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /authorize", f.authorize)
 	mux.HandleFunc("POST /token", f.token)
@@ -173,7 +204,7 @@ func (f *FakeOAuth) Issuer() string {
 func (f *FakeOAuth) metadata(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	path, at, iss := f.IssuerPath, f.MetadataAt, f.MetadataIssuer
-	dcr, cimd, noPKCE, issParam := f.DCR, f.CIMD, f.NoPKCE, f.IssParam
+	dcr, cimd, noPKCE, issParam, noCC := f.DCR, f.CIMD, f.NoPKCE, f.IssParam, f.NoClientCredentials
 	scopes := append([]string{}, f.ScopesSupported...)
 	f.mu.Unlock()
 	want := "/.well-known/oauth-authorization-server" + path
@@ -197,9 +228,13 @@ func (f *FakeOAuth) metadata(w http.ResponseWriter, r *http.Request) {
 	if noPKCE {
 		methods = []string{"plain"}
 	}
+	grants := []string{"authorization_code", "refresh_token"}
+	if !noCC {
+		grants = append(grants, "client_credentials")
+	}
 	md := map[string]any{"issuer": iss, "authorization_endpoint": b + "/authorize", "token_endpoint": b + "/token",
 		"revocation_endpoint": b + "/revoke", "response_types_supported": []string{"code"}, "code_challenge_methods_supported": methods,
-		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
+		"grant_types_supported":                 grants,
 		"token_endpoint_auth_methods_supported": []string{"client_secret_post", "client_secret_basic", "none"},
 		"scopes_supported":                      scopes, "authorization_response_iss_parameter_supported": issParam}
 	if dcr {
@@ -291,6 +326,9 @@ func (f *FakeOAuth) Introspect(token string) Introspection {
 	defer f.mu.Unlock()
 	g, ok := f.access[token]
 	if !ok {
+		return Introspection{}
+	}
+	if exp, has := f.expires[token]; has && f.EnforceExpiry && !time.Now().Before(exp) {
 		return Introspection{}
 	}
 	return Introspection{Active: true, Scopes: append([]string{}, g.scopes...), Resource: g.resource, ClientID: g.clientID}
@@ -533,6 +571,9 @@ func (f *FakeOAuth) token(w http.ResponseWriter, r *http.Request) {
 	rejectResource := f.RejectResource
 	f.mu.Unlock()
 	clientID, ok := f.clientOK(r)
+	if r.PostForm.Get("grant_type") == "client_credentials" {
+		f.recordClientCredentials(r, clientID, ok)
+	}
 	if !ok {
 		f.fail(w, http.StatusUnauthorized, "invalid_client")
 		return
@@ -608,6 +649,9 @@ func (f *FakeOAuth) token(w http.ResponseWriter, r *http.Request) {
 			f.issue(w, r, fakeGrant{scopes: want, resource: resource, clientID: clientID}, g)
 			return
 		}
+	case "client_credentials":
+		f.clientCredentials(w, r, clientID, resource)
+		return
 	default:
 		f.fail(w, http.StatusBadRequest, "unsupported_grant_type")
 		return
@@ -623,6 +667,9 @@ func (f *FakeOAuth) issue(w http.ResponseWriter, r *http.Request, g, rg fakeGran
 	f.mu.Lock()
 	access := fakeToken("fat_")
 	f.access[access] = g
+	if f.AccessTTL > 0 {
+		f.expires[access] = time.Now().Add(f.AccessTTL)
+	}
 	f.issued = append(f.issued, access)
 	out := map[string]any{"access_token": access, "token_type": "bearer"}
 	if f.AccessTTL > 0 {
@@ -710,4 +757,85 @@ func (f *FakeOAuth) userinfo(w http.ResponseWriter, r *http.Request) {
 func TokenDigest(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])[:16]
+}
+
+// recordClientCredentials notes a client credentials request.
+func (f *FakeOAuth) recordClientCredentials(r *http.Request, clientID string, ok bool) {
+	method := "none"
+	secret := r.PostForm.Get("client_secret")
+	if _, sec, basic := r.BasicAuth(); basic {
+		method = "basic"
+		secret, _ = url.QueryUnescape(sec)
+	} else if secret != "" {
+		method = "post"
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.machine = append(f.machine, ClientCredentialsRequest{ClientAuth: method, ClientID: clientID, ClientSecret: secret,
+		Scope: r.PostForm.Get("scope"), Audience: r.PostForm.Get("audience"), Resource: r.PostForm.Get("resource"), Authorized: ok})
+}
+
+// ClientCredentialsRequests are the client credentials grant requests so
+// far, in order.
+func (f *FakeOAuth) ClientCredentialsRequests() []ClientCredentialsRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]ClientCredentialsRequest(nil), f.machine...)
+}
+
+// clientCredentials answers the client credentials grant for an authenticated
+// client: an access token (no refresh token) for the scopes asked for.
+func (f *FakeOAuth) clientCredentials(w http.ResponseWriter, r *http.Request, clientID, resource string) {
+	f.mu.Lock()
+	off, fail, allowed, delay := f.NoClientCredentials, f.FailClientCredentials, append([]string(nil), f.MachineScopes...), f.TokenDelay
+	f.mu.Unlock()
+	time.Sleep(delay)
+	switch {
+	case off:
+		f.fail(w, http.StatusBadRequest, "unsupported_grant_type")
+		return
+	case fail == "invalid_client":
+		f.fail(w, http.StatusUnauthorized, "invalid_client")
+		return
+	case fail == "unavailable":
+		http.Error(w, "authorization server down", http.StatusServiceUnavailable)
+		return
+	case fail == "invalid_response":
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"token_type":"bearer"}`))
+		return
+	}
+	want := strings.Fields(r.PostForm.Get("scope"))
+	for _, sc := range want {
+		if len(allowed) > 0 && !slices.Contains(allowed, sc) {
+			f.fail(w, http.StatusBadRequest, "invalid_scope")
+			return
+		}
+	}
+	if len(want) == 0 {
+		want = allowed
+	}
+	if want == nil {
+		want = []string{}
+	}
+	f.mu.Lock()
+	access := fakeToken("fmt_")
+	f.access[access] = fakeGrant{scopes: want, resource: resource, clientID: clientID}
+	if f.AccessTTL > 0 {
+		f.expires[access] = time.Now().Add(f.AccessTTL)
+	}
+	f.issued = append(f.issued, access)
+	out := map[string]any{"access_token": access, "token_type": "bearer"}
+	if fail == "wrong_type" {
+		out["token_type"] = "DPoP"
+	}
+	if f.AccessTTL > 0 {
+		out["expires_in"] = int64(f.AccessTTL / time.Second)
+	}
+	if !f.OmitScope {
+		out["scope"] = strings.Join(want, " ")
+	}
+	f.mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
 }

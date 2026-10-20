@@ -127,7 +127,7 @@ func (rc *request) forwardRead(exposed string, t readTarget, again retry) {
 	}
 	target, err := rc.h.Registry.Target(ctx, o.Server)
 	if err != nil {
-		rc.upstreamFailed(rec, err)
+		rc.targetFailed(rec, err)
 		return
 	}
 	if !rc.withPersonSecret(&target, secret) {

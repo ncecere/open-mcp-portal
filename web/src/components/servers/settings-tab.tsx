@@ -12,7 +12,9 @@
  * call contents" is for the team's owners and admins (editors read it; it's
  * only sent when changed) and asks first when turned on. Authentication
  * (auth-mode-fields.tsx, settings-auth.tsx) switches between None, a static
- * header and each person's OAuth sign-in, with the same review warnings.
+ * credential, each person's own key (person-secret.ts), the portal's own
+ * OAuth client (machine-auth.ts) and each person's OAuth sign-in, with the
+ * same review warnings.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -43,9 +45,10 @@ import { CredentialFields } from "./credential-fields";
 import { credentialsBody, partProblems, type PartForm, partsOf } from "./credentials";
 import { EnabledSwitch, type ServerForm, serverFieldErrors, serverProblems, TimeoutField, UrlField, urlProblem } from "./server-fields";
 import { sameOrigin } from "./origin";
+import { machineProblems } from "./machine-auth";
 import { deletesText, keysDeleted, secretProblems } from "./person-secret";
 import { AuthChangeNotes, settingsAuthBody } from "./settings-auth";
-import { applyDetection, authChange, authModeOf, type DetectResult, oauthProblems, upstreamFormOf, type UpstreamForm } from "./upstream-auth";
+import { applyDetection, authChange, authModeOf, countedUpstream, type DetectResult, oauthProblems, upstreamFormOf, type UpstreamForm } from "./upstream-auth";
 
 type SettingsForm = ServerForm & { requirement: RequirementForm; capturePayloads: boolean; upstream: UpstreamForm; requiresPresentPerson: boolean };
 
@@ -70,6 +73,18 @@ const labels = {
   capturePayloads: "Record call contents",
   upstream: "Authentication",
   requiresPresentPerson: "Require a present person",
+};
+
+/** Why the User authorization section is closed in the modes that already send one credential per call. */
+const noRequirementTitle: Partial<Record<UpstreamForm["mode"], string>> = {
+  oauth: "Not with OAuth sign-in",
+  person_secret: "Not with each person's own key",
+  machine_oauth: "Not with the portal's own OAuth client",
+};
+const noRequirementText: Partial<Record<UpstreamForm["mode"], string>> = {
+  oauth: "Each call already carries the person's own token for this server, so it can't carry another account too.",
+  person_secret: "Each call already carries the person's own key for this server, so it can't carry another account too.",
+  machine_oauth: "Each call already carries the portal's own token for this server, so it can't carry another account too.",
 };
 
 /** The requirement's field errors: the form's own, or the server's refusal. */
@@ -102,6 +117,9 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   const dev = Boolean(useAuthConfig().data?.devAuthEnabled);
   const saved = formOf(server);
   const [form, setForm, revision] = useRevisionForm(saved, server.revision, { labels });
+  const ownKeys = form.upstream.mode === "person_secret";
+  // OAuth sign-in, each person's own key and the portal's own OAuth client each replace a requirement (one credential per call).
+  const noRequirement = form.upstream.mode === "oauth" || form.upstream.mode === "machine_oauth" || ownKeys;
   const providers = useQuery(authProvidersQuery());
   const caps = useQuery(capabilitiesQuery(scope, server.id));
   const [parts, setParts] = useState<PartForm[]>(() => partsOf(server));
@@ -114,7 +132,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
     mutationFn: async (_: { before: McpServer; urlChanged: boolean }) => {
       const authBody = settingsAuthBody(server, form, parts, secret, detected);
       // OAuth replaces a requirement (one credential per call): switching removes it.
-      const requirement = form.upstream.mode === "oauth" || form.upstream.mode === "person_secret" ? (server.requirement ? null : undefined) : requirementBody(form.requirement, server);
+      const requirement = noRequirement ? (server.requirement ? null : undefined) : requirementBody(form.requirement, server);
       return unwrap(
         await api.PATCH("/v1/teams/{team}/mcp-servers/{serverId}", {
           params: { path: { team: server.teamSlug, serverId: server.id }, header: ifMatch(server.revision) },
@@ -147,16 +165,11 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   // Turned off, the provider and scopes left in the fields don't count.
   const requirement = form.requirement.on ? form.requirement : saved.requirement.on ? { on: false, providerId: "", scopes: [] } : saved.requirement;
   // Only the chosen mode's fields count.
-  const upstream = {
-    ...form.upstream,
-    oauth: form.upstream.mode === "oauth" ? form.upstream.oauth : saved.upstream.oauth,
-    secret: form.upstream.mode === "person_secret" ? form.upstream.secret : saved.upstream.secret,
-  };
+  const upstream = countedUpstream(form.upstream, saved.upstream);
   const dirty =
     JSON.stringify({ ...form, name: form.name.trim(), url: form.url.trim(), requirement, upstream }) !== JSON.stringify(saved) ||
     ((form.upstream.mode === "static_header" || form.upstream.mode === "person_secret") && credentialsBody(parts, server) !== undefined) ||
     Boolean(secret);
-  const ownKeys = form.upstream.mode === "person_secret";
   // Parts of the server's own credential: required in static mode, optional (and only shown while some are stored) next to each person's key.
   const staticMode = form.upstream.mode === "static_header" || (ownKeys && parts.length > 0);
   // Another origin never keeps a stored value (F-1): every part is entered again.
@@ -166,6 +179,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   const problems = {
     ...serverProblems(form, { dev }),
     ...oauthProblems(form.upstream, { server, detected, secret }),
+    ...machineProblems(form.upstream.mode, form.upstream.machine, { server, secret, url: form.url }),
   };
   const reqErrors = requirementErrors(form.requirement, save.error, submitted);
   const secretErrors = ownKeys ? secretProblems(form.upstream.secret) : {};
@@ -188,9 +202,6 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
     return d ? new Error(d.title ? `${d.title}. ${d.message}` : d.message) : undefined;
   }, [save.error]);
   const change = authChange(server, form.upstream, { urlChanged, detected });
-  const oauthMode = form.upstream.mode === "oauth";
-  // OAuth and each person's own key both send one credential per call: no User authorization next to them.
-  const noRequirement = oauthMode || ownKeys;
   const relaxesPresence = relaxesServerSwitch(saved.requiresPresentPerson, form.requiresPresentPerson, caps.data);
   const leavesCatalog = canEdit && reviewedAgain(server) && (urlChanged || (!noRequirement && requirementWidens) || Boolean(change.review) || relaxesPresence);
   const providerChanges = Boolean(server.requirement) && (!form.requirement.on || form.requirement.providerId !== server.requirement?.providerId);
@@ -242,7 +253,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
         <TimeoutField {...fields} />
         <EnabledSwitch {...fields} />
       </SettingsSection>
-      <SettingsSection title="Authentication" description="How the portal proves itself to the server: nothing, a static credential of headers, a token, Basic or a query key (stored encrypted), or each person's own OAuth sign-in.">
+      <SettingsSection title="Authentication" description="How the portal proves itself to the server: nothing, a static credential of headers, a token, Basic or a query key (stored encrypted), each person's own key, the portal's own OAuth client, or each person's own OAuth sign-in.">
         <AuthModeFields
           team={server.teamSlug}
           url={form.url}
@@ -275,8 +286,8 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
         description="Whether calls to this server carry each caller's own token for another service, such as GitHub. Each capability can override it on the Capabilities tab."
       >
         {noRequirement ? (
-          <Alert tone="info" title={ownKeys ? "Not with each person's own key" : "Not with OAuth sign-in"}>
-            {ownKeys ? "Each call already carries the person's own key for this server, so it can't carry another account too." : "Each call already carries the person's own token for this server, so it can't carry another account too."}
+          <Alert tone="info" title={noRequirementTitle[form.upstream.mode]}>
+            {noRequirementText[form.upstream.mode]}
             {server.requirement && authModeOf(server) !== form.upstream.mode ? ` Saving removes the requirement (${server.requirement.providerName}).` : ""}
           </Alert>
         ) : (

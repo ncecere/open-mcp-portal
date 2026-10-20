@@ -38,6 +38,7 @@ function sentText(server: McpServer) {
     const moves = p && (p.placement === "bearer" || p.name?.toLowerCase() === "authorization") ? "MCP-Gateway-Identity" : "Authorization: Bearer";
     return `The caller's ${how}${identity ? `, and the portal's identity token in ${moves}` : ""}.`;
   }
+  if (mode === "machine_oauth") return `The portal's own token (client credentials) in Authorization: Bearer, the same for every caller${identity ? ", and the portal's identity token in MCP-Gateway-Identity" : ""}.`;
   if (mode === "static_header") {
     const parts = partsOf(server);
     const where = parts.some(setsAuthorization) ? "MCP-Gateway-Identity" : "Authorization: Bearer";
@@ -51,8 +52,28 @@ function sentText(server: McpServer) {
 export function signInItems(server: McpServer): DescriptionEntry[] {
   const o = authModeOf(server) === "oauth" ? server.oauth : null;
   const away = o ? otherHost(o.authorizationServer, server.url) : undefined;
+  const mc = authModeOf(server) === "machine_oauth" ? server.machineOAuth : null;
+  const machineAway = mc ? otherHost(mc.tokenUrl, server.url) : undefined;
   return [
     { label: "Authentication", value: authModeLabels[authModeOf(server)] },
+    ...(mc
+      ? [
+          {
+            label: "Token endpoint",
+            value: (
+              <span className={s.badges}>
+                <code className={m.url}>{mc.tokenUrl}</code>
+                {machineAway && <Badge size="sm" tone="warning">{`Another host: ${machineAway}`}</Badge>}
+              </span>
+            ),
+          },
+          { label: "Client", value: `ID ending in ${mc.clientIdHint}, secret${mc.clientSecretHint ? ` ending in ${mc.clientSecretHint}` : ""} (stored encrypted)` },
+          { label: "Token method", value: mc.tokenAuthMethod === "client_secret_basic" ? "HTTP Basic" : "In the request body" },
+          { label: "Scopes", value: <span className={s.mono}>{scopesText(mc.scopes, "None: the authorization server's default access")}</span> },
+          ...(mc.resource ? [{ label: "Resource", value: <code className={m.url}>{mc.resource}</code> }] : []),
+          ...(mc.audience ? [{ label: "Audience", value: <code className={m.url}>{mc.audience}</code> }] : []),
+        ]
+      : []),
     ...(o
       ? [
           {
@@ -79,6 +100,19 @@ export function signInItems(server: McpServer): DescriptionEntry[] {
 /** The rows as a list (review dialogs). */
 export function SignInSummary({ server }: { server: McpServer }) {
   return <DescriptionList dividers items={signInItems(server)} />;
+}
+
+/** A machine_oauth server's Overview card: the portal's own client, shared by every caller. */
+export function MachineCard({ server }: { server: McpServer }) {
+  if (authModeOf(server) !== "machine_oauth" || !server.machineOAuth) return null;
+  return (
+    <Card
+      title="The portal's OAuth client"
+      description={`${server.name} authenticates the portal itself. The portal gets one token with its client ID and secret and sends it with every request, for everyone alike; the call log and the identity token say who called.`}
+    >
+      <DescriptionList dividers items={signInItems(server)} />
+    </Card>
+  );
 }
 
 /** An oauth server's Overview card. */

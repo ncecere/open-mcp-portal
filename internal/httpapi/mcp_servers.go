@@ -178,6 +178,10 @@ func (a *api) createTeamMcpServer(w http.ResponseWriter, r *http.Request) {
 	}
 	ci.OAuth, ci.SendIdentity = fromAPIOAuthInput(in.Oauth), in.SendIdentity
 	ci.PersonSecret = fromAPIPersonSecretInput(in.PersonSecret)
+	ci.MachineOAuth = fromAPIMachineInput(in.MachineOAuth)
+	if actor := a.actor(r); actor.IsToken() && !a.tokenMayCreateServer(w, r, ci) {
+		return
+	}
 	res, err := a.Registry.Create(r.Context(), a.actor(r), r.PathValue("team"), ci)
 	if failed(w, r, err) {
 		return
@@ -262,6 +266,7 @@ func (a *api) updateTeamMcpServer(w http.ResponseWriter, r *http.Request) {
 		TimeoutSeconds: in.TimeoutSeconds, Enabled: in.Enabled, SetRequirement: setRequirement, Requirement: fromAPIRequirement(in.Requirement),
 		CapturePayloads: in.CapturePayloads, AuthMode: strPtr(in.AuthMode), OAuth: fromAPIOAuthInput(in.Oauth), SendIdentity: in.SendIdentity,
 		RequiresPresentPerson: in.RequiresPresentPerson, PersonSecret: fromAPIPersonSecretInput(in.PersonSecret),
+		MachineOAuth: fromAPIMachineInput(in.MachineOAuth),
 	}, rev)
 	if failed(w, r, err) {
 		return
@@ -442,8 +447,8 @@ func (a *api) adminListMcpServers(w http.ResponseWriter, r *http.Request) {
 		p.ProviderID = &pid
 	}
 	if v := q.Get("authMode"); v != "" {
-		if v != registry.AuthNone && v != registry.AuthStaticHeader && v != registry.AuthOAuth && v != registry.AuthPersonSecret {
-			httpx.Error(w, http.StatusBadRequest, "invalid_auth_mode", "authMode must be none, static_header, oauth or person_secret")
+		if v != registry.AuthNone && v != registry.AuthStaticHeader && v != registry.AuthOAuth && v != registry.AuthPersonSecret && v != registry.AuthMachineOAuth {
+			httpx.Error(w, http.StatusBadRequest, "invalid_auth_mode", "authMode must be none, static_header, oauth, person_secret or machine_oauth")
 			return
 		}
 		p.AuthMode = &v

@@ -49,6 +49,15 @@ func CapabilityRefOf(sv dbgen.McpServer, kind, name, fingerprint string, present
 // are the server's credential parts, as ServerView lists them; a server whose
 // credential is its legacy header (and none given) is covered by that header.
 func ReviewDigest(sv dbgen.McpServer, caps []CapabilityRef, parts ...CredentialView) string {
+	return ReviewDigestMachine(sv, caps, nil, parts...)
+}
+
+// ReviewDigestMachine is ReviewDigest for a server in machine_oauth mode: the
+// digest also covers its OAuth client as a reviewer sees it (the token
+// endpoint, the client ID, the scopes, the audience and the resource, never
+// the secret), so changing any of them stales an earlier look. Other servers'
+// digests do not include it.
+func ReviewDigestMachine(sv dbgen.McpServer, caps []CapabilityRef, machine *MachineOAuthView, parts ...CredentialView) string {
 	h := sha256.New()
 	put := func(s string) {
 		// Length-prefixed, so no field can run into the next.
@@ -87,6 +96,19 @@ func ReviewDigest(sv dbgen.McpServer, caps []CapabilityRef, parts ...CredentialV
 	} else {
 		put("")
 	}
+	if machine != nil && AuthModeOf(sv) == AuthMachineOAuth {
+		put("machine-oauth")
+		put(machine.TokenURL)
+		put(machine.ClientID)
+		put(machine.TokenAuthMethod)
+		scopes := sorted(machine.Scopes)
+		put(strconv.Itoa(len(scopes)))
+		for _, sc := range scopes {
+			put(sc)
+		}
+		put(machine.Audience)
+		put(machine.Resource)
+	}
 	if sv.RequiresPresentPerson {
 		// Only when on, so the digest of every server without the switch is
 		// what it was before the switch existed.
@@ -119,11 +141,16 @@ func digests(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServer) (
 	if err != nil {
 		return nil, err
 	}
-	return digestsWith(ctx, q, servers, creds)
+	machines, err := machineViews(ctx, q, servers)
+	if err != nil {
+		return nil, err
+	}
+	return digestsWith(ctx, q, servers, creds, machines)
 }
 
 // digestsWith is digests with the servers' credential parts already read.
-func digestsWith(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServer, creds map[uuid.UUID][]CredentialView) (map[uuid.UUID]string, error) {
+func digestsWith(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServer, creds map[uuid.UUID][]CredentialView,
+	machines map[uuid.UUID]*MachineOAuthView) (map[uuid.UUID]string, error) {
 	ids := make([]uuid.UUID, len(servers))
 	for i, sv := range servers {
 		ids[i] = sv.ID
@@ -142,7 +169,7 @@ func digestsWith(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServe
 		for i, r := range byServer[sv.ID] {
 			refs[i] = CapabilityRefOf(sv, r.Kind, r.Name, r.Fingerprint, r.RequiresPresentPerson)
 		}
-		out[sv.ID] = ReviewDigest(sv, refs, creds[sv.ID]...)
+		out[sv.ID] = ReviewDigestMachine(sv, refs, machines[sv.ID], creds[sv.ID]...)
 	}
 	return out, nil
 }

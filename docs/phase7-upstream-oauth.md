@@ -14,6 +14,11 @@ GitHub token issued to the person. The gateway acts as an **MCP client** to such
 gateway discovers how the server signs people in, and each person signs in once. From then on, every call carries
 that person's own token. The model and the MCP client never see it.
 
+> A server that authenticates the portal itself (an internal API behind an IdP, a vendor machine client) rather than a
+> person uses [`machine_oauth`](machine-oauth.md) (decision 73, v0.3.2): the portal's own token from the client
+> credentials grant, shared by every caller. It reuses this phase's guarded endpoint exchange, the F-1 origin rule and
+> the review gate.
+
 ## How it fits Phase 5
 
 Phase 5 sends a *third-party* token next to the call (`MCP-Gateway-Provider-Token`). In Phase 7 the token *is* the

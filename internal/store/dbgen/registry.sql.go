@@ -164,6 +164,15 @@ func (q *Queries) DeleteMCPServerCredentials(ctx context.Context, serverID uuid.
 	return err
 }
 
+const deleteMachineOAuth = `-- name: DeleteMachineOAuth :exec
+DELETE FROM mcp_server_machine_oauth WHERE server_id = $1
+`
+
+func (q *Queries) DeleteMachineOAuth(ctx context.Context, serverID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteMachineOAuth, serverID)
+	return err
+}
+
 const forgetMCPHealthChecks = `-- name: ForgetMCPHealthChecks :exec
 DELETE FROM mcp_health_checks WHERE server_id = $1
 `
@@ -303,6 +312,32 @@ func (q *Queries) GetMCPServerView(ctx context.Context, id uuid.UUID) (GetMCPSer
 		&i.TeamPolicyOverride,
 		&i.TeamStatus,
 		&i.ReviewedByName,
+	)
+	return i, err
+}
+
+const getMachineOAuth = `-- name: GetMachineOAuth :one
+SELECT server_id, token_url, client_id, client_secret_cipher, client_secret_hint, token_auth_method, scopes, audience, resource, created_by, updated_by, created_at, updated_at FROM mcp_server_machine_oauth WHERE server_id = $1
+`
+
+// A server's machine OAuth client (auth_mode machine_oauth; decision 73).
+func (q *Queries) GetMachineOAuth(ctx context.Context, serverID uuid.UUID) (McpServerMachineOauth, error) {
+	row := q.db.QueryRow(ctx, getMachineOAuth, serverID)
+	var i McpServerMachineOauth
+	err := row.Scan(
+		&i.ServerID,
+		&i.TokenUrl,
+		&i.ClientID,
+		&i.ClientSecretCipher,
+		&i.ClientSecretHint,
+		&i.TokenAuthMethod,
+		&i.Scopes,
+		&i.Audience,
+		&i.Resource,
+		&i.CreatedBy,
+		&i.UpdatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -1058,6 +1093,44 @@ func (q *Queries) ListMCPServersDueForCheck(ctx context.Context, dueBefore time.
 	return items, nil
 }
 
+const listMachineOAuthFor = `-- name: ListMachineOAuthFor :many
+SELECT server_id, token_url, client_id, client_secret_cipher, client_secret_hint, token_auth_method, scopes, audience, resource, created_by, updated_by, created_at, updated_at FROM mcp_server_machine_oauth WHERE server_id = ANY($1::uuid[])
+`
+
+func (q *Queries) ListMachineOAuthFor(ctx context.Context, ids []uuid.UUID) ([]McpServerMachineOauth, error) {
+	rows, err := q.db.Query(ctx, listMachineOAuthFor, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []McpServerMachineOauth{}
+	for rows.Next() {
+		var i McpServerMachineOauth
+		if err := rows.Scan(
+			&i.ServerID,
+			&i.TokenUrl,
+			&i.ClientID,
+			&i.ClientSecretCipher,
+			&i.ClientSecretHint,
+			&i.TokenAuthMethod,
+			&i.Scopes,
+			&i.Audience,
+			&i.Resource,
+			&i.CreatedBy,
+			&i.UpdatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockMCPCapability = `-- name: LockMCPCapability :one
 SELECT id, server_id, kind, name, title, description, definition, fingerprint, approved_fingerprint, approved_by, approved_at, first_seen_at, last_seen_at, gone_at, requirement_mode, requirement_scopes, requires_present_person FROM mcp_capabilities WHERE id = $1 AND server_id = $2 FOR UPDATE
 `
@@ -1757,4 +1830,61 @@ func (q *Queries) UpsertMCPCapability(ctx context.Context, arg UpsertMCPCapabili
 		arg.Fingerprint,
 	)
 	return err
+}
+
+const upsertMachineOAuth = `-- name: UpsertMachineOAuth :one
+INSERT INTO mcp_server_machine_oauth (server_id, token_url, client_id, client_secret_cipher, client_secret_hint, token_auth_method,
+    scopes, audience, resource, created_by, updated_by)
+VALUES ($1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10, $10)
+ON CONFLICT (server_id) DO UPDATE SET token_url = EXCLUDED.token_url, client_id = EXCLUDED.client_id,
+    client_secret_cipher = EXCLUDED.client_secret_cipher, client_secret_hint = EXCLUDED.client_secret_hint,
+    token_auth_method = EXCLUDED.token_auth_method, scopes = EXCLUDED.scopes, audience = EXCLUDED.audience,
+    resource = EXCLUDED.resource, updated_by = EXCLUDED.updated_by, updated_at = now()
+RETURNING server_id, token_url, client_id, client_secret_cipher, client_secret_hint, token_auth_method, scopes, audience, resource, created_by, updated_by, created_at, updated_at
+`
+
+type UpsertMachineOAuthParams struct {
+	ServerID           uuid.UUID
+	TokenUrl           string
+	ClientID           string
+	ClientSecretCipher []byte
+	ClientSecretHint   string
+	TokenAuthMethod    string
+	Scopes             []string
+	Audience           *string
+	Resource           *string
+	By                 uuid.NullUUID
+}
+
+func (q *Queries) UpsertMachineOAuth(ctx context.Context, arg UpsertMachineOAuthParams) (McpServerMachineOauth, error) {
+	row := q.db.QueryRow(ctx, upsertMachineOAuth,
+		arg.ServerID,
+		arg.TokenUrl,
+		arg.ClientID,
+		arg.ClientSecretCipher,
+		arg.ClientSecretHint,
+		arg.TokenAuthMethod,
+		arg.Scopes,
+		arg.Audience,
+		arg.Resource,
+		arg.By,
+	)
+	var i McpServerMachineOauth
+	err := row.Scan(
+		&i.ServerID,
+		&i.TokenUrl,
+		&i.ClientID,
+		&i.ClientSecretCipher,
+		&i.ClientSecretHint,
+		&i.TokenAuthMethod,
+		&i.Scopes,
+		&i.Audience,
+		&i.Resource,
+		&i.CreatedBy,
+		&i.UpdatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
