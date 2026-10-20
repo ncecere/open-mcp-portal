@@ -42,7 +42,11 @@ updates:
         patterns: ["*"]
     ignore:
       # The build images are the toolchain CI tests with (go.mod's toolchain
-      # line, setup-node 22). Moving either is a deliberate change of all of
-      # them together, not a Dependabot bump of the Dockerfile alone.
+      # line, setup-node 22). Moving either to another version is a deliberate
+      # change of all of them together, not a Dependabot bump of the
+      # Dockerfile alone. Only the version is ignored: the digests the
+      # Dockerfile pins (same tag, new image) still arrive as pull requests.
       - dependency-name: golang
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: node
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]

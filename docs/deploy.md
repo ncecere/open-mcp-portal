@@ -6,7 +6,7 @@ queue or object storage.
 
 | Path | What |
 |---|---|
-| [`Dockerfile`](../Dockerfile) | Image: UI built with `npm ci`, Go built with `-trimpath` and version ldflags, distroless `nonroot` runtime. Default target is the portal; `--target fakemcp` is the demo's fake MCP server. |
+| [`Dockerfile`](../Dockerfile) | Image: UI built with `npm ci`, Go built with `-trimpath` and version ldflags, distroless `nonroot` runtime; the base images are pinned by digest (tag kept), and Dependabot moves the digests. Default target is the portal; `--target fakemcp` is the demo's fake MCP server. |
 | [`compose.demo.yaml`](../compose.demo.yaml) | Local demo: gateway, Postgres and the fake MCP server, with development sign-in. |
 | [`deploy/kubernetes/base`](../deploy/kubernetes/base) | Kustomize base: Deployment (+ migrate init container), Service, PodDisruptionBudget, NetworkPolicies, ServiceAccount and a generated ConfigMap. |
 | [`deploy/kubernetes/overlays/example`](../deploy/kubernetes/overlays/example) | Example overlay: namespace, pinned image, settings, NGINX Ingress (or Gateway API `httproute.yaml`), narrowed NetworkPolicies. |

@@ -10,6 +10,8 @@ breaking changes; the entry says how to adapt.
 
 Documentation only: the [roadmap](docs/roadmap.md) is rewritten around what v0.2.1 shipped and what is still open, with an [issue](https://github.com/ncecere/open-mcp-portal/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap) and implementation plan for each item; the threat model's hardening table links its issues and no longer lists Trivy as open.
 
+- **Dockerfile base images are pinned by digest** ([#11](https://github.com/ncecere/open-mcp-portal/issues/11), threat model H-9). `node:22-alpine`, `golang:1.26` and `gcr.io/distroless/static-debian12:nonroot` keep their tag and carry the digest of their multi-arch index, so the same commit builds on the same bases. Dependabot's `docker` entry now ignores only the version of `golang` and `node` (a toolchain change stays deliberate), so their digest updates arrive in its weekly pull request.
+
 ## [0.2.1] - 2026-10-18
 
 Small changes since v0.2.0 ([release notes](docs/releases/v0.2.1.md)). No migration.

@@ -299,7 +299,7 @@ The main listener sets `ReadHeaderTimeout` (10 s) and `IdleTimeout` (120 s) and 
 - **Release** (`image.yml`): multi-arch build, SBOM and provenance attestations, Trivy scan, cosign keyless signing, GitHub Release; job-scoped permissions (`packages: write` and `id-token: write` only where needed). Verify with `cosign verify … --certificate-identity …/image.yml@refs/tags/v0.1.0` ([deploy.md](deploy.md#image)). First run is the v0.1.0 tag.
 - **Dependabot**: gomod, npm, github-actions and docker weekly, grouped.
 - **Image**: distroless `static:nonroot`, UID 65532, read-only root filesystem, no shell; `npm ci --ignore-scripts`; Go built with `-trimpath`, `CGO_ENABLED=0`.
-- **CI scans** (`ea920a4`): `govulncheck` (`golang.org/x/vuln` v1.9.0, run through `go run`, blocking) and `npm audit --audit-level=high`; both report nothing at that commit. **Gaps**: Dockerfile base images pinned by tag, not digest; the example overlay's image digest is a placeholder; the Trivy result is a gate only if configured to fail.
+- **CI scans** (`ea920a4`): `govulncheck` (`golang.org/x/vuln` v1.9.0, run through `go run`, blocking) and `npm audit --audit-level=high`; both report nothing at that commit. The Dockerfile's four base-image references (node, golang and distroless twice) are pinned by the digest of their multi-arch index with the tag kept (H-9). **Gaps**: the example overlay's image digest is a placeholder; the Trivy result is a gate only if configured to fail; a pinned digest is only as current as the last Dependabot pull request that was merged.
 
 ### 7.12 What an operator must do
 
@@ -357,7 +357,7 @@ The review read `internal/auth`, `authz`, `httpapi`, `mcpgw`, `oauth`, `provider
 - **H-6** Do not relay the first message of an upstream error body to MCP clients; show it only to editors on the Test and Health pages.
 - **H-7** **Done (`ea920a4`):** `serve` refuses an `ENCRYPTION_KEY` equal to the `API_KEY_PEPPER` (text or decoded bytes; `TestValidate`). Still open: warn when `TRUSTED_PROXIES` is empty and `X-Forwarded-For` is present; give the OIDC state cookie a `__Host-` name.
 - **H-8** Refresh tokens: an absolute lifetime and, within the reuse grace, no new pair for a token already rotated.
-- **H-9** CI: `govulncheck` and `npm audit --audit-level=high` **done (`ea920a4`; both blocking, none reported)**. The audit includes dev dependencies, as the image build and CI install them. Trivy already fails the release on fixable HIGH and CRITICAL findings (`.github/workflows/image.yml`: `severity: CRITICAL,HIGH`, `ignore-unfixed: true`, `exit-code: 1`). Still open: Dockerfile base images by digest.
+- **H-9** CI: `govulncheck` and `npm audit --audit-level=high` **done (`ea920a4`; both blocking, none reported)**. The audit includes dev dependencies, as the image build and CI install them. Trivy already fails the release on fixable HIGH and CRITICAL findings (`.github/workflows/image.yml`: `severity: CRITICAL,HIGH`, `ignore-unfixed: true`, `exit-code: 1`). **Dockerfile base images are pinned by digest (v0.2.2, #11):** `node:22-alpine`, `golang:1.26` and `gcr.io/distroless/static-debian12:nonroot` (used twice) carry the digest of their multi-arch index next to the tag, so two builds of one commit use the same bases and a moved or replaced tag cannot reach a release unreviewed. Dependabot's `docker` ecosystem (`/`, weekly, one grouped pull request) moves the digests; the golang and node *versions* stay ignored there (a toolchain change is deliberate), the digests do not. Residual: an upstream rebuild only reaches us when that pull request is merged, and the `docker` CI job is the only build check of a bump until the release workflow runs.
 - **H-10** Off-host, tamper-evident audit export and a minimum audit retention a platform admin cannot lower below the data's retention.
 - **H-11** Split database roles (migration owner and runtime) and revoke `UPDATE`/`DELETE` on the append-only tables from the runtime role.
 - **H-12** Idle session timeout and a session list ("sign out everywhere").
@@ -374,7 +374,7 @@ The review read `internal/auth`, `authz`, `httpapi`, `mcpgw`, `oauth`, `provider
 | H-6 upstream error text relayed | **Reviewed, kept** | It is capped at 300 characters and redacted. It proved useful in practice: DeepWiki's own message ("Authentication is not allowed on the public DeepWiki endpoint") told the person what was wrong. Revisit if a server's errors are found to leak. |
 | H-7 proxy and cookie checks | **Partly done** | `ENCRYPTION_KEY` and `API_KEY_PEPPER` must differ (done). Open: warn when `TRUSTED_PROXIES` is empty behind a proxy, and a `__Host-` cookie name. Tracked in #10. |
 | H-8 refresh token lifetime | **Open** | Needs a lifetime chosen (it forces re-sign-in after that long for every client): the owner's decision. Tracked in #7. |
-| H-9 image and scan hardening | **Partly done** | `govulncheck` and `npm audit` block CI (and, since 2026-10-18, the docs and website CI); Trivy fails the release on fixable HIGH and CRITICAL findings; Dependabot alerts and security updates are on. Open: base images by digest. Tracked in #11. |
+| H-9 image and scan hardening | **Done (v0.2.2), with a residual** | `govulncheck` and `npm audit` block CI (and, since 2026-10-18, the docs and website CI); Trivy fails the release on fixable HIGH and CRITICAL findings; Dependabot alerts and security updates are on; the Dockerfile's base images are pinned by digest (v0.2.2). Residual: digests are current only as far as Dependabot's weekly pull request is merged. Tracked in #11. |
 | H-10 off-host audit export | **Open** | Operational: needs a destination. The audit log is append-only and exportable as CSV. Tracked in #38. |
 | H-11 split database roles | **Open** | Needs separate migration and runtime connection strings in the product, then CloudNativePG roles in a deployment. Tracked in #44. |
 | H-12 idle timeout and session list | **Open** | A product change with a default to choose. Tracked in #37. |
@@ -435,7 +435,7 @@ These are designs, not code. They are reviewed here so tests exist before the fi
 | No IdP deprovisioning signal; group grants frozen at last sign-in | TN-5, MCP-3 | Roadmap SCIM; until then, operator process (7.12) |
 | No row-level security; no test runs every query against a foreign team | TN-1 | Review; consider RLS |
 | CI and release workflows have never run on GitHub | 7.11 | status.md next steps 2 |
-| ~~No `govulncheck` or `npm audit`~~ (done, `ea920a4`); base images by tag | 7.11 | H-9 (images) |
+| ~~No `govulncheck` or `npm audit`~~ (done, `ea920a4`); ~~base images by tag~~ (pinned by digest, v0.2.2) | 7.11 | H-9 (images) |
 | No content scanning of tool descriptions, arguments or results | 7.5 | Decision 50 (design first) |
 | Trusted clients skip consent; loopback redirects | OA-3 | H-1 |
 | Anonymous CIMD fetch; open DCR (the number of live clients is capped since v0.2.1) | OA-7, OA-2 | H-3, H-4 |
