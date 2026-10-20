@@ -1921,6 +1921,120 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/server-secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The servers whose callers enter their own key, with the caller's entry for each (never a key)
+         * @description Servers in person_secret mode that the caller may use through a gateway now (the rule a call is judged by), and every key the caller has entered, also for a server they can no longer reach (so it can be taken back), by server name. Session only (an automation token has no scope for it).
+         */
+        get: operations["listMyServerSecrets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/server-secrets/{serverId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serverId: components["parameters"]["ServerIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Enter, replace or change the caller's own key for a server
+         * @description Browser session only (403 session_required; API keys, automation tokens, service accounts and agents are refused: a key is a person's own decision). The key is sealed with ENCRYPTION_KEY, bound to the person, the server and the origin it has now, and never returned, logged or audited (person_secret.create, person_secret.rotate; person_secret.agents_update when only allowAgents changes). The request names the origin the person was shown. 404 server_not_found (no such server, or one the caller may not use through a gateway); 409 not_person_secret; 409 server_changed (another origin than the one shown: reload); 400 invalid_secret (no origin); 422 invalid_secret_value (8-4096 characters on one line); 422 secret_required (no key stored and none sent); 403 when useForSetup is asked by someone who is not an editor of the server's team. 429 slow_down (20 a minute per person, shared with revokeMyServerSecret).
+         */
+        put: operations["setMyServerSecret"];
+        post?: never;
+        /**
+         * Remove the caller's key for a server
+         * @description Browser session only (403 session_required). Deletes the key; the next call of that server asks for one again. Allowed whether or not the caller can still use the server. Audited as person_secret.revoke. 404 person_secret_not_found. 429 slow_down.
+         */
+        delete: operations["revokeMyServerSecret"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/connect/secret-requests/{requestId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The opaque ID from a consent link (the request query parameter of /connect/{provider}) */
+                requestId: components["parameters"]["ConnectRequestIdParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * What a link that asks for the person's own key is for, so the page can name the server, team and address
+         * @description Signed in, and only the person the link was made for; anyone else gets 404 secret_request_not_found, the same as an unknown ID. 410 secret_request_expired once it expired (10 minutes), or when the server's address or mode changed after the link was made (a link is for one server at one address). An agent's call never gets a link.
+         */
+        get: operations["getSecretRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/users/{userId}/server-secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserIdParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The keys a person has entered for servers, without the keys (platform admins and auditors)
+         * @description Session only (no automation token scope). Only the servers a key exists for.
+         */
+        get: operations["adminListUserServerSecrets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/users/{userId}/server-secrets/{serverId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserIdParam"];
+                serverId: components["parameters"]["ServerIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a person's key for a server (platform admins)
+         * @description As revokeMyServerSecret, audited with reason admin. Session only. Auditors get 403.
+         */
+        delete: operations["adminRevokeUserServerSecret"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/connections": {
         parameters: {
             query?: never;
@@ -3373,6 +3487,8 @@ export interface components {
             authMode?: components["schemas"]["McpServerAuthMode"];
             /** @description The sign-in configuration when authMode is oauth, else null. Absent (like authMode) from servers before Phase 7 */
             oauth?: components["schemas"]["McpServerOAuth"] | null;
+            /** @description How each person's own secret is sent, and how many people have entered one, when authMode is person_secret; else null. Absent from servers before v0.3.2 */
+            personSecret?: components["schemas"]["PersonSecretSettings"] | null;
             /** @description Refuse calls on a relay service account unless they are for a person the platform says is present (person_present true), for every capability without its own override (McpCapability.presentPerson): scheduled or background work, a token that names nobody and a relay key with no token are refused too. Default false. Calls that don't arrive on a relay service account are never affected. Absent from servers before v0.3 (false) */
             requiresPresentPerson?: boolean;
             /** @description Send the identity token (decision 45). true (the default) keeps decision 7: every forwarded call carries the signed identity JWT (Authorization: Bearer, or MCP-Gateway-Identity when the server has a static Authorization header or is in oauth mode). false: the JWT is not sent to this server at all (no header), recommended for servers run outside the company such as GitHub's hosted MCP server, so names, emails and teams are not sent to a third party. Absent from servers before Phase 7 (true). New servers with authMode none on a public host default to false (decision 64); servers saved earlier keep their value */
@@ -3446,6 +3562,8 @@ export interface components {
             /** @description Default: static_header when authHeaderName is sent, else none. oauth needs oauth */
             authMode?: components["schemas"]["McpServerAuthMode"];
             oauth?: components["schemas"]["McpServerOAuthInput"];
+            /** @description Required with authMode person_secret (422 invalid_person_secret otherwise); ignored for other modes. How each person's own secret is sent. Nobody has entered a key yet, so capabilities are not read (McpServerCreated.setupRequired); an editor enters theirs under Account > My connections, choosing to read the server with it */
+            personSecret?: components["schemas"]["PersonSecretInput"];
             /** @description Send the signed identity token with forwarded calls (McpServer.sendIdentity). Omit for the default (decision 64) true, except authMode none on a public host (or one that can't be resolved), where it is false; POST .../mcp-servers/identity-default tells which. An explicit value is always kept */
             sendIdentity?: boolean;
         };
@@ -3470,6 +3588,8 @@ export interface components {
             authMode?: components["schemas"]["McpServerAuthMode"];
             /** @description Only with authMode oauth (sent now or stored). Omitted fields keep their stored values */
             oauth?: components["schemas"]["McpServerOAuthInput"];
+            /** @description Only with authMode person_secret (sent now or stored; required when switching to it). Omit to keep. A URL on another origin, another mode or another placement deletes every person's secret for the server (audited as mcp_server.person_secrets_reset); a path-only edit, or another name, prefix, label or help, keeps them. A new mode, placement, name or prefix sends a published server back to review under approval_required. A publisher automation token can't send it, nor switch a server to this mode (403 token_not_allowed) */
+            personSecret?: components["schemas"]["PersonSecretInput"];
             /** @description Omit to keep. Not a review trigger (turning it off sends less). Audited in mcp_server.update */
             sendIdentity?: boolean;
             /** @description Omit to keep. Turning it on never needs review; turning it off, when it made some capability require a present person, sends a published server back to pending under approval_required (reason requirement_changed), like widening a requirement. Audited in mcp_server.update */
@@ -4751,10 +4871,118 @@ export interface components {
             expiresAt: string;
         };
         /**
-         * @description How the portal authenticates to the server (decision 39). none: only the identity token, in Authorization: Bearer. static_header: one static header (authHeaderName); the identity token moves to MCP-Gateway-Identity when that header is Authorization. oauth: each person's own token from the server's authorization server in Authorization: Bearer, and the identity token in MCP-Gateway-Identity. oauth excludes a static Authorization header and a requirement (one credential per call)
+         * @description How the portal authenticates to the server (decision 39). none: only the identity token, in Authorization: Bearer. static_header: one static header (authHeaderName); the identity token moves to MCP-Gateway-Identity when that header is Authorization. oauth: each person's own token from the server's authorization server in Authorization: Bearer, and the identity token in MCP-Gateway-Identity. oauth excludes a static Authorization header and a requirement (one credential per call). person_secret: each person's own API key or token, entered under Account > My connections and sent as the placement in personSecret says (a header, a bearer token or a query parameter; decision 72); a bearer or an Authorization header moves the identity token to MCP-Gateway-Identity. person_secret excludes a requirement and a static part that sets the same header, query parameter or Authorization
          * @enum {string}
          */
-        McpServerAuthMode: "none" | "static_header" | "oauth";
+        McpServerAuthMode: "none" | "static_header" | "oauth" | "person_secret";
+        /** @description How a server's person secrets travel and how the page where people enter them describes the key */
+        PersonSecretInput: {
+            placement: components["schemas"]["PersonSecretPlacement"];
+            /**
+             * @description The header (not a reserved one; Authorization is allowed) or the query parameter (1-64 letters, digits, dots, hyphens and underscores, never starting with mcp-). Absent for bearer
+             * @example X-API-Key
+             */
+            name?: string;
+            /** @description Sent before the secret, for example "Token ". Not for bearer */
+            prefix?: string;
+            /**
+             * @description What the key is called on the page where people enter it
+             * @example Acme API key
+             */
+            label?: string;
+            /** @description Plain text on that page, saying where to find the key */
+            help?: string;
+        };
+        /**
+         * @description header: Name: prefix + secret. bearer: Authorization: Bearer secret. query: ?Name=prefix+secret, added to each request and never to the saved URL; many servers and proxies log URLs, so prefer header or bearer
+         * @enum {string}
+         */
+        PersonSecretPlacement: "header" | "bearer" | "query";
+        PersonSecretSettings: {
+            placement: components["schemas"]["PersonSecretPlacement"];
+            name?: string | null;
+            prefix: string;
+            label: string;
+            help: string;
+            /**
+             * Format: int64
+             * @description How many people have entered a key for this server
+             */
+            people: number;
+            /**
+             * Format: int64
+             * @description Of those, how many the server refused (they are asked to enter them again)
+             */
+            rejected: number;
+            setup: components["schemas"]["PersonSecretSetup"];
+        };
+        /** @description The editor whose own key reads the server's capabilities (decision 42's counterpart); scheduled health checks send nobody's key */
+        PersonSecretSetup: {
+            /**
+             * @description missing when nobody was chosen, or the person is no longer an active editor of the team, or their key was revoked or is for another address
+             * @enum {string}
+             */
+            status: "active" | "rejected" | "missing";
+            /** Format: uuid */
+            personId?: string | null;
+            personName?: string | null;
+            /** Format: date-time */
+            at?: string | null;
+        };
+        /** @description A server in person_secret mode with the caller's own key for it, if any. The key itself is never returned, only its last four characters when it has at least eight */
+        ServerSecret: {
+            server: components["schemas"]["ConnectServer"];
+            config: components["schemas"]["PersonSecretInput"];
+            /** @description The scheme, host and port of the server's URL now; an entered key is bound to it */
+            origin: string;
+            hasSecret: boolean;
+            hint?: string | null;
+            /**
+             * @description The server answered 401 or 403 to a rejected key; it is not sent again until replaced
+             * @enum {string|null}
+             */
+            status?: "active" | "rejected" | null;
+            /** @description An agent that relays a call for the person may use the key (decisions 66 and 68). Off by default */
+            allowAgents: boolean;
+            /** Format: date-time */
+            createdAt?: string | null;
+            /** Format: date-time */
+            rotatedAt?: string | null;
+            /** Format: date-time */
+            rejectedAt?: string | null;
+            /** Format: date-time */
+            lastUsedAt?: string | null;
+            /** @description The caller may use the server through a gateway now (they may enter or replace a key) */
+            reachable: boolean;
+            /** @description The caller is an active editor of the server's team, so their key can read its capabilities */
+            canSetup: boolean;
+            /** @description Their key reads the server's capabilities now */
+            isSetup: boolean;
+        };
+        /** @description A key, or a change to the caller's entry for one server */
+        SetServerSecret: {
+            /** @description The origin the page showed (ServerSecret.origin); refused (409 server_changed) when the server has another now */
+            origin: string;
+            /** @description The key, on one line (surrounding space is trimmed). Omit to keep the stored key while changing allowAgents or useForSetup. Sealed, never returned, logged or audited */
+            value?: string;
+            /** @description Omit to keep (false for a new entry) */
+            allowAgents?: boolean;
+            /** @description Read the server's capabilities with this key from now on (editors of the server's team only, else 403). The capabilities are read once it is saved; a failure is stored as the server's refresh error */
+            useForSetup?: boolean;
+        };
+        /** @description Why a call asked the person to enter their key (a link from JSON-RPC -32042 or an input request) */
+        SecretRequest: {
+            id: string;
+            /** @enum {string} */
+            reason: "secret_missing" | "secret_rejected";
+            server: components["schemas"]["ConnectServer"];
+            config: components["schemas"]["PersonSecretInput"];
+            /** @description Where the key will be sent, and only there */
+            origin: string;
+            gateway: components["schemas"]["CallRef"];
+            capability: components["schemas"]["ConnectRequestCapability"];
+            secret: components["schemas"]["ServerSecret"];
+        };
         /**
          * @description How the portal got its OAuth client at the authorization server. dcr: registered automatically (RFC 7591). cimd: the portal's Client ID Metadata Document <APP_URL>/oauth/upstream-client-metadata.json (a public client), offered only when APP_URL is public https and the authorization server supports it. manual: a client the team created at the authorization server (client ID and secret entered). platform_provider: the client of a platform auth provider whose authorization and token endpoints equal the discovered ones
          * @enum {string}
@@ -9663,6 +9891,153 @@ export interface operations {
             path: {
                 userId: components["parameters"]["UserIdParam"];
                 connectionId: components["parameters"]["ConnectionIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+        };
+    };
+    listMyServerSecrets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Servers by name */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ServerSecret"][];
+                    };
+                };
+            };
+            401: components["responses"]["ErrorReply"];
+        };
+    };
+    setMyServerSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serverId: components["parameters"]["ServerIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetServerSecret"];
+            };
+        };
+        responses: {
+            /** @description The caller's entry, without the key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ServerSecret"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            422: components["responses"]["ErrorReply"];
+            429: components["responses"]["ErrorReply"];
+        };
+    };
+    revokeMyServerSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serverId: components["parameters"]["ServerIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            429: components["responses"]["ErrorReply"];
+        };
+    };
+    getSecretRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The opaque ID from a consent link (the request query parameter of /connect/{provider}) */
+                requestId: components["parameters"]["ConnectRequestIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["SecretRequest"];
+                    };
+                };
+            };
+            401: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            410: components["responses"]["ErrorReply"];
+        };
+    };
+    adminListUserServerSecrets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Entries by server name */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ServerSecret"][];
+                    };
+                };
+            };
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+        };
+    };
+    adminRevokeUserServerSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserIdParam"];
+                serverId: components["parameters"]["ServerIdParam"];
             };
             cookie?: never;
         };

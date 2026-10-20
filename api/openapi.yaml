@@ -3951,6 +3951,178 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '404':
           $ref: '#/components/responses/ErrorReply'
+  /v1/me/server-secrets:
+    get:
+      tags:
+      - me
+      - connections
+      operationId: listMyServerSecrets
+      summary: The servers whose callers enter their own key, with the caller's entry for each (never a key)
+      description: 'Servers in person_secret mode that the caller may use through a gateway now (the rule a call is
+        judged by), and every key the caller has entered, also for a server they can no longer reach (so it can be
+        taken back), by server name. Session only (an automation token has no scope for it).'
+      responses:
+        '200':
+          description: Servers by name
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServerSecret'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/me/server-secrets/{serverId}:
+    parameters:
+    - $ref: '#/components/parameters/ServerIdParam'
+    put:
+      tags:
+      - me
+      - connections
+      operationId: setMyServerSecret
+      summary: Enter, replace or change the caller's own key for a server
+      description: 'Browser session only (403 session_required; API keys, automation tokens, service accounts and agents
+        are refused: a key is a person''s own decision). The key is sealed with ENCRYPTION_KEY, bound to the person, the
+        server and the origin it has now, and never returned, logged or audited (person_secret.create, person_secret.rotate;
+        person_secret.agents_update when only allowAgents changes). The request names the origin the person was shown.
+        404 server_not_found (no such server, or one the caller may not use through a gateway); 409 not_person_secret;
+        409 server_changed (another origin than the one shown: reload); 400 invalid_secret (no origin); 422
+        invalid_secret_value (8-4096 characters on one line); 422 secret_required (no key stored and none sent); 403
+        when useForSetup is asked by someone who is not an editor of the server''s team. 429 slow_down (20 a minute per
+        person, shared with revokeMyServerSecret).'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetServerSecret'
+      responses:
+        '200':
+          description: The caller's entry, without the key
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ServerSecret'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
+        '429':
+          $ref: '#/components/responses/ErrorReply'
+    delete:
+      tags:
+      - me
+      - connections
+      operationId: revokeMyServerSecret
+      summary: Remove the caller's key for a server
+      description: 'Browser session only (403 session_required). Deletes the key; the next call of that server asks for
+        one again. Allowed whether or not the caller can still use the server. Audited as person_secret.revoke. 404
+        person_secret_not_found. 429 slow_down.'
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '429':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/connect/secret-requests/{requestId}:
+    parameters:
+    - $ref: '#/components/parameters/ConnectRequestIdParam'
+    get:
+      tags:
+      - connections
+      operationId: getSecretRequest
+      summary: What a link that asks for the person's own key is for, so the page can name the server, team and address
+      description: Signed in, and only the person the link was made for; anyone else gets 404 secret_request_not_found,
+        the same as an unknown ID. 410 secret_request_expired once it expired (10 minutes), or when the server's address
+        or mode changed after the link was made (a link is for one server at one address). An agent's call never gets
+        a link.
+      responses:
+        '200':
+          description: The request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SecretRequest'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '410':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/users/{userId}/server-secrets:
+    parameters:
+    - $ref: '#/components/parameters/UserIdParam'
+    get:
+      tags:
+      - admin
+      - connections
+      operationId: adminListUserServerSecrets
+      summary: The keys a person has entered for servers, without the keys (platform admins and auditors)
+      description: Session only (no automation token scope). Only the servers a key exists for.
+      responses:
+        '200':
+          description: Entries by server name
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServerSecret'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/users/{userId}/server-secrets/{serverId}:
+    parameters:
+    - $ref: '#/components/parameters/UserIdParam'
+    - $ref: '#/components/parameters/ServerIdParam'
+    delete:
+      tags:
+      - admin
+      - connections
+      operationId: adminRevokeUserServerSecret
+      summary: Remove a person's key for a server (platform admins)
+      description: As revokeMyServerSecret, audited with reason admin. Session only. Auditors get 403.
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
   /v1/me/connections:
     get:
       tags:
@@ -7025,6 +7197,12 @@ components:
           nullable: true
           description: The sign-in configuration when authMode is oauth, else null. Absent (like authMode) from servers
             before Phase 7
+        personSecret:
+          allOf:
+          - $ref: '#/components/schemas/PersonSecretSettings'
+          nullable: true
+          description: How each person's own secret is sent, and how many people have entered one, when authMode is
+            person_secret; else null. Absent from servers before v0.3.2
         requiresPresentPerson:
           type: boolean
           description: 'Refuse calls on a relay service account unless they are for a person the platform says is
@@ -7179,6 +7357,13 @@ components:
           description: 'Default: static_header when authHeaderName is sent, else none. oauth needs oauth'
         oauth:
           $ref: '#/components/schemas/McpServerOAuthInput'
+        personSecret:
+          allOf:
+          - $ref: '#/components/schemas/PersonSecretInput'
+          description: Required with authMode person_secret (422 invalid_person_secret otherwise); ignored for other
+            modes. How each person's own secret is sent. Nobody has entered a key yet, so capabilities are not read
+            (McpServerCreated.setupRequired); an editor enters theirs under Account > My connections, choosing to read
+            the server with it
         sendIdentity:
           type: boolean
           description: Send the signed identity token with forwarded calls (McpServer.sendIdentity). Omit for the default
@@ -7243,6 +7428,15 @@ components:
           allOf:
           - $ref: '#/components/schemas/McpServerOAuthInput'
           description: Only with authMode oauth (sent now or stored). Omitted fields keep their stored values
+        personSecret:
+          allOf:
+          - $ref: '#/components/schemas/PersonSecretInput'
+          description: 'Only with authMode person_secret (sent now or stored; required when switching to it). Omit to
+            keep. A URL on another origin, another mode or another placement deletes every person''s secret for the server
+            (audited as mcp_server.person_secrets_reset); a path-only edit, or another name, prefix, label or help,
+            keeps them. A new mode, placement, name or prefix sends a published server back to review under
+            approval_required. A publisher automation token can''t send it, nor switch a server to this mode (403
+            token_not_allowed)'
         sendIdentity:
           type: boolean
           description: Omit to keep. Not a review trigger (turning it off sends less). Audited in mcp_server.update
@@ -10047,11 +10241,226 @@ components:
       - none
       - static_header
       - oauth
+      - person_secret
       description: 'How the portal authenticates to the server (decision 39). none: only the identity token, in
         Authorization: Bearer. static_header: one static header (authHeaderName); the identity token moves to
         MCP-Gateway-Identity when that header is Authorization. oauth: each person''s own token from the server''s
         authorization server in Authorization: Bearer, and the identity token in MCP-Gateway-Identity. oauth excludes
-        a static Authorization header and a requirement (one credential per call)'
+        a static Authorization header and a requirement (one credential per call). person_secret: each person''s own
+        API key or token, entered under Account > My connections and sent as the placement in personSecret says (a
+        header, a bearer token or a query parameter; decision 72); a bearer or an Authorization header moves the identity
+        token to MCP-Gateway-Identity. person_secret excludes a requirement and a static part that sets the same header,
+        query parameter or Authorization'
+    PersonSecretInput:
+      type: object
+      description: How a server's person secrets travel and how the page where people enter them describes the key
+      required:
+      - placement
+      properties:
+        placement:
+          $ref: '#/components/schemas/PersonSecretPlacement'
+        name:
+          type: string
+          maxLength: 100
+          description: The header (not a reserved one; Authorization is allowed) or the query parameter (1-64 letters,
+            digits, dots, hyphens and underscores, never starting with mcp-). Absent for bearer
+          example: X-API-Key
+        prefix:
+          type: string
+          maxLength: 64
+          description: Sent before the secret, for example "Token ". Not for bearer
+        label:
+          type: string
+          maxLength: 100
+          description: What the key is called on the page where people enter it
+          example: Acme API key
+        help:
+          type: string
+          maxLength: 2000
+          description: Plain text on that page, saying where to find the key
+    PersonSecretPlacement:
+      type: string
+      enum:
+      - header
+      - bearer
+      - query
+      description: 'header: Name: prefix + secret. bearer: Authorization: Bearer secret. query: ?Name=prefix+secret,
+        added to each request and never to the saved URL; many servers and proxies log URLs, so prefer header or bearer'
+    PersonSecretSettings:
+      type: object
+      required:
+      - placement
+      - prefix
+      - label
+      - help
+      - people
+      - rejected
+      - setup
+      properties:
+        placement:
+          $ref: '#/components/schemas/PersonSecretPlacement'
+        name:
+          type: string
+          nullable: true
+        prefix:
+          type: string
+        label:
+          type: string
+        help:
+          type: string
+        people:
+          type: integer
+          format: int64
+          description: How many people have entered a key for this server
+        rejected:
+          type: integer
+          format: int64
+          description: Of those, how many the server refused (they are asked to enter them again)
+        setup:
+          $ref: '#/components/schemas/PersonSecretSetup'
+    PersonSecretSetup:
+      type: object
+      description: The editor whose own key reads the server's capabilities (decision 42's counterpart); scheduled
+        health checks send nobody's key
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          enum:
+          - active
+          - rejected
+          - missing
+          description: missing when nobody was chosen, or the person is no longer an active editor of the team, or
+            their key was revoked or is for another address
+        personId:
+          type: string
+          format: uuid
+          nullable: true
+        personName:
+          type: string
+          nullable: true
+        at:
+          type: string
+          format: date-time
+          nullable: true
+    ServerSecret:
+      type: object
+      description: A server in person_secret mode with the caller's own key for it, if any. The key itself is never
+        returned, only its last four characters when it has at least eight
+      required:
+      - server
+      - config
+      - origin
+      - hasSecret
+      - allowAgents
+      - reachable
+      - canSetup
+      - isSetup
+      properties:
+        server:
+          $ref: '#/components/schemas/ConnectServer'
+        config:
+          $ref: '#/components/schemas/PersonSecretInput'
+        origin:
+          type: string
+          description: The scheme, host and port of the server's URL now; an entered key is bound to it
+        hasSecret:
+          type: boolean
+        hint:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+          enum:
+          - active
+          - rejected
+          description: The server answered 401 or 403 to a rejected key; it is not sent again until replaced
+        allowAgents:
+          type: boolean
+          description: An agent that relays a call for the person may use the key (decisions 66 and 68). Off by default
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+        rotatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        rejectedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+        reachable:
+          type: boolean
+          description: The caller may use the server through a gateway now (they may enter or replace a key)
+        canSetup:
+          type: boolean
+          description: The caller is an active editor of the server's team, so their key can read its capabilities
+        isSetup:
+          type: boolean
+          description: Their key reads the server's capabilities now
+    SetServerSecret:
+      type: object
+      description: A key, or a change to the caller's entry for one server
+      required:
+      - origin
+      properties:
+        origin:
+          type: string
+          description: The origin the page showed (ServerSecret.origin); refused (409 server_changed) when the server has
+            another now
+        value:
+          type: string
+          writeOnly: true
+          minLength: 8
+          maxLength: 4096
+          description: The key, on one line (surrounding space is trimmed). Omit to keep the stored key while changing
+            allowAgents or useForSetup. Sealed, never returned, logged or audited
+        allowAgents:
+          type: boolean
+          description: Omit to keep (false for a new entry)
+        useForSetup:
+          type: boolean
+          description: Read the server's capabilities with this key from now on (editors of the server's team only, else 403). The capabilities are read once it is saved; a failure is stored as the server's refresh error
+    SecretRequest:
+      type: object
+      description: Why a call asked the person to enter their key (a link from JSON-RPC -32042 or an input request)
+      required:
+      - id
+      - reason
+      - server
+      - config
+      - origin
+      - gateway
+      - capability
+      - secret
+      properties:
+        id:
+          type: string
+        reason:
+          type: string
+          enum:
+          - secret_missing
+          - secret_rejected
+        server:
+          $ref: '#/components/schemas/ConnectServer'
+        config:
+          $ref: '#/components/schemas/PersonSecretInput'
+        origin:
+          type: string
+          description: Where the key will be sent, and only there
+        gateway:
+          $ref: '#/components/schemas/CallRef'
+        capability:
+          $ref: '#/components/schemas/ConnectRequestCapability'
+        secret:
+          $ref: '#/components/schemas/ServerSecret'
     McpServerOAuthRegistration:
       type: string
       enum:

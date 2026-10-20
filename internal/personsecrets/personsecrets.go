@@ -701,6 +701,7 @@ type RequestView struct {
 	Mine Mine
 	// The gateway as it is now (or as it was, when deleted), and the
 	// capability that asked.
+	GatewayID                uuid.UUID
 	GatewaySlug, GatewayName string
 	GatewayExists            bool
 	CapabilityKind           string
@@ -753,7 +754,7 @@ func (s *Service) GetRequest(ctx context.Context, a authz.Actor, id string) (Req
 	if err != nil {
 		return RequestView{}, err
 	}
-	v := RequestView{ID: id, Reason: r.Reason, Server: ref, Config: cfg, Origin: r.ServerOrigin, Mine: m, GatewaySlug: r.GatewaySlug,
+	v := RequestView{ID: id, Reason: r.Reason, Server: ref, Config: cfg, Origin: r.ServerOrigin, Mine: m, GatewayID: r.GatewayID, GatewaySlug: r.GatewaySlug,
 		GatewayName: r.GatewayName, CapabilityKind: r.CapabilityKind, ExposedName: r.ExposedName, Title: r.CapabilityTitle}
 	if g, err := s.q.GetGateway(ctx, r.GatewayID); err == nil {
 		v.GatewaySlug, v.GatewayName, v.GatewayExists = g.Slug, g.Name, true
