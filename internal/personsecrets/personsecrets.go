@@ -403,17 +403,39 @@ func (s *Service) listFor(ctx context.Context, userID uuid.UUID, withReachable b
 	}
 	reachable := map[uuid.UUID]bool{}
 	out := []Mine{}
-	for _, r := range reach {
-		if _, ok := registry.PersonSecretConfig(r.Server); !ok {
-			continue
+	add := func(sv dbgen.McpServer, ref ServerRef) error {
+		if reachable[sv.ID] {
+			return nil
 		}
-		reachable[r.Server.ID] = true
-		m, err := s.mine(ctx, u, r.Server, ServerRef{ID: r.Server.ID, Slug: r.Server.Slug, Name: r.Server.Name, TeamSlug: r.TeamSlug, TeamName: r.TeamName})
+		if _, ok := registry.PersonSecretConfig(sv); !ok {
+			return nil
+		}
+		reachable[sv.ID] = true
+		m, err := s.mine(ctx, u, sv, ref)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		m.Reachable = true
 		out = append(out, m)
+		return nil
+	}
+	for _, r := range reach {
+		if err := add(r.Server, ServerRef{ID: r.Server.ID, Slug: r.Server.Slug, Name: r.Server.Name, TeamSlug: r.TeamSlug, TeamName: r.TeamName}); err != nil {
+			return nil, err
+		}
+	}
+	if withReachable {
+		// An editor can enter a key for their team's servers before any gateway
+		// offers one: the setup key is what reads its capabilities.
+		eds, err := s.q.ListPersonSecretServersForEditor(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range eds {
+			if err := add(r.McpServer, ServerRef{ID: r.McpServer.ID, Slug: r.McpServer.Slug, Name: r.McpServer.Name, TeamSlug: r.TeamSlug, TeamName: r.TeamName}); err != nil {
+				return nil, err
+			}
+		}
 	}
 	for _, r := range rows {
 		if reachable[r.ServerID] {
@@ -459,7 +481,8 @@ func (s *Service) mine(ctx context.Context, u dbgen.User, sv dbgen.McpServer, re
 }
 
 // reachableServer finds a server in person_secret mode the person may use
-// now (404 server_not_found otherwise: another team's private server and an
+// through a gateway now, or, for an editor of its team, any of the team's
+// (404 server_not_found otherwise: another team's private server and an
 // unknown one answer the same).
 func (s *Service) reachableServer(ctx context.Context, u dbgen.User, id uuid.UUID) (dbgen.McpServer, error) {
 	var reach []gateways.ReachableServer
@@ -469,14 +492,27 @@ func (s *Service) reachableServer(ctx context.Context, u dbgen.User, id uuid.UUI
 			return dbgen.McpServer{}, err
 		}
 	}
-	i := slices.IndexFunc(reach, func(r gateways.ReachableServer) bool { return r.Server.ID == id })
-	if i < 0 {
-		return dbgen.McpServer{}, errServerNotFound
+	var sv dbgen.McpServer
+	if i := slices.IndexFunc(reach, func(r gateways.ReachableServer) bool { return r.Server.ID == id }); i >= 0 {
+		sv = reach[i].Server
+	} else {
+		// Not offered by any gateway yet: an editor of the server's team may
+		// still enter a key (it reads the server's capabilities). Anyone else,
+		// and an unknown server, answer the same.
+		eds, err := s.q.ListPersonSecretServersForEditor(ctx, u.ID)
+		if err != nil {
+			return dbgen.McpServer{}, err
+		}
+		j := slices.IndexFunc(eds, func(r dbgen.ListPersonSecretServersForEditorRow) bool { return r.McpServer.ID == id })
+		if j < 0 {
+			return dbgen.McpServer{}, errServerNotFound
+		}
+		sv = eds[j].McpServer
 	}
-	if _, ok := registry.PersonSecretConfig(reach[i].Server); !ok {
+	if _, ok := registry.PersonSecretConfig(sv); !ok {
 		return dbgen.McpServer{}, errNotSecretMode
 	}
-	return reach[i].Server, nil
+	return sv, nil
 }
 
 // SetInput is what a person sends: the key (nil keeps the stored one; needed

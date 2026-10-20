@@ -119,3 +119,14 @@ WHERE id_digest IN (
 
 -- name: DeleteStaleSecretRequests :execrows
 DELETE FROM secret_requests WHERE expires_at < @before;
+
+-- name: ListPersonSecretServersForEditor :many
+-- The person_secret servers of the active teams a person is an editor or above
+-- of: they may enter a key for them even before any gateway offers the server
+-- (the setup key reads its capabilities).
+SELECT sqlc.embed(s), t.slug AS team_slug, t.name AS team_name
+FROM mcp_servers s
+JOIN teams t ON t.id = s.team_id AND t.status = 'active'
+JOIN team_members tm ON tm.team_id = s.team_id AND tm.user_id = @user_id AND tm.role IN ('owner', 'admin', 'editor')
+WHERE s.auth_mode = 'person_secret'
+ORDER BY s.name, s.id;

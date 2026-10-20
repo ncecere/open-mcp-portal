@@ -318,6 +318,92 @@ func (q *Queries) InsertSecretRequest(ctx context.Context, arg InsertSecretReque
 	return i, err
 }
 
+const listPersonSecretServersForEditor = `-- name: ListPersonSecretServersForEditor :many
+SELECT s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, t.slug AS team_slug, t.name AS team_name
+FROM mcp_servers s
+JOIN teams t ON t.id = s.team_id AND t.status = 'active'
+JOIN team_members tm ON tm.team_id = s.team_id AND tm.user_id = $1 AND tm.role IN ('owner', 'admin', 'editor')
+WHERE s.auth_mode = 'person_secret'
+ORDER BY s.name, s.id
+`
+
+type ListPersonSecretServersForEditorRow struct {
+	McpServer McpServer
+	TeamSlug  string
+	TeamName  string
+}
+
+// The person_secret servers of the active teams a person is an editor or above
+// of: they may enter a key for them even before any gateway offers the server
+// (the setup key reads its capabilities).
+func (q *Queries) ListPersonSecretServersForEditor(ctx context.Context, userID uuid.UUID) ([]ListPersonSecretServersForEditorRow, error) {
+	rows, err := q.db.Query(ctx, listPersonSecretServersForEditor, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPersonSecretServersForEditorRow{}
+	for rows.Next() {
+		var i ListPersonSecretServersForEditorRow
+		if err := rows.Scan(
+			&i.McpServer.ID,
+			&i.McpServer.TeamID,
+			&i.McpServer.Slug,
+			&i.McpServer.Name,
+			&i.McpServer.Description,
+			&i.McpServer.URL,
+			&i.McpServer.Transport,
+			&i.McpServer.AuthHeaderName,
+			&i.McpServer.AuthValueCipher,
+			&i.McpServer.AuthValueHint,
+			&i.McpServer.TimeoutSeconds,
+			&i.McpServer.Enabled,
+			&i.McpServer.PublishState,
+			&i.McpServer.PublishRequestedAt,
+			&i.McpServer.PublishRequestedBy,
+			&i.McpServer.PublishRequestNote,
+			&i.McpServer.PublishReviewedAt,
+			&i.McpServer.PublishReviewedBy,
+			&i.McpServer.PublishReviewNote,
+			&i.McpServer.PublishedAt,
+			&i.McpServer.RefreshedAt,
+			&i.McpServer.LastRefreshError,
+			&i.McpServer.Revision,
+			&i.McpServer.CreatedBy,
+			&i.McpServer.CreatedAt,
+			&i.McpServer.UpdatedBy,
+			&i.McpServer.UpdatedAt,
+			&i.McpServer.AuthProviderID,
+			&i.McpServer.AuthScopes,
+			&i.McpServer.CapturePayloads,
+			&i.McpServer.AuthMode,
+			&i.McpServer.OauthSetupUserID,
+			&i.McpServer.OauthSetupAt,
+			&i.McpServer.SendIdentity,
+			&i.McpServer.ProtocolEra,
+			&i.McpServer.ProtocolVersion,
+			&i.McpServer.ProtocolNegotiatedAt,
+			&i.McpServer.RequiresPresentPerson,
+			&i.McpServer.SecretPlacement,
+			&i.McpServer.SecretName,
+			&i.McpServer.SecretPrefix,
+			&i.McpServer.SecretLabel,
+			&i.McpServer.SecretHelp,
+			&i.McpServer.SecretSetupUserID,
+			&i.McpServer.SecretSetupAt,
+			&i.TeamSlug,
+			&i.TeamName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPersonSecretsForUser = `-- name: ListPersonSecretsForUser :many
 SELECT ps.id, ps.user_id, ps.server_id, ps.origin, ps.secret_cipher, ps.hint, ps.status, ps.allow_agents, ps.created_at, ps.rotated_at, ps.rejected_at, ps.last_used_at, s.slug AS server_slug, s.name AS server_name, s.url AS server_url, s.auth_mode AS server_auth_mode,
        s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help,
