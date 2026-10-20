@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Open MCP Portal API
-  version: 0.2.1
+  version: 0.2.2
   description: 'Management API. Browser sessions authenticate with a cookie; writes need the session''s `X-CSRF-Token`
     (from `GET /v1/me`) and a same-origin `Origin`. Success responses are `{"data": ...}` and errors `{"error":
     {"code": "...", "message": "..."}}`.
@@ -919,6 +919,51 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/DetectAuthResult'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
+        '429':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/mcp-servers/identity-default:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    post:
+      tags:
+      - mcp-servers
+      operationId: getTeamMcpServerIdentityDefault
+      summary: The default of "Send identity token" for a server with no authentication at a URL (editors and above); changes nothing
+      description: >-
+        Classifies the host of url as the registry does when a server is created without an explicit sendIdentity
+        (decision 64): a public host, an internal host (named by the internal-network allowlist, or a private
+        address), or a name that could not be resolved in time (treated as public). Resolves the host name (at most 3
+        s) and connects to nothing. Only for authMode none: servers with a static header or in oauth mode default to
+        sending the token. Session only (the add form's helper; automation tokens can't call it). Nothing is stored or audited. 422
+        url_not_allowed as for create. 409 team_archived. 429 slow_down (30 a minute per person).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DetectAuthRequest'
+      responses:
+        '200':
+          description: The default and why
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/IdentityDefault'
         '400':
           $ref: '#/components/responses/ErrorReply'
         '403':
@@ -2459,6 +2504,7 @@ paths:
       - $ref: '#/components/parameters/CallGatewayParam'
       - $ref: '#/components/parameters/CallServerParam'
       - $ref: '#/components/parameters/CallOutcomeParam'
+      - $ref: '#/components/parameters/CallIdentitySentParam'
       - $ref: '#/components/parameters/CallUserParam'
       - $ref: '#/components/parameters/CallServiceAccountParam'
       - $ref: '#/components/parameters/AuditFromParam'
@@ -2825,6 +2871,7 @@ paths:
       - $ref: '#/components/parameters/CallGatewayParam'
       - $ref: '#/components/parameters/CallServerParam'
       - $ref: '#/components/parameters/CallOutcomeParam'
+      - $ref: '#/components/parameters/CallIdentitySentParam'
       - $ref: '#/components/parameters/CallUserParam'
       - $ref: '#/components/parameters/CallServiceAccountParam'
       - name: team
@@ -3040,8 +3087,9 @@ paths:
       - oauth
       operationId: decideOAuthConsent
       summary: Allow or deny an authorization request; returns where to send the browser
-      description: Allow records the caller's consent for the client and gateway (audited as oauth.consent) and
-        issues a single-use authorization code valid for 60 seconds. Deny sends the client access_denied.
+      description: Allow records the caller's consent for the client and gateway (audited as oauth.consent, or as
+        oauth.grant_confirmed when the page was the first-use notice of a trusted client) and issues a single-use
+        authorization code valid for 60 seconds. Deny sends the client access_denied.
       requestBody:
         required: true
         content:
@@ -3166,10 +3214,11 @@ paths:
       operationId: adminGetTrustedClients
       x-omp-token-scopes:
       - platform:read
-      summary: Clients that skip the consent screen (platform admins and auditors)
+      summary: OAuth client settings (platform admins and auditors)
+      description: The clients that skip the consent screen and whether open client registration is on.
       responses:
         '200':
-          description: Trusted clients
+          description: OAuth client settings
           headers:
             ETag:
               $ref: '#/components/headers/ETag'
@@ -3189,9 +3238,10 @@ paths:
       - admin
       - oauth
       operationId: adminUpdateTrustedClients
-      summary: Replace the trusted-client list (platform admins)
+      summary: Replace the trusted-client list and set open registration (platform admins)
       description: 422 invalid_client_id (details.index) when an entry isn't an https URL with a path (Client ID
-        Metadata Document). At most 50 entries. Audited as settings.oauth_clients_update.
+        Metadata Document). At most 50 entries. openRegistration, when sent, turns open client registration on or off
+        (a platform token can't; session only). Audited as settings.oauth_clients_update.
       parameters:
       - $ref: '#/components/parameters/IfMatchHeader'
       requestBody:
@@ -5556,6 +5606,15 @@ components:
       required: false
       schema:
         $ref: '#/components/schemas/McpCallOutcome'
+    CallIdentitySentParam:
+      name: identitySent
+      in: query
+      required: false
+      description: 'true: only calls where the identity token was sent to the server. false: only calls where it was not
+        sent (the server''s Send identity token switch was off). Calls that were not forwarded, and calls recorded
+        before this field existed, have no value and match neither.'
+      schema:
+        type: boolean
     CallUserParam:
       name: user
       in: query
@@ -6730,7 +6789,8 @@ components:
             call carries the signed identity JWT (Authorization: Bearer, or MCP-Gateway-Identity when the server has a
             static Authorization header or is in oauth mode). false: the JWT is not sent to this server at all (no
             header), recommended for servers run outside the company such as GitHub''s hosted MCP server, so names,
-            emails and teams are not sent to a third party. Absent from servers before Phase 7 (true)'
+            emails and teams are not sent to a third party. Absent from servers before Phase 7 (true). New servers with
+            authMode none on a public host default to false (decision 64); servers saved earlier keep their value'
         protocol:
           allOf:
           - $ref: '#/components/schemas/McpServerProtocol'
@@ -6816,8 +6876,9 @@ components:
           $ref: '#/components/schemas/McpServerOAuthInput'
         sendIdentity:
           type: boolean
-          default: true
-          description: Send the signed identity token with forwarded calls (McpServer.sendIdentity)
+          description: Send the signed identity token with forwarded calls (McpServer.sendIdentity). Omit for the default
+            (decision 64) true, except authMode none on a public host (or one that can't be resolved), where it is false;
+            POST .../mcp-servers/identity-default tells which. An explicit value is always kept
     McpServerUpdate:
       type: object
       properties:
@@ -8271,6 +8332,13 @@ components:
         providerSlug:
           type: string
           description: The auth provider the capability required at the time of the call (absent when none)
+        identitySent:
+          type: boolean
+          nullable: true
+          description: 'Whether the signed identity token (name, email, teams) was attached to the request to the
+            server (decision 64). true: sent. false: not sent (the server''s Send identity token switch was off).
+            null: the call was not forwarded (denied, needs authorization, rate limited) or was recorded before
+            this field existed'
         latencyMs:
           type: integer
           format: int32
@@ -8406,6 +8474,7 @@ components:
       - redirectUri
       - redirectHost
       - remembered
+      - notice
       properties:
         client:
           $ref: '#/components/schemas/OAuthClientInfo'
@@ -8419,6 +8488,10 @@ components:
         remembered:
           type: boolean
           description: The caller already allowed this client for this gateway
+        notice:
+          type: boolean
+          description: A trusted client asks for the first time with a loopback redirect, so the page is a short
+            confirmation instead of the usual consent screen (the answer is still allow or deny)
     OAuthConsentDecision:
       type: object
       required:
@@ -8456,6 +8529,12 @@ components:
           type: string
           format: date-time
           nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the app has to sign in again however often it is used (OAUTH_REFRESH_ABSOLUTE_TTL after the
+            person last signed it in); null when the portal sets no limit. Past it, the app is shown as expired.
     TrustedClient:
       type: object
       required:
@@ -8473,6 +8552,7 @@ components:
       type: object
       required:
       - clients
+      - openRegistration
       - revision
       - updatedAt
       properties:
@@ -8480,6 +8560,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TrustedClient'
+        openRegistration:
+          type: boolean
+          description: Whether POST /oauth/register accepts registrations (and the authorization server metadata lists
+            registration_endpoint). On by default. Apps already registered keep working when it is off.
         revision:
           $ref: '#/components/schemas/Revision'
         updatedAt:
@@ -8495,6 +8579,9 @@ components:
           maxItems: 50
           items:
             $ref: '#/components/schemas/TrustedClient'
+        openRegistration:
+          type: boolean
+          description: Turn open client registration on or off; omitted keeps it as it is
     ServiceAccountRole:
       type: string
       enum:
@@ -9715,6 +9802,25 @@ components:
           type: string
           maxLength: 2000
           description: A path on this site (default /teams/{team}/servers/{serverId}?setup=connected)
+    IdentityDefault:
+      type: object
+      required:
+      - basis
+      - sendIdentity
+      properties:
+        basis:
+          type: string
+          enum:
+          - public_host
+          - internal_host
+          - unresolved_host
+          description: 'public_host: a public address that no internal allowlist entry names. internal_host: named by
+            an allowlist entry, or a private address. unresolved_host: the name could not be resolved in time; treated
+            as public, because nothing shows it is internal'
+        sendIdentity:
+          type: boolean
+          description: The default of Send identity token for a server with no authentication at this URL. false for
+            public_host and unresolved_host, true for internal_host
     DetectAuthRequest:
       type: object
       required:

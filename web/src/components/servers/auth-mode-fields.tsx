@@ -33,12 +33,14 @@ type Props = {
   headerFields: ReactNode;
   /** Warnings about what saving the change does (review, sign-ins). */
   notes?: ReactNode;
+  /** Why the identity switch starts where it does (Add: it follows the address). */
+  identityNote?: ReactNode;
 };
 
 export const identityHelp =
-  "Every call carries a signed token (Authorization: Bearer …) with the caller's name, email and teams, so the server knows who's calling; Test connection sends one for you too. Turn it off for servers run outside the company, such as GitHub's hosted MCP server, so that personal data isn't sent to a third party. Some public servers refuse any Authorization header, so it should be off for them: a server like that fails on its first call while this is on.";
+  "Every call carries a signed token (Authorization: Bearer …) with the caller's name, email and teams, so the server knows who's calling; Test connection sends one for you too. Turn it off for servers run outside the company, such as GitHub's hosted MCP server, so that personal data isn't sent to a third party. Some public servers refuse any Authorization header, so it should be off for them: a server like that fails on its first call while this is on. A new server with no sign-in on a public address starts with this off.";
 
-export function AuthModeFields({ team, url, urlError, value, onChange, detected, onDetected, onUseUrl, server, secret, setSecret, errors, disabled, headerFields, notes }: Props) {
+export function AuthModeFields({ team, url, urlError, value, onChange, detected, onDetected, onUseUrl, server, secret, setSecret, errors, disabled, headerFields, notes, identityNote }: Props) {
   const canOAuth = oauthUsable(detected) || server?.authMode === "oauth";
   const options: RadioOption<AuthMode>[] = (["none", "static_header", "oauth"] as AuthMode[]).map((mode) => ({
     value: mode,
@@ -73,6 +75,7 @@ export function AuthModeFields({ team, url, urlError, value, onChange, detected,
       )}
       {notes}
       <Switch label="Send identity token" description={identityHelp} disabled={disabled} checked={value.sendIdentity} onCheckedChange={(sendIdentity) => onChange({ ...value, sendIdentity })} />
+      {identityNote && <p className={m.identityNote}>{identityNote}</p>}
       {value.sendIdentity && asHost && !disabled && (
         <Alert tone="info" title="Run outside the company?">
           People sign in to this server at {asHost}. If a third party runs it, turn off Send identity token: the server still gets each person&apos;s own token, but not their

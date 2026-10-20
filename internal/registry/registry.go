@@ -400,7 +400,8 @@ type CreateInput struct {
 	// header, else none); OAuth configures oauth.
 	AuthMode string
 	OAuth    *OAuthInput
-	// SendIdentity sends the identity token (nil: true; decision 45).
+	// SendIdentity sends the identity token (nil: true, except authMode none
+	// on a public or unresolvable host: false; decisions 45 and 64).
 	SendIdentity *bool
 }
 
@@ -548,6 +549,15 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 			return Created{}, err
 		}
 	}
+	// Send identity token: an explicit value is kept; else on, except for a
+	// server with no authentication on a public (or unresolvable) host
+	// (decision 64). The host lookup happens here, outside the transaction.
+	sendIdentity := in.SendIdentity == nil || *in.SendIdentity
+	if in.SendIdentity == nil && mode == AuthNone {
+		if u, err := s.client.NormalizeURL(ctx, in.URL); err == nil {
+			sendIdentity = s.defaultSendIdentity(ctx, mode, u).SendIdentity
+		}
+	}
 	id := uuid.New()
 	err = store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
 		ta, err := access(ctx, q, a, ref)
@@ -564,7 +574,7 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 		if p.AuthProviderID, p.AuthScopes, err = checkRequirement(ctx, q, in.Requirement, uuid.NullUUID{}); err != nil {
 			return err
 		}
-		p.AuthMode, p.SendIdentity = mode, in.SendIdentity == nil || *in.SendIdentity
+		p.AuthMode, p.SendIdentity = mode, sendIdentity
 		row, err := q.InsertMCPServer(ctx, p)
 		if apperr.IsUniqueViolation(err, "mcp_servers_slug_key") {
 			return errSlugTaken

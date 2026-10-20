@@ -491,6 +491,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teams/{team}/mcp-servers/identity-default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The default of "Send identity token" for a server with no authentication at a URL (editors and above); changes nothing
+         * @description Classifies the host of url as the registry does when a server is created without an explicit sendIdentity (decision 64): a public host, an internal host (named by the internal-network allowlist, or a private address), or a name that could not be resolved in time (treated as public). Resolves the host name (at most 3 s) and connects to nothing. Only for authMode none: servers with a static header or in oauth mode default to sending the token. Session only (the add form's helper; automation tokens can't call it). Nothing is stored or audited. 422 url_not_allowed as for create. 409 team_archived. 429 slow_down (30 a minute per person).
+         */
+        post: operations["getTeamMcpServerIdentityDefault"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teams/{team}/mcp-servers/{serverId}": {
         parameters: {
             query?: never;
@@ -1492,7 +1515,7 @@ export interface paths {
         put?: never;
         /**
          * Allow or deny an authorization request; returns where to send the browser
-         * @description Allow records the caller's consent for the client and gateway (audited as oauth.consent) and issues a single-use authorization code valid for 60 seconds. Deny sends the client access_denied.
+         * @description Allow records the caller's consent for the client and gateway (audited as oauth.consent, or as oauth.grant_confirmed when the page was the first-use notice of a trusted client) and issues a single-use authorization code valid for 60 seconds. Deny sends the client access_denied.
          */
         post: operations["decideOAuthConsent"];
         delete?: never;
@@ -1583,11 +1606,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Clients that skip the consent screen (platform admins and auditors) */
+        /**
+         * OAuth client settings (platform admins and auditors)
+         * @description The clients that skip the consent screen and whether open client registration is on.
+         */
         get: operations["adminGetTrustedClients"];
         /**
-         * Replace the trusted-client list (platform admins)
-         * @description 422 invalid_client_id (details.index) when an entry isn't an https URL with a path (Client ID Metadata Document). At most 50 entries. Audited as settings.oauth_clients_update.
+         * Replace the trusted-client list and set open registration (platform admins)
+         * @description 422 invalid_client_id (details.index) when an entry isn't an https URL with a path (Client ID Metadata Document). At most 50 entries. openRegistration, when sent, turns open client registration on or off (a platform token can't; session only). Audited as settings.oauth_clients_update.
          */
         put: operations["adminUpdateTrustedClients"];
         post?: never;
@@ -3252,7 +3278,7 @@ export interface components {
             oauth?: components["schemas"]["McpServerOAuth"] | null;
             /** @description Refuse calls an agent platform relays for a person who is not present (the token's person_present is false: scheduled or background work), for every capability without its own override (McpCapability.presentPerson). Default false. Calls not relayed for a person are never affected. Absent from servers before v0.3 (false) */
             requiresPresentPerson?: boolean;
-            /** @description Send the identity token (decision 45). true (the default) keeps decision 7: every forwarded call carries the signed identity JWT (Authorization: Bearer, or MCP-Gateway-Identity when the server has a static Authorization header or is in oauth mode). false: the JWT is not sent to this server at all (no header), recommended for servers run outside the company such as GitHub's hosted MCP server, so names, emails and teams are not sent to a third party. Absent from servers before Phase 7 (true) */
+            /** @description Send the identity token (decision 45). true (the default) keeps decision 7: every forwarded call carries the signed identity JWT (Authorization: Bearer, or MCP-Gateway-Identity when the server has a static Authorization header or is in oauth mode). false: the JWT is not sent to this server at all (no header), recommended for servers run outside the company such as GitHub's hosted MCP server, so names, emails and teams are not sent to a third party. Absent from servers before Phase 7 (true). New servers with authMode none on a public host default to false (decision 64); servers saved earlier keep their value */
             sendIdentity?: boolean;
             /** @description The MCP protocol version the portal last negotiated with the upstream server (set by refresh, health checks and test); read-only. Null until the first successful exchange. */
             protocol?: components["schemas"]["McpServerProtocol"] | null;
@@ -3296,11 +3322,8 @@ export interface components {
             /** @description Default: static_header when authHeaderName is sent, else none. oauth needs oauth */
             authMode?: components["schemas"]["McpServerAuthMode"];
             oauth?: components["schemas"]["McpServerOAuthInput"];
-            /**
-             * @description Send the signed identity token with forwarded calls (McpServer.sendIdentity)
-             * @default true
-             */
-            sendIdentity: boolean;
+            /** @description Send the signed identity token with forwarded calls (McpServer.sendIdentity). Omit for the default (decision 64) true, except authMode none on a public host (or one that can't be resolved), where it is false; POST .../mcp-servers/identity-default tells which. An explicit value is always kept */
+            sendIdentity?: boolean;
         };
         McpServerUpdate: {
             name?: string;
@@ -3952,6 +3975,8 @@ export interface components {
             errorClass?: string;
             /** @description The auth provider the capability required at the time of the call (absent when none) */
             providerSlug?: string;
+            /** @description Whether the signed identity token (name, email, teams) was attached to the request to the server (decision 64). true: sent. false: not sent (the server's Send identity token switch was off). null: the call was not forwarded (denied, needs authorization, rate limited) or was recorded before this field existed */
+            identitySent?: boolean | null;
             /** Format: int32 */
             latencyMs: number;
             /** Format: int64 */
@@ -4026,6 +4051,8 @@ export interface components {
             redirectHost: string;
             /** @description The caller already allowed this client for this gateway */
             remembered: boolean;
+            /** @description A trusted client asks for the first time with a loopback redirect, so the page is a short confirmation instead of the usual consent screen (the answer is still allow or deny) */
+            notice: boolean;
         };
         OAuthConsentDecision: {
             /** @description The authorization request's query string, as the consent page received it */
@@ -4042,6 +4069,11 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             lastUsedAt?: string | null;
+            /**
+             * Format: date-time
+             * @description When the app has to sign in again however often it is used (OAUTH_REFRESH_ABSOLUTE_TTL after the person last signed it in); null when the portal sets no limit. Past it, the app is shown as expired.
+             */
+            expiresAt?: string | null;
         };
         TrustedClient: {
             /** @example https://claude.ai/oauth/claude-code-client-metadata */
@@ -4051,12 +4083,16 @@ export interface components {
         };
         TrustedClients: {
             clients: components["schemas"]["TrustedClient"][];
+            /** @description Whether POST /oauth/register accepts registrations (and the authorization server metadata lists registration_endpoint). On by default. Apps already registered keep working when it is off. */
+            openRegistration: boolean;
             revision: components["schemas"]["Revision"];
             /** Format: date-time */
             updatedAt: string;
         };
         TrustedClientsUpdate: {
             clients: components["schemas"]["TrustedClient"][];
+            /** @description Turn open client registration on or off; omitted keeps it as it is */
+            openRegistration?: boolean;
         };
         /**
          * @description The team role used for capabilities' minimum roles (decision 22)
@@ -4645,6 +4681,15 @@ export interface components {
         OAuthSetupStart: {
             /** @description A path on this site (default /teams/{team}/servers/{serverId}?setup=connected) */
             returnTo?: string;
+        };
+        IdentityDefault: {
+            /**
+             * @description public_host: a public address that no internal allowlist entry names. internal_host: named by an allowlist entry, or a private address. unresolved_host: the name could not be resolved in time; treated as public, because nothing shows it is internal
+             * @enum {string}
+             */
+            basis: "public_host" | "internal_host" | "unresolved_host";
+            /** @description The default of Send identity token for a server with no authentication at this URL. false for public_host and unresolved_host, true for internal_host */
+            sendIdentity: boolean;
         };
         DetectAuthRequest: {
             /** @description The MCP endpoint, checked like a server URL */
@@ -5859,6 +5904,8 @@ export interface components {
         /** @description MCP server ID */
         CallServerParam: string;
         CallOutcomeParam: components["schemas"]["McpCallOutcome"];
+        /** @description true: only calls where the identity token was sent to the server. false: only calls where it was not sent (the server's Send identity token switch was off). Calls that were not forwarded, and calls recorded before this field existed, have no value and match neither. */
+        CallIdentitySentParam: boolean;
         /** @description Only calls made by this person (any credential) */
         CallUserParam: string;
         OAuthGrantIdParam: string;
@@ -6727,6 +6774,41 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["DetectAuthResult"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            422: components["responses"]["ErrorReply"];
+            429: components["responses"]["ErrorReply"];
+        };
+    };
+    getTeamMcpServerIdentityDefault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DetectAuthRequest"];
+            };
+        };
+        responses: {
+            /** @description The default and why */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["IdentityDefault"];
                     };
                 };
             };
@@ -8116,6 +8198,8 @@ export interface operations {
                 /** @description MCP server ID */
                 server?: components["parameters"]["CallServerParam"];
                 outcome?: components["parameters"]["CallOutcomeParam"];
+                /** @description true: only calls where the identity token was sent to the server. false: only calls where it was not sent (the server's Send identity token switch was off). Calls that were not forwarded, and calls recorded before this field existed, have no value and match neither. */
+                identitySent?: components["parameters"]["CallIdentitySentParam"];
                 /** @description Only calls made by this person (any credential) */
                 user?: components["parameters"]["CallUserParam"];
                 /** @description Only calls made by this service account */
@@ -8457,6 +8541,8 @@ export interface operations {
                 /** @description MCP server ID */
                 server?: components["parameters"]["CallServerParam"];
                 outcome?: components["parameters"]["CallOutcomeParam"];
+                /** @description true: only calls where the identity token was sent to the server. false: only calls where it was not sent (the server's Send identity token switch was off). Calls that were not forwarded, and calls recorded before this field existed, have no value and match neither. */
+                identitySent?: components["parameters"]["CallIdentitySentParam"];
                 /** @description Only calls made by this person (any credential) */
                 user?: components["parameters"]["CallUserParam"];
                 /** @description Only calls made by this service account */
@@ -8757,7 +8843,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Trusted clients */
+            /** @description OAuth client settings */
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];

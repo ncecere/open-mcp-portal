@@ -6,7 +6,7 @@ queue or object storage.
 
 | Path | What |
 |---|---|
-| [`Dockerfile`](../Dockerfile) | Image: UI built with `npm ci`, Go built with `-trimpath` and version ldflags, distroless `nonroot` runtime. Default target is the portal; `--target fakemcp` is the demo's fake MCP server. |
+| [`Dockerfile`](../Dockerfile) | Image: UI built with `npm ci`, Go built with `-trimpath` and version ldflags, distroless `nonroot` runtime; the base images are pinned by digest (tag kept), and Dependabot moves the digests. Default target is the portal; `--target fakemcp` is the demo's fake MCP server. |
 | [`compose.demo.yaml`](../compose.demo.yaml) | Local demo: gateway, Postgres and the fake MCP server, with development sign-in. |
 | [`deploy/kubernetes/base`](../deploy/kubernetes/base) | Kustomize base: Deployment (+ migrate init container), Service, PodDisruptionBudget, NetworkPolicies, ServiceAccount and a generated ConfigMap. |
 | [`deploy/kubernetes/overlays/example`](../deploy/kubernetes/overlays/example) | Example overlay: namespace, pinned image, settings, NGINX Ingress (or Gateway API `httproute.yaml`), narrowed NetworkPolicies. |
@@ -18,12 +18,12 @@ Released images are `ghcr.io/ncecere/open-mcp-portal:vX.Y.Z` (and `latest` for f
 (linux/amd64 and linux/arm64) with SBOM and provenance attestations, signed with cosign (keyless, GitHub Actions OIDC):
 
 ```sh
-docker pull ghcr.io/ncecere/open-mcp-portal:v0.2.1
-docker run --rm ghcr.io/ncecere/open-mcp-portal:v0.2.1 version     # open-mcp-portal 0.2.1 (<commit>)
+docker pull ghcr.io/ncecere/open-mcp-portal:v0.2.2
+docker run --rm ghcr.io/ncecere/open-mcp-portal:v0.2.2 version     # open-mcp-portal 0.2.2 (<commit>)
 
 # Pin the digest from the GitHub Release, and verify it first (cosign v3 or newer):
 cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:<digest> \
-  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.2.1 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.2.2 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
@@ -70,11 +70,13 @@ file named by `OMP_CONFIG_FILE`. Each secret can also be read from a file named 
 | `API_KEY_PEPPER_PREVIOUS` | while rotating (secret) | The old pepper: keys and tokens made with it keep working, and keys are re-digested on use. |
 | `METRICS_ADDR` | optional | Prometheus `/metrics` on its own listener, for example `:9090` (empty: off). See [Metrics](#metrics). |
 | `RETENTION_INTERVAL`, `RETENTION_BATCH_SIZE` | optional | How often old data is deleted (default 15m) and rows per transaction (1000). Periods are set in Admin › Retention. |
-| `OAUTH_MAX_REGISTERED_CLIENTS` | optional | Cap on live OAuth clients registered through the open `POST /oauth/register` (default `1000`; `0` = no cap; 0 to 1000000). Counts registrations used in the last 30 days; over it, registration answers `503 temporarily_unavailable` until one expires. Apps that identify themselves with a metadata document aren't counted. |
+| `OAUTH_MAX_REGISTERED_CLIENTS` | optional | Cap on live OAuth clients registered through the open `POST /oauth/register` (default `1000`; `0` = no cap; 0 to 1000000). Counts registrations used in the last 30 days; over it, registration answers `503 temporarily_unavailable` until one expires. Apps that identify themselves with a metadata document aren't counted. An admin can also turn open registration off (Admin › Trusted clients). |
+| `OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS` | optional | How many registrations that have not received tokens yet one source address can hold (default `20`; `0` = no cap). The answer past it is `429 slow_down`. Registrations that sign in stop counting; unused ones leave after 24 hours. Behind an ingress, set `TRUSTED_PROXIES`, or every caller shares one address. |
+| `OAUTH_REFRESH_ABSOLUTE_TTL` | optional | How long after a person last signed an app in its refresh tokens stop working, however often they are used (default `180d`; `0` turns it off; `180d`, or a duration such as `4320h`, 1 hour to 10 years). Past it the app signs in again. Headless agents should use service accounts or API keys. |
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID` | yes | The only production sign-in method. The redirect URI to register is `${APP_URL}/auth/callback`. |
 | `OIDC_CLIENT_SECRET` | yes (secret) | |
 | `BOOTSTRAP_ADMIN_SUBJECT` | first install | The OIDC `sub` made platform admin on first sign-in. It takes effect once. |
-| `TRUSTED_PROXIES` | recommended | Ingress controller CIDRs allowed to set `X-Forwarded-For`, used for logging and sign-in rate limits. |
+| `TRUSTED_PROXIES` | recommended behind an ingress | Ingress controller CIDRs allowed to set `X-Forwarded-For`, used for logging, audit addresses and per-address rate limits. Left empty, the header is ignored (safe), but every request then appears to come from the ingress. See [Behind a proxy](#behind-a-proxy-trusted_proxies). |
 | `UPSTREAM_ALLOWED_NETWORKS` | optional | Internal networks and hosts MCP servers may use, besides public addresses. See [Internal MCP servers](#internal-mcp-servers). |
 | `SMTP_HOST`, `SMTP_FROM`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_TLS` | optional | Notification email; off without `SMTP_HOST`. See [Notifications and automation tokens](#notifications-and-automation-tokens). `SMTP_PASSWORD` is a secret (`SMTP_PASSWORD_FILE` works). |
 | `NOTIFICATION_INTERVAL` | optional | The notification dispatcher's tick (default `15s`, 5s to 10m). |
@@ -175,13 +177,13 @@ pins it), `SHUTDOWN_DELAY=10s`, `SHUTDOWN_TIMEOUT=125s`, and placeholders for `A
 
 ### Image
 
-The base references `ghcr.io/ncecere/open-mcp-portal` and sets its tag to `v0.2.1` through a Kustomize `images:` entry.
+The base references `ghcr.io/ncecere/open-mcp-portal` and sets its tag to `v0.2.2` through a Kustomize `images:` entry.
 A tag can move, so pin the digest of the release you verified in your overlay (the digest wins over the tag):
 
 ```yaml
 images:
   - name: ghcr.io/ncecere/open-mcp-portal
-    newTag: v0.2.1
+    newTag: v0.2.2
     digest: sha256:<digest from the GitHub Release>
 ```
 
@@ -240,7 +242,26 @@ images:
   response (at most 1 MiB); a streamed call relays at most 64 progress events and 4 MiB.
 - **No sticky sessions.** `/mcp/{slug}` is stateless: no MCP session lives in a pod, and browser sessions and OIDC login
   state are in PostgreSQL. Any replica can serve any request.
-- Set `TRUSTED_PROXIES` to the controller's pod network.
+- Set `TRUSTED_PROXIES` to the controller's pod network ([why](#behind-a-proxy-trusted_proxies)).
+
+### Behind a proxy (`TRUSTED_PROXIES`)
+
+The portal serves plain http and expects TLS to end at a proxy, so `APP_URL` is `https://` and every request arrives from
+the proxy. The portal believes `X-Forwarded-For` only from peers inside `TRUSTED_PROXIES`. With it empty the header is
+ignored: that is safe (nobody can spoof an address), but per-address rate limits (sign-in, client registration, failed
+tokens), audit entries and access logs all name the proxy, so one noisy caller can use up everyone's allowance.
+
+- **A warning tells you.** With `TRUSTED_PROXIES` empty and a non-loopback `APP_URL`, a request that carries
+  `X-Forwarded-For` or `Forwarded` makes the portal log `requests carry X-Forwarded-For (or Forwarded) but
+  TRUSTED_PROXIES is empty…` at WARN level: once for the first such request, then at most once a minute. Nothing about
+  the request changes. Setting `TRUSTED_PROXIES` (to the proxy's network, such as `10.0.0.0/8`) stops it. The warning is
+  not given when `TRUSTED_PROXIES` is set, even for a request from outside it.
+- **`open-mcp-portal doctor`** prints an info line (`configuration / trusted proxies`) when `APP_URL` is https and
+  `TRUSTED_PROXIES` is empty. It cannot see traffic, so ignore it when nothing sits in front of the portal.
+- **Sign-in cookie.** On https the sign-in state cookie is `__Host-omp_oidc_state` (host-only, `Secure`, `Path=/`), like
+  the session cookie `__Host-omp_session`; over the development http origin the names have no prefix. For one release
+  (v0.2.2) the old name `omp_oidc_state` is still accepted, so a person who started signing in just before an upgrade is
+  not sent back to the start.
 
 ### Health checks
 
@@ -356,6 +377,15 @@ also checks their checksums). Other settings: `SMOKE_CLUSTER` (name, must start 
    keep serving during the rollout (`maxUnavailable: 0`), so a release's migrations must work with the previous release's
    code. Outside Kubernetes, run `migrate` with the new image first, then restart `serve`.
 3. To roll back, pin the previous digest. Migrations are never rolled back automatically.
+
+**v0.2.2 (migration `00018`, expand only).** Every OAuth app (Claude Code, VS Code, pi, ...) has to sign in again about
+every **180 days** from now: grants that exist at the upgrade get one whole window from the migration, however old they
+are, so nobody is signed out by the upgrade itself. Set `OAUTH_REFRESH_ABSOLUTE_TTL` to another value, or `0` for no
+limit, before upgrading if that doesn't suit you. Clients that refresh twice at once now get the same new tokens
+instead of two sets. A trusted client (Claude Code) shows a one-time notice the first time a person signs it in to a
+gateway from a computer; people who already connected it are not asked. Registrations that never received tokens
+disappear after 24 hours, and one address can hold 20 of them. An anonymous request to `/oauth/authorize` is sent to
+sign in before the client is looked at, so a bad client is reported after sign-in.
 
 ## Backups
 

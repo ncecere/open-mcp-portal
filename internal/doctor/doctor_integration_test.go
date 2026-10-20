@@ -71,6 +71,10 @@ func TestDoctorHealthyInstall(t *testing.T) {
 			t.Errorf("keys %s = %+v", name, c)
 		}
 	}
+	if c, ok := find(rep, "oauth", "registration"); !ok || c.Status != doctor.Info ||
+		!strings.Contains(c.Detail, "open client registration is on; 0 registered client(s) live, cap 1000 (OAUTH_MAX_REGISTERED_CLIENTS)") {
+		t.Errorf("oauth registration = %+v", c)
+	}
 	var buf bytes.Buffer
 	if err := rep.WriteText(&buf); err != nil || !strings.Contains(buf.String(), "all checks passed") {
 		t.Errorf("text = %s %v", buf.String(), err)

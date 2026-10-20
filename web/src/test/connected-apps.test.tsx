@@ -3,7 +3,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
-import { oauthGrant, registeredClient, team, user } from "./fixtures";
+import { oauthClient, oauthGrant, registeredClient, team, user } from "./fixtures";
 import { type Handler, mockApi, renderApp, shellRoutes } from "./harness";
 
 const grants = [
@@ -29,6 +29,21 @@ describe("Account › Connected apps", () => {
     expect(unverified).toHaveTextContent("Not used yet");
     await waitFor(() => expect(document.title).toBe("Connected apps · Open MCP Portal"));
     expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("says when each app's sign-in expires, and that it already has", async () => {
+    const old = oauthGrant({ id: "g3", client: registeredClient(), expiresAt: "2020-01-01T00:00:00Z" });
+    mockApi({ ...shellRoutes("none", "member"), "GET /v1/me/oauth-grants": () => [oauthGrant({ expiresAt: "2099-04-08T10:00:00Z" }), oauthGrant({ id: "g2", client: oauthClient({ id: "https://cursor.com/oauth/client.json", name: "Cursor", host: "cursor.com" }), expiresAt: null }), old] });
+    renderApp("/settings/connected-apps");
+    const table = await screen.findByRole("table", { name: "Your connected apps" });
+    expect(within(table).getByRole("columnheader", { name: /Sign-in expires/ })).toBeInTheDocument();
+    const limited = (await within(table).findByText("Claude Code")).closest("tr")!;
+    expect(limited.querySelector("time[datetime='2099-04-08T10:00:00Z']")).not.toBeNull();
+    expect(within(limited).queryByText("Expired")).toBeNull();
+    expect(within(table).getByText("No limit")).toBeInTheDocument();
+    // Only the one past its date says so.
+    expect(within(table).getAllByText("Expired")).toHaveLength(1);
+    expect(within(within(table).getByText("Handy MCP Helper").closest("tr")!).getByText("Expired")).toBeInTheDocument();
   });
 
   it("disconnects an app only after confirming", async () => {

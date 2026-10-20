@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const insertMCPCall = `-- name: InsertMCPCall :one
@@ -18,14 +19,14 @@ INSERT INTO mcp_calls (
     request_id, method, exposed_name, gateway_id, gateway_slug, gateway_name, gateway_team_id,
     server_id, server_slug, server_name, server_team_id, capability_id, principal_kind, user_id, api_key_id,
     key_name, service_account_id, service_account_name, service_account_team_id, oauth_grant_id, oauth_client_name,
-    oauth_client_kind, client_name, outcome, error_class, latency_ms, request_bytes, response_bytes, provider_slug,
+    oauth_client_kind, client_name, outcome, error_class, latency_ms, request_bytes, response_bytes, provider_slug, identity_sent,
     agent_id, agent_name, via_platform_id, via_platform_name, person_present
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7,
     $8, $9, $10, $11, $12, $13, $14, $15,
     $16, $17, $18, $19, $20, $21,
-    $22, $23, $24, $25, $26, $27, $28, $29,
-    $30, $31, $32, $33, $34
+    $22, $23, $24, $25, $26, $27, $28, $29, $30,
+    $31, $32, $33, $34, $35
 )
 RETURNING id, occurred_at
 `
@@ -60,6 +61,7 @@ type InsertMCPCallParams struct {
 	RequestBytes         int64
 	ResponseBytes        int64
 	ProviderSlug         *string
+	IdentitySent         *bool
 	AgentID              *string
 	AgentName            *string
 	ViaPlatformID        uuid.NullUUID
@@ -104,6 +106,7 @@ func (q *Queries) InsertMCPCall(ctx context.Context, arg InsertMCPCallParams) (I
 		arg.RequestBytes,
 		arg.ResponseBytes,
 		arg.ProviderSlug,
+		arg.IdentitySent,
 		arg.AgentID,
 		arg.AgentName,
 		arg.ViaPlatformID,
@@ -118,7 +121,7 @@ func (q *Queries) InsertMCPCall(ctx context.Context, arg InsertMCPCallParams) (I
 const listMCPCalls = `-- name: ListMCPCalls :many
 SELECT c.id, c.occurred_at, c.request_id, c.method, c.exposed_name, c.gateway_id, c.server_id,
        c.principal_kind, c.user_id, c.client_name, c.outcome, c.error_class, c.latency_ms,
-       c.request_bytes, c.response_bytes, c.service_account_id, c.oauth_client_name, c.provider_slug,
+       c.request_bytes, c.response_bytes, c.service_account_id, c.oauth_client_name, c.provider_slug, c.identity_sent,
        c.agent_id, c.agent_name, c.via_platform_id, c.via_platform_name, c.person_present,
        (g.id IS NOT NULL)::bool AS gateway_exists,
        COALESCE(g.slug, c.gateway_slug)::text AS gateway_slug, COALESCE(g.name, c.gateway_name)::text AS gateway_name,
@@ -152,12 +155,13 @@ WHERE ($1::uuid IS NULL
   AND ($4::uuid IS NULL OR c.user_id = $4::uuid)
   AND ($5::uuid IS NULL OR c.service_account_id = $5::uuid)
   AND ($6::text IS NULL OR c.outcome = $6::text)
-  AND ($7::timestamptz IS NULL OR c.occurred_at >= $7::timestamptz)
-  AND ($8::timestamptz IS NULL OR c.occurred_at < $8::timestamptz)
-  AND ($9::bigint IS NULL OR c.id < $9::bigint)
-  AND ($10::bigint IS NULL OR c.id = $10::bigint)
+  AND ($7::bool IS NULL OR c.identity_sent = $7::bool)
+  AND ($8::timestamptz IS NULL OR c.occurred_at >= $8::timestamptz)
+  AND ($9::timestamptz IS NULL OR c.occurred_at < $9::timestamptz)
+  AND ($10::bigint IS NULL OR c.id < $10::bigint)
+  AND ($11::bigint IS NULL OR c.id = $11::bigint)
 ORDER BY c.id DESC
-LIMIT $11
+LIMIT $12
 `
 
 type ListMCPCallsParams struct {
@@ -167,6 +171,7 @@ type ListMCPCallsParams struct {
 	UserID           uuid.NullUUID
 	ServiceAccountID uuid.NullUUID
 	Outcome          *string
+	IdentitySent     pgtype.Bool
 	OccurredFrom     *time.Time
 	OccurredTo       *time.Time
 	BeforeID         *int64
@@ -193,6 +198,7 @@ type ListMCPCallsRow struct {
 	ServiceAccountID       uuid.NullUUID
 	OauthClientName        *string
 	ProviderSlug           *string
+	IdentitySent           *bool
 	AgentID                *string
 	AgentName              *string
 	ViaPlatformID          uuid.NullUUID
@@ -231,6 +237,7 @@ func (q *Queries) ListMCPCalls(ctx context.Context, arg ListMCPCallsParams) ([]L
 		arg.UserID,
 		arg.ServiceAccountID,
 		arg.Outcome,
+		arg.IdentitySent,
 		arg.OccurredFrom,
 		arg.OccurredTo,
 		arg.BeforeID,
@@ -263,6 +270,7 @@ func (q *Queries) ListMCPCalls(ctx context.Context, arg ListMCPCallsParams) ([]L
 			&i.ServiceAccountID,
 			&i.OauthClientName,
 			&i.ProviderSlug,
+			&i.IdentitySent,
 			&i.AgentID,
 			&i.AgentName,
 			&i.ViaPlatformID,

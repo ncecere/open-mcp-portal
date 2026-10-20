@@ -21,9 +21,14 @@ import (
 // detectsPerMinute bounds detect-auth per person.
 const detectsPerMinute = 10
 
+// identityDefaultsPerMinute bounds the identity-default lookup per person
+// (the add form asks as the URL is typed).
+const identityDefaultsPerMinute = 30
+
 func (a *api) upstreamOAuthRoutes() []route {
 	return []route{
 		{"POST", "/v1/teams/{team}/mcp-servers/detect-auth", a.session(a.detectTeamMcpServerAuth)},
+		{"POST", "/v1/teams/{team}/mcp-servers/identity-default", a.session(a.getTeamMcpServerIdentityDefault)},
 		{"POST", "/v1/teams/{team}/mcp-servers/{serverId}/oauth/authorize-setup", a.session(a.authorizeTeamMcpServerSetup)},
 		{"GET", registry.CIMDPath, http.HandlerFunc(a.upstreamClientMetadata)},
 	}
@@ -62,6 +67,22 @@ func (a *api) detectTeamMcpServerAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, toAPIDetection(d))
+}
+
+func (a *api) getTeamMcpServerIdentityDefault(w http.ResponseWriter, r *http.Request) {
+	// Session only (no token scope): the limit is per person.
+	if a.slowDown(w, r, "identity-default:"+a.actor(r).UserID.String(), identityDefaultsPerMinute) {
+		return
+	}
+	var in apitypes.DetectAuthRequest
+	if !httpx.Decode(w, r, &in) {
+		return
+	}
+	d, err := a.Registry.IdentityDefault(r.Context(), a.actor(r), r.PathValue("team"), in.Url)
+	if failed(w, r, err) {
+		return
+	}
+	httpx.JSON(w, http.StatusOK, apitypes.IdentityDefault{Basis: apitypes.IdentityDefaultBasis(d.Basis), SendIdentity: d.SendIdentity})
 }
 
 func (a *api) authorizeTeamMcpServerSetup(w http.ResponseWriter, r *http.Request) {

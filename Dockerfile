@@ -8,8 +8,13 @@
 # Multi-arch build: the web UI and the Go binary are built on the build
 # platform and cross-compiled for the target (no emulation for the slow
 # steps). The UI is embedded in the binary (web/embed.go).
+#
+# Every base image is pinned by the digest of its multi-arch index, with the
+# tag kept for people to read. Dependabot's docker ecosystem (.github/
+# dependabot.yml) opens one pull request a week that moves the digests; to
+# resolve one by hand: docker buildx imagetools inspect <image:tag>.
 
-FROM --platform=$BUILDPLATFORM node:22-alpine AS web
+FROM --platform=$BUILDPLATFORM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --ignore-scripts
@@ -18,7 +23,7 @@ COPY web/ ./
 COPY api/ /api/
 RUN npm run build && test -f dist/index.html
 
-FROM --platform=$BUILDPLATFORM golang:1.26 AS gobase
+FROM --platform=$BUILDPLATFORM golang:1.26@sha256:5c3f3f28a273c9b61698b2d34f18375929790ab1f1d3835d032d21e2b31eae0c AS gobase
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
@@ -42,7 +47,7 @@ FROM gobase AS build-fakemcp
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     go build -trimpath -ldflags "-s -w" -o /out/fakemcp ./cmd/fakemcp
 
-FROM gcr.io/distroless/static-debian12:nonroot AS fakemcp
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab AS fakemcp
 COPY --from=build-fakemcp /out/fakemcp /fakemcp
 USER 65532:65532
 ENTRYPOINT ["/fakemcp"]
@@ -51,7 +56,7 @@ ENTRYPOINT ["/fakemcp"]
 # runs as a non-root user (65532) and works with a read-only root
 # filesystem. There is no HEALTHCHECK (no shell or curl in the image):
 # Kubernetes probes /healthz (liveness, startup) and /readyz (readiness).
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 ARG VERSION=dev
 ARG COMMIT=unknown
 LABEL org.opencontainers.image.title="open-mcp-portal" \

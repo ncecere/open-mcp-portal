@@ -56,6 +56,7 @@ const actionLabels: Record<string, string> = {
   "api_key.revoke": "Revoked API key",
   "oauth.client_register": "Registered OAuth client",
   "oauth.consent": "Allowed connected app",
+  "oauth.grant_confirmed": "Confirmed connected app",
   "oauth.token_issue": "Issued tokens to an app",
   "oauth.revoke": "Disconnected app",
   "settings.oauth_clients_update": "Changed trusted clients",
@@ -135,6 +136,7 @@ export const oauthRevokeReasons: Record<string, string> = {
   admin: "by a platform admin",
   client: "by the app",
   refresh_reuse: "after a refresh token was reused",
+  expired_absolute: "after its sign-in expired",
 };
 
 /** "Added member" for team.member_add; unknown actions are spelled out ("foo.bar_baz" → "Foo: bar baz"). */

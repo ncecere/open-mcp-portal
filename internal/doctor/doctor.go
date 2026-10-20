@@ -19,6 +19,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/config"
 	"github.com/ncecere/open-mcp-portal/internal/keyrotation"
 	"github.com/ncecere/open-mcp-portal/internal/notify"
+	"github.com/ncecere/open-mcp-portal/internal/oauth"
 	"github.com/ncecere/open-mcp-portal/internal/secrets"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
@@ -133,6 +134,21 @@ func (r *runner) configuration() {
 	if len(other) == 0 {
 		r.add(Check{Group: "configuration", Name: r.opts.Mode, Status: OK, Detail: "valid for open-mcp-portal " + r.opts.Mode})
 	}
+	r.proxies()
+}
+
+// proxies hints at TRUSTED_PROXIES. The portal serves plain http and an https
+// APP_URL means TLS ends at a proxy, so with TRUSTED_PROXIES empty every
+// request appears to come from that proxy: rate limits and audit addresses
+// are the proxy's. Doctor cannot see traffic; the running portal logs a
+// warning once a minute when requests actually carry X-Forwarded-For.
+func (r *runner) proxies() {
+	if r.opts.Mode != "serve" || !r.cfg.SecureCookies() || len(r.cfg.TrustedProxies) > 0 {
+		return
+	}
+	r.add(Check{Group: "configuration", Name: "trusted proxies", Status: Info,
+		Detail: "APP_URL is https and TRUSTED_PROXIES is empty: behind an ingress, client addresses in rate limits, audit entries and logs are the ingress's",
+		Fix:    "Set TRUSTED_PROXIES to the ingress controller's network (docs/deploy.md), or ignore this when nothing sits in front of the portal"})
 }
 
 // postgres connects, reports the server version and the migration state.
@@ -160,6 +176,7 @@ func (r *runner) postgres(ctx context.Context) *pgxpool.Pool {
 	r.add(c)
 	if r.migrations(cctx, pool) {
 		r.keys(cctx, pool)
+		r.oauthRegistration(cctx, pool)
 	}
 	return pool
 }
@@ -243,6 +260,27 @@ func (r *runner) keys(ctx context.Context, pool *pgxpool.Pool) {
 		pc.Detail = "every usable key is on API_KEY_PEPPER"
 	}
 	r.add(pc)
+}
+
+// oauthRegistration says whether open client registration is on and how many
+// registered clients are live against the cap (info: nothing to fix).
+func (r *runner) oauthRegistration(ctx context.Context, pool *pgxpool.Pool) {
+	start := time.Now()
+	live, open, err := oauth.RegistrationStatus(ctx, dbgen.New(pool), time.Now())
+	c := Check{Group: "oauth", Name: "registration", Status: Info, DurationMs: millis(time.Since(start))}
+	capText := "no cap (OAUTH_MAX_REGISTERED_CLIENTS=0)"
+	if n := r.cfg.OAuthMaxRegisteredClients; n > 0 {
+		capText = fmt.Sprintf("cap %d (OAUTH_MAX_REGISTERED_CLIENTS)", n)
+	}
+	switch {
+	case err != nil:
+		c.Status, c.Detail = Fail, err.Error()
+	case !open:
+		c.Detail = fmt.Sprintf("open client registration is off (Admin, Trusted clients); %d registered client(s) still live", live)
+	default:
+		c.Detail = fmt.Sprintf("open client registration is on; %d registered client(s) live, %s", live, capText)
+	}
+	r.add(c)
 }
 
 // migrations reports the migration state; ok when the schema is current.

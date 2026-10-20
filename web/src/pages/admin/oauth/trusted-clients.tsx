@@ -3,7 +3,9 @@
  * the consent screen. People still sign in with the company account, and a
  * trusted client still gets only their access, one gateway at a time. Only
  * Client ID Metadata Document clients (an https client_id) can be trusted.
- * Platform admins edit the list as staged changes and save it at once
+ * The same page holds the switch "Allow open client registration" (threat
+ * model H-4): off, apps can no longer register themselves. Platform admins
+ * edit the list and the switch as staged changes and save them at once
  * (If-Match; edits survive a change made elsewhere) after a confirmation
  * naming what's added and removed; auditors read.
  */
@@ -19,6 +21,7 @@ import { Button } from "@/components/ui/button/button";
 import { AlertDialog } from "@/components/ui/dialog/dialog";
 import { Stack } from "@/components/ui/layout/layout";
 import { PageHeader } from "@/components/ui/page-header/page-header";
+import { Switch } from "@/components/ui/switch/switch";
 import { toast } from "@/components/ui/toast/toast";
 import { adminOnly, terms } from "@/lib/terms";
 import s from "../../shared.module.css";
@@ -63,26 +66,31 @@ function ClientsForm({ saved }: { saved: TrustedClients }) {
   const isAdmin = useIsPlatformAdmin();
   const [editing, setEditing] = useState<number | "new" | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const base = { clients: saved.clients.map(normalClient) };
-  const [form, setForm, revision] = useRevisionForm(base, saved.revision, { labels: { clients: "Trusted clients" } });
+  const base = { clients: saved.clients.map(normalClient), openRegistration: saved.openRegistration };
+  const [form, setForm, revision] = useRevisionForm(base, saved.revision, { labels: { clients: "Trusted clients", openRegistration: "Open client registration" } });
   const save = useMutation({
-    mutationFn: async () => unwrap(await api.PUT("/v1/admin/settings/oauth-clients", { params: { header: ifMatch(saved.revision) }, body: { clients: form.clients } })),
+    mutationFn: async () => unwrap(await api.PUT("/v1/admin/settings/oauth-clients", { params: { header: ifMatch(saved.revision) }, body: { clients: form.clients, openRegistration: form.openRegistration } })),
     // A failure shows on the save bar, which also handles a change made elsewhere (412).
     onSettled: () => setConfirming(false),
     onError: (err) => {
       if (isRevisionConflict(err)) void qc.invalidateQueries({ queryKey: trustedClientsKey });
     },
     onSuccess: (st) => {
-      setForm({ clients: st.clients.map(normalClient) });
+      setForm({ clients: st.clients.map(normalClient), openRegistration: st.openRegistration });
       qc.setQueryData(trustedClientsKey, st);
-      toast.success("Trusted clients saved", "New connections from them skip the consent screen.");
+      toast.success("Client settings saved", st.openRegistration ? "New connections from trusted clients skip the consent screen." : "Apps can no longer register themselves.");
     },
   });
   const clients = form.clients;
   const setClients = (next: TrustedClient[]) => {
     if (save.error) save.reset();
-    setForm({ clients: next });
+    setForm({ ...form, clients: next });
   };
+  const setOpen = (openRegistration: boolean) => {
+    if (save.error) save.reset();
+    setForm({ ...form, openRegistration });
+  };
+  const registrationChanged = form.openRegistration !== base.openRegistration;
   const ids = (list: TrustedClient[]) => new Set(list.map((c) => c.clientId));
   const added = clients.filter((c) => !ids(base.clients).has(c.clientId));
   const removed = base.clients.filter((c) => !ids(clients).has(c.clientId));
@@ -98,11 +106,11 @@ function ClientsForm({ saved }: { saved: TrustedClients }) {
         revision={revision}
         canEdit={isAdmin}
         readOnlyNote={adminOnly}
-        dirty={clientsKey(clients) !== clientsKey(base.clients)}
+        dirty={clientsKey(clients) !== clientsKey(base.clients) || registrationChanged}
         saving={save.isPending}
         error={save.error}
         onSave={() => setConfirming(true)}
-        onDiscard={() => setClients(base.clients)}
+        onDiscard={() => setForm(base)}
       >
         <SettingsSection
           title="Trusted clients"
@@ -115,6 +123,18 @@ function ClientsForm({ saved }: { saved: TrustedClients }) {
             onEdit={isAdmin ? (i) => setEditing(i) : undefined}
             onRemove={isAdmin ? (i) => setClients(clients.filter((_, j) => j !== i)) : undefined}
             problem={clientProblem(save.error)}
+          />
+        </SettingsSection>
+        <SettingsSection
+          title="Client registration"
+          description="Some apps, such as pi, register themselves when they first connect (Dynamic Client Registration). Anyone who can reach the portal can do that, so registered apps are always marked Unverified and ask for consent."
+        >
+          <Switch
+            label="Allow open client registration"
+            description="Turned off, the portal stops listing a registration address and refuses registrations. Apps that already registered keep working, and apps that use a metadata document, such as Claude Code, are not affected."
+            disabled={!isAdmin}
+            checked={form.openRegistration}
+            onCheckedChange={setOpen}
           />
         </SettingsSection>
       </SettingsPage>
@@ -132,6 +152,13 @@ function ClientsForm({ saved }: { saved: TrustedClients }) {
       >
         {added.length > 0 && <p>Trusted from now on: {added.map(nameOf).join(", ")}.</p>}
         {removed.length > 0 && <p>Asks for consent again: {removed.map(nameOf).join(", ")}.</p>}
+        {registrationChanged && (
+          <p>
+            {form.openRegistration
+              ? "Apps can register themselves again."
+              : "Apps can no longer register themselves. Ones that already registered keep working; an app that needs to register will be refused."}
+          </p>
+        )}
       </AlertDialog>
       {editing !== null && (
         <ClientDialog

@@ -899,6 +899,27 @@ func (e HealthStatus) Valid() bool {
 	}
 }
 
+// Defines values for IdentityDefaultBasis.
+const (
+	InternalHost   IdentityDefaultBasis = "internal_host"
+	PublicHost     IdentityDefaultBasis = "public_host"
+	UnresolvedHost IdentityDefaultBasis = "unresolved_host"
+)
+
+// Valid indicates whether the value is a known member of the IdentityDefaultBasis enum.
+func (e IdentityDefaultBasis) Valid() bool {
+	switch e {
+	case InternalHost:
+		return true
+	case PublicHost:
+		return true
+	case UnresolvedHost:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for InstanceInfoTheme.
 const (
 	Neutral InstanceInfoTheme = "neutral"
@@ -3525,6 +3546,18 @@ type Health struct {
 // HealthStatus defines model for Health.Status.
 type HealthStatus string
 
+// IdentityDefault defines model for IdentityDefault.
+type IdentityDefault struct {
+	// Basis public_host: a public address that no internal allowlist entry names. internal_host: named by an allowlist entry, or a private address. unresolved_host: the name could not be resolved in time; treated as public, because nothing shows it is internal
+	Basis IdentityDefaultBasis `json:"basis"`
+
+	// SendIdentity The default of Send identity token for a server with no authentication at this URL. false for public_host and unresolved_host, true for internal_host
+	SendIdentity bool `json:"sendIdentity"`
+}
+
+// IdentityDefaultBasis public_host: a public address that no internal allowlist entry names. internal_host: named by an allowlist entry, or a private address. unresolved_host: the name could not be resolved in time; treated as public, because nothing shows it is internal
+type IdentityDefaultBasis string
+
 // InstanceInfo How this deployment presents itself (INSTANCE_NAME, ORG_NAME, UI_THEME, UI_LOGO_URL, SUPPORT_URL).
 type InstanceInfo struct {
 	// LogoUrl https URL or same-origin path of the logo
@@ -3627,7 +3660,10 @@ type McpCall struct {
 	ExposedName *string `json:"exposedName,omitempty"`
 	Gateway     CallRef `json:"gateway"`
 	Id          int64   `json:"id"`
-	LatencyMs   int32   `json:"latencyMs"`
+
+	// IdentitySent Whether the signed identity token (name, email, teams) was attached to the request to the server (decision 64). true: sent. false: not sent (the server's Send identity token switch was off). null: the call was not forwarded (denied, needs authorization, rate limited) or was recorded before this field existed
+	IdentitySent *bool `json:"identitySent,omitempty"`
+	LatencyMs    int32 `json:"latencyMs"`
 
 	// Method tools/list, tools/call, prompts/list, prompts/get, resources/list, resources/templates/list or resources/read
 	//
@@ -3815,7 +3851,7 @@ type McpServer struct {
 	// Revision Increases on every change. Send it back in If-Match.
 	Revision Revision `json:"revision"`
 
-	// SendIdentity Send the identity token (decision 45). true (the default) keeps decision 7: every forwarded call carries the signed identity JWT (Authorization: Bearer, or MCP-Gateway-Identity when the server has a static Authorization header or is in oauth mode). false: the JWT is not sent to this server at all (no header), recommended for servers run outside the company such as GitHub's hosted MCP server, so names, emails and teams are not sent to a third party. Absent from servers before Phase 7 (true)
+	// SendIdentity Send the identity token (decision 45). true (the default) keeps decision 7: every forwarded call carries the signed identity JWT (Authorization: Bearer, or MCP-Gateway-Identity when the server has a static Authorization header or is in oauth mode). false: the JWT is not sent to this server at all (no header), recommended for servers run outside the company such as GitHub's hosted MCP server, so names, emails and teams are not sent to a third party. Absent from servers before Phase 7 (true). New servers with authMode none on a public host default to false (decision 64); servers saved earlier keep their value
 	SendIdentity *bool `json:"sendIdentity,omitempty"`
 
 	// Slug Immutable; prefixes the server's tool names in gateways (slug__tool)
@@ -3860,7 +3896,7 @@ type McpServerCreate struct {
 	// Requirement Absent or null; no user authorization
 	Requirement *McpServerRequirementInput `json:"requirement,omitempty"`
 
-	// SendIdentity Send the signed identity token with forwarded calls (McpServer.sendIdentity)
+	// SendIdentity Send the signed identity token with forwarded calls (McpServer.sendIdentity). Omit for the default (decision 64) true, except authMode none on a public host (or one that can't be resolved), where it is false; POST .../mcp-servers/identity-default tells which. An explicit value is always kept
 	SendIdentity *bool `json:"sendIdentity,omitempty"`
 
 	// Slug Unique across the platform, immutable
@@ -4587,6 +4623,9 @@ type OAuthConsent struct {
 	Client  OAuthClientInfo `json:"client"`
 	Gateway MyGateway       `json:"gateway"`
 
+	// Notice A trusted client asks for the first time with a loopback redirect, so the page is a short confirmation instead of the usual consent screen (the answer is still allow or deny)
+	Notice bool `json:"notice"`
+
 	// RedirectHost Where the browser goes back to, such as 127.0.0.1:53211
 	RedirectHost string `json:"redirectHost"`
 	RedirectUri  string `json:"redirectUri"`
@@ -4608,8 +4647,11 @@ type OAuthConsentDecisionDecision string
 
 // OAuthGrant defines model for OAuthGrant.
 type OAuthGrant struct {
-	Client     OAuthClientInfo    `json:"client"`
-	CreatedAt  time.Time          `json:"createdAt"`
+	Client    OAuthClientInfo `json:"client"`
+	CreatedAt time.Time       `json:"createdAt"`
+
+	// ExpiresAt When the app has to sign in again however often it is used (OAUTH_REFRESH_ABSOLUTE_TTL after the person last signed it in); null when the portal sets no limit. Past it, the app is shown as expired.
+	ExpiresAt  *time.Time         `json:"expiresAt,omitempty"`
 	Gateway    CallRef            `json:"gateway"`
 	Id         openapi_types.UUID `json:"id"`
 	LastUsedAt *time.Time         `json:"lastUsedAt,omitempty"`
@@ -5287,6 +5329,9 @@ type TrustedClient struct {
 type TrustedClients struct {
 	Clients []TrustedClient `json:"clients"`
 
+	// OpenRegistration Whether POST /oauth/register accepts registrations (and the authorization server metadata lists registration_endpoint). On by default. Apps already registered keep working when it is off.
+	OpenRegistration bool `json:"openRegistration"`
+
 	// Revision Increases on every change. Send it back in If-Match.
 	Revision  Revision  `json:"revision"`
 	UpdatedAt time.Time `json:"updatedAt"`
@@ -5295,6 +5340,9 @@ type TrustedClients struct {
 // TrustedClientsUpdate defines model for TrustedClientsUpdate.
 type TrustedClientsUpdate struct {
 	Clients []TrustedClient `json:"clients"`
+
+	// OpenRegistration Turn open client registration on or off; omitted keeps it as it is
+	OpenRegistration *bool `json:"openRegistration,omitempty"`
 }
 
 // UpstreamSigninLapsedData defines model for UpstreamSigninLapsedData.
@@ -5455,6 +5503,9 @@ type CallGatewayParam = openapi_types.UUID
 
 // CallIdParam defines model for CallIdParam.
 type CallIdParam = int64
+
+// CallIdentitySentParam defines model for CallIdentitySentParam.
+type CallIdentitySentParam = bool
 
 // CallOutcomeParam ok: answered. tool_error: the tool reported an error. denied: refused by policy (logged; the client saw not found, or for a service account calling a capability that requires an account, a clear refusal). upstream_error: unreachable, refused or malformed (also provider_unavailable: the provider's token endpoint failed). bad_request: the client's request was invalid. needs_authorization: not forwarded because the person must connect or reconnect an account; the client got a consent link (JSON-RPC -32042), or, for a call from an agent, a tool error without a link (errorClass needs_connection). rate_limited: not forwarded because a rate limit was exceeded (HTTP 429, JSON-RPC -32029; errorClass names the limit: person_per_minute, credential_per_minute, service_account_per_minute or gateway_per_minute).
 type CallOutcomeParam = McpCallOutcome
@@ -5673,6 +5724,9 @@ type AdminListCallsParams struct {
 	// Server MCP server ID
 	Server  *CallServerParam  `form:"server,omitempty" json:"server,omitempty"`
 	Outcome *CallOutcomeParam `form:"outcome,omitempty" json:"outcome,omitempty"`
+
+	// IdentitySent true: only calls where the identity token was sent to the server. false: only calls where it was not sent (the server's Send identity token switch was off). Calls that were not forwarded, and calls recorded before this field existed, have no value and match neither.
+	IdentitySent *CallIdentitySentParam `form:"identitySent,omitempty" json:"identitySent,omitempty"`
 
 	// User Only calls made by this person (any credential)
 	User *CallUserParam `form:"user,omitempty" json:"user,omitempty"`
@@ -5979,6 +6033,9 @@ type ListTeamCallsParams struct {
 	Server  *CallServerParam  `form:"server,omitempty" json:"server,omitempty"`
 	Outcome *CallOutcomeParam `form:"outcome,omitempty" json:"outcome,omitempty"`
 
+	// IdentitySent true: only calls where the identity token was sent to the server. false: only calls where it was not sent (the server's Send identity token switch was off). Calls that were not forwarded, and calls recorded before this field existed, have no value and match neither.
+	IdentitySent *CallIdentitySentParam `form:"identitySent,omitempty" json:"identitySent,omitempty"`
+
 	// User Only calls made by this person (any credential)
 	User *CallUserParam `form:"user,omitempty" json:"user,omitempty"`
 
@@ -6232,6 +6289,9 @@ type CreateTeamMcpServerJSONRequestBody = McpServerCreate
 
 // DetectTeamMcpServerAuthJSONRequestBody defines body for DetectTeamMcpServerAuth for application/json ContentType.
 type DetectTeamMcpServerAuthJSONRequestBody = DetectAuthRequest
+
+// GetTeamMcpServerIdentityDefaultJSONRequestBody defines body for GetTeamMcpServerIdentityDefault for application/json ContentType.
+type GetTeamMcpServerIdentityDefaultJSONRequestBody = DetectAuthRequest
 
 // UpdateTeamMcpServerJSONRequestBody defines body for UpdateTeamMcpServer for application/json ContentType.
 type UpdateTeamMcpServerJSONRequestBody = McpServerUpdate

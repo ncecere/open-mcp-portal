@@ -227,6 +227,7 @@ type McpCall struct {
 	KeyName              *string
 	OauthClientKind      *string
 	ProviderSlug         *string
+	IdentitySent         *bool
 	AgentID              *string
 	AgentName            *string
 	ViaPlatformID        uuid.NullUUID
@@ -425,14 +426,16 @@ type NotificationState struct {
 }
 
 type OauthClient struct {
-	ID           uuid.UUID
-	ClientID     string
-	ClientName   string
-	RedirectUris []string
-	ClientUri    *string
-	LogoUri      *string
-	CreatedAt    time.Time
-	LastUsedAt   time.Time
+	ID             uuid.UUID
+	ClientID       string
+	ClientName     string
+	RedirectUris   []string
+	ClientUri      *string
+	LogoUri        *string
+	CreatedAt      time.Time
+	LastUsedAt     time.Time
+	RegisteredFrom *string
+	AuthorizedAt   *time.Time
 }
 
 type OauthCode struct {
@@ -460,14 +463,16 @@ type OauthGrant struct {
 	LastUsedAt    *time.Time
 	RevokedAt     *time.Time
 	RevokedReason *string
+	AuthorizedAt  *time.Time
 }
 
 type OauthSetting struct {
-	ID             int16
-	TrustedClients json.RawMessage
-	Revision       int64
-	UpdatedBy      uuid.NullUUID
-	UpdatedAt      time.Time
+	ID               int16
+	TrustedClients   json.RawMessage
+	Revision         int64
+	UpdatedBy        uuid.NullUUID
+	UpdatedAt        time.Time
+	OpenRegistration bool
 }
 
 type OauthToken struct {

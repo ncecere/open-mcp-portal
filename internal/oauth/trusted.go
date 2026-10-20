@@ -37,11 +37,13 @@ type TrustedClient struct {
 	Label    string `json:"label,omitempty"`
 }
 
-// TrustedClients is the list and its revision.
+// TrustedClients is the OAuth client settings of the platform: the trusted
+// list, whether open client registration is on, and their revision.
 type TrustedClients struct {
-	Clients   []TrustedClient
-	Revision  int64
-	UpdatedAt time.Time
+	Clients          []TrustedClient
+	OpenRegistration bool
+	Revision         int64
+	UpdatedAt        time.Time
 }
 
 func decodeTrusted(raw []byte) []TrustedClient {
@@ -53,7 +55,7 @@ func decodeTrusted(raw []byte) []TrustedClient {
 }
 
 func trustedView(row dbgen.OauthSetting) TrustedClients {
-	return TrustedClients{Clients: decodeTrusted(row.TrustedClients), Revision: row.Revision, UpdatedAt: row.UpdatedAt}
+	return TrustedClients{Clients: decodeTrusted(row.TrustedClients), OpenRegistration: row.OpenRegistration, Revision: row.Revision, UpdatedAt: row.UpdatedAt}
 }
 
 // GetTrustedClients returns the list (platform admins and auditors).
@@ -104,10 +106,12 @@ func validateTrusted(in []TrustedClient) ([]TrustedClient, error) {
 	return out, nil
 }
 
-// UpdateTrustedClients replaces the list (platform admins), If-Match on its
-// revision. Audited as settings.oauth_clients_update with the lists before
-// and after.
-func (s *Service) UpdateTrustedClients(ctx context.Context, a authz.Actor, in []TrustedClient, expectedRevision int64) (TrustedClients, error) {
+// UpdateTrustedClients replaces the list and, when openRegistration is
+// given, sets the open-registration switch (platform admins; a platform
+// token can't: this route is session-only), If-Match on the revision.
+// Audited as settings.oauth_clients_update with the list and the switch
+// before and after.
+func (s *Service) UpdateTrustedClients(ctx context.Context, a authz.Actor, in []TrustedClient, openRegistration *bool, expectedRevision int64) (TrustedClients, error) {
 	if !a.IsPlatformAdmin() {
 		return TrustedClients{}, errAdminOnly
 	}
@@ -128,12 +132,17 @@ func (s *Service) UpdateTrustedClients(ctx context.Context, a authz.Actor, in []
 		if cur.Revision != expectedRevision {
 			return apperr.Stale()
 		}
-		if row, err = q.UpdateTrustedClients(ctx, dbgen.UpdateTrustedClientsParams{TrustedClients: raw,
+		open := cur.OpenRegistration
+		if openRegistration != nil {
+			open = *openRegistration
+		}
+		if row, err = q.UpdateOAuthClientSettings(ctx, dbgen.UpdateOAuthClientSettingsParams{TrustedClients: raw, OpenRegistration: open,
 			UpdatedBy: uuid.NullUUID{UUID: a.UserID, Valid: a.UserID != uuid.Nil}}); err != nil {
 			return err
 		}
 		e := a.Audit("settings.oauth_clients_update", "platform_settings", "oauth_clients")
-		e.Before, e.After = map[string]any{"clients": decodeTrusted(cur.TrustedClients)}, map[string]any{"clients": clients}
+		e.Before = map[string]any{"clients": decodeTrusted(cur.TrustedClients), "openRegistration": cur.OpenRegistration}
+		e.After = map[string]any{"clients": clients, "openRegistration": open}
 		return audit.Record(ctx, q, e)
 	})
 	if err != nil {

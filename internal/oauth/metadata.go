@@ -55,6 +55,9 @@ type metadataDocs struct {
 	// (the development allowance: DEV_AUTH on a loopback APP_URL).
 	devHTTP bool
 	now     func() time.Time
+	// allow is asked before every fetch that isn't answered from the cache
+	// (nil: always); it limits fetches per source address (source.go).
+	allow func(ctx context.Context) error
 	// log is where fetches are logged (nil: slog.Default()).
 	log   func() *slog.Logger
 	mu    sync.Mutex
@@ -123,6 +126,11 @@ func (d *metadataDocs) get(ctx context.Context, id string) (Client, error) {
 	}
 	if !validMetadataURL(id, d.devHTTP) {
 		return Client{}, docError("The client_id must be an https URL with a path, without a query or fragment.")
+	}
+	if d.allow != nil {
+		if err := d.allow(ctx); err != nil {
+			return Client{}, err
+		}
 	}
 	c, ttl, err := d.fetch(ctx, id)
 	if err != nil {

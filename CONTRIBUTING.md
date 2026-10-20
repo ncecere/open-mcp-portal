@@ -20,6 +20,44 @@ with a proposed implementation and acceptance criteria. Good places to start:
 
 Please comment on an issue before starting a large one, so the design is agreed first.
 
+## How issues are handled
+
+Open MCP Portal has one maintainer, so everything here is best effort.
+
+**Replies.** The goal is a first reply within about a week. It can be a question, a label or "not now", and it may take longer around a release. Security reports follow [`SECURITY.md`](SECURITY.md) (private report, reply within 5 business days), never an issue.
+
+**Labels**
+
+| Label | Meaning |
+|---|---|
+| `bug` | Something doesn't work as documented |
+| `enhancement` | A new feature or an improvement |
+| `compatibility` | A report on how an MCP client works with a gateway (use the compatibility template) |
+| `decision needed` | Waiting for an owner decision; the issue lists options and a recommendation |
+| `needs real-world testing` | Needs a person, account or real client that CI can't provide |
+| `help wanted` | Welcome from contributors; comment first |
+| `good first issue` | Small and self-contained |
+| `security` | Hardening or a security-relevant change. Vulnerabilities go to a private advisory |
+| `size: S`, `size: M`, `size: L` | A few days, a week or two, several weeks |
+| `area: …` | The part of the product: `registry`, `gateway`, `oauth`, `providers`, `web`, `auth`, `ops` |
+| `roadmap` | Planned work listed in [`docs/roadmap.md`](docs/roadmap.md) |
+
+**Milestones** name the release that should carry the work: `v0.2.x` for patch releases of the current minor (the milestone is named for what they hold, such as "v0.2.x: pilot follow-ups"), `v0.3`, `v0.4` and so on for minor releases, and `Later` for anything not scheduled. A milestone is a plan, not a promise.
+
+**Supported versions.** The latest minor release gets fixes, security or otherwise. Before 1.0, older minors are not supported: upgrade to the latest. This matches the table in [`SECURITY.md`](SECURITY.md).
+
+**Releases.** A patch release (`v0.2.2`) ships when a fix or a small improvement is ready. A minor release (`v0.3.0`) follows the [roadmap](docs/roadmap.md) and may include breaking changes, which its notes say how to handle. Every release has notes in [`docs/releases/`](docs/releases/) and a changelog entry.
+
+**How decisions are made.** A product choice is a numbered row in [`docs/decisions.md`](docs/decisions.md), and a row that changes an earlier one says so. An open question is an issue with the `decision needed` label, with options and a recommendation. A comment with your use case helps; the owner decides and the row records it.
+
+**Contributing a fix.** Open an issue first for anything beyond a small fix (see above). A good pull request:
+
+- is focused on one change, linked to its issue;
+- has tests: a bug fix comes with a test that fails without it;
+- updates the docs it changes (`docs/`, `SPEC.md`, `.env.example`) and adds a line under `## Unreleased` in [`CHANGELOG.md`](CHANGELOG.md);
+- commits regenerated code when it changes `api/openapi.yaml` or the SQL queries (`make generate`);
+- passes what CI runs: `make lint`, `make actionlint`, `make check-generated`, the Go tests against PostgreSQL, the web checks (`npm run typecheck`, `npm test`, `npm run build`, `check:styling`, `check:size`), `make k8s-validate` and the Docker builds. [Tests](#tests) lists the commands.
+
 ## Development setup
 
 Requires Go 1.26+, Node 22+, Docker and Python 3. `make generate` also needs [sqlc](https://sqlc.dev) (CI uses 1.31.1) on your `PATH` or in `~/go/bin`.
@@ -100,9 +138,12 @@ The product is **Open MCP Portal** (short form OMP, only after the full name has
 
 ## Releasing
 
-1. Write `docs/releases/vX.Y.Z.md`, turn the changelog's unreleased entry into `X.Y.Z - <date>`, and make `Version` in
-   `internal/buildinfo/buildinfo.go` the release version. The release workflow refuses a tag that doesn't match it, or one
-   without notes.
+1. Write `docs/releases/vX.Y.Z.md`, then run `scripts/bump-version.py X.Y.Z` (add `--check` to see what it would change
+   first). It sets the version in `internal/buildinfo/buildinfo.go`, `api/openapi.yaml`, `web/package.json` and its lock, the
+   Kustomize base and example overlay (the overlay's digest goes back to the all-zeros placeholder until the image exists),
+   `docs/deploy.md`, `README.md`, `SECURITY.md` and the issue-form placeholders, turns `## Unreleased` in the changelog into
+   `## [X.Y.Z] - <date>`, and lists the other mentions of the old version for you to judge (history and older release pages
+   stay). The release workflow refuses a tag that doesn't match `Version`, or one without notes.
 2. Push `main` and wait for CI to pass.
 3. Tag `vX.Y.Z` (or `vX.Y.Z-rc.1`, which becomes a pre-release with the base version's notes) and push the tag.
    `.github/workflows/image.yml` builds, scans, signs and publishes the image and creates the GitHub Release

@@ -70,6 +70,13 @@ type Config struct {
 	// OAuthMaxRegisteredClients caps the live clients registered with
 	// Dynamic Client Registration at /oauth/register (0: no cap).
 	OAuthMaxRegisteredClients int
+	// OAuthMaxUnusedClientsPerAddress caps the registrations one source
+	// address can hold that have received no tokens yet (0: no cap).
+	OAuthMaxUnusedClientsPerAddress int
+	// OAuthRefreshAbsoluteTTL is how long after the person last signed an
+	// app in its refresh tokens stop working, however often they are used
+	// (0: no limit).
+	OAuthRefreshAbsoluteTTL time.Duration
 
 	// HealthCheckInterval is how often enabled MCP servers are re-tested
 	// (0: never; one replica at a time).
@@ -160,18 +167,20 @@ func Defaults() Config {
 			GroupsClaim:          "groups",
 			RequireVerifiedEmail: true,
 		},
-		SessionTTL:                12 * time.Hour,
-		HealthCheckInterval:       5 * time.Minute,
-		NotificationInterval:      15 * time.Second,
-		SigningKeyPrepublish:      24 * time.Hour,
-		MetricsMaxObjects:         200,
-		RetentionInterval:         15 * time.Minute,
-		RetentionBatchSize:        1000,
-		OAuthMaxRegisteredClients: 1000,
-		RequestsPerMinute:         600,
-		LoginAttemptsPerMinute:    20,
-		ShutdownDelay:             5 * time.Second,
-		ShutdownTimeout:           60 * time.Second,
+		SessionTTL:                      12 * time.Hour,
+		HealthCheckInterval:             5 * time.Minute,
+		NotificationInterval:            15 * time.Second,
+		SigningKeyPrepublish:            24 * time.Hour,
+		MetricsMaxObjects:               200,
+		RetentionInterval:               15 * time.Minute,
+		RetentionBatchSize:              1000,
+		OAuthMaxRegisteredClients:       1000,
+		OAuthMaxUnusedClientsPerAddress: 20,
+		OAuthRefreshAbsoluteTTL:         180 * 24 * time.Hour,
+		RequestsPerMinute:               600,
+		LoginAttemptsPerMinute:          20,
+		ShutdownDelay:                   5 * time.Second,
+		ShutdownTimeout:                 60 * time.Second,
 	}
 }
 

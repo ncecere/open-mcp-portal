@@ -98,7 +98,7 @@ function fieldsFor(action: string): Fields | undefined {
     case "settings.network_update":
       return { entries: ["Allowed networks and hosts", networkEntries] };
     case "settings.oauth_clients_update":
-      return { clients: ["Trusted clients", trustedClients] };
+      return { clients: ["Trusted clients", trustedClients], openRegistration: ["Open client registration", onOff] };
     case "settings.limits_update":
     case "team.limits_update":
       return { items: ["Rate limits", limitItems] };
@@ -160,6 +160,7 @@ function fieldsFor(action: string): Fields | undefined {
     case "automation_token.revoke":
       return { kind: ["Kind", label(tokenKindWords)], scopes: ["Can"], expiresAt: ["Expires"], id: null };
     case "oauth.consent":
+    case "oauth.grant_confirmed":
     case "oauth.revoke":
     case "oauth.token_issue":
       return {

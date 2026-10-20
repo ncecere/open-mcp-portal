@@ -14,12 +14,38 @@ import (
 )
 
 const countLiveOAuthClients = `-- name: CountLiveOAuthClients :one
-SELECT count(*) FROM oauth_clients WHERE last_used_at > $1
+SELECT count(*) FROM oauth_clients
+WHERE last_used_at > $1 AND (authorized_at IS NOT NULL OR created_at > $2)
 `
 
-// Registered clients used since unused_since (the ones ResolveClient accepts).
-func (q *Queries) CountLiveOAuthClients(ctx context.Context, unusedSince time.Time) (int64, error) {
-	row := q.db.QueryRow(ctx, countLiveOAuthClients, unusedSince)
+type CountLiveOAuthClientsParams struct {
+	UnusedSince       time.Time
+	UnauthorizedSince time.Time
+}
+
+// Registered clients ResolveClient accepts: used since unused_since, and
+// authorized or registered after unauthorized_since.
+func (q *Queries) CountLiveOAuthClients(ctx context.Context, arg CountLiveOAuthClientsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveOAuthClients, arg.UnusedSince, arg.UnauthorizedSince)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPendingOAuthClientsFrom = `-- name: CountPendingOAuthClientsFrom :one
+SELECT count(*) FROM oauth_clients
+WHERE registered_from = $1 AND authorized_at IS NULL AND created_at > $2
+`
+
+type CountPendingOAuthClientsFromParams struct {
+	RegisteredFrom    *string
+	UnauthorizedSince time.Time
+}
+
+// Registrations from one address that have not received tokens yet and are
+// still live: the only kind a caller can create without a person.
+func (q *Queries) CountPendingOAuthClientsFrom(ctx context.Context, arg CountPendingOAuthClientsFromParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPendingOAuthClientsFrom, arg.RegisteredFrom, arg.UnauthorizedSince)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -71,16 +97,24 @@ func (q *Queries) DeleteOAuthToken(ctx context.Context, id uuid.UUID) error {
 }
 
 const deleteUnusedOAuthClients = `-- name: DeleteUnusedOAuthClients :exec
-DELETE FROM oauth_clients WHERE last_used_at <= $1
+DELETE FROM oauth_clients
+WHERE last_used_at <= $1 OR (authorized_at IS NULL AND created_at <= $2)
 `
 
-func (q *Queries) DeleteUnusedOAuthClients(ctx context.Context, unusedSince time.Time) error {
-	_, err := q.db.Exec(ctx, deleteUnusedOAuthClients, unusedSince)
+type DeleteUnusedOAuthClientsParams struct {
+	UnusedSince       time.Time
+	UnauthorizedSince time.Time
+}
+
+// Registrations unused since unused_since, and the ones that never received
+// tokens within the shorter life.
+func (q *Queries) DeleteUnusedOAuthClients(ctx context.Context, arg DeleteUnusedOAuthClientsParams) error {
+	_, err := q.db.Exec(ctx, deleteUnusedOAuthClients, arg.UnusedSince, arg.UnauthorizedSince)
 	return err
 }
 
 const getActiveOAuthGrant = `-- name: GetActiveOAuthGrant :one
-SELECT id, user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, created_at, last_used_at, revoked_at, revoked_reason FROM oauth_grants
+SELECT id, user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, created_at, last_used_at, revoked_at, revoked_reason, authorized_at FROM oauth_grants
 WHERE user_id = $1 AND client_id = $2 AND gateway_id = $3 AND revoked_at IS NULL
 `
 
@@ -107,22 +141,28 @@ func (q *Queries) GetActiveOAuthGrant(ctx context.Context, arg GetActiveOAuthGra
 		&i.LastUsedAt,
 		&i.RevokedAt,
 		&i.RevokedReason,
+		&i.AuthorizedAt,
 	)
 	return i, err
 }
 
 const getOAuthClient = `-- name: GetOAuthClient :one
-SELECT id, client_id, client_name, redirect_uris, client_uri, logo_uri, created_at, last_used_at FROM oauth_clients WHERE client_id = $1 AND last_used_at > $2
+SELECT id, client_id, client_name, redirect_uris, client_uri, logo_uri, created_at, last_used_at, registered_from, authorized_at FROM oauth_clients
+WHERE client_id = $1 AND last_used_at > $2
+  AND (authorized_at IS NOT NULL OR created_at > $3)
 `
 
 type GetOAuthClientParams struct {
-	ClientID    string
-	UnusedSince time.Time
+	ClientID          string
+	UnusedSince       time.Time
+	UnauthorizedSince time.Time
 }
 
-// A registered client used since unused_since.
+// A registered client used since unused_since, and one that has received
+// tokens or was registered after unauthorized_since (a registration that
+// never completed an authorization lives for 24 hours).
 func (q *Queries) GetOAuthClient(ctx context.Context, arg GetOAuthClientParams) (OauthClient, error) {
-	row := q.db.QueryRow(ctx, getOAuthClient, arg.ClientID, arg.UnusedSince)
+	row := q.db.QueryRow(ctx, getOAuthClient, arg.ClientID, arg.UnusedSince, arg.UnauthorizedSince)
 	var i OauthClient
 	err := row.Scan(
 		&i.ID,
@@ -133,13 +173,15 @@ func (q *Queries) GetOAuthClient(ctx context.Context, arg GetOAuthClientParams) 
 		&i.LogoUri,
 		&i.CreatedAt,
 		&i.LastUsedAt,
+		&i.RegisteredFrom,
+		&i.AuthorizedAt,
 	)
 	return i, err
 }
 
 const getOAuthSettings = `-- name: GetOAuthSettings :one
 
-SELECT id, trusted_clients, revision, updated_by, updated_at FROM oauth_settings WHERE id = 1
+SELECT id, trusted_clients, revision, updated_by, updated_at, open_registration FROM oauth_settings WHERE id = 1
 `
 
 // OAuth sign-in for MCP clients (internal/oauth).
@@ -152,12 +194,13 @@ func (q *Queries) GetOAuthSettings(ctx context.Context) (OauthSetting, error) {
 		&i.Revision,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.OpenRegistration,
 	)
 	return i, err
 }
 
 const getOAuthToken = `-- name: GetOAuthToken :one
-SELECT t.id, t.grant_id, t.kind, t.token_hash, t.resource, t.expires_at, t.rotated_at, t.created_at, t.pepper_id, gr.id, gr.user_id, gr.gateway_id, gr.client_id, gr.client_kind, gr.client_name, gr.client_uri, gr.logo_uri, gr.resource, gr.created_at, gr.last_used_at, gr.revoked_at, gr.revoked_reason, u.id, u.oidc_issuer, u.oidc_subject, u.email, u.display_name, u.platform_role, u.status, u.claims, u.revision, u.created_at, u.updated_at, u.last_login_at, u.groups, u.email_verified, g.slug AS gateway_slug
+SELECT t.id, t.grant_id, t.kind, t.token_hash, t.resource, t.expires_at, t.rotated_at, t.created_at, t.pepper_id, gr.id, gr.user_id, gr.gateway_id, gr.client_id, gr.client_kind, gr.client_name, gr.client_uri, gr.logo_uri, gr.resource, gr.created_at, gr.last_used_at, gr.revoked_at, gr.revoked_reason, gr.authorized_at, u.id, u.oidc_issuer, u.oidc_subject, u.email, u.display_name, u.platform_role, u.status, u.claims, u.revision, u.created_at, u.updated_at, u.last_login_at, u.groups, u.email_verified, g.slug AS gateway_slug
 FROM oauth_tokens t
 JOIN oauth_grants gr ON gr.id = t.grant_id
 JOIN users u ON u.id = gr.user_id
@@ -204,6 +247,7 @@ func (q *Queries) GetOAuthToken(ctx context.Context, arg GetOAuthTokenParams) (G
 		&i.OauthGrant.LastUsedAt,
 		&i.OauthGrant.RevokedAt,
 		&i.OauthGrant.RevokedReason,
+		&i.OauthGrant.AuthorizedAt,
 		&i.User.ID,
 		&i.User.OIDCIssuer,
 		&i.User.OIDCSubject,
@@ -224,17 +268,18 @@ func (q *Queries) GetOAuthToken(ctx context.Context, arg GetOAuthTokenParams) (G
 }
 
 const insertOAuthClient = `-- name: InsertOAuthClient :one
-INSERT INTO oauth_clients (client_id, client_name, redirect_uris, client_uri, logo_uri)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, client_id, client_name, redirect_uris, client_uri, logo_uri, created_at, last_used_at
+INSERT INTO oauth_clients (client_id, client_name, redirect_uris, client_uri, logo_uri, registered_from)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, client_id, client_name, redirect_uris, client_uri, logo_uri, created_at, last_used_at, registered_from, authorized_at
 `
 
 type InsertOAuthClientParams struct {
-	ClientID     string
-	ClientName   string
-	RedirectUris []string
-	ClientUri    *string
-	LogoUri      *string
+	ClientID       string
+	ClientName     string
+	RedirectUris   []string
+	ClientUri      *string
+	LogoUri        *string
+	RegisteredFrom *string
 }
 
 func (q *Queries) InsertOAuthClient(ctx context.Context, arg InsertOAuthClientParams) (OauthClient, error) {
@@ -244,6 +289,7 @@ func (q *Queries) InsertOAuthClient(ctx context.Context, arg InsertOAuthClientPa
 		arg.RedirectUris,
 		arg.ClientUri,
 		arg.LogoUri,
+		arg.RegisteredFrom,
 	)
 	var i OauthClient
 	err := row.Scan(
@@ -255,6 +301,8 @@ func (q *Queries) InsertOAuthClient(ctx context.Context, arg InsertOAuthClientPa
 		&i.LogoUri,
 		&i.CreatedAt,
 		&i.LastUsedAt,
+		&i.RegisteredFrom,
+		&i.AuthorizedAt,
 	)
 	return i, err
 }
@@ -288,9 +336,9 @@ func (q *Queries) InsertOAuthCode(ctx context.Context, arg InsertOAuthCodeParams
 }
 
 const insertOAuthGrant = `-- name: InsertOAuthGrant :one
-INSERT INTO oauth_grants (user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, created_at, last_used_at, revoked_at, revoked_reason
+INSERT INTO oauth_grants (user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, authorized_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+RETURNING id, user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, created_at, last_used_at, revoked_at, revoked_reason, authorized_at
 `
 
 type InsertOAuthGrantParams struct {
@@ -330,6 +378,7 @@ func (q *Queries) InsertOAuthGrant(ctx context.Context, arg InsertOAuthGrantPara
 		&i.LastUsedAt,
 		&i.RevokedAt,
 		&i.RevokedReason,
+		&i.AuthorizedAt,
 	)
 	return i, err
 }
@@ -361,7 +410,7 @@ func (q *Queries) InsertOAuthToken(ctx context.Context, arg InsertOAuthTokenPara
 }
 
 const listUserOAuthGrants = `-- name: ListUserOAuthGrants :many
-SELECT gr.id, gr.user_id, gr.gateway_id, gr.client_id, gr.client_kind, gr.client_name, gr.client_uri, gr.logo_uri, gr.resource, gr.created_at, gr.last_used_at, gr.revoked_at, gr.revoked_reason, g.slug AS gateway_slug, g.name AS gateway_name
+SELECT gr.id, gr.user_id, gr.gateway_id, gr.client_id, gr.client_kind, gr.client_name, gr.client_uri, gr.logo_uri, gr.resource, gr.created_at, gr.last_used_at, gr.revoked_at, gr.revoked_reason, gr.authorized_at, g.slug AS gateway_slug, g.name AS gateway_name
 FROM oauth_grants gr
 JOIN gateways g ON g.id = gr.gateway_id
 WHERE gr.user_id = $1 AND gr.revoked_at IS NULL
@@ -398,6 +447,7 @@ func (q *Queries) ListUserOAuthGrants(ctx context.Context, userID uuid.UUID) ([]
 			&i.OauthGrant.LastUsedAt,
 			&i.OauthGrant.RevokedAt,
 			&i.OauthGrant.RevokedReason,
+			&i.OauthGrant.AuthorizedAt,
 			&i.GatewaySlug,
 			&i.GatewayName,
 		); err != nil {
@@ -423,7 +473,7 @@ func (q *Queries) LockOAuthClients(ctx context.Context) error {
 }
 
 const lockOAuthGrant = `-- name: LockOAuthGrant :one
-SELECT id, user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, created_at, last_used_at, revoked_at, revoked_reason FROM oauth_grants WHERE id = $1 FOR UPDATE
+SELECT id, user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, created_at, last_used_at, revoked_at, revoked_reason, authorized_at FROM oauth_grants WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockOAuthGrant(ctx context.Context, id uuid.UUID) (OauthGrant, error) {
@@ -443,12 +493,13 @@ func (q *Queries) LockOAuthGrant(ctx context.Context, id uuid.UUID) (OauthGrant,
 		&i.LastUsedAt,
 		&i.RevokedAt,
 		&i.RevokedReason,
+		&i.AuthorizedAt,
 	)
 	return i, err
 }
 
 const lockOAuthSettings = `-- name: LockOAuthSettings :one
-SELECT id, trusted_clients, revision, updated_by, updated_at FROM oauth_settings WHERE id = 1 FOR UPDATE
+SELECT id, trusted_clients, revision, updated_by, updated_at, open_registration FROM oauth_settings WHERE id = 1 FOR UPDATE
 `
 
 func (q *Queries) LockOAuthSettings(ctx context.Context) (OauthSetting, error) {
@@ -460,6 +511,7 @@ func (q *Queries) LockOAuthSettings(ctx context.Context) (OauthSetting, error) {
 		&i.Revision,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.OpenRegistration,
 	)
 	return i, err
 }
@@ -483,6 +535,26 @@ func (q *Queries) LockOAuthToken(ctx context.Context, id uuid.UUID) (OauthToken,
 		&i.PepperID,
 	)
 	return i, err
+}
+
+const markOAuthClientAuthorized = `-- name: MarkOAuthClientAuthorized :exec
+UPDATE oauth_clients SET authorized_at = now() WHERE client_id = $1 AND authorized_at IS NULL
+`
+
+// The first time a registered client receives tokens (a no-op afterwards).
+func (q *Queries) MarkOAuthClientAuthorized(ctx context.Context, clientID string) error {
+	_, err := q.db.Exec(ctx, markOAuthClientAuthorized, clientID)
+	return err
+}
+
+const renewOAuthGrant = `-- name: RenewOAuthGrant :exec
+UPDATE oauth_grants SET authorized_at = now() WHERE id = $1
+`
+
+// The person signed the app in again: its refresh tokens get a new absolute lifetime.
+func (q *Queries) RenewOAuthGrant(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, renewOAuthGrant, id)
+	return err
 }
 
 const revokeOAuthGrant = `-- name: RevokeOAuthGrant :execrows
@@ -557,20 +629,22 @@ func (q *Queries) TouchOAuthGrant(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-const updateTrustedClients = `-- name: UpdateTrustedClients :one
+const updateOAuthClientSettings = `-- name: UpdateOAuthClientSettings :one
 UPDATE oauth_settings
-SET trusted_clients = $1, revision = revision + 1, updated_by = $2, updated_at = now()
+SET trusted_clients = $1, open_registration = $2, revision = revision + 1,
+    updated_by = $3, updated_at = now()
 WHERE id = 1
-RETURNING id, trusted_clients, revision, updated_by, updated_at
+RETURNING id, trusted_clients, revision, updated_by, updated_at, open_registration
 `
 
-type UpdateTrustedClientsParams struct {
-	TrustedClients json.RawMessage
-	UpdatedBy      uuid.NullUUID
+type UpdateOAuthClientSettingsParams struct {
+	TrustedClients   json.RawMessage
+	OpenRegistration bool
+	UpdatedBy        uuid.NullUUID
 }
 
-func (q *Queries) UpdateTrustedClients(ctx context.Context, arg UpdateTrustedClientsParams) (OauthSetting, error) {
-	row := q.db.QueryRow(ctx, updateTrustedClients, arg.TrustedClients, arg.UpdatedBy)
+func (q *Queries) UpdateOAuthClientSettings(ctx context.Context, arg UpdateOAuthClientSettingsParams) (OauthSetting, error) {
+	row := q.db.QueryRow(ctx, updateOAuthClientSettings, arg.TrustedClients, arg.OpenRegistration, arg.UpdatedBy)
 	var i OauthSetting
 	err := row.Scan(
 		&i.ID,
@@ -578,6 +652,7 @@ func (q *Queries) UpdateTrustedClients(ctx context.Context, arg UpdateTrustedCli
 		&i.Revision,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.OpenRegistration,
 	)
 	return i, err
 }

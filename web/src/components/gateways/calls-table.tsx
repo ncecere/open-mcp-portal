@@ -23,7 +23,7 @@ import type { Facet, FacetOption } from "@/components/ui/filter-bar/filter-bar";
 import { TextLink } from "@/components/ui/text-link/text-link";
 import s from "../../pages/shared.module.css";
 import { OutcomeBadge } from "./badges";
-import { callErrorLabel, callOutcomes, type McpCall, outcomeLabels } from "./labels";
+import { callErrorLabel, callOutcomes, identitySentHelp, identitySentLabel, type McpCall, outcomeLabels } from "./labels";
 
 /** The Outcome facet (one value: the API takes one). */
 export const outcomeFacet: Facet<McpCall> = {
@@ -271,6 +271,13 @@ export function callColumns({ gateway = false, adminLinks = false, detail, narro
       accessor: (c) => c.providerSlug ?? "",
       defaultHidden: true,
       cell: (c) => (c.providerSlug ? <ProviderName slug={c.providerSlug} serverName={c.server?.name} /> : <span className={s.muted}>—</span>),
+    },
+    {
+      id: "identity",
+      header: "Identity token",
+      accessor: (c) => identitySentLabel(c),
+      defaultHidden: true,
+      cell: (c) => <span title={identitySentHelp[identitySentLabel(c)]}>{identitySentLabel(c)}</span>,
     },
     {
       id: "captured",

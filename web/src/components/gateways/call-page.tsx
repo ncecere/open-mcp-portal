@@ -26,7 +26,7 @@ import { OutcomeBadge } from "./badges";
 import { CallPayloadCard, PayloadElsewhere, type PayloadScope } from "./call-payload";
 import g from "./call.module.css";
 import { CallError, principalDetail, principalName, useProviderName } from "./calls-table";
-import type { McpCall } from "./labels";
+import { identitySentHelp, identitySentLabel, type McpCall } from "./labels";
 
 /** The query of one call, by scope (also the breadcrumb's). */
 export const callQuery = (scope: PayloadScope, callId: number) => ({
@@ -137,6 +137,14 @@ export function CallPage({ scope, callId, canViewPayload, elsewhere }: Props) {
               ),
             },
             ...(c.providerSlug ? [{ label: "Account", value: <Provider slug={c.providerSlug} serverName={c.server?.name} /> }] : []),
+            {
+              label: "Identity token",
+              value: (
+                <span>
+                  {identitySentLabel(c)} <span className={s.muted}>{identitySentHelp[identitySentLabel(c)]}</span>
+                </span>
+              ),
+            },
             { label: "Time", value: `${c.latencyMs.toLocaleString()} ms` },
             { label: "Size", value: `${bytes(c.requestBytes)} in · ${bytes(c.responseBytes)} out` },
             ...(c.clientName ? [{ label: "Client", value: c.clientName }] : []),

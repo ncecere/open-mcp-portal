@@ -6,20 +6,29 @@ SELECT * FROM oauth_settings WHERE id = 1;
 -- name: LockOAuthSettings :one
 SELECT * FROM oauth_settings WHERE id = 1 FOR UPDATE;
 
--- name: UpdateTrustedClients :one
+-- name: UpdateOAuthClientSettings :one
 UPDATE oauth_settings
-SET trusted_clients = @trusted_clients, revision = revision + 1, updated_by = @updated_by, updated_at = now()
+SET trusted_clients = @trusted_clients, open_registration = @open_registration, revision = revision + 1,
+    updated_by = @updated_by, updated_at = now()
 WHERE id = 1
 RETURNING *;
 
 -- name: GetOAuthClient :one
--- A registered client used since unused_since.
-SELECT * FROM oauth_clients WHERE client_id = @client_id AND last_used_at > @unused_since;
+-- A registered client used since unused_since, and one that has received
+-- tokens or was registered after unauthorized_since (a registration that
+-- never completed an authorization lives for 24 hours).
+SELECT * FROM oauth_clients
+WHERE client_id = @client_id AND last_used_at > @unused_since
+  AND (authorized_at IS NOT NULL OR created_at > @unauthorized_since);
 
 -- name: InsertOAuthClient :one
-INSERT INTO oauth_clients (client_id, client_name, redirect_uris, client_uri, logo_uri)
-VALUES (@client_id, @client_name, @redirect_uris, @client_uri, @logo_uri)
+INSERT INTO oauth_clients (client_id, client_name, redirect_uris, client_uri, logo_uri, registered_from)
+VALUES (@client_id, @client_name, @redirect_uris, @client_uri, @logo_uri, sqlc.narg(registered_from))
 RETURNING *;
+
+-- name: MarkOAuthClientAuthorized :exec
+-- The first time a registered client receives tokens (a no-op afterwards).
+UPDATE oauth_clients SET authorized_at = now() WHERE client_id = $1 AND authorized_at IS NULL;
 
 -- name: TouchOAuthClient :exec
 UPDATE oauth_clients SET last_used_at = now()
@@ -31,20 +40,35 @@ WHERE client_id = $1 AND last_used_at < now() - interval '1 minute';
 SELECT pg_advisory_xact_lock(hashtextextended('omp.oauth-clients', 0));
 
 -- name: CountLiveOAuthClients :one
--- Registered clients used since unused_since (the ones ResolveClient accepts).
-SELECT count(*) FROM oauth_clients WHERE last_used_at > @unused_since;
+-- Registered clients ResolveClient accepts: used since unused_since, and
+-- authorized or registered after unauthorized_since.
+SELECT count(*) FROM oauth_clients
+WHERE last_used_at > @unused_since AND (authorized_at IS NOT NULL OR created_at > @unauthorized_since);
+
+-- name: CountPendingOAuthClientsFrom :one
+-- Registrations from one address that have not received tokens yet and are
+-- still live: the only kind a caller can create without a person.
+SELECT count(*) FROM oauth_clients
+WHERE registered_from = @registered_from AND authorized_at IS NULL AND created_at > @unauthorized_since;
 
 -- name: DeleteUnusedOAuthClients :exec
-DELETE FROM oauth_clients WHERE last_used_at <= @unused_since;
+-- Registrations unused since unused_since, and the ones that never received
+-- tokens within the shorter life.
+DELETE FROM oauth_clients
+WHERE last_used_at <= @unused_since OR (authorized_at IS NULL AND created_at <= @unauthorized_since);
 
 -- name: GetActiveOAuthGrant :one
 SELECT * FROM oauth_grants
 WHERE user_id = @user_id AND client_id = @client_id AND gateway_id = @gateway_id AND revoked_at IS NULL;
 
 -- name: InsertOAuthGrant :one
-INSERT INTO oauth_grants (user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource)
-VALUES (@user_id, @gateway_id, @client_id, @client_kind, @client_name, @client_uri, @logo_uri, @resource)
+INSERT INTO oauth_grants (user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, authorized_at)
+VALUES (@user_id, @gateway_id, @client_id, @client_kind, @client_name, @client_uri, @logo_uri, @resource, now())
 RETURNING *;
+
+-- name: RenewOAuthGrant :exec
+-- The person signed the app in again: its refresh tokens get a new absolute lifetime.
+UPDATE oauth_grants SET authorized_at = now() WHERE id = $1;
 
 -- name: LockOAuthGrant :one
 SELECT * FROM oauth_grants WHERE id = $1 FOR UPDATE;

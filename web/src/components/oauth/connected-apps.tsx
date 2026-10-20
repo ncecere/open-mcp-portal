@@ -2,7 +2,8 @@
  * Connected apps: the MCP clients a person allowed with OAuth sign-in, one
  * row per client and gateway (decision 21), with the host that vouches for
  * the client (or "Unverified" for one that registered itself), when it was
- * connected and last used, and Disconnect (asked first; its tokens stop at
+ * connected, last used and when its sign-in expires (the app signs in again
+ * by then, decision 63), and Disconnect (asked first; its tokens stop at
  * once). Account › Connected apps shows the person's own; Admin › Users ›
  * person shows anyone's, where platform admins disconnect and auditors read.
  */
@@ -14,6 +15,7 @@ import { api, type Schemas, unwrap } from "../../api/client";
 import { ConfirmMutationDialog } from "../confirm-dialog";
 import { ListPage, RelativeTime, timeColumn } from "../templates/list-page";
 import { Badge } from "@/components/ui/badge/badge";
+import { formatDate } from "@/lib/bitop-format";
 import { CellText, type DataTableColumn } from "@/components/ui/data-table/data-table";
 import { TextLink } from "@/components/ui/text-link/text-link";
 import { toast } from "@/components/ui/toast/toast";
@@ -97,7 +99,27 @@ function columns(admin: boolean): DataTableColumn<OAuthGrant>[] {
       ...timeColumn<OAuthGrant>("lastUsedAt", "Last used", (g) => g.lastUsedAt),
       cell: (g) => (g.lastUsedAt ? <span className={s.nowrap}><RelativeTime value={g.lastUsedAt} /></span> : <span className={s.muted}>Not used yet</span>),
     },
+    { ...timeColumn<OAuthGrant>("expiresAt", "Sign-in expires", (g) => g.expiresAt), cell: (g) => <Expires grant={g} /> },
   ];
+}
+
+/** When the app has to sign in again (the portal's refresh lifetime), or that there's no limit. */
+function Expires({ grant }: { grant: OAuthGrant }) {
+  if (!grant.expiresAt) return <span className={s.muted}>No limit</span>;
+  const expired = new Date(grant.expiresAt).getTime() <= Date.now();
+  return (
+    <span className={s.nowrap}>
+      <time dateTime={grant.expiresAt}>{formatDate(grant.expiresAt, { style: "date" })}</time>
+      {expired && (
+        <>
+          {" "}
+          <Badge size="sm" tone="warning">
+            Expired
+          </Badge>
+        </>
+      )}
+    </span>
+  );
 }
 
 type Props = {
