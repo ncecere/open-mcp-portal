@@ -1,9 +1,12 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 
@@ -107,5 +110,45 @@ func TestIfMatch(t *testing.T) {
 		if (c.code == 0) != ok || (ok && rev != c.rev) || (!ok && w.Code != c.code) {
 			t.Errorf("If-Match %q: rev=%d ok=%v code=%d", c.header, rev, ok, w.Code)
 		}
+	}
+}
+
+// A deployment behind a proxy with TRUSTED_PROXIES empty gets the warning
+// (at most once a minute); a correctly configured install, a development
+// install and requests without forwarding headers get none.
+func TestChainWarnsAboutMissingTrustedProxies(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/x", func(w http.ResponseWriter, _ *http.Request) { httpx.JSON(w, http.StatusOK, true) })
+	run := func(mutate func(*config.Config), forwarded bool, requests int) int {
+		var buf bytes.Buffer
+		d := testDeps()
+		d.Log = slog.New(slog.NewTextHandler(&buf, nil))
+		d.Config.AppURL = "https://mcp.example.com"
+		mutate(&d.Config)
+		h := chain(mux, d)
+		for i := 0; i < requests; i++ {
+			r := httptest.NewRequest("GET", "/v1/x", nil)
+			r.RemoteAddr = "10.1.2.3:5555"
+			if forwarded {
+				r.Header.Set("X-Forwarded-For", "198.51.100.7")
+			}
+			h.ServeHTTP(httptest.NewRecorder(), r)
+		}
+		return strings.Count(buf.String(), "TRUSTED_PROXIES is empty")
+	}
+	none := func(*config.Config) {}
+	if n := run(none, true, 20); n != 1 {
+		t.Errorf("behind a proxy, TRUSTED_PROXIES empty: %d warnings in 20 requests, want 1", n)
+	}
+	if n := run(none, false, 5); n != 0 {
+		t.Errorf("no forwarding header: %d warnings", n)
+	}
+	trusted := func(c *config.Config) { c.TrustedProxies = []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")} }
+	if n := run(trusted, true, 5); n != 0 {
+		t.Errorf("TRUSTED_PROXIES set: %d warnings", n)
+	}
+	dev := func(c *config.Config) { c.AppURL = "http://localhost:8088" }
+	if n := run(dev, true, 5); n != 0 {
+		t.Errorf("development install: %d warnings", n)
 	}
 }

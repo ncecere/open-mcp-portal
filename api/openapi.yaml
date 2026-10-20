@@ -928,6 +928,51 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '429':
           $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/mcp-servers/identity-default:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    post:
+      tags:
+      - mcp-servers
+      operationId: getTeamMcpServerIdentityDefault
+      summary: The default of "Send identity token" for a server with no authentication at a URL (editors and above); changes nothing
+      description: >-
+        Classifies the host of url as the registry does when a server is created without an explicit sendIdentity
+        (decision 64): a public host, an internal host (named by the internal-network allowlist, or a private
+        address), or a name that could not be resolved in time (treated as public). Resolves the host name (at most 3
+        s) and connects to nothing. Only for authMode none: servers with a static header or in oauth mode default to
+        sending the token. Session only (the add form's helper; automation tokens can't call it). Nothing is stored or audited. 422
+        url_not_allowed as for create. 409 team_archived. 429 slow_down (30 a minute per person).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DetectAuthRequest'
+      responses:
+        '200':
+          description: The default and why
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/IdentityDefault'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
+        '429':
+          $ref: '#/components/responses/ErrorReply'
   /v1/teams/{team}/mcp-servers/{serverId}:
     parameters:
     - $ref: '#/components/parameters/TeamParam'
@@ -2139,6 +2184,7 @@ paths:
       - $ref: '#/components/parameters/CallGatewayParam'
       - $ref: '#/components/parameters/CallServerParam'
       - $ref: '#/components/parameters/CallOutcomeParam'
+      - $ref: '#/components/parameters/CallIdentitySentParam'
       - $ref: '#/components/parameters/CallUserParam'
       - $ref: '#/components/parameters/CallServiceAccountParam'
       - $ref: '#/components/parameters/AuditFromParam'
@@ -2505,6 +2551,7 @@ paths:
       - $ref: '#/components/parameters/CallGatewayParam'
       - $ref: '#/components/parameters/CallServerParam'
       - $ref: '#/components/parameters/CallOutcomeParam'
+      - $ref: '#/components/parameters/CallIdentitySentParam'
       - $ref: '#/components/parameters/CallUserParam'
       - $ref: '#/components/parameters/CallServiceAccountParam'
       - name: team
@@ -5239,6 +5286,15 @@ components:
       required: false
       schema:
         $ref: '#/components/schemas/McpCallOutcome'
+    CallIdentitySentParam:
+      name: identitySent
+      in: query
+      required: false
+      description: 'true: only calls where the identity token was sent to the server. false: only calls where it was not
+        sent (the server''s Send identity token switch was off). Calls that were not forwarded, and calls recorded
+        before this field existed, have no value and match neither.'
+      schema:
+        type: boolean
     CallUserParam:
       name: user
       in: query
@@ -6400,7 +6456,8 @@ components:
             call carries the signed identity JWT (Authorization: Bearer, or MCP-Gateway-Identity when the server has a
             static Authorization header or is in oauth mode). false: the JWT is not sent to this server at all (no
             header), recommended for servers run outside the company such as GitHub''s hosted MCP server, so names,
-            emails and teams are not sent to a third party. Absent from servers before Phase 7 (true)'
+            emails and teams are not sent to a third party. Absent from servers before Phase 7 (true). New servers with
+            authMode none on a public host default to false (decision 64); servers saved earlier keep their value'
         protocol:
           allOf:
           - $ref: '#/components/schemas/McpServerProtocol'
@@ -6486,8 +6543,9 @@ components:
           $ref: '#/components/schemas/McpServerOAuthInput'
         sendIdentity:
           type: boolean
-          default: true
-          description: Send the signed identity token with forwarded calls (McpServer.sendIdentity)
+          description: Send the signed identity token with forwarded calls (McpServer.sendIdentity). Omit for the default
+            (decision 64) true, except authMode none on a public host (or one that can't be resolved), where it is false;
+            POST .../mcp-servers/identity-default tells which. An explicit value is always kept
     McpServerUpdate:
       type: object
       properties:
@@ -7682,6 +7740,13 @@ components:
         providerSlug:
           type: string
           description: The auth provider the capability required at the time of the call (absent when none)
+        identitySent:
+          type: boolean
+          nullable: true
+          description: 'Whether the signed identity token (name, email, teams) was attached to the request to the
+            server (decision 64). true: sent. false: not sent (the server''s Send identity token switch was off).
+            null: the call was not forwarded (denied, needs authorization, rate limited) or was recorded before
+            this field existed'
         latencyMs:
           type: integer
           format: int32
@@ -9122,6 +9187,25 @@ components:
           type: string
           maxLength: 2000
           description: A path on this site (default /teams/{team}/servers/{serverId}?setup=connected)
+    IdentityDefault:
+      type: object
+      required:
+      - basis
+      - sendIdentity
+      properties:
+        basis:
+          type: string
+          enum:
+          - public_host
+          - internal_host
+          - unresolved_host
+          description: 'public_host: a public address that no internal allowlist entry names. internal_host: named by
+            an allowlist entry, or a private address. unresolved_host: the name could not be resolved in time; treated
+            as public, because nothing shows it is internal'
+        sendIdentity:
+          type: boolean
+          description: The default of Send identity token for a server with no authentication at this URL. false for
+            public_host and unresolved_host, true for internal_host
     DetectAuthRequest:
       type: object
       required:

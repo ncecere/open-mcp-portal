@@ -56,7 +56,8 @@ sign-in and the example keys in `.env.example` only work with a loopback `APP_UR
 Account › API keys and connect a client to `http://localhost:8088/mcp/demo`, or follow the snippets under My gateways.
 
 `make fake-oauth` adds a fake OAuth provider for delegated credentials, and `make demo` runs everything in Docker
-instead. `make help` lists every target; [CONTRIBUTING.md](CONTRIBUTING.md) has the tests and checks.
+instead. `make help` lists every target; [CONTRIBUTING.md](CONTRIBUTING.md) has the tests and checks, and
+[how issues are handled](CONTRIBUTING.md#how-issues-are-handled) (labels, expected replies, supported versions, releases).
 
 ## Deploying
 

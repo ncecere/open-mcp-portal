@@ -20,6 +20,7 @@ import { Input, Textarea } from "@/components/ui/input/input";
 import { toast } from "@/components/ui/toast/toast";
 import { describeAuthError } from "./auth-errors";
 import { AuthModeFields } from "./auth-mode-fields";
+import { defaultIdentity, identityBasisText, useIdentityDefault } from "./identity-default";
 import { serverSlug, slugPattern } from "./labels";
 import { firstDiscoveryKey } from "./scope";
 import { type AuthEdit, AuthFields, EnabledSwitch, type ServerForm, serverFieldErrors, serverProblems, TimeoutField, UrlField, urlProblem } from "./server-fields";
@@ -32,11 +33,14 @@ const noHeader: AuthEdit = { value: "", remove: false };
 const slugProblem = (slug: string) =>
   !slug ? "Enter a slug." : slugPattern.test(slug) ? undefined : "Use 1 to 48 lowercase letters, digits and hyphens, starting and ending with a letter or digit.";
 
-/** The request body's authentication: the mode, its header or OAuth settings, and the identity switch. */
-function authBody(form: ServerForm, auth: AuthEdit, u: UpstreamForm, secret: string, detected?: DetectResult) {
+/**
+ * The request body's authentication: the mode, its header or OAuth settings, and the identity switch (left out
+ * while the default for the address isn't known: the server then decides the same way).
+ */
+function authBody(form: ServerForm, auth: AuthEdit, u: UpstreamForm, secret: string, sendIdentity: boolean | undefined, detected?: DetectResult) {
   const header = u.mode === "static_header" && form.authHeaderName.trim() ? { authHeaderName: form.authHeaderName.trim(), authValue: auth.value } : {};
   const mode = u.mode === "static_header" && !form.authHeaderName.trim() ? "none" : u.mode;
-  return { authMode: mode, ...header, ...(mode === "oauth" ? { oauth: oauthInput(u.oauth, secret, detected) } : {}), sendIdentity: u.sendIdentity };
+  return { authMode: mode, ...header, ...(mode === "oauth" ? { oauth: oauthInput(u.oauth, secret, detected) } : {}), ...(sendIdentity === undefined ? {} : { sendIdentity }) };
 }
 
 export function AddServerForm({ team, onClose }: { team: string; onClose: () => void }) {
@@ -49,6 +53,11 @@ export function AddServerForm({ team, onClose }: { team: string; onClose: () => 
   const [slugEdited, setSlugEdited] = useState(false);
   const [auth, setAuth] = useState<AuthEdit>(noHeader);
   const [upstream, setUpstream] = useState<UpstreamForm>(() => upstreamFormOf());
+  // The identity switch follows the address until someone moves it (decision 64).
+  const [identityTouched, setIdentityTouched] = useState(false);
+  const basis = useIdentityDefault(team, form.url, upstream.mode, urlProblem(form.url, dev));
+  const followed = defaultIdentity(basis);
+  const sendIdentity = identityTouched ? upstream.sendIdentity : (followed ?? true);
   const [detected, setDetected] = useState<DetectResult>();
   const [secret, setSecret] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -63,7 +72,7 @@ export function AddServerForm({ team, onClose }: { team: string; onClose: () => 
             name: form.name.trim(),
             description: form.description.trim() || undefined,
             url: form.url.trim(),
-            ...authBody(form, auth, upstream, secret, detected),
+            ...authBody(form, auth, upstream, secret, identityTouched ? upstream.sendIdentity : followed, detected),
             timeoutSeconds: form.timeoutSeconds,
             enabled: form.enabled,
             // Recording call contents starts off: owners and admins turn it on in Settings, after a confirmation.
@@ -166,8 +175,12 @@ export function AddServerForm({ team, onClose }: { team: string; onClose: () => 
           team={team}
           url={form.url}
           urlError={urlProblem(form.url, dev)}
-          value={upstream}
-          onChange={setUpstream}
+          value={{ ...upstream, sendIdentity }}
+          onChange={(next) => {
+            if (next.sendIdentity !== sendIdentity) setIdentityTouched(true);
+            setUpstream(next);
+          }}
+          identityNote={identityTouched ? undefined : identityBasisText(basis)}
           detected={detected}
           onDetected={(r) => {
             setDetected(r);

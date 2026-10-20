@@ -115,6 +115,27 @@ export const outcomeTone: Record<CallOutcome, "success" | "warning" | "danger" |
 
 export const callOutcomes = Object.keys(outcomeLabels) as CallOutcome[];
 
+/** Outcomes of a call that never reached its server. */
+const notForwarded: CallOutcome[] = ["denied", "needs_authorization", "rate_limited", "bad_request"];
+
+/**
+ * Whether the identity token went to the server (McpCall.identitySent, decision 64): "Sent", "Not sent" (the
+ * server's Send identity token switch was off), "Not forwarded" (refused, or a list the portal answered itself), or
+ * "Not recorded" (a forwarded call from before the portal recorded this).
+ */
+export function identitySentLabel(c: Pick<McpCall, "identitySent" | "outcome" | "method">): string {
+  if (c.identitySent === true) return "Sent";
+  if (c.identitySent === false) return "Not sent";
+  return c.method.endsWith("/list") || c.method.endsWith("/templates/list") || notForwarded.includes(c.outcome) ? "Not forwarded" : "Not recorded";
+}
+
+export const identitySentHelp = {
+  Sent: "The signed identity token (name, email, teams) went to the server with this call.",
+  "Not sent": "The server's Send identity token switch was off, so the call carried no identity token.",
+  "Not forwarded": "The call was refused, or the portal answered it itself, so nothing was sent to a server.",
+  "Not recorded": "This call was recorded before the portal noted whether the identity token was sent.",
+} as Record<string, string>;
+
 /**
  * Why a call was refused or failed, in words (McpCall.errorClass). The backend
  * records: refusals (internal/mcpgw: gateway_disabled, no_access, role,

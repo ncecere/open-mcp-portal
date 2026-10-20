@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ncecere/open-mcp-portal/internal/apperr"
@@ -89,6 +90,25 @@ type Call struct {
 	// ProviderSlug is the auth provider the capability required (empty:
 	// none). Never a token.
 	ProviderSlug string
+	// IdentitySent says whether the identity token was attached to the
+	// request to the server (nil: the call was not forwarded).
+	IdentitySent *bool
+}
+
+// pgBool is a nullable bool column's value (nil: NULL).
+func pgBool(b *bool) pgtype.Bool {
+	if b == nil {
+		return pgtype.Bool{}
+	}
+	return pgtype.Bool{Bool: *b, Valid: true}
+}
+
+// IdentitySentOf is a call row's identity_sent (nil: not recorded).
+func IdentitySentOf(b pgtype.Bool) *bool {
+	if !b.Valid {
+		return nil
+	}
+	return &b.Bool
 }
 
 func clip(s string, n int) *string {
@@ -147,7 +167,7 @@ func insertParams(c Call) dbgen.InsertMCPCallParams {
 		ServiceAccountTeamID: null(c.ServiceAccountTeamID), OauthGrantID: null(c.OAuthGrantID), OauthClientName: clip(c.OAuthClientName, 200),
 		OauthClientKind: clip(c.OAuthClientKind, 20), ClientName: clip(c.ClientName, 200), Outcome: c.Outcome, ErrorClass: clip(c.ErrorClass, 64),
 		LatencyMs: int32(min(c.Latency.Milliseconds(), 1<<31-1)), RequestBytes: max(c.RequestBytes, 0), ResponseBytes: max(c.ResponseBytes, 0),
-		ProviderSlug: clip(c.ProviderSlug, 48),
+		ProviderSlug: clip(c.ProviderSlug, 48), IdentitySent: pgBool(c.IdentitySent),
 	}
 	if c.Server != nil {
 		p.ServerID, p.ServerTeamID = null(c.Server.ID), null(c.Server.TeamID)
@@ -175,14 +195,17 @@ func New(pool *pgxpool.Pool) *Service {
 type Filter struct {
 	Gateway, Server, User, ServiceAccount *uuid.UUID
 	Outcome                               *string
-	From, To                              *time.Time
-	BeforeID                              *int64
-	Team                                  string // admin list: a team slug or ID
-	Limit                                 int32
+	// IdentitySent keeps calls whose identity token was (true) or was not
+	// (false) sent to the server.
+	IdentitySent *bool
+	From, To     *time.Time
+	BeforeID     *int64
+	Team         string // admin list: a team slug or ID
+	Limit        int32
 }
 
 func (f Filter) query() dbgen.ListMCPCallsParams {
-	p := dbgen.ListMCPCallsParams{Outcome: f.Outcome, OccurredFrom: f.From, OccurredTo: f.To, BeforeID: f.BeforeID, PageSize: f.Limit}
+	p := dbgen.ListMCPCallsParams{Outcome: f.Outcome, IdentitySent: pgBool(f.IdentitySent), OccurredFrom: f.From, OccurredTo: f.To, BeforeID: f.BeforeID, PageSize: f.Limit}
 	if f.Gateway != nil {
 		p.GatewayID = null(*f.Gateway)
 	}

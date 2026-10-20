@@ -19,9 +19,19 @@ With no static header, your server can act as an ordinary OAuth resource server 
 
 The header names keep `Gateway` although the product is now called Open MCP Portal (it was Open MCP Gateway): they are a contract with the authors of MCP servers, and they describe what reaches your server, a call relayed through a gateway (`/mcp/{slug}`). They won't change.
 
-**Send identity (decision 45).** Every server has a `sendIdentity` switch, on by default (decision 7). Turn it off for
-servers run outside the company, such as GitHub's hosted MCP server, so people's names, emails and teams aren't sent to a
-third party; the server then gets no identity token on any call. It isn't a review trigger (it sends less).
+**Send identity (decisions 45 and 64).** Every server has a `sendIdentity` switch. When you register a server without
+saying, it is **off** if the server has no authentication and its host is public (or can't be resolved), and **on** if the
+host is internal (an internal-allowlist entry or a private address) or the server uses a static header or OAuth. Servers saved
+before decision 64 keep their value (on, unless a team turned it off). Turn it off for servers run outside the company, such
+as GitHub's hosted MCP server, so people's names, emails and teams aren't sent to a third party; the server then gets no
+identity token on any call. Turn it **on** for a public server that expects the token. It isn't a review trigger (it sends
+less).
+
+Each call record says whether the token was sent (`identitySent` in the API, **Identity token** on the call's page, and
+`?identitySent=true|false` on the call lists): `true` when it was attached to the request, `false` when the switch was off,
+and absent when the call was not forwarded (refused, rate limited, a list the portal answered) or was recorded before the
+field existed. If a server rejects calls only when a tool runs, look at this value first: a failure on calls that sent the
+token, with the same server working without it, points at the switch.
 
 **OAuth servers.** In `oauth` mode the portal is an ordinary MCP client of your server (MCP authorization 2025-11-25):
 it reads your protected-resource metadata and your authorization server's metadata, and sends each person's token
@@ -43,7 +53,7 @@ An editor's **Test connection** (decision 61) behaves like a call for a server w
 | `tool`, `prompt`, `resource` | **None of them is set** (a call sets exactly one) |
 | `client` | `Test connection` (no `client_verified`) |
 
-If your server answers a Test's request with `401` or `403` but accepts the same request without the token, the portal reports that the server refuses the identity token (and to turn Send identity token off, or to accept it). A public server that refuses any `Authorization` header is the usual case. This catches only a server that refuses at the HTTP level: one that accepts the request and rejects the token when a tool runs still passes a Test. Refresh, discovery and the scheduled health checks send **no** identity token, and an automation token's Test has no person to name, so it sends none either.
+If your server answers a Test's request with `401` or `403` but accepts the same request without the token, the portal reports that the server refuses the identity token (and to turn Send identity token off, or to accept it). A public server that refuses any `Authorization` header is the usual case. This catches only a server that refuses at the HTTP level: one that accepts the request and rejects the token when a tool runs still passes a Test. Since decision 64 a new server with no authentication on a public host starts with the switch off, which avoids this; the call record's `identitySent` shows the remaining cases. Refresh, discovery and the scheduled health checks send **no** identity token, and an automation token's Test has no person to name, so it sends none either.
 
 ## What to check
 

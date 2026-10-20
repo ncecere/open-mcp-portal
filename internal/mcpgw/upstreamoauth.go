@@ -61,6 +61,10 @@ func (rc *request) prepareTarget(t *upstream.Target, who identityFor, o gateways
 			t.IdentityHeader, t.IdentityValue = identity.HeaderIdentity, token
 		}
 	}
+	// Recorded with the call (decision 64): whether the identity token was
+	// attached to the request to the server.
+	sent := token != ""
+	rec.IdentitySent = &sent
 	withCredential(t, cred)
 	if serverBound(cred) {
 		rc.scrub = append(rc.scrub, cred.AccessToken)

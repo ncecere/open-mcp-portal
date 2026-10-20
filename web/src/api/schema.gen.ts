@@ -491,6 +491,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teams/{team}/mcp-servers/identity-default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The default of "Send identity token" for a server with no authentication at a URL (editors and above); changes nothing
+         * @description Classifies the host of url as the registry does when a server is created without an explicit sendIdentity (decision 64): a public host, an internal host (named by the internal-network allowlist, or a private address), or a name that could not be resolved in time (treated as public). Resolves the host name (at most 3 s) and connects to nothing. Only for authMode none: servers with a static header or in oauth mode default to sending the token. Session only (the add form's helper; automation tokens can't call it). Nothing is stored or audited. 422 url_not_allowed as for create. 409 team_archived. 429 slow_down (30 a minute per person).
+         */
+        post: operations["getTeamMcpServerIdentityDefault"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teams/{team}/mcp-servers/{serverId}": {
         parameters: {
             query?: never;
@@ -3109,7 +3132,7 @@ export interface components {
             authMode?: components["schemas"]["McpServerAuthMode"];
             /** @description The sign-in configuration when authMode is oauth, else null. Absent (like authMode) from servers before Phase 7 */
             oauth?: components["schemas"]["McpServerOAuth"] | null;
-            /** @description Send the identity token (decision 45). true (the default) keeps decision 7: every forwarded call carries the signed identity JWT (Authorization: Bearer, or MCP-Gateway-Identity when the server has a static Authorization header or is in oauth mode). false: the JWT is not sent to this server at all (no header), recommended for servers run outside the company such as GitHub's hosted MCP server, so names, emails and teams are not sent to a third party. Absent from servers before Phase 7 (true) */
+            /** @description Send the identity token (decision 45). true (the default) keeps decision 7: every forwarded call carries the signed identity JWT (Authorization: Bearer, or MCP-Gateway-Identity when the server has a static Authorization header or is in oauth mode). false: the JWT is not sent to this server at all (no header), recommended for servers run outside the company such as GitHub's hosted MCP server, so names, emails and teams are not sent to a third party. Absent from servers before Phase 7 (true). New servers with authMode none on a public host default to false (decision 64); servers saved earlier keep their value */
             sendIdentity?: boolean;
             /** @description The MCP protocol version the portal last negotiated with the upstream server (set by refresh, health checks and test); read-only. Null until the first successful exchange. */
             protocol?: components["schemas"]["McpServerProtocol"] | null;
@@ -3153,11 +3176,8 @@ export interface components {
             /** @description Default: static_header when authHeaderName is sent, else none. oauth needs oauth */
             authMode?: components["schemas"]["McpServerAuthMode"];
             oauth?: components["schemas"]["McpServerOAuthInput"];
-            /**
-             * @description Send the signed identity token with forwarded calls (McpServer.sendIdentity)
-             * @default true
-             */
-            sendIdentity: boolean;
+            /** @description Send the signed identity token with forwarded calls (McpServer.sendIdentity). Omit for the default (decision 64) true, except authMode none on a public host (or one that can't be resolved), where it is false; POST .../mcp-servers/identity-default tells which. An explicit value is always kept */
+            sendIdentity?: boolean;
         };
         McpServerUpdate: {
             name?: string;
@@ -3696,6 +3716,8 @@ export interface components {
             errorClass?: string;
             /** @description The auth provider the capability required at the time of the call (absent when none) */
             providerSlug?: string;
+            /** @description Whether the signed identity token (name, email, teams) was attached to the request to the server (decision 64). true: sent. false: not sent (the server's Send identity token switch was off). null: the call was not forwarded (denied, needs authorization, rate limited) or was recorded before this field existed */
+            identitySent?: boolean | null;
             /** Format: int32 */
             latencyMs: number;
             /** Format: int64 */
@@ -4391,6 +4413,15 @@ export interface components {
         OAuthSetupStart: {
             /** @description A path on this site (default /teams/{team}/servers/{serverId}?setup=connected) */
             returnTo?: string;
+        };
+        IdentityDefault: {
+            /**
+             * @description public_host: a public address that no internal allowlist entry names. internal_host: named by an allowlist entry, or a private address. unresolved_host: the name could not be resolved in time; treated as public, because nothing shows it is internal
+             * @enum {string}
+             */
+            basis: "public_host" | "internal_host" | "unresolved_host";
+            /** @description The default of Send identity token for a server with no authentication at this URL. false for public_host and unresolved_host, true for internal_host */
+            sendIdentity: boolean;
         };
         DetectAuthRequest: {
             /** @description The MCP endpoint, checked like a server URL */
@@ -5605,6 +5636,8 @@ export interface components {
         /** @description MCP server ID */
         CallServerParam: string;
         CallOutcomeParam: components["schemas"]["McpCallOutcome"];
+        /** @description true: only calls where the identity token was sent to the server. false: only calls where it was not sent (the server's Send identity token switch was off). Calls that were not forwarded, and calls recorded before this field existed, have no value and match neither. */
+        CallIdentitySentParam: boolean;
         /** @description Only calls made by this person (any credential) */
         CallUserParam: string;
         OAuthGrantIdParam: string;
@@ -6472,6 +6505,41 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["DetectAuthResult"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            422: components["responses"]["ErrorReply"];
+            429: components["responses"]["ErrorReply"];
+        };
+    };
+    getTeamMcpServerIdentityDefault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DetectAuthRequest"];
+            };
+        };
+        responses: {
+            /** @description The default and why */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["IdentityDefault"];
                     };
                 };
             };
@@ -7587,6 +7655,8 @@ export interface operations {
                 /** @description MCP server ID */
                 server?: components["parameters"]["CallServerParam"];
                 outcome?: components["parameters"]["CallOutcomeParam"];
+                /** @description true: only calls where the identity token was sent to the server. false: only calls where it was not sent (the server's Send identity token switch was off). Calls that were not forwarded, and calls recorded before this field existed, have no value and match neither. */
+                identitySent?: components["parameters"]["CallIdentitySentParam"];
                 /** @description Only calls made by this person (any credential) */
                 user?: components["parameters"]["CallUserParam"];
                 /** @description Only calls made by this service account */
@@ -7928,6 +7998,8 @@ export interface operations {
                 /** @description MCP server ID */
                 server?: components["parameters"]["CallServerParam"];
                 outcome?: components["parameters"]["CallOutcomeParam"];
+                /** @description true: only calls where the identity token was sent to the server. false: only calls where it was not sent (the server's Send identity token switch was off). Calls that were not forwarded, and calls recorded before this field existed, have no value and match neither. */
+                identitySent?: components["parameters"]["CallIdentitySentParam"];
                 /** @description Only calls made by this person (any credential) */
                 user?: components["parameters"]["CallUserParam"];
                 /** @description Only calls made by this service account */

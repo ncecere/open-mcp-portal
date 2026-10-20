@@ -20,10 +20,24 @@ import (
 )
 
 const (
-	stateCookie   = "omp_oidc_state"
-	loginStateTTL = 10 * time.Minute
-	maxClaimsSize = 32 << 10
+	// stateCookiePlain is the sign-in state cookie's name over plain http
+	// (the development origin); StateCookieName gives the https name. v0.2.2
+	// and earlier used the plain name everywhere.
+	stateCookiePlain = "omp_oidc_state"
+	stateCookieHost  = "__Host-omp_oidc_state"
+	loginStateTTL    = 10 * time.Minute
+	maxClaimsSize    = 32 << 10
 )
+
+// StateCookieName is the sign-in state cookie's name: __Host- prefixed under
+// HTTPS (host-only, Secure, Path=/, so a sibling subdomain cannot set or
+// shadow it), plain over the development http origin.
+func StateCookieName(secure bool) string {
+	if secure {
+		return stateCookieHost
+	}
+	return stateCookiePlain
+}
 
 type oidcClient struct {
 	oauth    *oauth2.Config
@@ -83,7 +97,7 @@ func (s *Service) Login(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusServiceUnavailable, "login_unavailable", "Sign-in is temporarily unavailable")
 		return
 	}
-	s.setCookie(w, stateCookie, state, int(loginStateTTL.Seconds()))
+	s.setCookie(w, StateCookieName(s.cfg.SecureCookies()), state, int(loginStateTTL.Seconds()))
 	http.Redirect(w, r, c.oauth.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oidc.Nonce(nonce)), http.StatusFound)
 }
 
@@ -124,16 +138,35 @@ func (s *Service) Callback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, saved.NextPath, http.StatusSeeOther)
 }
 
+// stateCookie reads this browser's sign-in state: the cookie under the
+// current name, else under the other one. A sign-in started before an upgrade
+// to v0.2.2 carries the plain name on https; accepting it for one release
+// (v0.2.2; remove in v0.3) keeps that person's sign-in from failing. The
+// current name always wins when both are present.
+func (s *Service) stateCookie(r *http.Request) (string, bool) {
+	secure := s.cfg.SecureCookies()
+	for _, name := range []string{StateCookieName(secure), StateCookieName(!secure)} {
+		if c, err := r.Cookie(name); err == nil && c.Value != "" {
+			return c.Value, true
+		}
+	}
+	return "", false
+}
+
 // takeState checks the state parameter against this browser's state cookie
 // and consumes the pending sign-in, writing a 400 when either fails.
 func (s *Service) takeState(w http.ResponseWriter, r *http.Request) (dbgen.LoginState, bool) {
 	state := r.URL.Query().Get("state")
-	cookie, err := r.Cookie(stateCookie)
-	if err != nil || len(state) < 32 || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
+	value, found := s.stateCookie(r)
+	if !found || len(state) < 32 || subtle.ConstantTimeCompare([]byte(value), []byte(state)) != 1 {
 		httpx.Error(w, http.StatusBadRequest, "invalid_state", "Sign-in expired or was started in another browser. Try again.")
 		return dbgen.LoginState{}, false
 	}
-	s.setCookie(w, stateCookie, "", -1)
+	// Both names are cleared, whichever one carried the state.
+	s.setCookie(w, StateCookieName(s.cfg.SecureCookies()), "", -1)
+	if s.cfg.SecureCookies() {
+		s.setCookie(w, stateCookiePlain, "", -1)
+	}
 	saved, err := s.q.TakeLoginState(r.Context(), Digest(state))
 	if err != nil {
 		httpx.Error(w, http.StatusBadRequest, "invalid_state", "Sign-in expired. Try again.")

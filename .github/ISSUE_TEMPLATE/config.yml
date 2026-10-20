@@ -6,6 +6,9 @@ contact_links:
   - name: Report a security vulnerability
     url: https://github.com/ncecere/open-mcp-portal/security/advisories/new
     about: Privately, please. Never in a public issue, pull request or discussion (see SECURITY.md).
+  - name: How issues are handled
+    url: https://github.com/ncecere/open-mcp-portal/blob/main/CONTRIBUTING.md#how-issues-are-handled
+    about: Labels, expected reply times, supported versions, releases and how decisions are made.
   - name: Documentation
     url: https://docs.omp.bitop.dev
     about: Guides for people, teams, administrators, operators and server authors.
