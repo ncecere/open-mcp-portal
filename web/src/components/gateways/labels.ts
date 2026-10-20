@@ -183,6 +183,7 @@ export const callErrorLabels: Record<string, string> = {
   timeout: "No answer in time",
   too_large: "Over 1 MiB",
   not_allowed: "Server address not allowed",
+  tls: "TLS problem with the server",
 };
 
 /** "Gateway turned off" for a known error class; an unknown one humanised ("some_new_class" → "Some new class"). */

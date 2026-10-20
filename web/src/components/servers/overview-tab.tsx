@@ -12,7 +12,7 @@ import { Link } from "@tanstack/react-router";
 import { Box, FileText, FlaskConical, MessageSquareText, RefreshCw, Wrench } from "lucide-react";
 import { useState } from "react";
 import { api, type Schemas, unwrap } from "../../api/client";
-import { ErrorAlert } from "@/components/ui/alert/alert";
+import { Alert, ErrorAlert } from "@/components/ui/alert/alert";
 import { Button } from "@/components/ui/button/button";
 import { Card } from "@/components/ui/card/card";
 import { DescriptionList } from "@/components/ui/description-list/description-list";
@@ -27,6 +27,7 @@ import { RequirementCard } from "./requirement-card";
 import { SetupConnectedNotice, SetupNotice } from "./setup";
 import { SignInCard } from "./sign-in-card";
 import { partsOf, partSummary } from "./credentials";
+import { tlsSummary } from "./tls";
 import { authModeLabels, authModeOf } from "./upstream-auth";
 import { type CapabilityKind, countOf, kindTitle, type McpServer } from "./labels";
 import { FailureLine, FirstDiscovery, RefreshError, refreshChanges, RefreshSummary, TestResultAlert } from "./results";
@@ -123,6 +124,11 @@ function ConnectionCard({ server, scope, abilities, onRun }: Props & { onRun: ()
       }
     >
       <div className={m.stack}>
+        {h.warnings?.map((w) => (
+          <Alert key={w.code} tone={w.code === "tls_certificate_expired" ? "danger" : "warning"} title={w.code === "tls_certificate_expired" ? "Client certificate expired" : "Client certificate expires soon"}>
+            {w.message}
+          </Alert>
+        ))}
         {test.data && <TestResultAlert result={test.data} />}
         {test.error && <ErrorAlert error={test.error} title="Couldn't run the test" />}
         {refresh.data && <RefreshSummary result={refresh.data} published={server.publishState === "published"} />}
@@ -134,6 +140,7 @@ function ConnectionCard({ server, scope, abilities, onRun }: Props & { onRun: ()
             { label: "Transport", value: "Streamable HTTP" },
             { label: "Upstream", value: <ProtocolText protocol={server.protocol} /> },
             { label: mode === "static_header" ? "Header" : "Authentication", value: auth },
+            ...(tlsSummary(server) ? [{ label: "TLS", value: tlsSummary(server) }] : []),
             { label: "Timeout", value: `${server.timeoutSeconds} s` },
             { label: "Status", value: <EnabledBadge enabled={server.enabled} /> },
             { label: "Health", value: <HealthBadge health={h} /> },

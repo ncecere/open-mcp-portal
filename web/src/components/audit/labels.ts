@@ -129,6 +129,7 @@ export const publishRequestReasons: Record<string, string> = {
   url_changed: "after its URL changed",
   requirement_changed: "after what it receives changed",
   upstream_auth_changed: "after its sign-in changed",
+  upstream_tls_changed: "after its trusted CA changed",
 };
 
 /** Why a connected app's sign-in ended (oauth.revoke, metadata.reason). */
