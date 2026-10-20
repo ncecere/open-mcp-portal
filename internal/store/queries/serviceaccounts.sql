@@ -5,7 +5,8 @@
 SELECT sqlc.embed(sa),
        (SELECT count(*) FROM service_account_keys k
         WHERE k.service_account_id = sa.id AND k.revoked_at IS NULL AND k.expires_at > now())::bigint AS active_keys,
-       u.display_name AS created_by_name
+       u.display_name AS created_by_name,
+       COALESCE((SELECT p.name FROM agent_platforms p WHERE p.id = sa.relay_platform_id), '')::text AS relay_platform_name
 FROM service_accounts sa
 LEFT JOIN users u ON u.id = sa.created_by
 WHERE sa.team_id = $1
@@ -15,7 +16,8 @@ ORDER BY sa.name, sa.id;
 SELECT sqlc.embed(sa),
        (SELECT count(*) FROM service_account_keys k
         WHERE k.service_account_id = sa.id AND k.revoked_at IS NULL AND k.expires_at > now())::bigint AS active_keys,
-       u.display_name AS created_by_name
+       u.display_name AS created_by_name,
+       COALESCE((SELECT p.name FROM agent_platforms p WHERE p.id = sa.relay_platform_id), '')::text AS relay_platform_name
 FROM service_accounts sa
 LEFT JOIN users u ON u.id = sa.created_by
 WHERE sa.id = @id AND sa.team_id = @team_id;
@@ -119,7 +121,8 @@ SELECT EXISTS (SELECT 1 FROM gateway_grants WHERE gateway_id = @gateway_id AND t
 SELECT sqlc.embed(sa), t.slug AS team_slug,
        (SELECT count(*) FROM service_account_keys k
         WHERE k.service_account_id = sa.id AND k.revoked_at IS NULL AND k.expires_at > now())::bigint AS active_keys,
-       u.display_name AS created_by_name
+       u.display_name AS created_by_name,
+       COALESCE((SELECT p.name FROM agent_platforms p WHERE p.id = sa.relay_platform_id), '')::text AS relay_platform_name
 FROM service_accounts sa
 JOIN teams t ON t.id = sa.team_id
 LEFT JOIN users u ON u.id = sa.created_by

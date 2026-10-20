@@ -34,6 +34,7 @@ describe("navigation lists", () => {
       "/admin/networks",
       "/admin/gateways",
       "/admin/trusted-clients",
+      "/admin/agent-platforms",
       "/admin/auth-providers",
       "/admin/automation-tokens",
       "/admin/audit",

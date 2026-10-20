@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ncecere/open-mcp-portal/internal/agentidentity"
 	"github.com/ncecere/open-mcp-portal/internal/apikeys"
 	"github.com/ncecere/open-mcp-portal/internal/auth"
 	"github.com/ncecere/open-mcp-portal/internal/automation"
@@ -52,6 +53,9 @@ type Deps struct {
 	OAuth *oauth.Service
 	// ServiceAccounts manages team service accounts and their keys.
 	ServiceAccounts *serviceaccounts.Service
+	// AgentPlatforms manages trusted agent platforms and their relay
+	// accounts (internal/agentidentity).
+	AgentPlatforms *agentidentity.Service
 	// Providers is delegated credentials: auth providers, connections and
 	// consent links (internal/providers).
 	Providers *providers.Service
@@ -119,7 +123,7 @@ func apiRoutes(d Deps) []route {
 	for _, group := range [][]route{a.authRoutes(), a.teamRoutes(), a.platformAdminRoutes(), a.mcpServerRoutes(), a.mcpAdminRoutes(),
 		a.gatewayRoutes(), a.gatewayAdminRoutes(), a.meGatewayRoutes(), a.mcpRoutes(), a.oauthRoutes(), a.oauthRESTRoutes(),
 		a.serviceAccountRoutes(), a.serviceAccountAdminRoutes(), a.providerRoutes(), a.operationsRoutes(), a.operationsAdminRoutes(),
-		a.upstreamOAuthRoutes(), a.v02Routes()} {
+		a.upstreamOAuthRoutes(), a.v02Routes(), a.agentPlatformRoutes(), a.presentPersonRoutes()} {
 		routes = append(routes, group...)
 	}
 	return routes

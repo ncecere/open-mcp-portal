@@ -11,6 +11,30 @@ import (
 	"github.com/google/uuid"
 )
 
+type AgentPlatform struct {
+	ID            uuid.UUID
+	Name          string
+	Issuer        string
+	JwksUrl       string
+	Audience      string
+	Enabled       bool
+	Revision      int64
+	JwksCheckedAt *time.Time
+	JwksOk        *bool
+	JwksError     *string
+	JwksKeyIds    []string
+	CreatedBy     uuid.NullUUID
+	UpdatedBy     uuid.NullUUID
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type AgentTokenJti struct {
+	PlatformID uuid.UUID
+	Jti        string
+	ExpiresAt  time.Time
+}
+
 type ApiKey struct {
 	ID         uuid.UUID
 	UserID     uuid.UUID
@@ -203,6 +227,11 @@ type McpCall struct {
 	KeyName              *string
 	OauthClientKind      *string
 	ProviderSlug         *string
+	AgentID              *string
+	AgentName            *string
+	ViaPlatformID        uuid.NullUUID
+	ViaPlatformName      *string
+	PersonPresent        *bool
 }
 
 type McpCallPayload struct {
@@ -224,22 +253,23 @@ type McpCallPayload struct {
 }
 
 type McpCapability struct {
-	ID                  uuid.UUID
-	ServerID            uuid.UUID
-	Kind                string
-	Name                string
-	Title               string
-	Description         string
-	Definition          json.RawMessage
-	Fingerprint         string
-	ApprovedFingerprint *string
-	ApprovedBy          uuid.NullUUID
-	ApprovedAt          *time.Time
-	FirstSeenAt         time.Time
-	LastSeenAt          time.Time
-	GoneAt              *time.Time
-	RequirementMode     string
-	RequirementScopes   []string
+	ID                    uuid.UUID
+	ServerID              uuid.UUID
+	Kind                  string
+	Name                  string
+	Title                 string
+	Description           string
+	Definition            json.RawMessage
+	Fingerprint           string
+	ApprovedFingerprint   *string
+	ApprovedBy            uuid.NullUUID
+	ApprovedAt            *time.Time
+	FirstSeenAt           time.Time
+	LastSeenAt            time.Time
+	GoneAt                *time.Time
+	RequirementMode       string
+	RequirementScopes     []string
+	RequiresPresentPerson *bool
 }
 
 type McpHealthCheck struct {
@@ -258,43 +288,44 @@ type McpHealthCheck struct {
 }
 
 type McpServer struct {
-	ID                   uuid.UUID
-	TeamID               uuid.UUID
-	Slug                 string
-	Name                 string
-	Description          string
-	URL                  string
-	Transport            string
-	AuthHeaderName       *string
-	AuthValueCipher      []byte
-	AuthValueHint        string
-	TimeoutSeconds       int32
-	Enabled              bool
-	PublishState         string
-	PublishRequestedAt   *time.Time
-	PublishRequestedBy   uuid.NullUUID
-	PublishRequestNote   *string
-	PublishReviewedAt    *time.Time
-	PublishReviewedBy    uuid.NullUUID
-	PublishReviewNote    *string
-	PublishedAt          *time.Time
-	RefreshedAt          *time.Time
-	LastRefreshError     *string
-	Revision             int64
-	CreatedBy            uuid.NullUUID
-	CreatedAt            time.Time
-	UpdatedBy            uuid.NullUUID
-	UpdatedAt            time.Time
-	AuthProviderID       uuid.NullUUID
-	AuthScopes           []string
-	CapturePayloads      bool
-	AuthMode             string
-	OauthSetupUserID     uuid.NullUUID
-	OauthSetupAt         *time.Time
-	SendIdentity         bool
-	ProtocolEra          *string
-	ProtocolVersion      *string
-	ProtocolNegotiatedAt *time.Time
+	ID                    uuid.UUID
+	TeamID                uuid.UUID
+	Slug                  string
+	Name                  string
+	Description           string
+	URL                   string
+	Transport             string
+	AuthHeaderName        *string
+	AuthValueCipher       []byte
+	AuthValueHint         string
+	TimeoutSeconds        int32
+	Enabled               bool
+	PublishState          string
+	PublishRequestedAt    *time.Time
+	PublishRequestedBy    uuid.NullUUID
+	PublishRequestNote    *string
+	PublishReviewedAt     *time.Time
+	PublishReviewedBy     uuid.NullUUID
+	PublishReviewNote     *string
+	PublishedAt           *time.Time
+	RefreshedAt           *time.Time
+	LastRefreshError      *string
+	Revision              int64
+	CreatedBy             uuid.NullUUID
+	CreatedAt             time.Time
+	UpdatedBy             uuid.NullUUID
+	UpdatedAt             time.Time
+	AuthProviderID        uuid.NullUUID
+	AuthScopes            []string
+	CapturePayloads       bool
+	AuthMode              string
+	OauthSetupUserID      uuid.NullUUID
+	OauthSetupAt          *time.Time
+	SendIdentity          bool
+	ProtocolEra           *string
+	ProtocolVersion       *string
+	ProtocolNegotiatedAt  *time.Time
+	RequiresPresentPerson bool
 }
 
 type NetworkSetting struct {
@@ -543,18 +574,21 @@ type RetentionSetting struct {
 }
 
 type ServiceAccount struct {
-	ID          uuid.UUID
-	TeamID      uuid.UUID
-	Name        string
-	Description string
-	Role        string
-	Enabled     bool
-	Revision    int64
-	CreatedBy   uuid.NullUUID
-	CreatedAt   time.Time
-	UpdatedBy   uuid.NullUUID
-	UpdatedAt   time.Time
-	LastUsedAt  *time.Time
+	ID              uuid.UUID
+	TeamID          uuid.UUID
+	Name            string
+	Description     string
+	Role            string
+	Enabled         bool
+	Revision        int64
+	CreatedBy       uuid.NullUUID
+	CreatedAt       time.Time
+	UpdatedBy       uuid.NullUUID
+	UpdatedAt       time.Time
+	LastUsedAt      *time.Time
+	RelayPlatformID uuid.NullUUID
+	RelayMarkedBy   uuid.NullUUID
+	RelayMarkedAt   *time.Time
 }
 
 type ServiceAccountKey struct {

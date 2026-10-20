@@ -130,6 +130,9 @@ type View struct {
 	TeamSlug      string
 	ActiveKeys    int64
 	CreatedByName *string
+	// RelayPlatformName is the agent platform the account relays for ("":
+	// not a relay; decision 66).
+	RelayPlatformName string
 }
 
 // teamAccess is a team as seen by an actor.
@@ -190,7 +193,7 @@ func (s *Service) view(ctx context.Context, q *dbgen.Queries, t dbgen.Team, id u
 	} else if err != nil {
 		return View{}, err
 	}
-	return View{Account: row.ServiceAccount, TeamSlug: t.Slug, ActiveKeys: row.ActiveKeys, CreatedByName: row.CreatedByName}, nil
+	return View{Account: row.ServiceAccount, TeamSlug: t.Slug, ActiveKeys: row.ActiveKeys, CreatedByName: row.CreatedByName, RelayPlatformName: row.RelayPlatformName}, nil
 }
 
 // List lists the team's service accounts by name (members; platform admins
@@ -206,7 +209,7 @@ func (s *Service) List(ctx context.Context, a authz.Actor, ref string) ([]View, 
 	}
 	out := make([]View, len(rows))
 	for i, r := range rows {
-		out[i] = View{Account: r.ServiceAccount, TeamSlug: ta.team.Slug, ActiveKeys: r.ActiveKeys, CreatedByName: r.CreatedByName}
+		out[i] = View{Account: r.ServiceAccount, TeamSlug: ta.team.Slug, ActiveKeys: r.ActiveKeys, CreatedByName: r.CreatedByName, RelayPlatformName: r.RelayPlatformName}
 	}
 	return out, nil
 }
@@ -274,7 +277,7 @@ func (s *Service) AdminList(ctx context.Context, a authz.Actor, p AdminListParam
 	}
 	out := make([]View, len(rows))
 	for i, r := range rows {
-		out[i] = View{Account: r.ServiceAccount, TeamSlug: r.TeamSlug, ActiveKeys: r.ActiveKeys, CreatedByName: r.CreatedByName}
+		out[i] = View{Account: r.ServiceAccount, TeamSlug: r.TeamSlug, ActiveKeys: r.ActiveKeys, CreatedByName: r.CreatedByName, RelayPlatformName: r.RelayPlatformName}
 	}
 	return out, nil
 }

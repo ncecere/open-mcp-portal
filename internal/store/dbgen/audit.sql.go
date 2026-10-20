@@ -131,6 +131,7 @@ CROSS JOIN LATERAL (
         WHEN 'service_account_key' THEN (SELECT sa.name || ' · ' || k.name FROM service_account_keys k
                                          JOIN service_accounts sa ON sa.id = k.service_account_id WHERE k.id = ids.target_uuid)
         WHEN 'auth_provider' THEN (SELECT ap.name FROM auth_providers ap WHERE ap.id = ids.target_uuid)
+        WHEN 'agent_platform' THEN (SELECT p.name FROM agent_platforms p WHERE p.id = ids.target_uuid)
         WHEN 'provider_connection' THEN (SELECT COALESCE(NULLIF(cu.display_name, ''), cu.email::text) || ' · ' || cp.name
                                          FROM provider_connections pc JOIN users cu ON cu.id = pc.user_id
                                          JOIN auth_providers cp ON cp.id = pc.provider_id WHERE pc.id = ids.target_uuid)

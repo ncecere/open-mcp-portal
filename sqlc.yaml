@@ -51,3 +51,8 @@ sql:
             go_type:
               type: int64
               pointer: true
+          - db_type: pg_catalog.bool
+            nullable: true
+            go_type:
+              type: bool
+              pointer: true
