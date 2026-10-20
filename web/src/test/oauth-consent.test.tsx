@@ -1,4 +1,4 @@
-/* The OAuth consent page: the client (verified or not), the gateway, where the browser goes back to, Allow and Deny, invalid requests and signing in first. */
+/* The OAuth consent page: the client (verified or not), the gateway, where the browser goes back to, Allow and Deny, the first-use notice of a trusted client, invalid requests and signing in first. */
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
@@ -139,6 +139,49 @@ describe("OAuth consent page", () => {
     openConsent({ "GET /v1/oauth/consent": () => oauthConsent({ remembered: true, gateway: myGateway({ ownerKind: "platform", teamSlug: undefined, teamName: undefined }) }) });
     expect(await screen.findByText(/You allowed this app on this gateway before/)).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "The gateway" })).toHaveTextContent("Platform gateway");
+  });
+
+  it("asks a trusted client's first sign-in from this computer once, as a notice with Continue and Cancel", async () => {
+    const u = userEvent.setup();
+    const go = vi.spyOn(redirectTo, "go").mockImplementation(() => {});
+    const { calls, container } = openConsent({
+      "GET /v1/oauth/consent": () => oauthConsent({ client: oauthClient({ trusted: true }), notice: true }),
+      "POST /v1/oauth/consent": () => ({ redirectUrl: back }),
+    });
+    expect(await screen.findByRole("heading", { level: 1, name: "Claude Code wants to use Support tools as you" })).toBeInTheDocument();
+    const notice = screen.getByText("Your administrators trust Claude Code").closest("[role]") ?? screen.getByText("Your administrators trust Claude Code").parentElement!;
+    expect(notice).toHaveTextContent("It doesn't normally ask, but this is its first sign-in to Support tools from you");
+    expect(notice).toHaveTextContent("it receives the result on this computer, at 127.0.0.1:53211");
+    expect(notice).toHaveTextContent("If you didn't just start signing in from Claude Code, choose Cancel.");
+    // The usual buttons are replaced, not added to.
+    expect(screen.queryByRole("button", { name: "Allow" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Deny" })).toBeNull();
+    expect(await axe(container)).toHaveNoViolations();
+    await u.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(go).toHaveBeenCalledWith(back));
+    // The same answer as Allow: the server records it as a confirmation.
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ query, decision: "allow" });
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  });
+
+  it("cancels the notice with deny", async () => {
+    const u = userEvent.setup();
+    const denied = "http://127.0.0.1:53211/callback?error=access_denied&state=123";
+    const go = vi.spyOn(redirectTo, "go").mockImplementation(() => {});
+    const { calls } = openConsent({
+      "GET /v1/oauth/consent": () => oauthConsent({ client: oauthClient({ trusted: true }), notice: true }),
+      "POST /v1/oauth/consent": () => ({ redirectUrl: denied }),
+    });
+    await u.click(await screen.findByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(go).toHaveBeenCalledWith(denied));
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ query, decision: "deny" });
+  });
+
+  it("shows no notice for a request that isn't one", async () => {
+    openConsent({ "GET /v1/oauth/consent": () => oauthConsent() });
+    expect(await screen.findByRole("button", { name: "Allow" })).toBeInTheDocument();
+    expect(screen.queryByText(/Your administrators trust/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
   });
 
   it("signed out, shows the sign-in page, which returns here with the whole request", async () => {

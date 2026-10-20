@@ -404,6 +404,7 @@ export const oauthConsent = (extra: Partial<Schemas["OAuthConsent"]> = {}): Sche
   redirectUri: "http://127.0.0.1:53211/callback",
   redirectHost: "127.0.0.1:53211",
   remembered: false,
+  notice: false,
   ...extra,
 });
 
@@ -413,6 +414,7 @@ export const oauthGrant = (extra: Partial<Schemas["OAuthGrant"]> = {}): Schemas[
   gateway: { id: gatewayId, slug: "support-tools", name: "Support tools", exists: true },
   createdAt: "2026-10-10T10:00:00Z",
   lastUsedAt: "2026-10-16T07:00:00Z",
+  expiresAt: "2027-04-08T10:00:00Z",
   ...extra,
 });
 
@@ -421,6 +423,7 @@ export const trustedClients = (extra: Partial<Schemas["TrustedClients"]> = {}): 
     { clientId: "https://claude.ai/oauth/claude-code-client-metadata", label: "Claude Code" },
     { clientId: "https://vscode.dev/oauth/client-metadata.json", label: "VS Code" },
   ],
+  openRegistration: true,
   revision: 2,
   updatedAt: "2026-10-15T10:00:00Z",
   ...extra,

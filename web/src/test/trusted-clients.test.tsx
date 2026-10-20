@@ -1,4 +1,4 @@
-/* Admin → Trusted clients: the list, its client-ID checks, the save with If-Match and confirmation, a refused entry, a save conflict, and auditors reading. */
+/* Admin → Trusted clients: the list, its client-ID checks, the open-registration switch, the save with If-Match and confirmation, a refused entry, a save conflict, and auditors reading. */
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
@@ -61,7 +61,49 @@ describe("Admin → Trusted clients", () => {
       { clientId: "https://vscode.dev/oauth/client-metadata.json", label: "VS Code" },
       { clientId: "https://cursor.com/oauth/client-metadata.json", label: "Cursor" },
     ]);
-    expect(await screen.findByText("Trusted clients saved")).toBeInTheDocument();
+    expect(await screen.findByText("Client settings saved")).toBeInTheDocument();
+  });
+
+  it("turns open client registration off after confirming, saving it with the list (If-Match)", async () => {
+    const u = userEvent.setup();
+    const calls = mockApi(routes("platform_admin", { [`PUT ${path}`]: (body) => trustedClients({ ...(body as Clients), revision: 3 }) }));
+    const { container } = renderApp("/admin/trusted-clients");
+    const section = await screen.findByRole("region", { name: "Client registration" });
+    const toggle = within(section).getByRole("switch", { name: "Allow open client registration" });
+    expect(toggle).toBeChecked();
+    expect(section).toHaveTextContent("registered apps are always marked Unverified");
+    expect(section).toHaveTextContent("Apps that already registered keep working");
+    expect(await axe(container)).toHaveNoViolations();
+    await u.click(toggle);
+    expect(toggle).not.toBeChecked();
+    expect(puts(calls)).toHaveLength(0);
+    await u.click(screen.getByRole("button", { name: "Save settings" }));
+    const ask = await screen.findByRole("alertdialog", { name: "Save the trusted clients?" });
+    expect(ask).toHaveTextContent("Apps can no longer register themselves.");
+    await u.click(within(ask).getByRole("button", { name: "Save trusted clients" }));
+    await waitFor(() => expect(puts(calls)).toHaveLength(1));
+    expect(puts(calls)[0]?.headers.get("If-Match")).toBe('"2"');
+    expect(puts(calls)[0]?.body).toEqual({ clients: trustedClients().clients, openRegistration: false });
+    expect(await screen.findByText("Apps can no longer register themselves.")).toBeInTheDocument();
+    expect(within(await screen.findByRole("region", { name: "Client registration" })).getByRole("switch")).not.toBeChecked();
+  });
+
+  it("shows registration that is already off, turns it on again, and discards a change", async () => {
+    const u = userEvent.setup();
+    const calls = mockApi(routes("platform_admin", { [`GET ${path}`]: () => trustedClients({ openRegistration: false }), [`PUT ${path}`]: (body) => trustedClients({ ...(body as Clients), revision: 3 }) }));
+    renderApp("/admin/trusted-clients");
+    const toggle = await screen.findByRole("switch", { name: "Allow open client registration" });
+    expect(toggle).not.toBeChecked();
+    await u.click(toggle);
+    await u.click(screen.getByRole("button", { name: "Discard" }));
+    expect(toggle).not.toBeChecked();
+    await u.click(toggle);
+    await u.click(screen.getByRole("button", { name: "Save settings" }));
+    const ask = await screen.findByRole("alertdialog");
+    expect(ask).toHaveTextContent("Apps can register themselves again.");
+    await u.click(within(ask).getByRole("button", { name: "Save trusted clients" }));
+    await waitFor(() => expect(puts(calls)).toHaveLength(1));
+    expect((puts(calls)[0]?.body as Clients).openRegistration).toBe(true);
   });
 
   it("names removed clients in the confirmation, and shows a refused client on its row", async () => {
@@ -131,6 +173,8 @@ describe("Admin → Trusted clients", () => {
     expect(await screen.findByText("https://vscode.dev/oauth/client-metadata.json")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add client" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Actions for/ })).toBeNull();
+    // The switch shows the setting and can't be changed.
+    expect(screen.getByRole("switch", { name: "Allow open client registration" })).toHaveAttribute("aria-disabled", "true");
     expect(await axe(container)).toHaveNoViolations();
   });
 });

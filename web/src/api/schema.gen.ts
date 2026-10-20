@@ -1348,7 +1348,7 @@ export interface paths {
         put?: never;
         /**
          * Allow or deny an authorization request; returns where to send the browser
-         * @description Allow records the caller's consent for the client and gateway (audited as oauth.consent) and issues a single-use authorization code valid for 60 seconds. Deny sends the client access_denied.
+         * @description Allow records the caller's consent for the client and gateway (audited as oauth.consent, or as oauth.grant_confirmed when the page was the first-use notice of a trusted client) and issues a single-use authorization code valid for 60 seconds. Deny sends the client access_denied.
          */
         post: operations["decideOAuthConsent"];
         delete?: never;

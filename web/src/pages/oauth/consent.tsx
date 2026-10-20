@@ -10,6 +10,11 @@
  * client, with a code or access_denied. A request that isn't valid (400,
  * 404) is explained here and never sent anywhere.
  *
+ * A client the admins trust skips this page, except the first time it asks
+ * with a loopback redirect (a program on this computer receives the answer;
+ * decision 62): then the server marks the request `notice` and the page is
+ * a short confirmation, "Continue" or "Cancel", once per person and gateway.
+ *
  * No app shell: nothing to wander off to while the client waits. Signed
  * out, the session gate shows the sign-in page, which returns here with the
  * whole query.
@@ -144,6 +149,8 @@ function ConsentBody({ consent, titleId, email, decide, leaving }: BodyProps) {
   const unverified = client.kind === "registered";
   const logo = safeLogo(client);
   const busy = decide.isPending || leaving !== null;
+  // A trusted client's first sign-in from this computer: a confirmation, not a consent.
+  const notice = consent.notice;
   return (
     <Stack gap={5}>
       <div className={styles.client}>
@@ -172,6 +179,12 @@ function ConsentBody({ consent, titleId, email, decide, leaving }: BodyProps) {
         <Alert tone="warning">
           This app registered itself, so its name and website aren&apos;t checked. Allow it only if you just connected it yourself. Your answer goes to{" "}
           <strong>{consent.redirectHost}</strong>.
+        </Alert>
+      )}
+      {notice && (
+        <Alert tone="info" title={`Your administrators trust ${client.name}`}>
+          It doesn&apos;t normally ask, but this is its first sign-in to {gateway.name} from you, so it asks once. After you continue, it receives the result on this
+          computer, at <strong>{consent.redirectHost}</strong>. If you didn&apos;t just start signing in from {client.name}, choose Cancel.
         </Alert>
       )}
       {consent.remembered && <Alert tone="info">You allowed this app on this gateway before. Allowing again signs it in again.</Alert>}
@@ -216,10 +229,10 @@ function ConsentBody({ consent, titleId, email, decide, leaving }: BodyProps) {
       </p>
       <div className={styles.actions}>
         <Button variant="secondary" disabled={busy} loading={decide.isPending && decide.variables === "deny"} onClick={() => decide.mutate("deny")}>
-          Deny
+          {notice ? "Cancel" : "Deny"}
         </Button>
         <Button disabled={busy} loading={decide.isPending && decide.variables === "allow"} onClick={() => decide.mutate("allow")}>
-          Allow
+          {notice ? "Continue" : "Allow"}
         </Button>
       </div>
     </Stack>
