@@ -3,6 +3,7 @@ package oauth
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -20,7 +21,39 @@ const (
 	ReasonAdmin  = "admin"
 	ReasonClient = "client"
 	ReasonReuse  = "refresh_reuse"
+	// ReasonExpired: the grant's refresh tokens reached the absolute
+	// lifetime (OAUTH_REFRESH_ABSOLUTE_TTL, decision 63).
+	ReasonExpired = "expired_absolute"
 )
+
+// authorizedAt is when the person last signed the grant's app in: the start
+// of the absolute lifetime of its refresh tokens. The previous release
+// didn't set it, so a grant without one counts from its creation.
+func authorizedAt(g dbgen.OauthGrant) time.Time {
+	if g.AuthorizedAt != nil {
+		return *g.AuthorizedAt
+	}
+	return g.CreatedAt
+}
+
+// RefreshAbsoluteTTL is OAUTH_REFRESH_ABSOLUTE_TTL (0: no limit).
+func (s *Service) RefreshAbsoluteTTL() time.Duration { return s.refreshTTL }
+
+// GrantExpiry is when a grant's refresh tokens stop working however often
+// they are used, or nil without a limit. The app then signs in again.
+func (s *Service) GrantExpiry(g dbgen.OauthGrant) *time.Time {
+	if s.refreshTTL <= 0 {
+		return nil
+	}
+	t := authorizedAt(g).Add(s.refreshTTL)
+	return &t
+}
+
+// expired reports whether a grant's refresh tokens reached the absolute lifetime.
+func (s *Service) expired(g dbgen.OauthGrant) bool {
+	t := s.GrantExpiry(g)
+	return t != nil && !s.now().Before(*t)
+}
 
 // Grant is a connected app: a person's consent for a client on a gateway,
 // with the gateway's slug and name.

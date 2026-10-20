@@ -313,3 +313,35 @@ func TestUpstreamAllowedNetworks(t *testing.T) {
 		}
 	}
 }
+
+func TestOAuthRefreshAbsoluteTTL(t *testing.T) {
+	c, err := LoadFrom("", env(map[string]string{}))
+	if err != nil || c.OAuthRefreshAbsoluteTTL != 180*24*time.Hour {
+		t.Fatalf("default = %s %v", c.OAuthRefreshAbsoluteTTL, err)
+	}
+	for value, want := range map[string]time.Duration{"0": 0, "0d": 0, "180d": 180 * 24 * time.Hour, " 90d ": 90 * 24 * time.Hour,
+		"4320h": 180 * 24 * time.Hour, "24h": 24 * time.Hour, "1h": time.Hour} {
+		if c, err = LoadFrom("", env(map[string]string{"OAUTH_REFRESH_ABSOLUTE_TTL": value})); err != nil || c.OAuthRefreshAbsoluteTTL != want {
+			t.Errorf("%q = %s %v, want %s", value, c.OAuthRefreshAbsoluteTTL, err, want)
+		}
+	}
+	for _, bad := range []string{"-1d", "30m", "10000d", "forever", "1.5d", "", "d"} {
+		_, err := LoadFrom("", env(map[string]string{"OAUTH_REFRESH_ABSOLUTE_TTL": bad}))
+		if err == nil || !strings.Contains(err.Error(), "OAUTH_REFRESH_ABSOLUTE_TTL") {
+			t.Errorf("%q: err = %v, want one naming the setting", bad, err)
+		}
+	}
+}
+
+func TestOAuthMaxUnusedClientsPerAddress(t *testing.T) {
+	c, err := LoadFrom("", env(map[string]string{}))
+	if err != nil || c.OAuthMaxUnusedClientsPerAddress != 20 {
+		t.Fatalf("default = %d %v", c.OAuthMaxUnusedClientsPerAddress, err)
+	}
+	if c, err = LoadFrom("", env(map[string]string{"OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS": "0"})); err != nil || c.OAuthMaxUnusedClientsPerAddress != 0 {
+		t.Fatalf("0 = %d %v", c.OAuthMaxUnusedClientsPerAddress, err)
+	}
+	if _, err := LoadFrom("", env(map[string]string{"OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS": "-1"})); err == nil {
+		t.Fatal("a negative value was accepted")
+	}
+}

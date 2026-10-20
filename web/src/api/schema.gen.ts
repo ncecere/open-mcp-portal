@@ -1439,11 +1439,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Clients that skip the consent screen (platform admins and auditors) */
+        /**
+         * OAuth client settings (platform admins and auditors)
+         * @description The clients that skip the consent screen and whether open client registration is on.
+         */
         get: operations["adminGetTrustedClients"];
         /**
-         * Replace the trusted-client list (platform admins)
-         * @description 422 invalid_client_id (details.index) when an entry isn't an https URL with a path (Client ID Metadata Document). At most 50 entries. Audited as settings.oauth_clients_update.
+         * Replace the trusted-client list and set open registration (platform admins)
+         * @description 422 invalid_client_id (details.index) when an entry isn't an https URL with a path (Client ID Metadata Document). At most 50 entries. openRegistration, when sent, turns open client registration on or off (a platform token can't; session only). Audited as settings.oauth_clients_update.
          */
         put: operations["adminUpdateTrustedClients"];
         post?: never;
@@ -3765,6 +3768,8 @@ export interface components {
             redirectHost: string;
             /** @description The caller already allowed this client for this gateway */
             remembered: boolean;
+            /** @description A trusted client asks for the first time with a loopback redirect, so the page is a short confirmation instead of the usual consent screen (the answer is still allow or deny) */
+            notice: boolean;
         };
         OAuthConsentDecision: {
             /** @description The authorization request's query string, as the consent page received it */
@@ -3781,6 +3786,11 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             lastUsedAt?: string | null;
+            /**
+             * Format: date-time
+             * @description When the app has to sign in again however often it is used (OAUTH_REFRESH_ABSOLUTE_TTL after the person last signed it in); null when the portal sets no limit. Past it, the app is shown as expired.
+             */
+            expiresAt?: string | null;
         };
         TrustedClient: {
             /** @example https://claude.ai/oauth/claude-code-client-metadata */
@@ -3790,12 +3800,16 @@ export interface components {
         };
         TrustedClients: {
             clients: components["schemas"]["TrustedClient"][];
+            /** @description Whether POST /oauth/register accepts registrations (and the authorization server metadata lists registration_endpoint). On by default. Apps already registered keep working when it is off. */
+            openRegistration: boolean;
             revision: components["schemas"]["Revision"];
             /** Format: date-time */
             updatedAt: string;
         };
         TrustedClientsUpdate: {
             clients: components["schemas"]["TrustedClient"][];
+            /** @description Turn open client registration on or off; omitted keeps it as it is */
+            openRegistration?: boolean;
         };
         /**
          * @description The team role used for capabilities' minimum roles (decision 22)
@@ -8214,7 +8228,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Trusted clients */
+            /** @description OAuth client settings */
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];

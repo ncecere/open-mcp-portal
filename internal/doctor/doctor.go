@@ -19,6 +19,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/config"
 	"github.com/ncecere/open-mcp-portal/internal/keyrotation"
 	"github.com/ncecere/open-mcp-portal/internal/notify"
+	"github.com/ncecere/open-mcp-portal/internal/oauth"
 	"github.com/ncecere/open-mcp-portal/internal/secrets"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
@@ -160,6 +161,7 @@ func (r *runner) postgres(ctx context.Context) *pgxpool.Pool {
 	r.add(c)
 	if r.migrations(cctx, pool) {
 		r.keys(cctx, pool)
+		r.oauthRegistration(cctx, pool)
 	}
 	return pool
 }
@@ -243,6 +245,27 @@ func (r *runner) keys(ctx context.Context, pool *pgxpool.Pool) {
 		pc.Detail = "every usable key is on API_KEY_PEPPER"
 	}
 	r.add(pc)
+}
+
+// oauthRegistration says whether open client registration is on and how many
+// registered clients are live against the cap (info: nothing to fix).
+func (r *runner) oauthRegistration(ctx context.Context, pool *pgxpool.Pool) {
+	start := time.Now()
+	live, open, err := oauth.RegistrationStatus(ctx, dbgen.New(pool), time.Now())
+	c := Check{Group: "oauth", Name: "registration", Status: Info, DurationMs: millis(time.Since(start))}
+	capText := "no cap (OAUTH_MAX_REGISTERED_CLIENTS=0)"
+	if n := r.cfg.OAuthMaxRegisteredClients; n > 0 {
+		capText = fmt.Sprintf("cap %d (OAUTH_MAX_REGISTERED_CLIENTS)", n)
+	}
+	switch {
+	case err != nil:
+		c.Status, c.Detail = Fail, err.Error()
+	case !open:
+		c.Detail = fmt.Sprintf("open client registration is off (Admin, Trusted clients); %d registered client(s) still live", live)
+	default:
+		c.Detail = fmt.Sprintf("open client registration is on; %d registered client(s) live, %s", live, capText)
+	}
+	r.add(c)
 }
 
 // migrations reports the migration state; ok when the schema is current.

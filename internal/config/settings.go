@@ -5,6 +5,7 @@ package config
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"net/netip"
 	"strconv"
@@ -51,6 +52,31 @@ func duration(dst func(*Config) *time.Duration, min, max time.Duration) func(*Co
 		d, err := time.ParseDuration(strings.TrimSpace(v))
 		if err != nil || d < min || d > max {
 			return fmt.Errorf("must be a duration from %s to %s", min, max)
+		}
+		*dst(c) = d
+		return nil
+	}
+}
+
+// daysOrDuration is a duration that also takes whole days ("180d"), where
+// "0" turns the limit off; otherwise it must be from min to max.
+func daysOrDuration(dst func(*Config) *time.Duration, min, max time.Duration) func(*Config, string) error {
+	return func(c *Config, v string) error {
+		v = strings.TrimSpace(v)
+		var d time.Duration
+		var err error
+		if n, ok := strings.CutSuffix(v, "d"); ok {
+			var days int
+			if days, err = strconv.Atoi(n); err == nil && days >= 0 && days <= 100*365 {
+				d = time.Duration(days) * 24 * time.Hour
+			} else {
+				err = errors.New("bad days")
+			}
+		} else {
+			d, err = time.ParseDuration(v)
+		}
+		if err != nil || (d != 0 && (d < min || d > max)) {
+			return fmt.Errorf("must be 0 (no limit) or a duration from %s to %s, such as 180d or 4320h", min, max)
 		}
 		*dst(c) = d
 		return nil
@@ -139,6 +165,8 @@ var settings = []setting{
 	{key: "RETENTION_INTERVAL", apply: duration(func(c *Config) *time.Duration { return &c.RetentionInterval }, time.Minute, 24*time.Hour)},
 	{key: "RETENTION_BATCH_SIZE", apply: integer(func(c *Config) *int { return &c.RetentionBatchSize }, 10, 100_000)},
 	{key: "OAUTH_MAX_REGISTERED_CLIENTS", apply: integer(func(c *Config) *int { return &c.OAuthMaxRegisteredClients }, 0, 1_000_000)},
+	{key: "OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS", apply: integer(func(c *Config) *int { return &c.OAuthMaxUnusedClientsPerAddress }, 0, 1_000_000)},
+	{key: "OAUTH_REFRESH_ABSOLUTE_TTL", apply: daysOrDuration(func(c *Config) *time.Duration { return &c.OAuthRefreshAbsoluteTTL }, time.Hour, 10*365*24*time.Hour)},
 	{key: "HEALTH_CHECK_INTERVAL", apply: duration(func(c *Config) *time.Duration { return &c.HealthCheckInterval }, 0, 24*time.Hour)},
 	{key: "SIGNING_KEY_PREPUBLISH", apply: duration(func(c *Config) *time.Duration { return &c.SigningKeyPrepublish }, 0, 7*24*time.Hour)},
 	{key: "SESSION_TTL", apply: duration(func(c *Config) *time.Duration { return &c.SessionTTL }, 5*time.Minute, 30*24*time.Hour)},

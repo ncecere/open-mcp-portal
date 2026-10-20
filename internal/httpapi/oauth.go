@@ -118,16 +118,22 @@ func (a *api) oauthResourceMetadata(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// oauthServerMetadata is the authorization server metadata (RFC 8414).
-func (a *api) oauthServerMetadata(w http.ResponseWriter, _ *http.Request) {
+// oauthServerMetadata is the authorization server metadata (RFC 8414). It
+// lists registration_endpoint unless an admin turned open client
+// registration off.
+func (a *api) oauthServerMetadata(w http.ResponseWriter, r *http.Request) {
 	iss := a.OAuth.Issuer()
+	open, err := a.OAuth.OpenRegistration(r.Context())
+	if err != nil {
+		a.oauthFail(w, r, err)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=60")
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	doc := map[string]any{
 		"issuer":                                         iss,
 		"authorization_endpoint":                         iss + "/oauth/authorize",
 		"token_endpoint":                                 iss + "/oauth/token",
-		"registration_endpoint":                          iss + "/oauth/register",
 		"revocation_endpoint":                            iss + "/oauth/revoke",
 		"response_types_supported":                       []string{"code"},
 		"response_modes_supported":                       []string{"query"},
@@ -137,17 +143,42 @@ func (a *api) oauthServerMetadata(w http.ResponseWriter, _ *http.Request) {
 		"code_challenge_methods_supported":               []string{"S256"},
 		"client_id_metadata_document_supported":          true,
 		"authorization_response_iss_parameter_supported": true,
-	})
+	}
+	if open {
+		doc["registration_endpoint"] = iss + "/oauth/register"
+	}
+	_ = json.NewEncoder(w).Encode(doc)
 }
 
-// oauthAuthorize is the authorization endpoint. A request whose client or
-// redirect URI isn't good gets a page (never a redirect); other errors go
-// back to the client. Without a browser session it sends the person to sign
-// in and back here. Signed in, the resource must be a gateway they may use
-// now; then a client they already allowed on that gateway, or a trusted
-// client, goes straight back with a code, and anyone else goes to the
-// consent page of the web app with the same request.
+// oauthAuthorize is the authorization endpoint. Nothing about the request
+// is looked at before the person is signed in: without a browser session it
+// sends them to sign in and back here, so an anonymous caller can't make the
+// portal fetch a client's metadata document or learn why one failed
+// (threat model H-3). The only anonymous refusal is a request that is
+// malformed on its face (too long, or a repeated parameter), the same page
+// for both, with no reason.
+//
+// Signed in, a request whose client or redirect URI isn't good gets a page
+// (never a redirect); other errors go back to the client. The resource must
+// be a gateway they may use now; then a client they already allowed on that
+// gateway, or a trusted client, goes straight back with a code, and anyone
+// else (and a trusted client asking for the first time with a loopback
+// redirect, decision 62) goes to the consent page of the web app with the
+// same request.
 func (a *api) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
+	user, ok, err := a.Auth.SessionUser(r)
+	if err != nil {
+		a.oauthPage(w, r, err)
+		return
+	}
+	if !ok {
+		a.oauthAnonymous(w, r)
+		return
+	}
+	if user.Status != auth.StatusActive {
+		a.oauthPage(w, r, &oauth.Error{Code: "access_denied", Description: "This account is suspended."})
+		return
+	}
 	if len(r.URL.RawQuery) > oauth.MaxQueryLen {
 		a.oauthPage(w, r, &oauth.Error{Code: "invalid_request", Description: "The request is too long."})
 		return
@@ -157,26 +188,14 @@ func (a *api) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		a.oauthPage(w, r, err)
 		return
 	}
-	c, err := a.OAuth.Check(r.Context(), req)
+	ctx := oauth.WithSource(r.Context(), httpx.ClientIP(r, a.Config.TrustedProxies))
+	c, err := a.OAuth.Check(ctx, req)
 	var oe *oauth.Error
 	if errors.As(err, &oe) && !oe.ShowPage() {
 		http.Redirect(w, r, a.OAuth.ErrorRedirect(req, oe), http.StatusFound)
 		return
 	} else if err != nil {
 		a.oauthPage(w, r, err)
-		return
-	}
-	user, ok, err := a.Auth.SessionUser(r)
-	if err != nil {
-		a.oauthPage(w, r, err)
-		return
-	}
-	if !ok {
-		http.Redirect(w, r, a.Auth.LoginURL("/oauth/authorize?"+r.URL.RawQuery), http.StatusFound)
-		return
-	}
-	if user.Status != auth.StatusActive {
-		a.oauthPage(w, r, &oauth.Error{Code: "access_denied", Description: "This account is suspended."})
 		return
 	}
 	g, err := a.OAuth.Gateway(r.Context(), user, req)
@@ -187,17 +206,12 @@ func (a *api) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		a.oauthPage(w, r, err)
 		return
 	}
-	trusted, err := a.OAuth.Trusted(r.Context(), c)
+	state, err := a.OAuth.ConsentState(r.Context(), user.ID, c, g.ID, req.RedirectURI)
 	if err != nil {
 		a.oauthPage(w, r, err)
 		return
 	}
-	remembered, err := a.OAuth.Remembered(r.Context(), user.ID, c.ID, g.ID)
-	if err != nil {
-		a.oauthPage(w, r, err)
-		return
-	}
-	if !trusted && !remembered {
+	if !state.Silent() {
 		http.Redirect(w, r, oauthConsentPath+"?"+r.URL.RawQuery, http.StatusFound)
 		return
 	}
@@ -208,6 +222,24 @@ func (a *api) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, to, http.StatusFound)
+}
+
+// oauthAnonymous answers an authorization request without a session: sign
+// in first, and come back with the whole query. The client is not resolved
+// (no fetch, no reason); a request too long to come back, or repeating a
+// parameter, gets the generic page.
+func (a *api) oauthAnonymous(w http.ResponseWriter, r *http.Request) {
+	if len(r.URL.RawQuery) > oauth.MaxQueryLen {
+		a.oauthGenericPage(w, r)
+		return
+	}
+	for _, v := range r.URL.Query() {
+		if len(v) > 1 {
+			a.oauthGenericPage(w, r)
+			return
+		}
+	}
+	http.Redirect(w, r, a.Auth.LoginURL("/oauth/authorize?"+r.URL.RawQuery), http.StatusFound)
 }
 
 // oauthPageTmpl is the authorization error page. It follows the person's
@@ -226,7 +258,7 @@ html{background:var(--bg)}body{font-family:system-ui,sans-serif;max-width:36rem;
 h1{font-size:1.4rem}small{color:var(--muted)}code{background:var(--code);padding:0 .25rem}</style></head>
 <body><main><h1>Can't connect this app</h1><p>{{.Message}}</p>
 <p>Nothing was shared with the app. Close this page and try connecting again, or ask the app's maker.</p>
-<p><small>Error: <code>{{.Code}}</code></small></p></main></body></html>`))
+{{if .Code}}<p><small>Error: <code>{{.Code}}</code></small></p>{{end}}</main></body></html>`))
 
 // oauthPage shows an authorization error to the person (400; 500 for a
 // failure of ours, logged).
@@ -235,6 +267,9 @@ func (a *api) oauthPage(w http.ResponseWriter, r *http.Request, err error) {
 	var oe *oauth.Error
 	if errors.As(err, &oe) {
 		code, msg = oe.Code, oe.Description
+		if oe.Status != 0 {
+			status = oe.Status
+		}
 	} else {
 		a.Log.ErrorContext(r.Context(), "oauth authorize", "err", err, "request_id", httpx.RequestID(r.Context()))
 		status, code, msg = http.StatusInternalServerError, "server_error", "Something went wrong. Try again shortly."
@@ -245,6 +280,17 @@ func (a *api) oauthPage(w http.ResponseWriter, r *http.Request, err error) {
 	h.Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'")
 	w.WriteHeader(status)
 	_ = oauthPageTmpl.Execute(w, map[string]string{"Instance": a.Config.Instance.Name, "Message": msg, "Code": code})
+}
+
+// oauthGenericPage is the page for an anonymous caller: the same for every
+// failure, naming no reason and no error code.
+func (a *api) oauthGenericPage(w http.ResponseWriter, r *http.Request) {
+	h := w.Header()
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Set("Cache-Control", "no-store")
+	h.Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'")
+	w.WriteHeader(http.StatusBadRequest)
+	_ = oauthPageTmpl.Execute(w, map[string]string{"Instance": a.Config.Instance.Name, "Message": "The app's request isn't valid.", "Code": ""})
 }
 
 // oauthForm reads a form-encoded protocol request (bounded).

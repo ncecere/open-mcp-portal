@@ -2,6 +2,7 @@ package oauth
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
@@ -103,10 +104,10 @@ func (s *Service) exchange(ctx context.Context, r TokenRequest) (Tokens, error) 
 		if err != nil {
 			return err
 		}
-		if out, err = s.issue(ctx, q, g); err != nil {
+		if out, err = s.issue(ctx, q, g, newToken(AccessPrefix), newToken(RefreshPrefix)); err != nil {
 			return err
 		}
-		return s.auditIssue(ctx, q, g, r, "authorization_code")
+		return s.auditIssue(ctx, q, g, r, "authorization_code", nil)
 	})
 	return out, err
 }
@@ -133,10 +134,20 @@ func (s *Service) usableGrant(ctx context.Context, q *dbgen.Queries, id uuid.UUI
 	return g, nil
 }
 
-// refresh rotates a refresh token. A token already rotated more than
-// RefreshReuseGrace ago is reuse (a stolen copy, or a client that lost the
-// new one): the whole grant is revoked, and the person connects the client
-// again.
+// refresh rotates a refresh token.
+//
+//   - Its grant must be within the absolute lifetime (OAUTH_REFRESH_ABSOLUTE_TTL,
+//     counted from the last time the person signed the app in): past it the
+//     grant is revoked (reason expired_absolute) and the answer is invalid_grant,
+//     so the app signs in again.
+//   - A token already rotated more than RefreshReuseGrace ago is reuse (a
+//     stolen copy, or a client that lost the new one): the whole grant is
+//     revoked, and the person connects the client again.
+//   - Inside the grace a token that was rotated is a client that refreshed
+//     twice at once: it gets the same pair the rotation issued, not another
+//     one. The pair is derived from the presented token (successor), so no
+//     token is stored in the clear to hand out again, and a second pair is
+//     never minted for a token that was already used.
 func (s *Service) refresh(ctx context.Context, r TokenRequest) (Tokens, error) {
 	row, ok, err := s.lookup(ctx, r.RefreshToken, RefreshPrefix, kindRefresh)
 	if err != nil {
@@ -149,8 +160,8 @@ func (s *Service) refresh(ctx context.Context, r TokenRequest) (Tokens, error) {
 		return Tokens{}, oauthError("invalid_target", "The resource must be the one the grant is for: "+row.OauthToken.Resource)
 	}
 	var (
-		out    Tokens
-		reused bool
+		out            Tokens
+		reused, lapsed bool
 	)
 	err = store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
 		tok, err := q.LockOAuthToken(ctx, row.OauthToken.ID)
@@ -170,27 +181,68 @@ func (s *Service) refresh(ctx context.Context, r TokenRequest) (Tokens, error) {
 		if err != nil {
 			return err
 		}
-		// Within RefreshReuseGrace of its rotation the token was already
-		// rotated: issue a new pair without rotating again.
-		if tok.RotatedAt == nil {
-			if n, err := q.RotateOAuthToken(ctx, tok.ID); err != nil || n == 0 {
-				return errors.Join(err, errInvalidGrant())
-			}
+		if s.expired(g) {
+			lapsed = true
+			return s.revokeGrant(ctx, q, grantActor(g, r.RequestID, r.ClientIP), g.ID, ReasonExpired)
 		}
-		if out, err = s.issue(ctx, q, g); err != nil {
+		access, refresh := s.successor(r.RefreshToken)
+		if tok.RotatedAt != nil {
+			// Inside the grace: the rotation already issued this pair.
+			if out, err = s.repeat(ctx, q, g, access, refresh); err != nil {
+				return err
+			}
+			return s.auditIssue(ctx, q, g, r, "refresh_token", map[string]any{"repeat": true})
+		}
+		if n, err := q.RotateOAuthToken(ctx, tok.ID); err != nil || n == 0 {
+			return errors.Join(err, errInvalidGrant())
+		}
+		if out, err = s.issue(ctx, q, g, access, refresh); err != nil {
 			return err
 		}
-		return s.auditIssue(ctx, q, g, r, "refresh_token")
+		return s.auditIssue(ctx, q, g, r, "refresh_token", nil)
 	})
-	if err == nil && reused {
+	if err == nil && (reused || lapsed) {
 		return Tokens{}, errInvalidGrant()
 	}
 	return out, err
 }
 
-// issue stores a new access and refresh token for a grant, bound to its
+// successor is the access and refresh token a rotation of a refresh token
+// issues: keyed digests of it under the pepper, so the same token always
+// has the same successors and only someone who holds the token (and the
+// pepper) can compute them. A repeat inside the grace answers them again.
+func (s *Service) successor(refreshToken string) (access, refresh string) {
+	derive := func(label, prefix string) string {
+		m := hmac.New(sha256.New, s.pepper)
+		m.Write([]byte("oauth-successor:" + label + ":" + refreshToken))
+		return prefix + base64.RawURLEncoding.EncodeToString(m.Sum(nil))
+	}
+	return derive("access", AccessPrefix), derive("refresh", RefreshPrefix)
+}
+
+// repeat answers a refresh token presented again inside the grace: the pair
+// its rotation issued, if both tokens are still there (a client that
+// revoked one, or a rotation by the previous release, which issued a random
+// pair, gets invalid_grant and signs in again).
+func (s *Service) repeat(ctx context.Context, q *dbgen.Queries, g dbgen.OauthGrant, access, refresh string) (Tokens, error) {
+	var expires time.Time
+	for _, t := range []struct{ kind, token string }{{kindRefresh, refresh}, {kindAccess, access}} {
+		row, err := q.GetOAuthToken(ctx, dbgen.GetOAuthTokenParams{TokenHash: s.digest(t.token), Kind: t.kind})
+		if errors.Is(store.NotFound(err), store.ErrNotFound) || (err == nil && row.OauthToken.GrantID != g.ID) {
+			return Tokens{}, errInvalidGrant()
+		} else if err != nil {
+			return Tokens{}, err
+		}
+		if t.kind == kindAccess {
+			expires = row.OauthToken.ExpiresAt
+		}
+	}
+	return Tokens{AccessToken: access, RefreshToken: refresh, TokenType: "Bearer", ExpiresIn: max(1, int(expires.Sub(s.now()).Seconds()))}, nil
+}
+
+// issue stores an access and a refresh token for a grant, bound to its
 // resource.
-func (s *Service) issue(ctx context.Context, q *dbgen.Queries, g dbgen.OauthGrant) (Tokens, error) {
+func (s *Service) issue(ctx context.Context, q *dbgen.Queries, g dbgen.OauthGrant, access, refresh string) (Tokens, error) {
 	if err := q.DeleteExpiredOAuthTokens(ctx); err != nil {
 		return Tokens{}, err
 	}
@@ -198,9 +250,11 @@ func (s *Service) issue(ctx context.Context, q *dbgen.Queries, g dbgen.OauthGran
 		if err := q.TouchOAuthClient(ctx, g.ClientID); err != nil {
 			return Tokens{}, err
 		}
+		if err := q.MarkOAuthClientAuthorized(ctx, g.ClientID); err != nil {
+			return Tokens{}, err
+		}
 	}
-	out := Tokens{AccessToken: newToken(AccessPrefix), RefreshToken: newToken(RefreshPrefix), TokenType: "Bearer",
-		ExpiresIn: int(AccessTokenTTL.Seconds())}
+	out := Tokens{AccessToken: access, RefreshToken: refresh, TokenType: "Bearer", ExpiresIn: int(AccessTokenTTL.Seconds())}
 	now := s.now()
 	for _, t := range []struct {
 		kind, token string
@@ -228,11 +282,15 @@ func grantAudit(a authz.Actor, g dbgen.OauthGrant, action string) audit.Entry {
 	return e
 }
 
-// auditIssue records oauth.token_issue: the grant and the grant type,
-// never a token.
-func (s *Service) auditIssue(ctx context.Context, q *dbgen.Queries, g dbgen.OauthGrant, r TokenRequest, grantType string) error {
+// auditIssue records oauth.token_issue: the grant and the grant type
+// (extra: "repeat" for a pair answered again inside the grace), never a
+// token.
+func (s *Service) auditIssue(ctx context.Context, q *dbgen.Queries, g dbgen.OauthGrant, r TokenRequest, grantType string, extra map[string]any) error {
 	e := grantAudit(grantActor(g, r.RequestID, r.ClientIP), g, "oauth.token_issue")
 	e.Metadata["grantType"] = grantType
+	for k, v := range extra {
+		e.Metadata[k] = v
+	}
 	return audit.Record(ctx, q, e)
 }
 
