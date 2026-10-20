@@ -123,7 +123,7 @@ func (rc *request) forwardRead(exposed string, t readTarget, again retry) {
 	}
 	target, err := rc.h.Registry.Target(ctx, o.Server)
 	if err != nil {
-		rc.upstreamFailed(rec, err)
+		rc.targetFailed(rec, err)
 		return
 	}
 	token, ok := rc.prepareTarget(&target, identityFor{resource: exposed}, o, cred, &rec)

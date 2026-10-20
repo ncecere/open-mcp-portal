@@ -78,6 +78,8 @@ func AuthModeOf(sv dbgen.McpServer) string {
 	switch {
 	case sv.AuthMode == AuthOAuth:
 		return AuthOAuth
+	case sv.AuthMode == AuthMachineOAuth:
+		return AuthMachineOAuth
 	case sv.AuthMode == AuthStaticHeader || sv.AuthHeaderName != nil:
 		return AuthStaticHeader
 	}
@@ -211,6 +213,9 @@ func (s *Service) registrationOptions(ctx context.Context, q *dbgen.Queries, md 
 type Detection struct {
 	Result       oauthmeta.Result
 	Registration *RegistrationOptions
+	// Machine says whether the authorization server it found offers the
+	// client credentials grant (nil: no authorization server metadata).
+	Machine *MachineDetection
 }
 
 // DetectAuth probes a URL and reports how its server wants clients to
@@ -234,8 +239,26 @@ func (s *Service) DetectAuth(ctx context.Context, a authz.Actor, ref, rawURL str
 			return Detection{}, err
 		}
 		out.Registration = &reg
+		out.Machine = machineDetection(md, out.Result.Resource)
 	}
 	return out, nil
+}
+
+// machineDetection reads the client credentials grant from an authorization
+// server's metadata (RFC 8414 grant_types_supported and
+// token_endpoint_auth_methods_supported).
+func machineDetection(md *oauthmeta.ServerMetadata, res *oauthmeta.ResourceMetadata) *MachineDetection {
+	out := &MachineDetection{TokenEndpoint: md.TokenEndpoint, GrantTypesListed: len(md.GrantTypesSupported) > 0,
+		ClientCredentials: slices.Contains(md.GrantTypesSupported, "client_credentials"), AuthMethods: []string{}}
+	for _, m := range md.TokenEndpointAuthMethods {
+		if (m == MachineAuthBasic || m == MachineAuthPost) && !slices.Contains(out.AuthMethods, m) {
+			out.AuthMethods = append(out.AuthMethods, m)
+		}
+	}
+	if res != nil {
+		out.Resource = res.Resource
+	}
+	return out
 }
 
 // IdentityDefault is the default of "Send identity token" for a URL when
@@ -879,8 +902,16 @@ func createMode(in CreateInput) (string, error) {
 		}
 	case AuthOAuth:
 		return AuthOAuth, nil
+	case AuthMachineOAuth:
+		if in.MachineOAuth == nil {
+			return "", errMachineRequired
+		}
+		return AuthMachineOAuth, nil
 	default:
-		return "", apperr.Invalid("invalid_auth_mode", "authMode must be none, static_header or oauth")
+		return "", apperr.Invalid("invalid_auth_mode", "authMode must be none, static_header, oauth or machine_oauth")
+	}
+	if in.MachineOAuth != nil {
+		return "", apperr.Invalid("invalid_machine_oauth", "machineOAuth is for authMode machine_oauth only")
 	}
 	// An oauth input without oauth mode is ignored (clients may always send
 	// it with its defaults).

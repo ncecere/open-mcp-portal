@@ -107,7 +107,7 @@ func (rc *request) forward(kind string, o gateways.Offer, args json.RawMessage, 
 	}
 	target, err := rc.h.Registry.Target(ctx, o.Server)
 	if err != nil {
-		rc.upstreamFailed(rec, err)
+		rc.targetFailed(rec, err)
 		return
 	}
 	who := identityFor{tool: o.ExposedName}

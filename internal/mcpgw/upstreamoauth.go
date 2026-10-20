@@ -31,6 +31,35 @@ const (
 	DeniedResourceMismatch    = "resource_mismatch"
 )
 
+// machineMode reports whether the call's server authenticates the portal
+// itself with a machine token (decision 73): its bearer is the portal's, the
+// same for every caller.
+func machineMode(o gateways.Offer) bool {
+	return registry.AuthModeOf(o.Server) == registry.AuthMachineOAuth
+}
+
+// ReasonMachineAuthUnavailable is the data.reason of a call refused because
+// the portal could not get a machine token (the server's authorization server
+// is unreachable or failing): the call did not reach the server.
+const ReasonMachineAuthUnavailable = upstream.ReasonMachineAuthUnavailable
+
+// targetFailed answers a call whose target could not be built: a machine
+// token that could not be had because the authorization server is unavailable
+// is -32010 with data.reason machine_auth_unavailable (recorded
+// upstream_error, with the error class); everything else (a refused client is
+// class auth) is an upstream error.
+func (rc *request) targetFailed(rec calls.Call, err error) {
+	var ue *upstream.Error
+	if !errors.As(err, &ue) || ue.Reason != ReasonMachineAuthUnavailable {
+		rc.upstreamFailed(rec, err)
+		return
+	}
+	n := rc.failData(codeDenied, "The portal could not get the access token this server needs. Try again shortly.",
+		map[string]any{"reason": ReasonMachineAuthUnavailable})
+	rec.Outcome, rec.ErrorClass = calls.OutcomeUpstreamError, ue.Class
+	rc.record(rec, n)
+}
+
 // serverBound reports whether cred is an oauth server's own sign-in.
 func serverBound(cred *providers.Credential) bool {
 	return cred != nil && cred.Provider.ServerBound()
@@ -69,6 +98,10 @@ func (rc *request) prepareTarget(t *upstream.Target, who identityFor, o gateways
 	if serverBound(cred) {
 		rc.scrub = append(rc.scrub, cred.AccessToken)
 	}
+	if t.BearerToken != "" && !serverBound(cred) {
+		// A machine token (registry.Target): the server may echo it.
+		rc.scrub = append(rc.scrub, t.BearerToken)
+	}
 	return token, true
 }
 
@@ -98,6 +131,22 @@ func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.C
 			return result, isError, true
 		}
 		var ue *upstream.Error
+		if !serverBound(cred) && errors.As(err, &ue) && attempt == 0 && ue.HTTPStatus == 401 && machineMode(o) {
+			// The server refused the portal's machine token: nothing ran, so
+			// get another (one request however many calls were refused) and
+			// retry once; a second 401 is class auth.
+			next, rerr := rc.h.Registry.RenewMachineToken(ctx, o.Server, t.BearerToken)
+			if rerr != nil {
+				rc.targetFailed(*rec, rerr)
+				return nil, false, false
+			}
+			t.BearerToken = next
+			rc.scrub = append(rc.scrub, next)
+			if rc.capture != nil {
+				rc.capture.Secrets = append(rc.capture.Secrets, next)
+			}
+			continue
+		}
 		if !serverBound(cred) || !errors.As(err, &ue) {
 			rc.upstreamFailed(*rec, err)
 			return nil, false, false
