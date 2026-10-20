@@ -118,6 +118,16 @@ go run ./cmd/fakemcp -addr 127.0.0.1:8094 -protect http://127.0.0.1:8092
 # token endpoint http://127.0.0.1:8092/token, resource http://127.0.0.1:8094/mcp (DEV_AUTH on a loopback APP_URL)
 ```
 
+## With TLS to the server (decision 74)
+
+A `machine_oauth` server can also have a private CA and a client certificate ([registry.md](registry.md#tls-to-the-server)). They
+apply to the exchange with **the MCP server**: discovery, Test, health checks and calls reach it over the CA and, when it asks, the
+client certificate, carrying the portal's token. **The token request is not covered**: the token endpoint is reached with the system
+roots and no client certificate, so an authorization server behind a private CA is not supported (a token request to it fails with
+`machine_auth_unavailable`, never with a wider trust), and the resource-metadata discovery in Detect sign-in is likewise unaffected.
+Moving the URL to another origin needs the client secret *and* the TLS key entered again in the same request (`422 client_secret_required`
+and `422 tls_key_required`, each on its own); a changed CA sends a published server back to review like a changed token endpoint does.
+
 ## Not built, and not tested
 
 - `private_key_jwt` and mTLS client authentication at the token endpoint, token exchange (RFC 8693), a platform-wide

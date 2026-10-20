@@ -90,7 +90,7 @@ export function AuthModeFields({ team, url, urlError, value, onChange, detected,
         />
       )}
       {value.mode === "person_secret" && (
-        <PersonSecretFields value={value.secret} onChange={(secret) => onChange({ ...value, secret })} errors={secretErrors} disabled={disabled} deletes={deletesKeys} />
+        <PersonSecretFields value={value.secret} onChange={(secret) => onChange({ ...value, secret })} errors={secretErrors} disabled={disabled} />
       )}
       {value.mode === "person_secret" && value.sendIdentity && !disabled && (
         <Alert tone="info" title="Run outside the company?">
@@ -110,6 +110,11 @@ export function AuthModeFields({ team, url, urlError, value, onChange, detected,
           errors={errors}
           disabled={disabled}
         />
+      )}
+      {deletesKeys && (
+        <Alert tone="warning" title="Everyone's keys are deleted">
+          {deletesKeys}
+        </Alert>
       )}
       {notes}
       <Switch label="Send identity token" description={identityHelp} disabled={disabled} checked={value.sendIdentity} onCheckedChange={(sendIdentity) => onChange({ ...value, sendIdentity })} />

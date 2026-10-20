@@ -18,13 +18,11 @@ type Props = {
   onChange: (next: SecretForm) => void;
   errors: SecretErrors;
   disabled?: boolean;
-  /** Saving deletes the keys people entered (what and how many, in words). */
-  deletes?: string;
 };
 
 const placements: Placement[] = ["header", "bearer", "query"];
 
-export function PersonSecretFields({ value, onChange, errors, disabled, deletes }: Props) {
+export function PersonSecretFields({ value, onChange, errors, disabled }: Props) {
   const options: RadioOption<Placement>[] = placements.map((p) => ({ value: p, label: placementLabels[p], description: placementHelp[p] }));
   const named = value.placement !== "bearer";
   return (
@@ -62,11 +60,6 @@ export function PersonSecretFields({ value, onChange, errors, disabled, deletes 
         Each person enters their own key under Account › My connections, and calls carry it only to this server&apos;s address. A new address, another way of sending it or
         leaving this mode deletes everyone&apos;s keys; a new name, prefix or text does not.
       </p>
-      {deletes && (
-        <Alert tone="warning" title="Everyone's keys are deleted">
-          {deletes}
-        </Alert>
-      )}
     </div>
   );
 }

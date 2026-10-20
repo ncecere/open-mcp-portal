@@ -114,6 +114,14 @@ service account or agent can enter, read or remove a key.
 `McpServer` gains `personSecret` (settings, how many people entered a key, the setup person's state) and
 `McpServerCreate`/`Update` gain `personSecret`.
 
+## With TLS to the server (decision 74)
+
+A person-secret server can also have a private CA and a client certificate ([registry.md](registry.md#tls-to-the-server)). Every
+exchange with it uses them: the editor's setup read, Test and Refresh with their own key, and every person's call, so the key
+travels only over the server's own trust. Another origin deletes everyone's keys and, separately, needs the TLS key entered again
+or cleared (`422 tls_key_required`); a changed CA sends a published server back to review like a changed placement does. An
+automation token can't send `tls` or `personSecret`, on create or update.
+
 ## What was not tested
 
 Against a real third-party server that wants a personal key (the fake MCP server in the tests checks headers, bearer and

@@ -19,7 +19,6 @@
  * changed CA is a trust change and reviewed again.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { api, ApiError, ifMatch, unwrap } from "../../api/client";
 import { authProvidersQuery } from "../../api/queries";
@@ -30,8 +29,7 @@ import { ConfirmMutationDialog } from "../confirm-dialog";
 import { Switch } from "@/components/ui/switch/switch";
 import { Alert } from "@/components/ui/alert/alert";
 import { useRevisionForm } from "../templates/revision-form";
-import { DangerAction, DangerZone, SettingsPage, SettingsSection } from "../templates/settings-page";
-import { Button } from "@/components/ui/button/button";
+import { SettingsPage, SettingsSection } from "../templates/settings-page";
 import { CopyField } from "@/components/ui/copy-field/copy-field";
 import { Field } from "@/components/ui/field/field";
 import { Input, Textarea } from "@/components/ui/input/input";
@@ -42,10 +40,11 @@ import { AuthModeFields } from "./auth-mode-fields";
 import type { McpServer } from "./labels";
 import { type RequirementForm, requirementBody, requirementFormOf, reviewedAgain, serverChangeWidens } from "./requirement";
 import { RequirementFields } from "./requirement-section";
-import { capabilitiesQuery, invalidateServer, type ServerAbilities, type ServerScope, storeServer } from "./scope";
+import { capabilitiesQuery, type ServerAbilities, type ServerScope, storeServer } from "./scope";
 import { CredentialFields } from "./credential-fields";
 import { credentialsBody, partProblems, type PartForm, partsOf } from "./credentials";
 import { EnabledSwitch, type ServerForm, serverFieldErrors, serverProblems, TimeoutField, UrlField, urlProblem } from "./server-fields";
+import { DeleteServer } from "./delete-server";
 import { sameOrigin } from "./origin";
 import { machineProblems } from "./machine-auth";
 import { deletesText, keysDeleted, secretProblems } from "./person-secret";
@@ -377,42 +376,5 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
         confirmLabel="Record call contents"
       />
     </SettingsPage>
-  );
-}
-
-function DeleteServer({ server }: { server: McpServer }) {
-  const qc = useQueryClient();
-  const navigate = useNavigate();
-  const [confirming, setConfirming] = useState<McpServer | null>(null);
-  const del = useMutation({
-    mutationFn: async () => unwrap(await api.DELETE("/v1/teams/{team}/mcp-servers/{serverId}", { params: { path: { team: server.teamSlug, serverId: server.id } } })),
-    onSuccess: () => {
-      setConfirming(null);
-      toast.success(`${server.name} was deleted`);
-      // Leave first: the record would load again and find nothing.
-      void navigate({ to: "/teams/$team/servers", params: { team: server.teamSlug }, replace: true }).then(() => invalidateServer(qc, server));
-    },
-  });
-  return (
-    <DangerZone>
-      <DangerAction
-        title="Delete this server"
-        description={`Removes ${server.name} and everything read from it${server.publishState === "published" ? ", and takes it off the catalog" : ""}. This can't be undone.`}
-        action={
-          <Button variant="danger" onClick={() => setConfirming(server)}>
-            Delete server
-          </Button>
-        }
-      />
-      <ConfirmMutationDialog
-        target={confirming}
-        onClose={() => setConfirming(null)}
-        mutation={del}
-        onConfirm={() => del.mutate()}
-        title={`Delete ${server.name}?`}
-        description="Its capabilities, health checks and catalog entry are deleted. Its slug becomes free for another server."
-        confirmLabel="Delete server"
-      />
-    </DangerZone>
   );
 }

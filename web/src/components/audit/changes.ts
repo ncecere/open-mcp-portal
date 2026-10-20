@@ -51,7 +51,13 @@ const credentialParts: Format = (v) =>
   Array.isArray(v)
     ? v.map((c: { kind?: string; name?: string }) => (c.kind === "bearer" ? "Bearer token" : c.kind === "basic" ? "Basic (user and password)" : `${c.kind === "query" ? "Query parameter" : "Header"} ${c.name ?? ""}`.trim()))
     : v;
-const authModeWords: Record<string, string> = { none: "None", static_header: "Static header", oauth: "OAuth sign-in per person", person_secret: "Each person's own key" };
+const authModeWords: Record<string, string> = {
+  none: "None",
+  static_header: "Static header",
+  oauth: "OAuth sign-in per person",
+  person_secret: "Each person's own key",
+  machine_oauth: "The portal's own OAuth client",
+};
 /** How people's own keys are sent (never a key): "Header X-Api-Key", "Bearer token", "Query parameter k". */
 const ownKeySettings: Format = (v) => {
   if (!v || typeof v !== "object") return v;
