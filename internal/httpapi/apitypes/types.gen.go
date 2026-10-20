@@ -42,6 +42,7 @@ const (
 	AttentionKindPersonalKeysExpiring       AttentionKind = "personal_keys_expiring"
 	AttentionKindRateLimited                AttentionKind = "rate_limited"
 	AttentionKindReviewPending              AttentionKind = "review_pending"
+	AttentionKindServerCertificateExpiring  AttentionKind = "server_certificate_expiring"
 	AttentionKindServerFailing              AttentionKind = "server_failing"
 	AttentionKindServiceAccountKeysExpiring AttentionKind = "service_account_keys_expiring"
 	AttentionKindUpstreamSigninLapsed       AttentionKind = "upstream_signin_lapsed"
@@ -65,6 +66,8 @@ func (e AttentionKind) Valid() bool {
 	case AttentionKindRateLimited:
 		return true
 	case AttentionKindReviewPending:
+		return true
+	case AttentionKindServerCertificateExpiring:
 		return true
 	case AttentionKindServerFailing:
 		return true
@@ -955,10 +958,11 @@ func (e InstanceInfoTheme) Valid() bool {
 
 // Defines values for KeyExpiringDataKeyKind.
 const (
-	KeyExpiringDataKeyKindPersonal       KeyExpiringDataKeyKind = "personal"
-	KeyExpiringDataKeyKindPlatformToken  KeyExpiringDataKeyKind = "platform_token"
-	KeyExpiringDataKeyKindPublisherToken KeyExpiringDataKeyKind = "publisher_token"
-	KeyExpiringDataKeyKindServiceAccount KeyExpiringDataKeyKind = "service_account"
+	KeyExpiringDataKeyKindPersonal          KeyExpiringDataKeyKind = "personal"
+	KeyExpiringDataKeyKindPlatformToken     KeyExpiringDataKeyKind = "platform_token"
+	KeyExpiringDataKeyKindPublisherToken    KeyExpiringDataKeyKind = "publisher_token"
+	KeyExpiringDataKeyKindServerCertificate KeyExpiringDataKeyKind = "server_certificate"
+	KeyExpiringDataKeyKindServiceAccount    KeyExpiringDataKeyKind = "service_account"
 )
 
 // Valid indicates whether the value is a known member of the KeyExpiringDataKeyKind enum.
@@ -969,6 +973,8 @@ func (e KeyExpiringDataKeyKind) Valid() bool {
 	case KeyExpiringDataKeyKindPlatformToken:
 		return true
 	case KeyExpiringDataKeyKindPublisherToken:
+		return true
+	case KeyExpiringDataKeyKindServerCertificate:
 		return true
 	case KeyExpiringDataKeyKindServiceAccount:
 		return true
@@ -1080,6 +1086,7 @@ const (
 	McpErrorClassNotFound    McpErrorClass = "not_found"
 	McpErrorClassRateLimited McpErrorClass = "rate_limited"
 	McpErrorClassTimeout     McpErrorClass = "timeout"
+	McpErrorClassTls         McpErrorClass = "tls"
 	McpErrorClassTooLarge    McpErrorClass = "too_large"
 	McpErrorClassUnavailable McpErrorClass = "unavailable"
 )
@@ -1102,6 +1109,8 @@ func (e McpErrorClass) Valid() bool {
 	case McpErrorClassRateLimited:
 		return true
 	case McpErrorClassTimeout:
+		return true
+	case McpErrorClassTls:
 		return true
 	case McpErrorClassTooLarge:
 		return true
@@ -1316,6 +1325,27 @@ func (e McpServerProtocolEra) Valid() bool {
 	case Legacy:
 		return true
 	case Modern:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for McpServerTlsClientStatus.
+const (
+	McpServerTlsClientStatusExpired  McpServerTlsClientStatus = "expired"
+	McpServerTlsClientStatusExpiring McpServerTlsClientStatus = "expiring"
+	McpServerTlsClientStatusValid    McpServerTlsClientStatus = "valid"
+)
+
+// Valid indicates whether the value is a known member of the McpServerTlsClientStatus enum.
+func (e McpServerTlsClientStatus) Valid() bool {
+	switch e {
+	case McpServerTlsClientStatusExpired:
+		return true
+	case McpServerTlsClientStatusExpiring:
+		return true
+	case McpServerTlsClientStatusValid:
 		return true
 	default:
 		return false
@@ -1828,6 +1858,7 @@ const (
 	PublishRequestedDataReasonNew                 PublishRequestedDataReason = "new"
 	PublishRequestedDataReasonRequirementChanged  PublishRequestedDataReason = "requirement_changed"
 	PublishRequestedDataReasonUpstreamAuthChanged PublishRequestedDataReason = "upstream_auth_changed"
+	PublishRequestedDataReasonUpstreamTlsChanged  PublishRequestedDataReason = "upstream_tls_changed"
 	PublishRequestedDataReasonUrlChanged          PublishRequestedDataReason = "url_changed"
 )
 
@@ -1839,6 +1870,8 @@ func (e PublishRequestedDataReason) Valid() bool {
 	case PublishRequestedDataReasonRequirementChanged:
 		return true
 	case PublishRequestedDataReasonUpstreamAuthChanged:
+		return true
+	case PublishRequestedDataReasonUpstreamTlsChanged:
 		return true
 	case PublishRequestedDataReasonUrlChanged:
 		return true
@@ -1952,6 +1985,24 @@ func (e ServerHealthStatus) Valid() bool {
 	case ServerHealthStatusHealthy:
 		return true
 	case ServerHealthStatusUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ServerWarningCode.
+const (
+	TlsCertificateExpired  ServerWarningCode = "tls_certificate_expired"
+	TlsCertificateExpiring ServerWarningCode = "tls_certificate_expiring"
+)
+
+// Valid indicates whether the value is a known member of the ServerWarningCode enum.
+func (e ServerWarningCode) Valid() bool {
+	switch e {
+	case TlsCertificateExpired:
+		return true
+	case TlsCertificateExpiring:
 		return true
 	default:
 		return false
@@ -2478,7 +2529,7 @@ type AttentionItem struct {
 	// Count How many, for kinds that count
 	Count *int64 `json:"count,omitempty"`
 
-	// Kind server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
+	// Kind server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within 14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
 	Kind AttentionKind `json:"kind"`
 
 	// Link Where to go; null when there is nowhere useful (personal keys)
@@ -2491,7 +2542,7 @@ type AttentionItem struct {
 	Team    *TeamRef `json:"team,omitempty"`
 }
 
-// AttentionKind server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
+// AttentionKind server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within 14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
 type AttentionKind string
 
 // AttentionSeverity defines model for AttentionSeverity.
@@ -3751,8 +3802,11 @@ type KeyExpiringData struct {
 	ExpiresAt time.Time              `json:"expiresAt"`
 	KeyKind   KeyExpiringDataKeyKind `json:"keyKind"`
 
-	// Name The key's or token's name (never its prefix or secret)
-	Name           string `json:"name"`
+	// Name The key's or token's name (never its prefix or secret); for server_certificate the server's name
+	Name string `json:"name"`
+
+	// Server The server, for server_certificate (its mTLS client certificate expires within 14 days; the team's owners, admins and editors are told)
+	Server         *NotificationServerRef `json:"server,omitempty"`
 	ServiceAccount *struct {
 		Id   openapi_types.UUID `json:"id"`
 		Name string             `json:"name"`
@@ -3887,14 +3941,14 @@ type McpCapabilityApproval struct {
 	ExpectedFingerprint string `json:"expectedFingerprint"`
 }
 
-// McpErrorClass not_allowed: the URL or an address it resolves to is refused (blocked, or internal and not allowlisted), or the server redirected
+// McpErrorClass not_allowed: the URL or an address it resolves to is refused (blocked, or internal and not allowlisted), or the server redirected. tls: the TLS handshake failed (the server's certificate isn't trusted or isn't valid for the host name, or the server refused the portal's client certificate); the message says which and what to do. See McpServerTls.
 type McpErrorClass string
 
 // McpHealthCheck defines model for McpHealthCheck.
 type McpHealthCheck struct {
 	CheckedAt time.Time `json:"checkedAt"`
 
-	// ErrorClass not_allowed: the URL or an address it resolves to is refused (blocked, or internal and not allowlisted), or the server redirected
+	// ErrorClass not_allowed: the URL or an address it resolves to is refused (blocked, or internal and not allowlisted), or the server redirected. tls: the TLS handshake failed (the server's certificate isn't trusted or isn't valid for the host name, or the server refused the portal's client certificate); the message says which and what to do. See McpServerTls.
 	ErrorClass *McpErrorClass `json:"errorClass,omitempty"`
 	HttpStatus *int32         `json:"httpStatus,omitempty"`
 	LatencyMs  int32          `json:"latencyMs"`
@@ -4021,8 +4075,11 @@ type McpServer struct {
 	TeamName       string             `json:"teamName"`
 	TeamSlug       string             `json:"teamSlug"`
 	TimeoutSeconds int32              `json:"timeoutSeconds"`
-	Transport      McpServerTransport `json:"transport"`
-	UpdatedAt      time.Time          `json:"updatedAt"`
+
+	// Tls The server's TLS settings (decision 74); null when it has none
+	Tls       *McpServerTls      `json:"tls,omitempty"`
+	Transport McpServerTransport `json:"transport"`
+	UpdatedAt time.Time          `json:"updatedAt"`
 
 	// Url Example: https://status.example.com/mcp
 	Url string `json:"url"`
@@ -4064,6 +4121,9 @@ type McpServerCreate struct {
 	// Slug Unique across the platform, immutable
 	Slug           string `json:"slug"`
 	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
+
+	// Tls The server's CA bundle and client certificate (decision 74). The server is created even when discovery then fails; refreshError says why (class tls for a handshake problem)
+	Tls *McpServerTlsInput `json:"tls,omitempty"`
 
 	// Url The Streamable HTTP endpoint, https only (plain http for loopback in development)
 	Url string `json:"url"`
@@ -4285,6 +4345,57 @@ type McpServerRequirementInput struct {
 	Scopes *ScopeList `json:"scopes,omitempty"`
 }
 
+// McpServerTls A server's TLS settings as facts about the certificates; never the key. Absent from a server that has none (system roots, no client certificate).
+type McpServerTls struct {
+	// Ca The CA bundle that replaces the system roots for this server
+	Ca     *McpServerTlsCa     `json:"ca,omitempty"`
+	Client *McpServerTlsClient `json:"client,omitempty"`
+}
+
+// McpServerTlsCa defines model for McpServerTlsCa.
+type McpServerTlsCa struct {
+	Certificates []TlsCertificate `json:"certificates"`
+
+	// Sha256 Fingerprint of the set of certificates (their order doesn't matter); what a review covers
+	Sha256 string `json:"sha256"`
+}
+
+// McpServerTlsClient defines model for McpServerTlsClient.
+type McpServerTlsClient struct {
+	// Certificate Public facts about one certificate
+	Certificate TlsCertificate `json:"certificate"`
+
+	// ChainLength Certificates in the chain, the first included
+	ChainLength int32 `json:"chainLength"`
+
+	// DaysLeft Whole days until notAfter (zero or negative once expired)
+	DaysLeft int32 `json:"daysLeft"`
+
+	// HasKey The private key is stored (sealed). It is never returned.
+	HasKey bool `json:"hasKey"`
+
+	// Status expiring is within 14 days of notAfter
+	Status McpServerTlsClientStatus `json:"status"`
+}
+
+// McpServerTlsClientStatus expiring is within 14 days of notAfter
+type McpServerTlsClientStatus string
+
+// McpServerTlsInput A server's TLS settings in a request (decision 74): a CA bundle that replaces the system roots for this server only (a stolen public CA can't impersonate an internal server, and the private CA vouches for nothing else), and a client certificate with its private key for mTLS. Host name verification and TLS 1.2 as the minimum always apply; there is no setting that turns verification off. The private key is sealed with ENCRYPTION_KEY and never returned, logged or audited. A new or changed CA (or removing it) sends a published server back to pending under approval_required (reason upstream_tls_changed); a new client certificate does not. Input is validated when saved (422 invalid_tls, details.field tls.caPem, tls.clientCertPem or tls.clientKeyPem and details.reason: empty, too_large, not_pem, too_many_certificates, private_key_in_certificate_field, not_a_certificate, invalid_certificate, expired, not_yet_valid, not_for_client_authentication, weak_key, weak_signature, encrypted_key, not_a_private_key, invalid_key, key_mismatch, key_without_certificate, key_required, clear_with_other_fields). Moving the URL to another origin never carries the stored key or CA along: 422 tls_key_required unless the same request replaces the client certificate and key, removes them (clientCertPem "") or clears the settings (a stored CA alone is dropped and audited). A platform admin or publisher automation token can't send it (403 token_not_allowed, details.field tls). Omitted fields keep what is stored.
+type McpServerTlsInput struct {
+	// CaPem PEM certificates only (at most 10 and 64 KiB; a private key block is refused). The CA that signed the server's certificate, with any intermediates. "" removes the CA (the system roots apply again).
+	CaPem *string `json:"caPem,omitempty"`
+
+	// Clear Remove the CA, the client certificate and its key. Not with other fields.
+	Clear *bool `json:"clear,omitempty"`
+
+	// ClientCertPem The client certificate chain, leaf first (at most 10 certificates). Not expired, for client authentication, RSA 2048 bits or more, ECDSA P-256/P-384/P-521 or Ed25519. Without clientKeyPem it must belong to the stored key (a renewal). "" (with no key) removes the client certificate and its key.
+	ClientCertPem *string `json:"clientCertPem,omitempty"`
+
+	// ClientKeyPem One unencrypted PKCS#8, PKCS#1 or SEC1 PEM private key (a passphrase-protected key is refused) that belongs to the first certificate. Sealed with ENCRYPTION_KEY, never returned.
+	ClientKeyPem *string `json:"clientKeyPem,omitempty"`
+}
+
 // McpServerUpdate defines model for McpServerUpdate.
 type McpServerUpdate struct {
 	// AuthHeaderName Omit to keep; an empty string removes the header and its value
@@ -4315,16 +4426,19 @@ type McpServerUpdate struct {
 	RequiresPresentPerson *bool `json:"requiresPresentPerson,omitempty"`
 
 	// SendIdentity Omit to keep. Not a review trigger (turning it off sends less). Audited in mcp_server.update
-	SendIdentity   *bool   `json:"sendIdentity,omitempty"`
-	TimeoutSeconds *int32  `json:"timeoutSeconds,omitempty"`
-	Url            *string `json:"url,omitempty"`
+	SendIdentity   *bool  `json:"sendIdentity,omitempty"`
+	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
+
+	// Tls Omit to keep. Changing the CA or the client certificate forgets the stored health and reads the capabilities again (like a URL change); a changed CA is a review trigger under approval_required (reason upstream_tls_changed). Audited in mcp_server.update (fingerprints and what changed; never a key, a ciphertext or a PEM)
+	Tls *McpServerTlsInput `json:"tls,omitempty"`
+	Url *string            `json:"url,omitempty"`
 }
 
 // McpTestResult defines model for McpTestResult.
 type McpTestResult struct {
 	Counts *CapabilityCounts `json:"counts,omitempty"`
 
-	// ErrorClass not_allowed: the URL or an address it resolves to is refused (blocked, or internal and not allowlisted), or the server redirected
+	// ErrorClass not_allowed: the URL or an address it resolves to is refused (blocked, or internal and not allowlisted), or the server redirected. tls: the TLS handshake failed (the server's certificate isn't trusted or isn't valid for the host name, or the server refused the portal's client certificate); the message says which and what to do. See McpServerTls.
 	ErrorClass *McpErrorClass `json:"errorClass,omitempty"`
 	HttpStatus *int32         `json:"httpStatus,omitempty"`
 	LatencyMs  int64          `json:"latencyMs"`
@@ -5181,7 +5295,7 @@ type ScopeList = []string
 type ServerHealth struct {
 	CheckedAt *time.Time `json:"checkedAt,omitempty"`
 
-	// ErrorClass not_allowed: the URL or an address it resolves to is refused (blocked, or internal and not allowlisted), or the server redirected
+	// ErrorClass not_allowed: the URL or an address it resolves to is refused (blocked, or internal and not allowlisted), or the server redirected. tls: the TLS handshake failed (the server's certificate isn't trusted or isn't valid for the host name, or the server refused the portal's client certificate); the message says which and what to do. See McpServerTls.
 	ErrorClass *McpErrorClass `json:"errorClass,omitempty"`
 	LatencyMs  *int32         `json:"latencyMs,omitempty"`
 	Message    *string        `json:"message,omitempty"`
@@ -5192,6 +5306,9 @@ type ServerHealth struct {
 
 	// StatusSince When the current status began
 	StatusSince *time.Time `json:"statusSince,omitempty"`
+
+	// Warnings Things that aren't failures yet, such as a client certificate that expires within 14 days (or has expired)
+	Warnings *[]ServerWarning `json:"warnings,omitempty"`
 }
 
 // ServerHealthStatus defines model for ServerHealth.Status.
@@ -5227,6 +5344,17 @@ type ServerUnhealthyData struct {
 	// Since When the failing status began
 	Since time.Time `json:"since"`
 }
+
+// ServerWarning defines model for ServerWarning.
+type ServerWarning struct {
+	// At When it expires (or expired)
+	At      *time.Time        `json:"at,omitempty"`
+	Code    ServerWarningCode `json:"code"`
+	Message string            `json:"message"`
+}
+
+// ServerWarningCode defines model for ServerWarning.Code.
+type ServerWarningCode string
 
 // ServiceAccount defines model for ServiceAccount.
 type ServiceAccount struct {
@@ -5516,6 +5644,20 @@ type TeamView struct {
 	// Role The caller's role; absent when viewing as a platform admin or auditor
 	Role *TeamRole `json:"role,omitempty"`
 	Team Team      `json:"team"`
+}
+
+// TlsCertificate Public facts about one certificate
+type TlsCertificate struct {
+	Issuer string `json:"issuer"`
+
+	// Names DNS names and addresses the certificate lists (client certificate only)
+	Names     *[]string `json:"names,omitempty"`
+	NotAfter  time.Time `json:"notAfter"`
+	NotBefore time.Time `json:"notBefore"`
+
+	// Sha256 Fingerprint of the DER encoding, hex
+	Sha256  string `json:"sha256"`
+	Subject string `json:"subject"`
 }
 
 // TrustedClient defines model for TrustedClient.

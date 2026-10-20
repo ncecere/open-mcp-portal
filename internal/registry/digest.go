@@ -15,7 +15,9 @@ import (
 
 // The review digest binds an approval to what the reviewer saw (docs/
 // threat-model.md, F-2): a SHA-256 over the server's URL, auth mode, the kind
-// and name of each part of its own credential (never a value) and
+// and name of each part of its own credential (never a value), the
+// fingerprints of its CA bundle and client certificate when it has them (a new
+// or changed CA is a trust change, decision 74), and its
 // requirement (and its requires-a-present-person switch when on) and over
 // every listed (not gone) capability's kind, name and fingerprint (and its
 // effective requires-a-present-person, when true), sorted. A refresh that
@@ -27,7 +29,7 @@ import (
 
 // digestVersion is hashed first so a future change of what is covered can't
 // collide with this one.
-const digestVersion = "omp-review-v2"
+const digestVersion = "omp-review-v3"
 
 // CapabilityRef is one listed capability as the digest covers it.
 // PresentPerson is whether calls relayed for a person need that person
@@ -49,6 +51,10 @@ func CapabilityRefOf(sv dbgen.McpServer, kind, name, fingerprint string, present
 // are the server's credential parts, as ServerView lists them; a server whose
 // credential is its legacy header (and none given) is covered by that header.
 func ReviewDigest(sv dbgen.McpServer, caps []CapabilityRef, parts ...CredentialView) string {
+	return reviewDigest(sv, caps, tlsDigest{}, parts)
+}
+
+func reviewDigest(sv dbgen.McpServer, caps []CapabilityRef, tls tlsDigest, parts []CredentialView) string {
 	h := sha256.New()
 	put := func(s string) {
 		// Length-prefixed, so no field can run into the next.
@@ -82,6 +88,14 @@ func ReviewDigest(sv dbgen.McpServer, caps []CapabilityRef, parts ...CredentialV
 	} else {
 		put("")
 	}
+	if tls != (tlsDigest{}) {
+		// Only when set, so the digest of a server without TLS settings changes
+		// only with the version: the fingerprint of the CA bundle that replaces
+		// the system roots for it, and of the client certificate it presents.
+		put("tls")
+		put(tls.CASHA)
+		put(tls.ClientSHA)
+	}
 	if sv.RequiresPresentPerson {
 		// Only when on, so the digest of every server without the switch is
 		// what it was before the switch existed.
@@ -114,11 +128,15 @@ func digests(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServer) (
 	if err != nil {
 		return nil, err
 	}
-	return digestsWith(ctx, q, servers, creds)
+	tlsByServer, err := tlsRows(ctx, q, servers)
+	if err != nil {
+		return nil, err
+	}
+	return digestsWith(ctx, q, servers, creds, tlsByServer)
 }
 
 // digestsWith is digests with the servers' credential parts already read.
-func digestsWith(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServer, creds map[uuid.UUID][]CredentialView) (map[uuid.UUID]string, error) {
+func digestsWith(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServer, creds map[uuid.UUID][]CredentialView, tls map[uuid.UUID]*dbgen.McpServerTl) (map[uuid.UUID]string, error) {
 	ids := make([]uuid.UUID, len(servers))
 	for i, sv := range servers {
 		ids[i] = sv.ID
@@ -137,7 +155,7 @@ func digestsWith(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServe
 		for i, r := range byServer[sv.ID] {
 			refs[i] = CapabilityRefOf(sv, r.Kind, r.Name, r.Fingerprint, r.RequiresPresentPerson)
 		}
-		out[sv.ID] = ReviewDigest(sv, refs, creds[sv.ID]...)
+		out[sv.ID] = reviewDigest(sv, refs, digestOf(tls[sv.ID]), creds[sv.ID])
 	}
 	return out, nil
 }

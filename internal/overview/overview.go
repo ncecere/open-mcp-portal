@@ -37,6 +37,7 @@ const (
 	GatewaysDisabled           = "gateways_disabled"
 	RateLimited                = "rate_limited"
 	NotificationFailures       = "notification_failures"
+	ServerCertExpiring         = "server_certificate_expiring"
 )
 
 // Severities.
@@ -312,6 +313,27 @@ func (s *Service) serverKinds(ctx context.Context, c *collector, team uuid.NullU
 			Link: &Link{Type: LinkServer, ID: r.ID.String(), TeamSlug: r.TeamSlug}})
 	}
 	c.add(CapabilitiesChanged, total, len(items), items...)
+
+	certs, err := s.q.AttentionExpiringCertificates(ctx, dbgen.AttentionExpiringCertificatesParams{PublishedOnly: published, TeamID: team, PageSize: PerKind})
+	if err != nil {
+		return err
+	}
+	items, total = nil, 0
+	for _, r := range certs {
+		total = r.Total
+		if r.ClientNotAfter == nil {
+			continue
+		}
+		at := *r.ClientNotAfter
+		sev, summary := expirySeverity(c.now, at), fmt.Sprintf("The client certificate of %s (%s) expires in %s", r.Name, r.TeamName, since(at, c.now))
+		if !at.After(c.now) {
+			sev, summary = Critical, fmt.Sprintf("The client certificate of %s (%s) has expired: the server refuses it", r.Name, r.TeamName)
+		}
+		items = append(items, Item{Kind: ServerCertExpiring, Severity: sev, At: &at, Summary: summary,
+			Subject: &Subject{ID: r.ID.String(), Name: r.Name, Slug: r.Slug}, Team: teamRef(r.TeamID, r.TeamSlug, r.TeamName),
+			Link: &Link{Type: LinkServer, ID: r.ID.String(), TeamSlug: r.TeamSlug}})
+	}
+	c.add(ServerCertExpiring, total, len(items), items...)
 	return nil
 }
 

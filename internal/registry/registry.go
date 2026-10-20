@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -213,6 +214,12 @@ type ServerView struct {
 	// Credentials are the parts of the server's own credential, in order:
 	// kind, name and hint only (the legacy header counts as one part).
 	Credentials []CredentialView
+	// TLS is the server's CA bundle and client certificate as facts about the
+	// certificates (nil: none set); never the key.
+	TLS *TLSView
+	// Warnings are things that aren't failures yet (a client certificate about
+	// to expire), shown with the health.
+	Warnings []HealthWarning
 }
 
 // HasAuth reports whether the server has a stored credential.
@@ -250,13 +257,20 @@ func views(ctx context.Context, q *dbgen.Queries, rows []dbgen.ListMCPServersRow
 	if err != nil {
 		return nil, err
 	}
-	digest, err := digestsWith(ctx, q, servers, creds)
+	tlsByServer, err := tlsRows(ctx, q, servers)
 	if err != nil {
 		return nil, err
 	}
+	digest, err := digestsWith(ctx, q, servers, creds, tlsByServer)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
 	for i := range out {
 		out[i].ReviewDigest = digest[out[i].Server.ID]
 		out[i].Credentials = creds[out[i].Server.ID]
+		out[i].TLS = viewOfTLS(tlsByServer[out[i].Server.ID], now)
+		out[i].Warnings = out[i].TLS.warnings()
 	}
 	stats, err := q.MCPCapabilityStats(ctx, ids)
 	if err != nil {
@@ -413,6 +427,8 @@ type CreateInput struct {
 	// SendIdentity sends the identity token (nil: true, except authMode none
 	// on a public or unresolvable host: false; decisions 45 and 64).
 	SendIdentity *bool
+	// TLS is the server's CA bundle and client certificate (nil: none).
+	TLS *TLSInput
 }
 
 // UpdateInput holds optional changes. AuthHeaderName "" removes the header
@@ -444,6 +460,9 @@ type UpdateInput struct {
 	// present (nil keeps it; presence.go). Relaxing it can send a published
 	// server back to review.
 	RequiresPresentPerson *bool
+	// TLS changes the server's CA bundle and client certificate (nil keeps
+	// them; see TLSInput).
+	TLS *TLSInput
 }
 
 // errCaptureRole: only the server team's owners and admins switch capture.
@@ -617,8 +636,18 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 		if err := setCapture(ctx, q, ta.role, &row, in.CapturePayloads); err != nil {
 			return err
 		}
+		var tlsRow *dbgen.McpServerTl
+		if !in.TLS.empty() && !in.TLS.Clear {
+			tp, err := s.planTLS(id, nil, in.TLS, false, time.Now())
+			if err != nil {
+				return err
+			}
+			if tlsRow, err = storeTLS(ctx, q, id, tp); err != nil {
+				return err
+			}
+		}
 		e := a.Audit("mcp_server.create", "mcp_server", id.String())
-		e.TeamID, e.After = ta.team.ID, snapshot(row, parts...)
+		e.TeamID, e.After = ta.team.ID, withTLS(snapshot(row, parts...), tlsRow)
 		if err := audit.Record(ctx, q, e); err != nil {
 			return err
 		}
@@ -702,7 +731,7 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 	if err != nil {
 		return ServerView{}, err
 	}
-	var moved bool
+	var moved, tlsChanged bool
 	err = store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
 		ta, err := access(ctx, q, a, ref)
 		if err != nil {
@@ -723,6 +752,14 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 			return err
 		}
 		p, valueChanged := ap.p, ap.valueChanged
+		curTLS, err := loadTLS(ctx, q, id)
+		if err != nil {
+			return err
+		}
+		tp, err := s.planTLS(id, curTLS, in.TLS, !sameOrigin(cur.URL, p.URL), time.Now())
+		if err != nil {
+			return err
+		}
 		if in.SetRequirement {
 			if p.AuthProviderID, p.AuthScopes, err = checkRequirement(ctx, q, in.Requirement, cur.AuthProviderID, ta.team.ID, cur.ID); err != nil {
 				return err
@@ -739,7 +776,7 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 		setIf(&p.RequiresPresentPerson, in.RequiresPresentPerson)
 		curProv := pre.provider
 		planChanged := pre.plan != nil && (curProv == nil || !planUnchanged(*curProv, pre.plan))
-		if unchanged(cur, p, valueChanged || ap.rewrites(), in.CapturePayloads) && !planChanged && pre.mode == AuthModeOf(cur) {
+		if unchanged(cur, p, valueChanged || ap.rewrites() || tp.changed(), in.CapturePayloads) && !planChanged && pre.mode == AuthModeOf(cur) {
 			return nil
 		}
 		ps, err := LoadProviders(ctx, q)
@@ -769,6 +806,11 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 				return err
 			}
 		}
+		newTLS, err := storeTLS(ctx, q, id, tp)
+		if err != nil {
+			return err
+		}
+		tlsChanged = tp.changed()
 		reset := int64(0)
 		if row.AuthProviderID != cur.AuthProviderID {
 			// Overrides with other scopes belong to the old provider.
@@ -793,8 +835,16 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 			return err
 		}
 		e := a.Audit("mcp_server.update", "mcp_server", id.String())
-		e.TeamID, e.Before, e.After = ta.team.ID, snapshot(cur, ap.before...), snapshot(row, ap.afterParts()...)
+		e.TeamID, e.Before, e.After = ta.team.ID, withTLS(snapshot(cur, ap.before...), curTLS), withTLS(snapshot(row, ap.afterParts()...), newTLS)
 		e.Metadata = map[string]any{"authValueChanged": valueChanged}
+		if tp.changed() {
+			// Which part changed and whether the origin dropped the old settings;
+			// the fingerprints are in the snapshots. Never a key, a ciphertext or a PEM.
+			e.Metadata["tlsCaChanged"], e.Metadata["tlsClientCertChanged"] = tp.caChanged, tp.clientChanged
+			if tp.droppedCA || tp.droppedClient {
+				e.Metadata["tlsDroppedForOrigin"] = true
+			}
+		}
 		for k, v := range originChange(cur.URL, row.URL) {
 			e.Metadata[k] = v
 		}
@@ -813,6 +863,10 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 			err = s.resubmit(ctx, q, a, ta.team, cur, "url_changed", "The server's URL changed; review it again.")
 		case authChanged:
 			err = s.resubmit(ctx, q, a, ta.team, cur, "upstream_auth_changed", noteUpstreamAuthChanged)
+		case tp.caChanged:
+			// The CA a server is trusted against is a trust setting; a new client
+			// certificate is not (decision 74).
+			err = s.resubmit(ctx, q, a, ta.team, cur, "upstream_tls_changed", noteUpstreamTLSChanged)
 		case widened(before, after):
 			err = s.resubmit(ctx, q, a, ta.team, cur, "requirement_changed", noteRequirementChanged)
 		case relaxed(presenceBefore, presenceAfter):
@@ -827,7 +881,7 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 			}
 		}
 		// A new address or credentials make the stored health meaningless.
-		if valueChanged || ap.rewrites() || row.URL != cur.URL || !equalPtr(row.AuthHeaderName, cur.AuthHeaderName) || AuthModeOf(row) != AuthModeOf(cur) {
+		if valueChanged || ap.rewrites() || tp.changed() || row.URL != cur.URL || !equalPtr(row.AuthHeaderName, cur.AuthHeaderName) || AuthModeOf(row) != AuthModeOf(cur) {
 			return q.ForgetMCPHealthChecks(ctx, id)
 		}
 		return nil
@@ -835,7 +889,7 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 	if err != nil {
 		return ServerView{}, err
 	}
-	if moved {
+	if moved || tlsChanged {
 		// Best effort, like Create: a failure is stored as the refresh error.
 		sv, err := s.q.GetMCPServer(ctx, id)
 		if err != nil {
@@ -924,6 +978,11 @@ func (s *Service) prepareUpdate(ctx context.Context, a authz.Actor, ref string, 
 	// Refused before any network exchange with the new host (F-1); applyUpdate
 	// checks again under the row lock.
 	if err := requireValueForOrigin(cur, stored, newURL, in, out.mode); err != nil {
+		return out, err
+	}
+	if curTLS, err := loadTLS(ctx, s.q, id); err != nil {
+		return out, err
+	} else if _, err := s.planTLS(id, curTLS, in.TLS, !sameOrigin(cur.URL, newURL), time.Now()); err != nil {
 		return out, err
 	}
 	switch {
@@ -1237,6 +1296,10 @@ func (s *Service) Delete(ctx context.Context, a authz.Actor, ref string, id uuid
 		if err := resetProviderGrants(ctx, q, a, ta.team.ID, id, "server_deleted", nil); err != nil {
 			return err
 		}
+		deletedTLS, err := loadTLS(ctx, q, id)
+		if err != nil {
+			return err
+		}
 		if err := q.DeleteMCPServer(ctx, id); err != nil {
 			return err
 		}
@@ -1245,7 +1308,7 @@ func (s *Service) Delete(ctx context.Context, a authz.Actor, ref string, id uuid
 			return err
 		}
 		e := a.Audit("mcp_server.delete", "mcp_server", id.String())
-		e.TeamID, e.Before = ta.team.ID, snapshot(cur, stored.views()...)
+		e.TeamID, e.Before = ta.team.ID, withTLS(snapshot(cur, stored.views()...), deletedTLS)
 		return audit.Record(ctx, q, e)
 	})
 }
@@ -1278,5 +1341,10 @@ func (s *Service) target(ctx context.Context, sv dbgen.McpServer) (upstream.Targ
 		}
 		t.Credentials = creds
 	}
+	tid, err := s.openTLS(ctx, sv)
+	if err != nil {
+		return t, err
+	}
+	t.TLS = tid
 	return t, nil
 }

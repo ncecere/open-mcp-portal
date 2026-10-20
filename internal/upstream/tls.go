@@ -362,6 +362,24 @@ func parsePrivateKey(s string) (crypto.Signer, error) {
 	return signer, nil
 }
 
+// DescribeChain describes a stored client certificate chain: the leaf (with the
+// names it lists) and how many certificates there are.
+func DescribeChain(certPEM string) (CertInfo, int, error) {
+	certs, err := certificates(TLSFieldCert, certPEM)
+	if err != nil {
+		return CertInfo{}, 0, err
+	}
+	info := infoOf(certs[0])
+	for _, n := range certs[0].DNSNames {
+		info.Names = append(info.Names, clip(n, 100))
+	}
+	for _, ip := range certs[0].IPAddresses {
+		info.Names = append(info.Names, ip.String())
+	}
+	info.Names = info.Names[:min(len(info.Names), 20)]
+	return info, len(certs), nil
+}
+
 // TLSIdentity is a server's TLS settings, ready to dial with: the CA bundle
 // that replaces the system roots (none: the system roots) and the client
 // certificate presented when the server asks for one. Its String and GoString

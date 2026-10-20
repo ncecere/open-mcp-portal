@@ -177,6 +177,11 @@ func (a *api) createTeamMcpServer(w http.ResponseWriter, r *http.Request) {
 		ci.AuthMode = string(*in.AuthMode)
 	}
 	ci.OAuth, ci.SendIdentity = fromAPIOAuthInput(in.Oauth), in.SendIdentity
+	ci.TLS = fromAPITLS(in.Tls)
+	if actor := a.actor(r); actor.IsToken() && ci.TLS != nil {
+		a.refuseToken(w, r, "tls")
+		return
+	}
 	res, err := a.Registry.Create(r.Context(), a.actor(r), r.PathValue("team"), ci)
 	if failed(w, r, err) {
 		return
@@ -260,7 +265,7 @@ func (a *api) updateTeamMcpServer(w http.ResponseWriter, r *http.Request) {
 		Credentials:    fromAPICredentialsPtr(in.Credentials),
 		TimeoutSeconds: in.TimeoutSeconds, Enabled: in.Enabled, SetRequirement: setRequirement, Requirement: fromAPIRequirement(in.Requirement),
 		CapturePayloads: in.CapturePayloads, AuthMode: strPtr(in.AuthMode), OAuth: fromAPIOAuthInput(in.Oauth), SendIdentity: in.SendIdentity,
-		RequiresPresentPerson: in.RequiresPresentPerson,
+		RequiresPresentPerson: in.RequiresPresentPerson, TLS: fromAPITLS(in.Tls),
 	}, rev)
 	if failed(w, r, err) {
 		return

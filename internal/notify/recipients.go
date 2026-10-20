@@ -121,6 +121,8 @@ func (s *Service) recipients(ctx context.Context, q *dbgen.Queries, ev dbgen.Not
 			err = person()
 		case KeyServiceAccount, KeyPublisherToken:
 			err = team(adminsUp)
+		case KeyServerCertificate:
+			err = team(editorsUp)
 		case KeyPlatformToken:
 			err = platform()
 		}
@@ -144,7 +146,7 @@ func webhookRoute(ev dbgen.NotificationEvent) (team, platform, platformNeedsTeam
 		return false, true, false
 	case KeyExpiring:
 		switch keyKindOf(ev) {
-		case KeyServiceAccount, KeyPublisherToken:
+		case KeyServiceAccount, KeyPublisherToken, KeyServerCertificate:
 			return true, true, true
 		case KeyPlatformToken:
 			return false, true, false

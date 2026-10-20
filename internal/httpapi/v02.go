@@ -566,11 +566,13 @@ func (a *api) tokenMayUpdateServer(w http.ResponseWriter, r *http.Request, actor
 	}
 	sv := v.Server
 	refuse := func(field string) bool {
-		a.Automation.Count(automation.ResultNotAllowed)
-		e := apperr.New(http.StatusForbidden, "token_not_allowed", "An automation token can't change "+field+" of this server: sign in to do it")
-		e.Details = map[string]any{"field": field}
-		httpx.Fail(w, r, e)
+		a.refuseToken(w, r, field)
 		return false
+	}
+	// A client key and a CA are credentials and trust settings: a token never
+	// sends them, whatever the server holds (decision 74).
+	if _, ok := keys["tls"]; ok {
+		return refuse("tls")
 	}
 	if in.CapturePayloads != nil && *in.CapturePayloads != sv.CapturePayloads {
 		return refuse("capturePayloads")
@@ -578,7 +580,7 @@ func (a *api) tokenMayUpdateServer(w http.ResponseWriter, r *http.Request, actor
 	if in.RequiresPresentPerson != nil && *in.RequiresPresentPerson != sv.RequiresPresentPerson {
 		return refuse("requiresPresentPerson")
 	}
-	if !v.HasAuth() && sv.AuthMode == "none" && !sv.AuthProviderID.Valid {
+	if !v.HasAuth() && sv.AuthMode == "none" && !sv.AuthProviderID.Valid && !(v.TLS != nil && v.TLS.Client != nil) {
 		return true // no credentials yet: nothing to steal or redirect
 	}
 	for _, f := range []string{"authHeaderName", "authValue", "credentials", "authMode", "oauth", "requirement"} {
@@ -593,4 +595,13 @@ func (a *api) tokenMayUpdateServer(w http.ResponseWriter, r *http.Request, actor
 		return refuse("sendIdentity")
 	}
 	return true
+}
+
+// refuseToken answers an automation token that tried to change field: 403
+// token_not_allowed with details.field.
+func (a *api) refuseToken(w http.ResponseWriter, r *http.Request, field string) {
+	a.Automation.Count(automation.ResultNotAllowed)
+	e := apperr.New(http.StatusForbidden, "token_not_allowed", "An automation token can't change "+field+" of this server: sign in to do it")
+	e.Details = map[string]any{"field": field}
+	httpx.Fail(w, r, e)
 }

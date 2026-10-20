@@ -17,17 +17,9 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/testutil"
 )
 
-// An upstream MCP server behind TLS that requires and verifies client
-// certificates (the setup an internal service has): its certificate is signed
-// by a private CA, and so are the client certificates it accepts.
-type tlsFake struct {
-	*testutil.FakeMCP
-	conns atomic.Int64
-	mu    sync.Mutex
-	seen  []tlsSeen
-}
+// tlsFake adapts the shared fake to this file's vocabulary.
+type tlsFake struct{ *testutil.MTLSFake }
 
-// tlsSeen is what one request showed the server about its TLS connection.
 type tlsSeen struct {
 	clientCN   string
 	protoMajor int
@@ -36,59 +28,16 @@ type tlsSeen struct {
 }
 
 func (f *tlsFake) requests() []tlsSeen {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return append([]tlsSeen(nil), f.seen...)
+	var out []tlsSeen
+	for _, s := range f.Seen() {
+		out = append(out, tlsSeen{clientCN: s.ClientCN, protoMajor: s.ProtoMajor, version: s.Version, serverName: s.ServerName})
+	}
+	return out
 }
 
-type tlsFakeOptions struct {
-	server    *testutil.Cert // the server's certificate (with its chain)
-	clientCAs []*testutil.Cert
-	// noClientCert: ask for no client certificate at all.
-	noClientCert bool
-	maxVersion   uint16
-}
-
-func startTLSFake(t *testing.T, o tlsFakeOptions) *tlsFake {
+func startTLSFake(t *testing.T, o testutil.MTLSOptions) *tlsFake {
 	t.Helper()
-	fake, h := testutil.NewFakeMCPHandler()
-	f := &tlsFake{FakeMCP: fake}
-	var srv *httptest.Server
-	srv = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s := tlsSeen{protoMajor: r.ProtoMajor}
-		if r.TLS != nil {
-			s.version, s.serverName = r.TLS.Version, r.TLS.ServerName
-			if len(r.TLS.PeerCertificates) > 0 {
-				s.clientCN = r.TLS.PeerCertificates[0].Subject.CommonName
-			}
-		}
-		f.mu.Lock()
-		f.seen = append(f.seen, s)
-		f.mu.Unlock()
-		// The MCP handler's DNS-rebinding guard wants a loopback Host on a
-		// loopback listener; the handshake already used the name it was given.
-		r.Host = srv.Listener.Addr().String()
-		h.ServeHTTP(w, r)
-	}))
-	srv.EnableHTTP2 = true
-	srv.TLS = &tls.Config{Certificates: []tls.Certificate{o.server.TLSCertificate()}, MaxVersion: o.maxVersion}
-	if !o.noClientCert {
-		srv.TLS.ClientAuth = tls.RequireAndVerifyClientCert
-		srv.TLS.ClientCAs = testutil.Pool(o.clientCAs...)
-	}
-	if o.maxVersion != 0 && o.maxVersion < tls.VersionTLS12 {
-		srv.TLS.MinVersion = tls.VersionTLS10
-	}
-	srv.Config.ErrorLog = nil
-	srv.Config.ConnState = func(_ net.Conn, s http.ConnState) {
-		if s == http.StateNew {
-			f.conns.Add(1)
-		}
-	}
-	srv.StartTLS()
-	fake.Server = srv
-	t.Cleanup(srv.Close)
-	return f
+	return &tlsFake{testutil.StartMTLSFake(t, o)}
 }
 
 // tlsID builds a target identity, failing the test on bad input.
@@ -130,7 +79,7 @@ func TestTLSMutualDiscoverAndCall(t *testing.T) {
 	client := ca.Issue(t, testutil.IssueOptions{CommonName: "portal-client", Client: true})
 	for _, proto := range []testutil.Protocol{testutil.ProtocolModern, testutil.ProtocolLegacy} {
 		t.Run(string(proto), func(t *testing.T) {
-			f := startTLSFake(t, tlsFakeOptions{server: loopbackCert(t, ca), clientCAs: []*testutil.Cert{ca}})
+			f := startTLSFake(t, testutil.MTLSOptions{Server: loopbackCert(t, ca), ClientCAs: []*testutil.Cert{ca}})
 			f.SetProtocol(proto)
 			f.EnableGatewayTools()
 			c := eraClient()
@@ -192,7 +141,7 @@ func TestTLSMutualDiscoverAndCall(t *testing.T) {
 func TestTLSStreamedCall(t *testing.T) {
 	ca := testutil.NewCA(t, "Internal CA")
 	client := ca.Issue(t, testutil.IssueOptions{Client: true})
-	f := startTLSFake(t, tlsFakeOptions{server: loopbackCert(t, ca), clientCAs: []*testutil.Cert{ca}})
+	f := startTLSFake(t, testutil.MTLSOptions{Server: loopbackCert(t, ca), ClientCAs: []*testutil.Cert{ca}})
 	f.EnableStreamTools()
 	c := eraClient()
 	var mu sync.Mutex
@@ -218,7 +167,7 @@ func TestTLSFailureClasses(t *testing.T) {
 	otherCA := testutil.NewCA(t, "Other CA")
 	client := ca.Issue(t, testutil.IssueOptions{Client: true})
 	stranger := otherCA.Issue(t, testutil.IssueOptions{Client: true})
-	f := startTLSFake(t, tlsFakeOptions{server: loopbackCert(t, ca), clientCAs: []*testutil.Cert{ca}})
+	f := startTLSFake(t, testutil.MTLSOptions{Server: loopbackCert(t, ca), ClientCAs: []*testutil.Cert{ca}})
 	c := testClient(true)
 	ctx := context.Background()
 	call := func(id *TLSIdentity) *Error {
@@ -268,7 +217,7 @@ func TestTLSHostNameIsVerified(t *testing.T) {
 		"CN only":     ca.Issue(t, testutil.IssueOptions{Server: true, CommonName: "mcp.internal.test"}),
 	} {
 		t.Run(name, func(t *testing.T) {
-			f := startTLSFake(t, tlsFakeOptions{server: cert, clientCAs: []*testutil.Cert{ca}})
+			f := startTLSFake(t, testutil.MTLSOptions{Server: cert, ClientCAs: []*testutil.Cert{ca}})
 			_, port, _ := net.SplitHostPort(f.Listener.Addr().String())
 			c := testClient(true)
 			c.Lookup = func(context.Context, string) ([]netip.Addr, error) {
@@ -287,7 +236,7 @@ func TestTLSHostNameIsVerified(t *testing.T) {
 			// to the checked address, the name verified is the URL's).
 		})
 	}
-	f := startTLSFake(t, tlsFakeOptions{server: ca.Issue(t, testutil.IssueOptions{Server: true, DNSNames: []string{"mcp.internal.test"}}), clientCAs: []*testutil.Cert{ca}})
+	f := startTLSFake(t, testutil.MTLSOptions{Server: ca.Issue(t, testutil.IssueOptions{Server: true, DNSNames: []string{"mcp.internal.test"}}), ClientCAs: []*testutil.Cert{ca}})
 	_, port, _ := net.SplitHostPort(f.Listener.Addr().String())
 	c := testClient(true)
 	c.Lookup = func(context.Context, string) ([]netip.Addr, error) {
@@ -305,20 +254,20 @@ func TestTLSHostNameIsVerified(t *testing.T) {
 func TestTLSMinimumVersion(t *testing.T) {
 	ca := testutil.NewCA(t, "Internal CA")
 	client := ca.Issue(t, testutil.IssueOptions{Client: true})
-	f := startTLSFake(t, tlsFakeOptions{server: loopbackCert(t, ca), clientCAs: []*testutil.Cert{ca}, maxVersion: tls.VersionTLS11})
+	f := startTLSFake(t, testutil.MTLSOptions{Server: loopbackCert(t, ca), ClientCAs: []*testutil.Cert{ca}, MaxVersion: tls.VersionTLS11})
 	_, err := testClient(true).Discover(context.Background(), Target{URL: f.URL(), Timeout: 5 * time.Second, TLS: tlsID(t, ca, client)})
 	if e := class(t, err); e.Class != ClassTLS || !strings.Contains(e.Message, "TLS 1.2") {
 		t.Fatalf("TLS 1.1 server: %+v", e)
 	}
 	// TLS 1.2 is accepted, and 1.3 is what is used when both speak it.
-	f12 := startTLSFake(t, tlsFakeOptions{server: loopbackCert(t, ca), clientCAs: []*testutil.Cert{ca}, maxVersion: tls.VersionTLS12})
+	f12 := startTLSFake(t, testutil.MTLSOptions{Server: loopbackCert(t, ca), ClientCAs: []*testutil.Cert{ca}, MaxVersion: tls.VersionTLS12})
 	if _, err := testClient(true).Discover(context.Background(), Target{URL: f12.URL(), Timeout: 5 * time.Second, TLS: tlsID(t, ca, client)}); err != nil {
 		t.Fatalf("TLS 1.2: %v", err)
 	}
 	if s := f12.requests(); len(s) == 0 || s[0].version != tls.VersionTLS12 {
 		t.Fatalf("TLS 1.2 server saw %+v", s)
 	}
-	f13 := startTLSFake(t, tlsFakeOptions{server: loopbackCert(t, ca), clientCAs: []*testutil.Cert{ca}})
+	f13 := startTLSFake(t, testutil.MTLSOptions{Server: loopbackCert(t, ca), ClientCAs: []*testutil.Cert{ca}})
 	if _, err := testClient(true).Discover(context.Background(), Target{URL: f13.URL(), Timeout: 5 * time.Second, TLS: tlsID(t, ca, client)}); err != nil {
 		t.Fatalf("TLS 1.3: %v", err)
 	}
@@ -348,7 +297,7 @@ func TestTLSConnectionsAreNotSharedBetweenIdentities(t *testing.T) {
 	ca := testutil.NewCA(t, "Internal CA")
 	alice := ca.Issue(t, testutil.IssueOptions{CommonName: "alice", Client: true})
 	bob := ca.Issue(t, testutil.IssueOptions{CommonName: "bob", Client: true})
-	f := startTLSFake(t, tlsFakeOptions{server: loopbackCert(t, ca), clientCAs: []*testutil.Cert{ca}})
+	f := startTLSFake(t, testutil.MTLSOptions{Server: loopbackCert(t, ca), ClientCAs: []*testutil.Cert{ca}})
 	c := testClient(true)
 	ids := map[string]*TLSIdentity{"alice": tlsID(t, ca, alice), "bob": tlsID(t, ca, bob)}
 	if ids["alice"].Fingerprint() == ids["bob"].Fingerprint() {
@@ -381,12 +330,12 @@ func TestTLSConnectionsAreNotSharedBetweenIdentities(t *testing.T) {
 	}
 	// Twelve exchanges, none reusing another's connection: at least one
 	// connection each (the transport of an exchange is closed with it).
-	if f.conns.Load() < 12 {
-		t.Fatalf("%d connections for 12 exchanges: connections are shared", f.conns.Load())
+	if f.Conns() < 12 {
+		t.Fatalf("%d connections for 12 exchanges: connections are shared", f.Conns())
 	}
 	// And the server that trusts only one of the CAs never sees the other's
 	// certificate: a connection can't carry a certificate it wasn't made with.
-	solo := startTLSFake(t, tlsFakeOptions{server: loopbackCert(t, ca), clientCAs: []*testutil.Cert{ca}})
+	solo := startTLSFake(t, testutil.MTLSOptions{Server: loopbackCert(t, ca), ClientCAs: []*testutil.Cert{ca}})
 	if _, err := c.Discover(context.Background(), Target{URL: solo.URL(), Timeout: 5 * time.Second, TLS: ids["alice"]}); err != nil {
 		t.Fatal(err)
 	}
@@ -403,7 +352,7 @@ func TestTLSConnectionsAreNotSharedBetweenIdentities(t *testing.T) {
 func TestTLSIsOrthogonalToTheAddressRule(t *testing.T) {
 	ca := testutil.NewCA(t, "Internal CA")
 	client := ca.Issue(t, testutil.IssueOptions{Client: true})
-	f := startTLSFake(t, tlsFakeOptions{server: loopbackCert(t, ca, "mcp.corp.example.com"), clientCAs: []*testutil.Cert{ca}})
+	f := startTLSFake(t, testutil.MTLSOptions{Server: loopbackCert(t, ca, "mcp.corp.example.com"), ClientCAs: []*testutil.Cert{ca}})
 	_, port, _ := net.SplitHostPort(f.Listener.Addr().String())
 	id := tlsID(t, ca, client)
 	ctx := context.Background()
@@ -464,7 +413,7 @@ func TestTLSIsOrthogonalToTheAddressRule(t *testing.T) {
 // legacy path.
 func TestTLSFailureLeavesTheEraCacheAlone(t *testing.T) {
 	ca := testutil.NewCA(t, "Internal CA")
-	f := startTLSFake(t, tlsFakeOptions{server: loopbackCert(t, ca), clientCAs: []*testutil.Cert{ca}})
+	f := startTLSFake(t, testutil.MTLSOptions{Server: loopbackCert(t, ca), ClientCAs: []*testutil.Cert{ca}})
 	c := eraClient()
 	tgt := Target{URL: f.URL(), ServerID: "s9", Timeout: 5 * time.Second}
 	if _, err := c.Discover(context.Background(), tgt); class(t, err).Class != ClassTLS {
