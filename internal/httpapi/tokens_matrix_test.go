@@ -450,6 +450,47 @@ func TestTokenFieldRules(t *testing.T) {
 	if code, _, body := e.bearer(pub.secret, patch(path, map[string]any{"description": "parts stay"}).h(rev())); code != 200 {
 		t.Errorf("description on a server with parts: %d %s", code, body)
 	}
+
+	// TLS settings (decision 74): a client key and a CA are credentials and a
+	// trust setting, so no token sends them, whatever the server holds, and on
+	// a server that holds a client key it can't re-point the URL either.
+	fieldOf := func(body []byte) string {
+		var env struct {
+			Error struct{ Details struct{ Field string } }
+		}
+		_ = json.Unmarshal(body, &env)
+		return env.Error.Details.Field
+	}
+	e.run(`DELETE FROM mcp_server_credentials WHERE server_id = $1`, srv)
+	e.run(`UPDATE mcp_servers SET auth_mode = 'none' WHERE id = $1`, srv)
+	for name, tls := range map[string]map[string]any{
+		"a CA":       {"caPem": "x"},
+		"a key":      {"clientCertPem": "x", "clientKeyPem": "y"},
+		"clear":      {"clear": true},
+		"an empty":   {},
+		"a removing": {"caPem": ""},
+	} {
+		code, _, body := e.bearer(pub.secret, patch(path, map[string]any{"tls": tls}).h(rev()))
+		if code != 403 || fieldOf(body) != "tls" || strings.Contains(string(body), "BEGIN") {
+			t.Errorf("tls (%s) on a server without credentials: %d %s", name, code, body)
+		}
+	}
+	code, _, body = e.bearer(pub.secret, post("/v1/teams/bravo/mcp-servers", map[string]any{"slug": "with-tls", "name": "With TLS", "url": e.fakeURL,
+		"tls": map[string]any{"caPem": "x"}}))
+	if code != 403 || fieldOf(body) != "tls" {
+		t.Errorf("create with tls: %d %s", code, body)
+	}
+	if got := e.exec(`SELECT count(*)::text FROM mcp_server_tls`); got != "0" {
+		t.Errorf("a token stored TLS settings: %s", got)
+	}
+	e.run(`INSERT INTO mcp_server_tls (server_id, client_cert_pem, client_key_cipher, client_cert_sha256, client_not_after)
+		VALUES ($1, 'x', '\x00', repeat('a', 64), now() + interval '90 days')`, srv)
+	if code, _, body := e.bearer(pub.secret, patch(path, map[string]any{"url": "https://attacker.example.com/mcp"}).h(rev())); code != 403 || fieldOf(body) != "url" {
+		t.Errorf("url on a server with a client key: %d %s", code, body)
+	}
+	if code, _, body := e.bearer(pub.secret, patch(path, map[string]any{"description": "tls stays"}).h(rev())); code != 200 {
+		t.Errorf("description on a server with a client key: %d %s", code, body)
+	}
 }
 
 // Detect-auth is limited per token (10 a minute), counted separately from

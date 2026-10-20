@@ -208,3 +208,15 @@ func (c *Cert) KeyPEMAs(t testing.TB, form string) string {
 	}
 	return string(pem.EncodeToMemory(&pem.Block{Type: typ, Bytes: b}))
 }
+
+// IssueFor makes a certificate signed by ca for an existing key (a renewal:
+// same key, new certificate).
+func (ca *Cert) IssueFor(t testing.TB, key crypto.Signer, o IssueOptions) *Cert {
+	t.Helper()
+	c := &Cert{Key: key}
+	der, err := x509.CreateCertificate(rand.Reader, certTemplate(o), ca.Cert, key.Public(), ca.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c.wrap(t, der)
+}
