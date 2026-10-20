@@ -364,3 +364,28 @@ func TestTracingUpstreamFailure(t *testing.T) {
 	}
 	assertNothingSensitive(t, sr, e, "x-never")
 }
+
+// A streamed answer (SSE with progress events) still streams with the
+// response writer wrapped for tracing, and its span ends with the stream.
+func TestTracingStreamedCall(t *testing.T) {
+	sr := tracingOn(t)
+	e := newRelayEnv(t, nil)
+	body, headers := toolRequest(true, "status__progress", map[string]any{"count": 3, "delay_ms": 0}, map[string]any{"progressToken": "p1", "traceparent": traceTP})
+	res := e.post(context.Background(), body, headers)
+	defer res.Body.Close()
+	if ct := res.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("content type %q", ct)
+	}
+	events := readSSE(res.Body)
+	if len(events) != 4 || !strings.Contains(events[len(events)-1].data, `"result"`) {
+		t.Fatalf("%d events", len(events))
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && spansOf(sr, traceID)["MCP tools/call"] == nil {
+		time.Sleep(10 * time.Millisecond)
+	}
+	s := spansOf(sr, traceID)["MCP tools/call"]
+	if s == nil || !hasAttr(s, "http.response.status_code", "200") || !hasAttr(s, "omp.outcome", "ok") || spansOf(sr, traceID)["mcp.upstream.forward"] == nil {
+		t.Errorf("the streamed call's spans: %v", spansOf(sr, traceID))
+	}
+}
