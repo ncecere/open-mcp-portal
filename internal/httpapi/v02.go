@@ -15,6 +15,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/httpx"
 	"github.com/ncecere/open-mcp-portal/internal/notify"
 	"github.com/ncecere/open-mcp-portal/internal/overview"
+	"github.com/ncecere/open-mcp-portal/internal/registry"
 )
 
 // The v0.2 pilot-readiness operations: the admin overview and team
@@ -577,6 +578,15 @@ func (a *api) tokenMayUpdateServer(w http.ResponseWriter, r *http.Request, actor
 	}
 	if in.RequiresPresentPerson != nil && *in.RequiresPresentPerson != sv.RequiresPresentPerson {
 		return refuse("requiresPresentPerson")
+	}
+	// A machine client is a secret like no other the token could set: never
+	// from an automation token, even on a server without credentials (a
+	// token must not choose where a client secret goes; decision 73).
+	if _, ok := keys["machineOAuth"]; ok {
+		return refuse("machineOAuth")
+	}
+	if in.AuthMode != nil && string(*in.AuthMode) == registry.AuthMachineOAuth && sv.AuthMode != registry.AuthMachineOAuth {
+		return refuse("authMode")
 	}
 	if !v.HasAuth() && sv.AuthMode == "none" && !sv.AuthProviderID.Valid {
 		return true // no credentials yet: nothing to steal or redirect

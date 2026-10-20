@@ -159,6 +159,7 @@ func toAPIDetection(d registry.Detection) apitypes.DetectAuthResult {
 			GrantTypesSupported: nonNilStrings(m.GrantTypesSupported), IssParameterSupported: m.IssParameterSupported,
 			ClientIdMetadataDocumentSupported: m.CIMDSupported}
 	}
+	out.MachineOAuth = toAPIMachineDetection(d.Machine)
 	if g := d.Registration; g != nil {
 		reg := &apitypes.DetectAuthRegistration{Recommended: apitypes.McpServerOAuthRegistration(g.Recommended), RedirectUri: g.RedirectURI,
 			ClientMetadataUrl: g.ClientMetadataURL, Options: []apitypes.McpServerOAuthRegistration{}, MatchingProviders: []apitypes.ProviderRef{}}
