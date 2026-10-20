@@ -885,6 +885,9 @@ func (s *Service) OAuthServer(ctx context.Context, a authz.Actor, ref string, id
 
 // createMode is a new server's auth mode.
 func createMode(in CreateInput) (string, error) {
+	if in.MachineOAuth != nil && in.AuthMode != AuthMachineOAuth {
+		return "", apperr.Invalid("invalid_machine_oauth", "machineOAuth is for authMode machine_oauth only")
+	}
 	has := in.AuthHeaderName != "" || in.AuthValue != "" || len(in.Credentials) > 0
 	switch in.AuthMode {
 	case "":
@@ -909,9 +912,6 @@ func createMode(in CreateInput) (string, error) {
 		return AuthMachineOAuth, nil
 	default:
 		return "", apperr.Invalid("invalid_auth_mode", "authMode must be none, static_header, oauth or machine_oauth")
-	}
-	if in.MachineOAuth != nil {
-		return "", apperr.Invalid("invalid_machine_oauth", "machineOAuth is for authMode machine_oauth only")
 	}
 	// An oauth input without oauth mode is ignored (clients may always send
 	// it with its defaults).
