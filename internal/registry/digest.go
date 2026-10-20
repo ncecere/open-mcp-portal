@@ -14,7 +14,8 @@ import (
 )
 
 // The review digest binds an approval to what the reviewer saw (docs/
-// threat-model.md, F-2): a SHA-256 over the server's URL, auth mode and
+// threat-model.md, F-2): a SHA-256 over the server's URL, auth mode, the kind
+// and name of each part of its own credential (never a value) and
 // requirement (and its requires-a-present-person switch when on) and over
 // every listed (not gone) capability's kind, name and fingerprint (and its
 // effective requires-a-present-person, when true), sorted. A refresh that
@@ -26,7 +27,7 @@ import (
 
 // digestVersion is hashed first so a future change of what is covered can't
 // collide with this one.
-const digestVersion = "omp-review-v1"
+const digestVersion = "omp-review-v2"
 
 // CapabilityRef is one listed capability as the digest covers it.
 // PresentPerson is whether calls relayed for a person need that person
@@ -44,8 +45,10 @@ func CapabilityRefOf(sv dbgen.McpServer, kind, name, fingerprint string, present
 		PresentPerson: PresentPersonRequired(sv, dbgen.McpCapability{RequiresPresentPerson: presentOverride})}
 }
 
-// ReviewDigest is the digest of a server and its listed capabilities.
-func ReviewDigest(sv dbgen.McpServer, caps []CapabilityRef) string {
+// ReviewDigest is the digest of a server and its listed capabilities. parts
+// are the server's credential parts, as ServerView lists them; a server whose
+// credential is its legacy header (and none given) is covered by that header.
+func ReviewDigest(sv dbgen.McpServer, caps []CapabilityRef, parts ...CredentialView) string {
 	h := sha256.New()
 	put := func(s string) {
 		// Length-prefixed, so no field can run into the next.
@@ -54,6 +57,21 @@ func ReviewDigest(sv dbgen.McpServer, caps []CapabilityRef) string {
 	put(digestVersion)
 	put(sv.URL)
 	put(AuthModeOf(sv))
+	// The kind and name of every part of the server's own credential, sorted,
+	// so adding one (a tenant header, a query key) shows to the reviewer and
+	// moving a header between the legacy columns and the table does not.
+	keys := make([]string, 0, len(parts)+1)
+	if len(parts) == 0 && sv.AuthHeaderName != nil {
+		parts = []CredentialView{{Kind: CredHeader, Name: *sv.AuthHeaderName}}
+	}
+	for _, p := range parts {
+		keys = append(keys, p.key())
+	}
+	slices.Sort(keys)
+	put(strconv.Itoa(len(keys)))
+	for _, k := range keys {
+		put(k)
+	}
 	if sv.AuthProviderID.Valid {
 		put(sv.AuthProviderID.UUID.String())
 		scopes := sorted(sv.AuthScopes)
@@ -92,6 +110,15 @@ func ReviewDigest(sv dbgen.McpServer, caps []CapabilityRef) string {
 
 // digests are the review digests of servers, by ID (for lists and views).
 func digests(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServer) (map[uuid.UUID]string, error) {
+	creds, err := credentialViews(ctx, q, servers)
+	if err != nil {
+		return nil, err
+	}
+	return digestsWith(ctx, q, servers, creds)
+}
+
+// digestsWith is digests with the servers' credential parts already read.
+func digestsWith(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServer, creds map[uuid.UUID][]CredentialView) (map[uuid.UUID]string, error) {
 	ids := make([]uuid.UUID, len(servers))
 	for i, sv := range servers {
 		ids[i] = sv.ID
@@ -110,7 +137,7 @@ func digests(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServer) (
 		for i, r := range byServer[sv.ID] {
 			refs[i] = CapabilityRefOf(sv, r.Kind, r.Name, r.Fingerprint, r.RequiresPresentPerson)
 		}
-		out[sv.ID] = ReviewDigest(sv, refs)
+		out[sv.ID] = ReviewDigest(sv, refs, creds[sv.ID]...)
 	}
 	return out, nil
 }

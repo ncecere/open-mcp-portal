@@ -1166,6 +1166,54 @@ func (e McpServerAuthMode) Valid() bool {
 	}
 }
 
+// Defines values for McpServerCredentialKind.
+const (
+	McpServerCredentialKindBasic  McpServerCredentialKind = "basic"
+	McpServerCredentialKindBearer McpServerCredentialKind = "bearer"
+	McpServerCredentialKindHeader McpServerCredentialKind = "header"
+	McpServerCredentialKindQuery  McpServerCredentialKind = "query"
+)
+
+// Valid indicates whether the value is a known member of the McpServerCredentialKind enum.
+func (e McpServerCredentialKind) Valid() bool {
+	switch e {
+	case McpServerCredentialKindBasic:
+		return true
+	case McpServerCredentialKindBearer:
+		return true
+	case McpServerCredentialKindHeader:
+		return true
+	case McpServerCredentialKindQuery:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for McpServerCredentialInputKind.
+const (
+	McpServerCredentialInputKindBasic  McpServerCredentialInputKind = "basic"
+	McpServerCredentialInputKindBearer McpServerCredentialInputKind = "bearer"
+	McpServerCredentialInputKindHeader McpServerCredentialInputKind = "header"
+	McpServerCredentialInputKindQuery  McpServerCredentialInputKind = "query"
+)
+
+// Valid indicates whether the value is a known member of the McpServerCredentialInputKind enum.
+func (e McpServerCredentialInputKind) Valid() bool {
+	switch e {
+	case McpServerCredentialInputKindBasic:
+		return true
+	case McpServerCredentialInputKindBearer:
+		return true
+	case McpServerCredentialInputKindHeader:
+		return true
+	case McpServerCredentialInputKindQuery:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for McpServerOAuthRegistration.
 const (
 	McpServerOAuthRegistrationCimd             McpServerOAuthRegistration = "cimd"
@@ -3823,25 +3871,30 @@ type McpRefreshResult struct {
 
 // McpServer A remote MCP server a team registered. The auth header value is never returned.
 type McpServer struct {
-	// AuthHeaderName The static header sent with every request (absent: none)
+	// AuthHeaderName The static header sent with every request, for a server whose credential is still its single header (absent: none, or the credential is the list credentials)
 	AuthHeaderName *string `json:"authHeaderName,omitempty"`
 
 	// AuthMode How the portal authenticates to the server (decision 39). none: only the identity token, in Authorization: Bearer. static_header: one static header (authHeaderName); the identity token moves to MCP-Gateway-Identity when that header is Authorization. oauth: each person's own token from the server's authorization server in Authorization: Bearer, and the identity token in MCP-Gateway-Identity. oauth excludes a static Authorization header and a requirement (one credential per call)
 	AuthMode *McpServerAuthMode `json:"authMode,omitempty"`
 
-	// AuthValueHint Last 4 characters of the header value, or empty
+	// AuthValueHint Last 4 characters of the single header's value, or empty
 	AuthValueHint string `json:"authValueHint"`
 
 	// CapturePayloads Record the arguments and results of calls to this server's capabilities through any gateway (redacted, truncated to 16 KiB per part; readable by the team's owners and admins and platform staff; kept for the captured_payloads retention period). Absent from servers before Phase 6.
 	CapturePayloads *bool            `json:"capturePayloads,omitempty"`
 	Counts          CapabilityCounts `json:"counts"`
 	CreatedAt       time.Time        `json:"createdAt"`
-	Description     string           `json:"description"`
+
+	// Credentials The parts of the server's own credential, in order, with no values. The single header of a server that has not been saved with the list shows here as one header part
+	Credentials *[]McpServerCredential `json:"credentials,omitempty"`
+	Description string                 `json:"description"`
 
 	// EffectivePublishPolicy approval_required: a platform admin approves each server, and each changed capability, before it reaches the catalog. self_publish: the team's owners and admins do.
 	EffectivePublishPolicy PublishPolicy `json:"effectivePublishPolicy"`
 	Enabled                bool          `json:"enabled"`
-	HasAuth                bool          `json:"hasAuth"`
+
+	// HasAuth Whether the server has any credential part (the single header or credentials)
+	HasAuth bool `json:"hasAuth"`
 
 	// Health The latest health check. unknown before the first one.
 	Health           ServerHealth       `json:"health"`
@@ -3917,11 +3970,14 @@ type McpServerCreate struct {
 	AuthValue *string `json:"authValue,omitempty"`
 
 	// CapturePayloads Only team owners and admins may set it to true (403 capture_role)
-	CapturePayloads *bool                `json:"capturePayloads,omitempty"`
-	Description     *string              `json:"description,omitempty"`
-	Enabled         *bool                `json:"enabled,omitempty"`
-	Name            string               `json:"name"`
-	Oauth           *McpServerOAuthInput `json:"oauth,omitempty"`
+	CapturePayloads *bool `json:"capturePayloads,omitempty"`
+
+	// Credentials The server's own credential as parts, instead of authHeaderName and authValue (decision 70)
+	Credentials *[]McpServerCredentialInput `json:"credentials,omitempty"`
+	Description *string                     `json:"description,omitempty"`
+	Enabled     *bool                       `json:"enabled,omitempty"`
+	Name        string                      `json:"name"`
+	Oauth       *McpServerOAuthInput        `json:"oauth,omitempty"`
 
 	// Requirement Absent or null; no user authorization
 	Requirement *McpServerRequirementInput `json:"requirement,omitempty"`
@@ -3951,6 +4007,40 @@ type McpServerCreated struct {
 	// SetupRequired true for a server created in oauth mode; nobody has signed in yet, so capabilities weren't read. Call authorizeTeamMcpServerSetup next
 	SetupRequired *bool `json:"setupRequired,omitempty"`
 }
+
+// McpServerCredential One part of a server's own credential. Values are sealed and never returned
+type McpServerCredential struct {
+	// Hint Last 4 characters of the value (of the password for basic), or empty when it has fewer than 8
+	Hint string `json:"hint"`
+
+	// Kind header sends name as a header; bearer sends Authorization Bearer; basic sends Authorization Basic (user and password); query adds name as a query parameter to each request to the server
+	Kind McpServerCredentialKind `json:"kind"`
+
+	// Name The header or query parameter name (absent for bearer and basic)
+	Name *string `json:"name,omitempty"`
+}
+
+// McpServerCredentialKind header sends name as a header; bearer sends Authorization Bearer; basic sends Authorization Basic (user and password); query adds name as a query parameter to each request to the server
+type McpServerCredentialKind string
+
+// McpServerCredentialInput One part of a server's own credential in a request
+type McpServerCredentialInput struct {
+	// Keep Keep the stored part of this kind and name with its values (update only; sends no value; not allowed when the URL moves to another origin)
+	Keep *bool                        `json:"keep,omitempty"`
+	Kind McpServerCredentialInputKind `json:"kind"`
+
+	// Name The header name (header) or the query parameter name (query); omit for bearer and basic
+	Name *string `json:"name,omitempty"`
+
+	// Secondary The Basic password (basic only). Stored encrypted, never returned
+	Secondary *string `json:"secondary,omitempty"`
+
+	// Value The header value, token, Basic user name or query value. Stored encrypted, never returned
+	Value *string `json:"value,omitempty"`
+}
+
+// McpServerCredentialInputKind defines model for McpServerCredentialInput.Kind.
+type McpServerCredentialInputKind string
 
 // McpServerOAuth An oauth server's sign-in configuration, as discovered and chosen. The client secret is never returned
 type McpServerOAuth struct {
@@ -4131,10 +4221,13 @@ type McpServerUpdate struct {
 	AuthValue *string `json:"authValue,omitempty"`
 
 	// CapturePayloads Omit to keep. Only team owners and admins may change it (403 capture_role; sending the current value is allowed). Not a review trigger. Audited in mcp_server.update.
-	CapturePayloads *bool   `json:"capturePayloads,omitempty"`
-	Description     *string `json:"description,omitempty"`
-	Enabled         *bool   `json:"enabled,omitempty"`
-	Name            *string `json:"name,omitempty"`
+	CapturePayloads *bool `json:"capturePayloads,omitempty"`
+
+	// Credentials Omit to keep. The server's whole list of parts. Each one keeps its stored values (keep) or has new ones, and a part left out is removed; an empty list removes the credential. It replaces the single header (the legacy columns are cleared when it is stored). Not together with authHeaderName or authValue (400 invalid_auth_header), which can't change a server whose credential is a list (422 credentials_in_use). Adding, changing or removing parts is not a review trigger (nothing new is sent to a new origin), but the review digest covers the kinds and names, so a reviewer's earlier look is stale. Audited in mcp_server.update (kind and name of each part, authValueChanged; never a value). A publisher automation token can't send it for a server that has a credential (403 token_not_allowed)
+	Credentials *[]McpServerCredentialInput `json:"credentials,omitempty"`
+	Description *string                     `json:"description,omitempty"`
+	Enabled     *bool                       `json:"enabled,omitempty"`
+	Name        *string                     `json:"name,omitempty"`
 
 	// Oauth Only with authMode oauth (sent now or stored). Omitted fields keep their stored values
 	Oauth *McpServerOAuthInput `json:"oauth,omitempty"`

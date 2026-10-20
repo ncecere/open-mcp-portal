@@ -57,7 +57,7 @@ func (a *api) toAPIServer(v registry.ServerView) apitypes.McpServer {
 		Id: s.ID, TeamId: s.TeamID, TeamSlug: v.TeamSlug, TeamName: v.TeamName,
 		Slug: s.Slug, Name: s.Name, Description: s.Description, Url: s.URL,
 		Transport:      apitypes.McpServerTransport(s.Transport),
-		AuthHeaderName: s.AuthHeaderName, HasAuth: v.HasAuth(), AuthValueHint: s.AuthValueHint,
+		AuthHeaderName: s.AuthHeaderName, HasAuth: v.HasAuth(), AuthValueHint: s.AuthValueHint, Credentials: toAPICredentials(v.Credentials),
 		TimeoutSeconds: s.TimeoutSeconds, Enabled: s.Enabled,
 		PublishState:           apitypes.PublishState(s.PublishState),
 		EffectivePublishPolicy: apitypes.PublishPolicy(v.EffectivePolicy),
@@ -69,6 +69,15 @@ func (a *api) toAPIServer(v registry.ServerView) apitypes.McpServer {
 		AuthMode: authModePtr(s), Oauth: a.toAPIServerOAuth(v), SendIdentity: &s.SendIdentity, RequiresPresentPerson: &s.RequiresPresentPerson, Protocol: toAPIProtocol(s), ReviewDigest: nonEmpty(v.ReviewDigest),
 		Revision: s.Revision, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
 	}
+}
+
+// toAPICredentials are a server's credential parts without their values.
+func toAPICredentials(parts []registry.CredentialView) *[]apitypes.McpServerCredential {
+	out := make([]apitypes.McpServerCredential, len(parts))
+	for i, c := range parts {
+		out[i] = apitypes.McpServerCredential{Kind: apitypes.McpServerCredentialKind(c.Kind), Name: nonEmpty(c.Name), Hint: c.Hint}
+	}
+	return &out
 }
 
 // toAPIProtocol is the era and version last negotiated with the server (nil

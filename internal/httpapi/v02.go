@@ -556,7 +556,7 @@ func (a *api) revokeTeamAutomationToken(w http.ResponseWriter, r *http.Request) 
 // automation tokens (docs/automation-tokens.md): a token is not a person who
 // accepted the capture notice, so it may not change capturePayloads; and on a
 // server that already holds credentials it may not re-point it or change what
-// it sends: url, auth header, auth mode, OAuth setup, requirement or
+// it sends: url, auth header or credential parts, auth mode, OAuth setup, requirement or
 // sendIdentity (a leaked token could otherwise steal a header value or
 // teammates' tokens). Refused with 403 token_not_allowed and details.field.
 func (a *api) tokenMayUpdateServer(w http.ResponseWriter, r *http.Request, actor authz.Actor, id uuid.UUID, in apitypes.McpServerUpdate, keys map[string]json.RawMessage) bool {
@@ -578,10 +578,10 @@ func (a *api) tokenMayUpdateServer(w http.ResponseWriter, r *http.Request, actor
 	if in.RequiresPresentPerson != nil && *in.RequiresPresentPerson != sv.RequiresPresentPerson {
 		return refuse("requiresPresentPerson")
 	}
-	if len(sv.AuthValueCipher) == 0 && sv.AuthMode == "none" && !sv.AuthProviderID.Valid {
+	if !v.HasAuth() && sv.AuthMode == "none" && !sv.AuthProviderID.Valid {
 		return true // no credentials yet: nothing to steal or redirect
 	}
-	for _, f := range []string{"authHeaderName", "authValue", "authMode", "oauth", "requirement"} {
+	for _, f := range []string{"authHeaderName", "authValue", "credentials", "authMode", "oauth", "requirement"} {
 		if _, ok := keys[f]; ok {
 			return refuse(f)
 		}

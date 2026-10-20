@@ -89,8 +89,10 @@ func (c *Client) log() *slog.Logger {
 
 // Target is where and how to reach one server.
 type Target struct {
-	URL                     string
-	HeaderName, HeaderValue string
+	URL string
+	// Credentials are the server's own static credential parts (header,
+	// bearer, basic and query; credentials.go), sent on every request to it.
+	Credentials []Credential
 	// IdentityHeader and IdentityValue carry the caller's signed identity
 	// on forwarded calls (empty for discovery and health checks). The
 	// gateway never forwards a client's own credential.
@@ -565,19 +567,11 @@ func clipMessage(msg string) string {
 	return msg
 }
 
-// safe is SafeMessage with both the header value and the identity token
-// redacted.
+// safe is SafeMessage with every secret the target carries redacted: the
+// server's own credential parts (and their encoded forms), the identity
+// token, the provider token and the person's bearer token.
 func (t Target) safe(msg string) string {
-	if t.IdentityValue != "" {
-		msg = strings.ReplaceAll(msg, t.IdentityValue, "[redacted]")
-	}
-	if t.ProviderToken != "" {
-		msg = strings.ReplaceAll(msg, t.ProviderToken, "[redacted]")
-	}
-	if t.BearerToken != "" {
-		msg = strings.ReplaceAll(msg, t.BearerToken, "[redacted]")
-	}
-	return SafeMessage(msg, t.HeaderValue)
+	return SafeMessage(msg, t.Secrets()...)
 }
 
 // MaxMessage bounds a stored or returned message (in characters).
@@ -587,13 +581,14 @@ const MaxMessage = 300
 // error message: bearer tokens, OpenAI-style keys and key=value secrets.
 var secretPattern = regexp.MustCompile(`(?i)\bbearer\s+\S+|\bsk-[A-Za-z0-9_\-*.]{6,}|\b(api[_-]?key|token|secret|password)\s*[=:]\s*\S+`)
 
-// SafeMessage makes a message fit to store and show: the server's header
-// value (when given) and anything that looks like a secret redacted,
-// whitespace collapsed, at most MaxMessage characters.
-func SafeMessage(msg, headerValue string) string {
+// SafeMessage makes a message fit to store and show: the given secret values
+// (a server's credential parts, tokens; empty ones are skipped, and each one
+// also in its URL-encoded form) and anything that looks like a secret
+// redacted, whitespace collapsed, at most MaxMessage characters.
+func SafeMessage(msg string, secrets ...string) string {
 	msg = strings.ToValidUTF8(msg, "")
-	if headerValue != "" {
-		msg = strings.ReplaceAll(msg, headerValue, "[redacted]")
+	for _, secret := range expandSecrets(secrets) {
+		msg = strings.ReplaceAll(msg, secret, "[redacted]")
 	}
 	msg = secretPattern.ReplaceAllString(msg, "[redacted]")
 	msg = strings.Join(strings.Fields(msg), " ")

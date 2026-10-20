@@ -56,7 +56,7 @@ func (rc *request) prepareTarget(t *upstream.Target, who identityFor, o gateways
 			rc.internal(err)
 			return "", false
 		}
-		t.IdentityHeader, t.IdentityValue = identity.Header(t.HeaderName, token)
+		t.IdentityHeader, t.IdentityValue = identity.Header(t.AuthorizationHeader(), token)
 		if serverBound(cred) {
 			t.IdentityHeader, t.IdentityValue = identity.HeaderIdentity, token
 		}

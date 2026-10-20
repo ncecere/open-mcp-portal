@@ -29,7 +29,7 @@ func TestDiscoverEveryKind(t *testing.T) {
 	fake := testutil.NewFakeMCP(t)
 	fake.RequireHeader("X-API-Key", "k-123456789")
 	c := testClient(true)
-	tgt := Target{URL: fake.URL(), HeaderName: "X-API-Key", HeaderValue: "k-123456789", Timeout: 5 * time.Second}
+	tgt := Target{URL: fake.URL(), Credentials: []Credential{{Kind: CredHeader, Name: "X-API-Key", Value: "k-123456789"}}, Timeout: 5 * time.Second}
 	d, err := c.Discover(context.Background(), tgt)
 	if err != nil {
 		t.Fatal(err)
@@ -91,7 +91,7 @@ func TestDiscoverErrorClasses(t *testing.T) {
 	var e *Error
 
 	// Wrong credentials: auth, with the status, never the value.
-	_, err := testClient(true).Discover(ctx, Target{URL: fake.URL(), HeaderName: "Authorization", HeaderValue: "Bearer wrong-value", Timeout: 5 * time.Second})
+	_, err := testClient(true).Discover(ctx, Target{URL: fake.URL(), Credentials: []Credential{{Kind: CredHeader, Name: "Authorization", Value: "Bearer wrong-value"}}, Timeout: 5 * time.Second})
 	if !errors.As(err, &e) || e.Class != ClassAuth || e.HTTPStatus != 401 || strings.Contains(e.Message, "wrong-value") {
 		t.Fatalf("wrong key = %#v", err)
 	}
@@ -118,7 +118,7 @@ func TestDiscoverErrorClasses(t *testing.T) {
 	// A response over the cap.
 	small := testClient(true)
 	small.MaxResponseBytes = 64
-	_, err = small.Discover(ctx, Target{URL: fake.URL(), HeaderName: "Authorization", HeaderValue: "Bearer right-value", Timeout: 5 * time.Second})
+	_, err = small.Discover(ctx, Target{URL: fake.URL(), Credentials: []Credential{{Kind: CredHeader, Name: "Authorization", Value: "Bearer right-value"}}, Timeout: 5 * time.Second})
 	if !errors.As(err, &e) || e.Class != ClassTooLarge {
 		t.Fatalf("over the cap = %v", err)
 	}

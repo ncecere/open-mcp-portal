@@ -72,12 +72,13 @@ func ProviderSecretAAD(id uuid.UUID) []byte { return []byte("auth_provider:" + i
 
 // AuthModeOf is a server's upstream auth mode. Rows written before Phase 7
 // (or by the previous release) have none with a static header: that is
-// static_header.
+// static_header. A server whose credential is a list of parts has no header in
+// its row and is static_header by its stored mode.
 func AuthModeOf(sv dbgen.McpServer) string {
 	switch {
 	case sv.AuthMode == AuthOAuth:
 		return AuthOAuth
-	case sv.AuthHeaderName != nil:
+	case sv.AuthMode == AuthStaticHeader || sv.AuthHeaderName != nil:
 		return AuthStaticHeader
 	}
 	return AuthNone
@@ -861,18 +862,19 @@ func (s *Service) OAuthServer(ctx context.Context, a authz.Actor, ref string, id
 
 // createMode is a new server's auth mode.
 func createMode(in CreateInput) (string, error) {
+	has := in.AuthHeaderName != "" || in.AuthValue != "" || len(in.Credentials) > 0
 	switch in.AuthMode {
 	case "":
-		if in.AuthHeaderName != "" || in.AuthValue != "" {
+		if has {
 			return AuthStaticHeader, nil
 		}
 		return AuthNone, nil
 	case AuthNone:
-		if in.AuthHeaderName != "" || in.AuthValue != "" {
-			return "", apperr.Invalid("invalid_auth_header", "authMode none has no static header")
+		if has {
+			return "", apperr.Invalid("invalid_auth_header", "authMode none has no static credential")
 		}
 	case AuthStaticHeader:
-		if in.AuthHeaderName == "" {
+		if in.AuthHeaderName == "" && len(in.Credentials) == 0 {
 			return "", apperr.Invalid("invalid_auth_header", "Enter the static header's name and value")
 		}
 	case AuthOAuth:
@@ -883,6 +885,34 @@ func createMode(in CreateInput) (string, error) {
 	// An oauth input without oauth mode is ignored (clients may always send
 	// it with its defaults).
 	return in.AuthMode, nil
+}
+
+// checkCreateCredentials checks the parts of a new server: valid, none kept
+// (nothing is stored yet) and not together with the single header's fields.
+func checkCreateCredentials(in CreateInput) error {
+	if len(in.Credentials) == 0 {
+		return nil
+	}
+	if in.AuthHeaderName != "" || in.AuthValue != "" {
+		return apperr.Invalid("invalid_auth_header", "Send either authHeaderName and authValue or credentials, not both")
+	}
+	for i, c := range in.Credentials {
+		if c.Keep {
+			return invalidCredential(i, "invalid_credential", "A new server has no stored part to keep")
+		}
+	}
+	return checkCredentialShape(in.Credentials)
+}
+
+// createAuthorization is "Authorization" when a new server's credential sets
+// that header, for oauthConflicts.
+func createAuthorization(in CreateInput) string {
+	for _, c := range in.Credentials {
+		if occupiesAuthorization(c.Kind, c.Name) {
+			return "Authorization"
+		}
+	}
+	return in.AuthHeaderName
 }
 
 // oauthConflicts: oauth mode excludes a static Authorization header and a

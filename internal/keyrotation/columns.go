@@ -73,6 +73,10 @@ func callAAD(part string) func(string) []byte {
 // schema gains a *_cipher column that is not listed here.
 var Columns = []Column{
 	{Table: "mcp_servers", Column: "auth_value_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(registry.ServerAAD)},
+	// A server's own credential parts (registry.CredentialAAD): the value (or
+	// Basic user name) and the Basic password.
+	{Table: "mcp_server_credentials", Column: "value_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(registry.CredentialAAD)},
+	{Table: "mcp_server_credentials", Column: "secondary_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(registry.CredentialSecondaryAAD)},
 	// identity.keyAAD
 	{Table: "signing_keys", Column: "private_key_cipher", Key: "kid", KeyType: "text",
 		AAD: func(k string) []byte { return []byte("signing_key:" + k) }},

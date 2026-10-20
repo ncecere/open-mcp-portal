@@ -61,6 +61,7 @@ func seed(t *testing.T, pool *pgxpool.Pool, b *secrets.Box) map[string]string {
 		"provider_auth_states":      strings.Repeat("a", 64),
 		"provider_connect_requests": strings.Repeat("B", 43),
 	}
+	keys["mcp_server_credentials"] = scalar(t, pool, `INSERT INTO mcp_server_credentials (server_id, position, kind, value_cipher, secondary_cipher) VALUES ($1, 0, 'basic', '\x00', '\x00') RETURNING id::text`, keys["mcp_servers"])
 	keys["provider_connections"] = scalar(t, pool, `INSERT INTO provider_connections (user_id, provider_id, status, access_token_cipher) VALUES ($1, $2, 'active', '\x00') RETURNING id::text`, user, keys["auth_providers"])
 	gw := scalar(t, pool, `INSERT INTO gateways (slug, name, owner_kind) VALUES ('g', 'G', 'platform') RETURNING id::text`)
 	keys["mcp_call_payloads"] = scalar(t, pool, `INSERT INTO mcp_calls (method, gateway_id, gateway_slug, gateway_name, user_id, outcome) VALUES ('tools/call', $1, 'g', 'G', $2, 'ok') RETURNING id::text`, gw, user)
@@ -118,7 +119,7 @@ func TestRotateKeys(t *testing.T) {
 	cfg.DatabaseURL, cfg.AppURL, cfg.DevAuth = dbURL, "http://localhost:8088", true
 	cfg.EncryptionKey, cfg.EncryptionKeyPrevious, cfg.APIKeyPepper = newKey, oldKey, oldKey
 	rep := doctor.Run(ctx, cfg, doctor.Options{Timeout: 10 * time.Second})
-	if c := find(rep, "encryption"); c.Status != doctor.Info || !strings.Contains(c.Detail, "12 sealed value(s) still on ENCRYPTION_KEY_PREVIOUS") {
+	if c := find(rep, "encryption"); c.Status != doctor.Info || !strings.Contains(c.Detail, "14 sealed value(s) still on ENCRYPTION_KEY_PREVIOUS") {
 		t.Fatalf("doctor before = %+v", c)
 	}
 
@@ -152,7 +153,7 @@ func TestRotateKeys(t *testing.T) {
 			t.Errorf("%s after rotation: %q %v", c.Name(), plain, err)
 		}
 	}
-	if n := scalar(t, pool, `SELECT count(*)::text FROM audit_log WHERE action = 'platform.secrets_reencrypt'`); n != "12" {
+	if n := scalar(t, pool, `SELECT count(*)::text FROM audit_log WHERE action = 'platform.secrets_reencrypt'`); n != "14" {
 		t.Errorf("per-batch audit entries = %s", n)
 	}
 	if meta := scalar(t, pool, `SELECT metadata::text FROM audit_log WHERE action = 'platform.key_rotation'`); strings.Contains(meta, "secret of") {

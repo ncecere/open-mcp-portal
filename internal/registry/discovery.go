@@ -61,37 +61,37 @@ type TestResult struct {
 
 // probe discovers a server's capabilities (no storing), without an identity
 // token: refresh, discovery and scheduled health checks never send one (see
-// testIdentity for why). headerValue is returned so messages can be scrubbed
-// of it. A server in oauth mode is read with the setup connection, except by
+// testIdentity for why). The secrets the exchange used (the credential parts
+// and what they encode to) are returned so messages can be scrubbed of them. A server in oauth mode is read with the setup connection, except by
 // scheduled checks, which use nobody's token (probeSignIn).
-func (s *Service) probe(ctx context.Context, sv dbgen.McpServer, trigger string) (TestResult, upstream.Discovery, string) {
+func (s *Service) probe(ctx context.Context, sv dbgen.McpServer, trigger string) (TestResult, upstream.Discovery, []string) {
 	return s.probeAs(ctx, sv, trigger, "")
 }
 
 // probeAs is probe sending the signed identity token (the bare JWT) the way
 // a forwarded call does, when token is not empty: as Authorization: Bearer,
-// or as MCP-Gateway-Identity when the server's own static header is
+// or as MCP-Gateway-Identity when one of the server's own credential parts is
 // Authorization or it is read with its own sign-in (an oauth server).
-func (s *Service) probeAs(ctx context.Context, sv dbgen.McpServer, trigger, token string) (TestResult, upstream.Discovery, string) {
+func (s *Service) probeAs(ctx context.Context, sv dbgen.McpServer, trigger, token string) (TestResult, upstream.Discovery, []string) {
 	t, err := s.target(ctx, sv)
 	if err != nil {
 		var e *upstream.Error
 		errors.As(err, &e)
-		return TestResult{Err: e}, upstream.Discovery{}, ""
+		return TestResult{Err: e}, upstream.Discovery{}, nil
 	}
 	var res TestResult
 	if AuthModeOf(sv) == AuthOAuth {
 		p, err := s.q.GetServerProvider(ctx, uuid.NullUUID{UUID: sv.ID, Valid: true})
 		if err != nil {
 			return TestResult{Err: &upstream.Error{Class: upstream.ClassConfig, Message: "The server's sign-in isn't configured."}},
-				upstream.Discovery{}, ""
+				upstream.Discovery{}, nil
 		}
 		if trigger == TriggerScheduled {
-			return s.probeSignIn(ctx, sv, p), upstream.Discovery{}, ""
+			return s.probeSignIn(ctx, sv, p), upstream.Discovery{}, nil
 		}
 		if deref(p.Resource) != sv.URL {
 			return TestResult{Err: &upstream.Error{Class: upstream.ClassConfig,
-				Message: "The server's URL differs from its OAuth resource; save its sign-in again."}}, upstream.Discovery{}, ""
+				Message: "The server's URL differs from its OAuth resource; save its sign-in again."}}, upstream.Discovery{}, nil
 		}
 		token, person, err := s.setupToken(ctx, sv, p)
 		var se *SetupError
@@ -99,15 +99,15 @@ func (s *Service) probeAs(ctx context.Context, sv dbgen.McpServer, trigger, toke
 		case errors.As(err, &se):
 			return TestResult{SetupRequired: true, SetupStatus: se.Status, Err: &upstream.Error{Class: upstream.ClassAuth,
 					Message: "No usable sign-in to read this server with: an editor signs in again (Sign in to read capabilities)."}},
-				upstream.Discovery{}, ""
+				upstream.Discovery{}, nil
 		case err != nil:
 			return TestResult{Err: &upstream.Error{Class: upstream.ClassUnavailable, Message: upstream.SafeMessage(err.Error(), "")}},
-				upstream.Discovery{}, ""
+				upstream.Discovery{}, nil
 		}
 		t.BearerToken, res.ReadAs = token, &person
 	}
 	if token != "" {
-		t.IdentityHeader, t.IdentityValue = identity.Header(t.HeaderName, token)
+		t.IdentityHeader, t.IdentityValue = identity.Header(t.AuthorizationHeader(), token)
 		if t.BearerToken != "" {
 			t.IdentityHeader, t.IdentityValue = identity.HeaderIdentity, token
 		}
@@ -120,17 +120,12 @@ func (s *Service) probeAs(ctx context.Context, sv dbgen.McpServer, trigger, toke
 		if !ok {
 			e = &upstream.Error{Class: upstream.ClassUnavailable, Message: "The test failed."}
 		}
-		msg := upstream.SafeMessage(e.Message, t.HeaderValue)
-		for _, secret := range []string{t.BearerToken, token} {
-			if secret != "" {
-				msg = upstream.SafeMessage(msg, secret)
-			}
-		}
+		msg := upstream.SafeMessage(e.Message, append(t.Secrets(), token)...)
 		res.Err = &upstream.Error{Class: e.Class, HTTPStatus: e.HTTPStatus, Message: msg}
-		return res, d, t.HeaderValue
+		return res, d, t.Secrets()
 	}
 	res.OK, res.Counts = true, upstream.CountKinds(d.Capabilities)
-	return res, d, t.HeaderValue
+	return res, d, t.Secrets()
 }
 
 // setupToken is the setup connection's token (internal/providers).

@@ -270,3 +270,19 @@ JOIN teams t ON t.id = s.team_id
 WHERE s.enabled AND t.status = 'active'
   AND NOT EXISTS (SELECT 1 FROM mcp_health_checks h WHERE h.server_id = s.id AND h.checked_at >= @due_before)
 ORDER BY s.id;
+
+-- name: ListMCPServerCredentials :many
+-- A server's own credential parts in order (empty: the legacy header columns
+-- of mcp_servers, if any, are its only part).
+SELECT * FROM mcp_server_credentials WHERE server_id = $1 ORDER BY position;
+
+-- name: ListMCPServerCredentialsFor :many
+SELECT * FROM mcp_server_credentials WHERE server_id = ANY(@ids::uuid[]) ORDER BY server_id, position;
+
+-- name: InsertMCPServerCredential :one
+INSERT INTO mcp_server_credentials (id, server_id, position, kind, name, value_cipher, secondary_cipher, hint, created_at)
+VALUES (@id, @server_id, @position, @kind, @name, @value_cipher, @secondary_cipher, @hint, @created_at)
+RETURNING *;
+
+-- name: DeleteMCPServerCredentials :exec
+DELETE FROM mcp_server_credentials WHERE server_id = $1;

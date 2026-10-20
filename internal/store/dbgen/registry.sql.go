@@ -148,6 +148,15 @@ func (q *Queries) DeleteMCPServer(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const deleteMCPServerCredentials = `-- name: DeleteMCPServerCredentials :exec
+DELETE FROM mcp_server_credentials WHERE server_id = $1
+`
+
+func (q *Queries) DeleteMCPServerCredentials(ctx context.Context, serverID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteMCPServerCredentials, serverID)
+	return err
+}
+
 const forgetMCPHealthChecks = `-- name: ForgetMCPHealthChecks :exec
 DELETE FROM mcp_health_checks WHERE server_id = $1
 `
@@ -462,6 +471,51 @@ func (q *Queries) InsertMCPServer(ctx context.Context, arg InsertMCPServerParams
 	return i, err
 }
 
+const insertMCPServerCredential = `-- name: InsertMCPServerCredential :one
+INSERT INTO mcp_server_credentials (id, server_id, position, kind, name, value_cipher, secondary_cipher, hint, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, server_id, position, kind, name, value_cipher, secondary_cipher, hint, created_at
+`
+
+type InsertMCPServerCredentialParams struct {
+	ID              uuid.UUID
+	ServerID        uuid.UUID
+	Position        int16
+	Kind            string
+	Name            *string
+	ValueCipher     []byte
+	SecondaryCipher []byte
+	Hint            string
+	CreatedAt       time.Time
+}
+
+func (q *Queries) InsertMCPServerCredential(ctx context.Context, arg InsertMCPServerCredentialParams) (McpServerCredential, error) {
+	row := q.db.QueryRow(ctx, insertMCPServerCredential,
+		arg.ID,
+		arg.ServerID,
+		arg.Position,
+		arg.Kind,
+		arg.Name,
+		arg.ValueCipher,
+		arg.SecondaryCipher,
+		arg.Hint,
+		arg.CreatedAt,
+	)
+	var i McpServerCredential
+	err := row.Scan(
+		&i.ID,
+		&i.ServerID,
+		&i.Position,
+		&i.Kind,
+		&i.Name,
+		&i.ValueCipher,
+		&i.SecondaryCipher,
+		&i.Hint,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const latestMCPHealthChecks = `-- name: LatestMCPHealthChecks :many
 SELECT DISTINCT ON (h.server_id) h.id, h.server_id, h.checked_at, h.ok, h.latency_ms, h.trigger, h.triggered_by, h.error_class, h.http_status, h.message, h.status_since, h.sign_in_required
 FROM mcp_health_checks h
@@ -683,6 +737,76 @@ func (q *Queries) ListMCPHealthChecks(ctx context.Context, arg ListMCPHealthChec
 			&i.Message,
 			&i.StatusSince,
 			&i.SignInRequired,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPServerCredentials = `-- name: ListMCPServerCredentials :many
+SELECT id, server_id, position, kind, name, value_cipher, secondary_cipher, hint, created_at FROM mcp_server_credentials WHERE server_id = $1 ORDER BY position
+`
+
+// A server's own credential parts in order (empty: the legacy header columns
+// of mcp_servers, if any, are its only part).
+func (q *Queries) ListMCPServerCredentials(ctx context.Context, serverID uuid.UUID) ([]McpServerCredential, error) {
+	rows, err := q.db.Query(ctx, listMCPServerCredentials, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []McpServerCredential{}
+	for rows.Next() {
+		var i McpServerCredential
+		if err := rows.Scan(
+			&i.ID,
+			&i.ServerID,
+			&i.Position,
+			&i.Kind,
+			&i.Name,
+			&i.ValueCipher,
+			&i.SecondaryCipher,
+			&i.Hint,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPServerCredentialsFor = `-- name: ListMCPServerCredentialsFor :many
+SELECT id, server_id, position, kind, name, value_cipher, secondary_cipher, hint, created_at FROM mcp_server_credentials WHERE server_id = ANY($1::uuid[]) ORDER BY server_id, position
+`
+
+func (q *Queries) ListMCPServerCredentialsFor(ctx context.Context, ids []uuid.UUID) ([]McpServerCredential, error) {
+	rows, err := q.db.Query(ctx, listMCPServerCredentialsFor, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []McpServerCredential{}
+	for rows.Next() {
+		var i McpServerCredential
+		if err := rows.Scan(
+			&i.ID,
+			&i.ServerID,
+			&i.Position,
+			&i.Kind,
+			&i.Name,
+			&i.ValueCipher,
+			&i.SecondaryCipher,
+			&i.Hint,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

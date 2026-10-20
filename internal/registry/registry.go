@@ -210,10 +210,13 @@ type ServerView struct {
 	OAuth *OAuthView
 	// ReviewDigest binds a review to what its reader saw (ReviewDigest).
 	ReviewDigest string
+	// Credentials are the parts of the server's own credential, in order:
+	// kind, name and hint only (the legacy header counts as one part).
+	Credentials []CredentialView
 }
 
-// HasAuth reports whether the server has a stored header.
-func (v ServerView) HasAuth() bool { return v.Server.AuthValueCipher != nil }
+// HasAuth reports whether the server has a stored credential.
+func (v ServerView) HasAuth() bool { return len(v.Credentials) > 0 }
 
 // views completes listed rows with counts, health and the effective policy.
 func views(ctx context.Context, q *dbgen.Queries, rows []dbgen.ListMCPServersRow) ([]ServerView, error) {
@@ -243,12 +246,17 @@ func views(ctx context.Context, q *dbgen.Queries, rows []dbgen.ListMCPServersRow
 	for i, r := range rows {
 		servers[i] = r.McpServer
 	}
-	digest, err := digests(ctx, q, servers)
+	creds, err := credentialViews(ctx, q, servers)
+	if err != nil {
+		return nil, err
+	}
+	digest, err := digestsWith(ctx, q, servers, creds)
 	if err != nil {
 		return nil, err
 	}
 	for i := range out {
 		out[i].ReviewDigest = digest[out[i].Server.ID]
+		out[i].Credentials = creds[out[i].Server.ID]
 	}
 	stats, err := q.MCPCapabilityStats(ctx, ids)
 	if err != nil {
@@ -386,10 +394,12 @@ func (s *Service) AdminGet(ctx context.Context, a authz.Actor, id uuid.UUID) (Se
 }
 
 // CreateInput registers a server. AuthHeaderName and AuthValue are both
-// empty (no credentials) or both set.
+// empty (no credentials) or both set; Credentials is the list of parts of its
+// own credential instead (not together with them, never Keep).
 type CreateInput struct {
 	Slug, Name, Description, URL string
 	AuthHeaderName, AuthValue    string
+	Credentials                  []CredentialInput
 	TimeoutSeconds               int32 // 0: the default (30)
 	Enabled                      bool
 	// Requirement is the user-authorization requirement (nil: none).
@@ -406,10 +416,15 @@ type CreateInput struct {
 }
 
 // UpdateInput holds optional changes. AuthHeaderName "" removes the header
-// and its value; AuthValue nil keeps the stored value.
+// and its value; AuthValue nil keeps the stored value. Credentials (nil keeps
+// them) is the server's whole list of parts: each part keeps its stored values
+// (Keep) or has new ones, and a part left out is removed; it replaces the
+// single header, and a server that has several parts can't be changed with
+// AuthHeaderName and AuthValue.
 type UpdateInput struct {
 	Name, Description, URL    *string
 	AuthHeaderName, AuthValue *string
+	Credentials               *[]CredentialInput
 	TimeoutSeconds            *int32
 	Enabled                   *bool
 	// SetRequirement changes the requirement to Requirement (nil removes
@@ -485,13 +500,17 @@ func valueHint(v string) string {
 
 // snapshot is a server's audited configuration: never the header value or
 // its ciphertext, only whether one is set.
-func snapshot(s dbgen.McpServer) map[string]any {
+func snapshot(s dbgen.McpServer, parts ...CredentialView) map[string]any {
 	out := map[string]any{"slug": s.Slug, "name": s.Name, "description": s.Description, "url": s.URL,
 		"timeoutSeconds": s.TimeoutSeconds, "enabled": s.Enabled, "hasAuth": s.AuthValueCipher != nil,
 		"publishState": s.PublishState, "requirement": requirementSnapshot(s), "capturePayloads": s.CapturePayloads,
 		"authMode": AuthModeOf(s), "sendIdentity": s.SendIdentity, "requiresPresentPerson": s.RequiresPresentPerson}
 	if s.AuthHeaderName != nil {
 		out["authHeaderName"] = *s.AuthHeaderName
+	}
+	if len(parts) > 0 {
+		out["hasAuth"] = true
+		out["credentials"] = credentialSnapshot(parts)
 	}
 	return out
 }
@@ -516,6 +535,9 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 	if in.TimeoutSeconds == 0 {
 		in.TimeoutSeconds = defaultTimeoutSec
 	}
+	if err := checkCreateCredentials(in); err != nil {
+		return Created{}, err
+	}
 	mode, err := createMode(in)
 	if err != nil {
 		return Created{}, err
@@ -531,7 +553,7 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 		if err := ta.writable(authz.CheckServerEdit); err != nil {
 			return Created{}, err
 		}
-		if err := oauthConflicts(in.AuthHeaderName, in.Requirement != nil); err != nil {
+		if err := oauthConflicts(createAuthorization(in), in.Requirement != nil); err != nil {
 			return Created{}, err
 		}
 		if !slugRE.MatchString(in.Slug) {
@@ -581,11 +603,22 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 		} else if err != nil {
 			return err
 		}
+		var parts []CredentialView
+		if len(in.Credentials) > 0 {
+			cp, err := s.planCredentials(row, storedCredentials{}, in.Credentials)
+			if err != nil {
+				return err
+			}
+			if err := storeCredentials(ctx, q, id, cp); err != nil {
+				return err
+			}
+			parts = cp.views
+		}
 		if err := setCapture(ctx, q, ta.role, &row, in.CapturePayloads); err != nil {
 			return err
 		}
 		e := a.Audit("mcp_server.create", "mcp_server", id.String())
-		e.TeamID, e.After = ta.team.ID, snapshot(row)
+		e.TeamID, e.After = ta.team.ID, snapshot(row, parts...)
 		if err := audit.Record(ctx, q, e); err != nil {
 			return err
 		}
@@ -637,7 +670,7 @@ func (s *Service) insertParams(ctx context.Context, id, teamID uuid.UUID, a auth
 	}
 	p := dbgen.InsertMCPServerParams{ID: id, TeamID: teamID, Slug: in.Slug, Name: in.Name, Description: in.Description, URL: u,
 		TimeoutSeconds: in.TimeoutSeconds, Enabled: in.Enabled, CreatedBy: by(a), AuthScopes: []string{}}
-	if in.AuthHeaderName != "" || in.AuthValue != "" {
+	if len(in.Credentials) == 0 && (in.AuthHeaderName != "" || in.AuthValue != "") {
 		if err := checkHeader(in.AuthHeaderName, in.AuthValue); err != nil {
 			return p, err
 		}
@@ -685,17 +718,18 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 		if cur.Revision != expectedRevision {
 			return apperr.Stale()
 		}
-		p, valueChanged, err := s.applyUpdate(ctx, cur, in, pre.mode)
+		ap, err := s.applyUpdate(ctx, q, cur, in, pre.mode)
 		if err != nil {
 			return err
 		}
+		p, valueChanged := ap.p, ap.valueChanged
 		if in.SetRequirement {
 			if p.AuthProviderID, p.AuthScopes, err = checkRequirement(ctx, q, in.Requirement, cur.AuthProviderID); err != nil {
 				return err
 			}
 		}
 		if pre.mode == AuthOAuth {
-			if err := oauthConflicts(deref(p.AuthHeaderName), p.AuthProviderID.Valid); err != nil {
+			if err := oauthConflicts(firstNonEmpty(authorizationName(ap.views), deref(p.AuthHeaderName)), p.AuthProviderID.Valid); err != nil {
 				return err
 			}
 		}
@@ -705,7 +739,7 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 		setIf(&p.RequiresPresentPerson, in.RequiresPresentPerson)
 		curProv := pre.provider
 		planChanged := pre.plan != nil && (curProv == nil || !planUnchanged(*curProv, pre.plan))
-		if unchanged(cur, p, valueChanged, in.CapturePayloads) && !planChanged && pre.mode == AuthModeOf(cur) {
+		if unchanged(cur, p, valueChanged || ap.rewrites(), in.CapturePayloads) && !planChanged && pre.mode == AuthModeOf(cur) {
 			return nil
 		}
 		ps, err := LoadProviders(ctx, q)
@@ -724,6 +758,11 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 		row, err := q.UpdateMCPServer(ctx, p)
 		if err != nil {
 			return err
+		}
+		if ap.rewrites() {
+			if err := storeCredentials(ctx, q, id, *ap.plan); err != nil {
+				return err
+			}
 		}
 		if in.CapturePayloads != nil {
 			if err := setCapture(ctx, q, ta.role, &row, *in.CapturePayloads); err != nil {
@@ -754,7 +793,7 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 			return err
 		}
 		e := a.Audit("mcp_server.update", "mcp_server", id.String())
-		e.TeamID, e.Before, e.After = ta.team.ID, snapshot(cur), snapshot(row)
+		e.TeamID, e.Before, e.After = ta.team.ID, snapshot(cur, ap.before...), snapshot(row, ap.afterParts()...)
 		e.Metadata = map[string]any{"authValueChanged": valueChanged}
 		for k, v := range originChange(cur.URL, row.URL) {
 			e.Metadata[k] = v
@@ -788,7 +827,7 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 			}
 		}
 		// A new address or credentials make the stored health meaningless.
-		if valueChanged || row.URL != cur.URL || !equalPtr(row.AuthHeaderName, cur.AuthHeaderName) || AuthModeOf(row) != AuthModeOf(cur) {
+		if valueChanged || ap.rewrites() || row.URL != cur.URL || !equalPtr(row.AuthHeaderName, cur.AuthHeaderName) || AuthModeOf(row) != AuthModeOf(cur) {
 			return q.ForgetMCPHealthChecks(ctx, id)
 		}
 		return nil
@@ -841,6 +880,13 @@ func (s *Service) prepareUpdate(ctx context.Context, a authz.Actor, ref string, 
 	if cur.Revision != expectedRevision {
 		return updatePrep{}, apperr.Stale()
 	}
+	stored, err := loadStored(ctx, s.q, cur)
+	if err != nil {
+		return updatePrep{}, err
+	}
+	if err := checkUpdateCredentials(in, stored); err != nil {
+		return updatePrep{}, err
+	}
 	out := updatePrep{mode: AuthModeOf(cur)}
 	if in.AuthMode != nil {
 		switch *in.AuthMode {
@@ -850,13 +896,9 @@ func (s *Service) prepareUpdate(ctx context.Context, a authz.Actor, ref string, 
 			return out, apperr.Invalid("invalid_auth_mode", "authMode must be none, static_header or oauth")
 		}
 	} else if out.mode != AuthOAuth {
-		// Without a mode, a header added or removed decides it.
-		header := deref(cur.AuthHeaderName)
-		if in.AuthHeaderName != nil {
-			header = *in.AuthHeaderName
-		}
+		// Without a mode, a credential added or removed decides it.
 		out.mode = AuthNone
-		if header != "" {
+		if _, has := finalAuthorization(cur, stored, in); has {
 			out.mode = AuthStaticHeader
 		}
 	}
@@ -881,15 +923,12 @@ func (s *Service) prepareUpdate(ctx context.Context, a authz.Actor, ref string, 
 	}
 	// Refused before any network exchange with the new host (F-1); applyUpdate
 	// checks again under the row lock.
-	if err := requireValueForOrigin(cur, newURL, in, out.mode); err != nil {
+	if err := requireValueForOrigin(cur, stored, newURL, in, out.mode); err != nil {
 		return out, err
 	}
 	switch {
 	case out.mode == AuthOAuth && (AuthModeOf(cur) != AuthOAuth || in.OAuth != nil || newURL != cur.URL || out.provider == nil):
-		header := deref(cur.AuthHeaderName)
-		if in.AuthHeaderName != nil {
-			header = *in.AuthHeaderName
-		}
+		header, _ := finalAuthorization(cur, stored, in)
 		requirement := cur.AuthProviderID.Valid
 		if in.SetRequirement {
 			requirement = in.Requirement != nil
@@ -986,45 +1025,109 @@ func (s *Service) applyOAuth(ctx context.Context, q *dbgen.Queries, a authz.Acto
 
 func ptr[T any](v T) *T { return &v }
 
-func (s *Service) applyUpdate(ctx context.Context, cur dbgen.McpServer, in UpdateInput, mode string) (dbgen.UpdateMCPServerParams, bool, error) {
+// applied is what an update decided about the server's row and its credential.
+type applied struct {
+	p            dbgen.UpdateMCPServerParams
+	valueChanged bool
+	// plan is the new list of parts to store (nil: the stored parts stay,
+	// the legacy header columns in p included).
+	plan *credentialPlan
+	// before and views are the parts before and after, for the audit entry
+	// and the conflict checks.
+	before, views []CredentialView
+}
+
+// rewrites reports whether the update stores a new list of parts.
+func (a applied) rewrites() bool { return a.plan != nil && a.plan.write }
+
+func (a applied) afterParts() []CredentialView { return a.views }
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+func (s *Service) applyUpdate(ctx context.Context, q *dbgen.Queries, cur dbgen.McpServer, in UpdateInput, mode string) (applied, error) {
+	stored, err := loadStored(ctx, q, cur)
+	if err != nil {
+		return applied{}, err
+	}
+	if err := checkUpdateCredentials(in, stored); err != nil {
+		return applied{}, err
+	}
 	p := dbgen.UpdateMCPServerParams{ID: cur.ID, Name: cur.Name, Description: cur.Description, URL: cur.URL,
 		AuthHeaderName: cur.AuthHeaderName, AuthValueCipher: cur.AuthValueCipher, AuthValueHint: cur.AuthValueHint,
 		TimeoutSeconds: cur.TimeoutSeconds, Enabled: cur.Enabled, AuthProviderID: cur.AuthProviderID, AuthScopes: nonNil(cur.AuthScopes),
 		AuthMode: mode, SendIdentity: cur.SendIdentity, RequiresPresentPerson: cur.RequiresPresentPerson}
+	out := applied{p: p, before: stored.views(), views: stored.views()}
 	setIf(&p.Name, in.Name)
 	p.Name = strings.TrimSpace(p.Name)
 	setIf(&p.Description, in.Description)
 	setIf(&p.TimeoutSeconds, in.TimeoutSeconds)
 	setIf(&p.Enabled, in.Enabled)
 	if err := checkFields(p.Name, p.Description, p.TimeoutSeconds); err != nil {
-		return p, false, err
+		return out, err
 	}
 	if in.URL != nil {
 		u, err := s.client.NormalizeURL(ctx, *in.URL)
 		if err != nil {
-			return p, false, err
+			return out, err
 		}
 		p.URL = u
 	}
-	if err := requireValueForOrigin(cur, p.URL, in, mode); err != nil {
-		return p, false, err
+	if err := requireValueForOrigin(cur, stored, p.URL, in, mode); err != nil {
+		return out, err
 	}
-	if mode == AuthNone {
-		// authMode none removes the static header with its value.
-		if (in.AuthHeaderName != nil && *in.AuthHeaderName != "") || (in.AuthValue != nil && *in.AuthValue != "") {
-			return p, false, apperr.Invalid("invalid_auth_header", "authMode none has no static header")
+	switch {
+	case mode == AuthNone:
+		// authMode none removes the static credential with its values.
+		if (in.AuthHeaderName != nil && *in.AuthHeaderName != "") || (in.AuthValue != nil && *in.AuthValue != "") ||
+			(in.Credentials != nil && len(*in.Credentials) > 0) {
+			return out, apperr.Invalid("invalid_auth_header", "authMode none has no static credential")
 		}
 		p.AuthHeaderName, p.AuthValueCipher, p.AuthValueHint = nil, nil, ""
-		return p, cur.AuthValueCipher != nil, nil
+		if len(stored.rows) > 0 {
+			out.plan = &credentialPlan{write: true}
+		}
+		out.p, out.valueChanged, out.views = p, stored.any(), nil
+		return out, nil
+	case in.Credentials != nil:
+		plan, err := s.planCredentials(cur, stored, *in.Credentials)
+		if err != nil {
+			return out, err
+		}
+		if plan.write {
+			// The credential moves into (or stays in, or leaves) the table:
+			// the legacy columns are never kept next to it.
+			p.AuthHeaderName, p.AuthValueCipher, p.AuthValueHint = nil, nil, ""
+			out.plan = &plan
+		}
+		out.views, out.valueChanged = plan.views, plan.valueChanged
+		if mode == AuthStaticHeader && len(plan.views) == 0 {
+			return out, apperr.Invalid("invalid_auth_header", "Add at least one credential part")
+		}
+		out.p = p
+		return out, nil
+	case len(stored.rows) > 0:
+		// Several parts, and the request doesn't touch them.
+		out.p = p
+		return out, nil
 	}
 	removed := in.AuthHeaderName != nil && *in.AuthHeaderName == "" && cur.AuthValueCipher != nil
 	if err := s.applyAuth(&p, cur, in); err != nil {
-		return p, false, err
+		return out, err
 	}
 	if mode == AuthStaticHeader && p.AuthHeaderName == nil {
-		return p, false, apperr.Invalid("invalid_auth_header", "Enter the static header's name and value")
+		return out, apperr.Invalid("invalid_auth_header", "Enter the static header's name and value")
 	}
-	return p, in.AuthValue != nil || removed, nil
+	out.p, out.valueChanged = p, in.AuthValue != nil || removed
+	out.views = nil
+	if p.AuthHeaderName != nil {
+		out.views = []CredentialView{{Kind: CredHeader, Name: *p.AuthHeaderName, Hint: p.AuthValueHint}}
+	}
+	return out, nil
 }
 
 // applyAuth applies a header change: "" removes it; a new name keeps the
@@ -1137,8 +1240,12 @@ func (s *Service) Delete(ctx context.Context, a authz.Actor, ref string, id uuid
 		if err := q.DeleteMCPServer(ctx, id); err != nil {
 			return err
 		}
+		stored, err := loadStored(ctx, q, cur)
+		if err != nil {
+			return err
+		}
 		e := a.Audit("mcp_server.delete", "mcp_server", id.String())
-		e.TeamID, e.Before = ta.team.ID, snapshot(cur)
+		e.TeamID, e.Before = ta.team.ID, snapshot(cur, stored.views()...)
 		return audit.Record(ctx, q, e)
 	})
 }
@@ -1152,7 +1259,7 @@ func (s *Service) Target(ctx context.Context, sv dbgen.McpServer) (upstream.Targ
 // Client is the guarded client servers are reached with.
 func (s *Service) Client() *upstream.Client { return s.client }
 
-// target reads how to reach a server, decrypting its header value. The URL
+// target reads how to reach a server, decrypting its credential parts. The URL
 // is checked against the address rule again (it may have been saved under
 // the development allowance, or the allowlist may have changed since).
 func (s *Service) target(ctx context.Context, sv dbgen.McpServer) (upstream.Target, error) {
@@ -1164,12 +1271,12 @@ func (s *Service) target(ctx context.Context, sv dbgen.McpServer) (upstream.Targ
 		}
 		return t, &upstream.Error{Class: upstream.ClassNotAllowed, Message: msg}
 	}
-	if sv.AuthHeaderName != nil && sv.AuthValueCipher != nil {
-		plain, err := s.box.Open(sv.AuthValueCipher, ServerAAD(sv.ID))
+	if AuthModeOf(sv) != AuthNone {
+		creds, err := s.openCredentials(ctx, sv)
 		if err != nil {
-			return t, errUndecryptable
+			return t, err
 		}
-		t.HeaderName, t.HeaderValue = *sv.AuthHeaderName, string(plain)
+		t.Credentials = creds
 	}
 	return t, nil
 }
