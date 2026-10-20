@@ -25,7 +25,7 @@ export const authModeLabels: Record<AuthMode, string> = {
 };
 
 export const authModeHelp: Record<AuthMode, string> = {
-  none: "Calls carry only the portal's signed identity token.",
+  none: "No credential of its own: calls carry the portal's signed identity token, unless you turn that off below.",
   static_header: "One header with a fixed value, such as an API key, sent with every request.",
   oauth: "Each person signs in to the server's own service once; every call carries their own token. Clients and models never see it.",
 };

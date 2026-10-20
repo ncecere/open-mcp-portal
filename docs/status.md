@@ -1,7 +1,11 @@
 # Status and handoff
 
-Last updated: 2026-10-18. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.2.1, **cut on 2026-10-18**
-(release notes: [releases/v0.2.1.md](releases/v0.2.1.md); earlier: [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+Last updated: 2026-10-18. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.2.2, **cut on 2026-10-20**
+(release notes: [releases/v0.2.2.md](releases/v0.2.2.md); earlier: [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+
+## v0.2.2 (2026-10-20)
+
+Hardening (migrations `00018`, `00019`): see the [release notes](releases/v0.2.2.md). Verified by tests, including a full authorization-code and PKCE flow for Claude Code's metadata-document shape with a loopback redirect; **not** yet browser-checked or run with the real Claude Code client.
 
 ## v0.2.1 (2026-10-18)
 

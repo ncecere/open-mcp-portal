@@ -6,7 +6,7 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
-## Unreleased
+## [0.2.2] - 2026-10-20
 
 Documentation: the [roadmap](docs/roadmap.md) is rewritten around what v0.2.1 shipped and what is still open, with an [issue](https://github.com/ncecere/open-mcp-portal/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap) and implementation plan for each item; the threat model's hardening table links its issues and no longer lists Trivy as open.
 
