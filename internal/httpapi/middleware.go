@@ -59,8 +59,16 @@ func chain(mux *http.ServeMux, d Deps) http.Handler {
 	if log == nil {
 		log = slog.Default()
 	}
+	// A deployment behind a proxy with TRUSTED_PROXIES empty is told once a
+	// minute (httpx.ProxyWatch); a development install on a loopback APP_URL
+	// is not.
+	var proxies *httpx.ProxyWatch
+	if len(d.Config.TrustedProxies) == 0 && !d.Config.LoopbackAppURL() {
+		proxies = httpx.NewProxyWatch(log)
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		proxies.Observe(r.Context(), r)
 		reqID := httpx.NewID(12)
 		r = r.WithContext(httpx.WithRequestID(r.Context(), reqID))
 

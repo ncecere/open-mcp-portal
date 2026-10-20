@@ -74,7 +74,7 @@ file named by `OMP_CONFIG_FILE`. Each secret can also be read from a file named 
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID` | yes | The only production sign-in method. The redirect URI to register is `${APP_URL}/auth/callback`. |
 | `OIDC_CLIENT_SECRET` | yes (secret) | |
 | `BOOTSTRAP_ADMIN_SUBJECT` | first install | The OIDC `sub` made platform admin on first sign-in. It takes effect once. |
-| `TRUSTED_PROXIES` | recommended | Ingress controller CIDRs allowed to set `X-Forwarded-For`, used for logging and sign-in rate limits. |
+| `TRUSTED_PROXIES` | recommended behind an ingress | Ingress controller CIDRs allowed to set `X-Forwarded-For`, used for logging, audit addresses and per-address rate limits. Left empty, the header is ignored (safe), but every request then appears to come from the ingress. See [Behind a proxy](#behind-a-proxy-trusted_proxies). |
 | `UPSTREAM_ALLOWED_NETWORKS` | optional | Internal networks and hosts MCP servers may use, besides public addresses. See [Internal MCP servers](#internal-mcp-servers). |
 | `SMTP_HOST`, `SMTP_FROM`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_TLS` | optional | Notification email; off without `SMTP_HOST`. See [Notifications and automation tokens](#notifications-and-automation-tokens). `SMTP_PASSWORD` is a secret (`SMTP_PASSWORD_FILE` works). |
 | `NOTIFICATION_INTERVAL` | optional | The notification dispatcher's tick (default `15s`, 5s to 10m). |
@@ -240,7 +240,26 @@ images:
   response (at most 1 MiB); a streamed call relays at most 64 progress events and 4 MiB.
 - **No sticky sessions.** `/mcp/{slug}` is stateless: no MCP session lives in a pod, and browser sessions and OIDC login
   state are in PostgreSQL. Any replica can serve any request.
-- Set `TRUSTED_PROXIES` to the controller's pod network.
+- Set `TRUSTED_PROXIES` to the controller's pod network ([why](#behind-a-proxy-trusted_proxies)).
+
+### Behind a proxy (`TRUSTED_PROXIES`)
+
+The portal serves plain http and expects TLS to end at a proxy, so `APP_URL` is `https://` and every request arrives from
+the proxy. The portal believes `X-Forwarded-For` only from peers inside `TRUSTED_PROXIES`. With it empty the header is
+ignored: that is safe (nobody can spoof an address), but per-address rate limits (sign-in, client registration, failed
+tokens), audit entries and access logs all name the proxy, so one noisy caller can use up everyone's allowance.
+
+- **A warning tells you.** With `TRUSTED_PROXIES` empty and a non-loopback `APP_URL`, a request that carries
+  `X-Forwarded-For` or `Forwarded` makes the portal log `requests carry X-Forwarded-For (or Forwarded) but
+  TRUSTED_PROXIES is empty…` at WARN level: once for the first such request, then at most once a minute. Nothing about
+  the request changes. Setting `TRUSTED_PROXIES` (to the proxy's network, such as `10.0.0.0/8`) stops it. The warning is
+  not given when `TRUSTED_PROXIES` is set, even for a request from outside it.
+- **`open-mcp-portal doctor`** prints an info line (`configuration / trusted proxies`) when `APP_URL` is https and
+  `TRUSTED_PROXIES` is empty. It cannot see traffic, so ignore it when nothing sits in front of the portal.
+- **Sign-in cookie.** On https the sign-in state cookie is `__Host-omp_oidc_state` (host-only, `Secure`, `Path=/`), like
+  the session cookie `__Host-omp_session`; over the development http origin the names have no prefix. For one release
+  (v0.2.2) the old name `omp_oidc_state` is still accepted, so a person who started signing in just before an upgrade is
+  not sent back to the start.
 
 ### Health checks
 
