@@ -51,6 +51,7 @@ const (
 	defaultCacheTTL      = 60 * time.Second
 	maxCacheTTL          = 5 * time.Minute
 	staleMax             = 15 * time.Minute
+	staleLogEvery        = time.Minute // at most one stale-keys warning a minute per platform
 	failureBackoff       = 10 * time.Second
 	maxUnknownRefetches  = 2
 	unknownRefetchWindow = time.Minute
@@ -104,6 +105,7 @@ type platformKeys struct {
 	set         *keySet
 	lastFailure time.Time
 	unknown     []time.Time // when unknown-kid refetches ran
+	staleLogged time.Time   // when the stale-keys warning was last logged
 }
 
 func (s *Service) keysOf(id uuid.UUID) *platformKeys {
@@ -296,7 +298,7 @@ func (s *Service) keyFor(ctx context.Context, p dbgen.AgentPlatform, kid string)
 	}
 	pk.mu.Unlock()
 	if !fresh && !allowed {
-		return s.stale(set, kid, now)
+		return s.stale(pk, set, kid, now)
 	}
 	if fresh && !allowed {
 		return nil, reject(ReasonUnknownKid, "the key id isn't published")
@@ -311,7 +313,7 @@ func (s *Service) keyFor(ctx context.Context, p dbgen.AgentPlatform, kid string)
 			// A fresh set that doesn't know the kid, and no new one: unknown.
 			return nil, reject(ReasonUnknownKid, "the key id isn't published")
 		}
-		return s.stale(set, kid, now)
+		return s.stale(pk, set, kid, now)
 	}
 	pk.lastFailure = time.Time{}
 	pk.set = fetched
@@ -324,16 +326,32 @@ func (s *Service) keyFor(ctx context.Context, p dbgen.AgentPlatform, kid string)
 
 // stale serves a key from an expired set while the platform can't be
 // reached, for staleMax after the set expired; later, or for a kid the set
-// doesn't hold, the verification fails.
-func (s *Service) stale(set *keySet, kid string, now time.Time) (*ecdsa.PublicKey, error) {
+// doesn't hold, the verification fails. The warning is logged at most once a
+// minute per platform (a platform that is down would otherwise log once per
+// relayed request).
+func (s *Service) stale(pk *platformKeys, set *keySet, kid string, now time.Time) (*ecdsa.PublicKey, error) {
 	if set != nil && now.Before(set.expiresAt.Add(staleMax)) {
 		if k, ok := set.keys[kid]; ok {
-			s.Log.Warn("agent platform JWKS can't be refreshed; using the cached keys", "keys", len(set.keys), "expired", set.expiresAt)
+			if pk.staleLogDue(now) {
+				s.Log.Warn("agent platform JWKS can't be refreshed; using the cached keys", "keys", len(set.keys), "expired", set.expiresAt)
+			}
 			return k, nil
 		}
 		return nil, reject(ReasonUnknownKid, "the key id isn't published")
 	}
 	return nil, reject(ReasonJWKSUnavailable, "the platform's keys can't be fetched")
+}
+
+// staleLogDue reports whether the stale-keys warning is due (once a minute)
+// and notes that it is being logged.
+func (pk *platformKeys) staleLogDue(now time.Time) bool {
+	pk.mu.Lock()
+	defer pk.mu.Unlock()
+	if !pk.staleLogged.IsZero() && now.Sub(pk.staleLogged) < staleLogEvery && !now.Before(pk.staleLogged) {
+		return false
+	}
+	pk.staleLogged = now
+	return true
 }
 
 func (pk *platformKeys) snapshot(url string) *keySet {

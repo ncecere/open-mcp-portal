@@ -273,7 +273,7 @@ func (s *Service) check(p dbgen.AgentPlatform, payload []byte) (Identity, error)
 	if c.PrincipalType != "agent" {
 		return Identity{}, reject(ReasonPrincipalType, "principal_type must be agent")
 	}
-	if !plain(c.Sub, maxClaimLen) || c.Team == nil || !plain(c.Team.ID, maxClaimLen) || !plain(c.JTI, maxClaimLen) {
+	if !shown(c.Sub, maxClaimLen) || c.Team == nil || !shown(c.Team.ID, maxClaimLen) || !shown(c.JTI, maxClaimLen) {
 		return Identity{}, reject(ReasonClaims, "sub, team.id and jti are required")
 	}
 	id := Identity{Platform: p, AgentID: c.Sub, AgentName: tidy(c.Name, maxNameLen), TeamID: c.Team.ID, TeamSlug: tidy(c.Team.Slug, maxClaimLen),
@@ -372,12 +372,25 @@ func plain(s string, max int) bool {
 	return s != "" && len(s) <= max && utf8.ValidString(s) && s == strings.TrimSpace(s) && !strings.ContainsFunc(s, unicode.IsControl)
 }
 
-// tidy makes an informational claim safe to store and show: invalid UTF-8
-// and control characters removed, at most max bytes.
+// shown is plain for an identifier that is stored in the call log and shown
+// to people (the agent's ID, the team's ID, the jti): it also refuses Unicode
+// format characters, which are invisible or reorder text (I-8).
+func shown(s string, max int) bool {
+	return plain(s, max) && !strings.ContainsFunc(s, invisible)
+}
+
+// invisible reports whether r is a control character (Unicode category Cc) or
+// a format character (Cf: bidirectional controls such as U+202E, zero-width
+// spaces and joiners, the byte order mark, the soft hyphen...), which can hide
+// or reorder text in what people read.
+func invisible(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }
+
+// tidy makes an informational claim safe to store and show: invalid UTF-8,
+// control characters and format characters removed (I-8), at most max bytes.
 func tidy(s string, max int) string {
 	s = strings.ToValidUTF8(s, "")
 	s = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		if invisible(r) {
 			return -1
 		}
 		return r

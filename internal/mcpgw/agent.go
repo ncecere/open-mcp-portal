@@ -270,16 +270,6 @@ func (p principal) actClaim() *identity.Actor {
 		PrincipalType: identity.PrincipalAgent, PersonPresent: rl.agent.PersonPresent}
 }
 
-// intersect limits a person's access to a gateway by the relay account's.
-func (rc *request) intersect(g dbgen.Gateway, personCaller gateways.Caller) (gateways.Caller, error) {
-	sa := rc.principal.account
-	relay, err := rc.h.Gateways.ServiceAccountCaller(rc.r.Context(), g, sa.Team.ID, sa.Account.Role)
-	if err != nil {
-		return gateways.Caller{}, err
-	}
-	return gateways.Intersect(personCaller, relay), nil
-}
-
 // presenceOK refuses a call whose capability requires a present person
 // unless the person is present (recorded denied, person_not_present). It
 // applies to every call on a relay-marked service account (M-2 of the

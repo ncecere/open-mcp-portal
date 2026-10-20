@@ -13,6 +13,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -163,7 +165,28 @@ func b64(v any) string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
+// logSink collects what a service logs.
+type logSink struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+var _ io.Writer = (*logSink)(nil)
+
+func (l *logSink) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *logSink) count(sub string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return strings.Count(l.b.String(), sub)
+}
+
 type env struct {
+	logs   *logSink
 	t      *testing.T
 	pool   *pgxpool.Pool
 	f      *fakeIssuer
@@ -223,7 +246,7 @@ func (e *env) newService(resolved string, entries []netpolicy.Entry) *agentident
 			return (&net.Dialer{}).DialContext(ctx, network, e.f.srv.Listener.Addr().String())
 		},
 	}
-	svc := agentidentity.New(e.pool, client, audience, personIssuer, testutil.Logger())
+	svc := agentidentity.New(e.pool, client, audience, personIssuer, slog.New(slog.NewTextHandler(e.logs, nil)))
 	svc.TLS = &tls.Config{RootCAs: e.f.srv.Client().Transport.(*http.Transport).TLSClientConfig.RootCAs, ServerName: "example.com"}
 	svc.SetClock(e.clock)
 	return svc
@@ -232,7 +255,7 @@ func (e *env) newService(resolved string, entries []netpolicy.Entry) *agentident
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	pool, _ := testutil.NewDB(t)
-	e := &env{t: t, pool: pool, f: newFakeIssuer(t), now: time.Now().Truncate(time.Second)}
+	e := &env{t: t, pool: pool, logs: &logSink{}, f: newFakeIssuer(t), now: time.Now().Truncate(time.Second)}
 	e.key = e.f.addKey("k1", true)
 	e.svc = e.newService("93.184.216.34", nil)
 	var admin string
@@ -306,6 +329,52 @@ func TestVerifyAcceptsThePlatformsToken(t *testing.T) {
 	id, err = e.verify(e.token(func(c map[string]any) { c["person"] = nil }, nil))
 	if err != nil || id.Person != nil || id.PersonPresent {
 		t.Fatalf("null person: %+v %v", id, err)
+	}
+}
+
+// I-8 of the security review: what a token says about the agent is shown to
+// people, so Unicode format characters (category Cf: bidirectional controls
+// such as U+202E, zero-width spaces and joiners, the byte order mark, the soft
+// hyphen) are removed as well as control characters; the identifiers that are
+// stored and shown (sub, team.id, jti) may not contain any. The tool claim
+// keeps its exact value for the binding of M-1 (it is never shown as is).
+func TestVerifyCleansWhatPeopleRead(t *testing.T) {
+	e := newEnv(t)
+	e.trust()
+	id, err := e.verify(e.token(func(c map[string]any) {
+		c["name"] = "\u202eMail\u200b \u2066assis\u00adtant\ufeff\u200d\r\n\x00"
+		c["team"] = map[string]any{"id": "6f1c0000", "slug": "pers\u200bonal\u202e", "kind": "per\u2060sonal"}
+		c["thread_visibility"] = "pri\u200fvate"
+		c["tool"] = "search\u200b_mail"
+		c["person"] = map[string]any{"iss": personIssuer, "sub": "8c41d2", "email": "ada\u202e@example.com"}
+	}, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id.AgentName != "Mail assistant" || id.TeamSlug != "personal" || id.TeamKind != "personal" || id.ThreadVisibility != "private" ||
+		id.Tool != "search_mail" || id.Person == nil || id.Person.Email != "ada@example.com" {
+		t.Fatalf("identity = %+v person %+v", id, id.Person)
+	}
+	// ... but the tool claim as signed is what a call is held to.
+	if id.ToolClaim != "search\u200b_mail" || id.ToolMatches(true, "search_mail") || !id.ToolMatches(true, "search\u200b_mail") {
+		t.Fatalf("tool claim %q matches the cleaned name", id.ToolClaim)
+	}
+	// A name of nothing but invisible characters is empty, not a blank row.
+	id, err = e.verify(e.token(func(c map[string]any) { c["name"] = "\u200b\u202e\u200d" }, nil))
+	if err != nil || id.AgentName != "" {
+		t.Fatalf("an invisible name = %q %v", id.AgentName, err)
+	}
+	// Identifiers that are stored and shown refuse them.
+	for name, mutate := range map[string]func(map[string]any){
+		"sub": func(c map[string]any) { c["sub"] = "0e6a3d4c\u202e-5f1b" },
+		"team.id": func(c map[string]any) {
+			c["team"] = map[string]any{"id": "6f1c\u200b0000", "slug": "x", "kind": "team"}
+		},
+		"jti": func(c map[string]any) { c["jti"] = "jti-\u2066-1" },
+	} {
+		if got := reasonOf(func() error { _, err := e.verify(e.token(mutate, nil)); return err }()); got != agentidentity.ReasonClaims {
+			t.Errorf("a format character in %s: %s, want %s", name, got, agentidentity.ReasonClaims)
+		}
 	}
 }
 
@@ -662,6 +731,44 @@ func TestJWKSCacheLifetime(t *testing.T) {
 // Stale-while-error: when the platform can't be reached, the keys last
 // fetched keep serving for 15 minutes past their expiry, then nothing
 // verifies. Unreachable is not retried for ten seconds.
+// I-3 of the security review: while a platform is down and its cached keys
+// verify tokens, the warning is logged once a minute for the platform, not
+// once per relayed request.
+func TestStaleKeysWarningIsThrottled(t *testing.T) {
+	const warning = "using the cached keys"
+	e := newEnv(t)
+	e.trust()
+	if _, err := e.verify(e.token(nil, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if n := e.logs.count(warning); n != 0 {
+		t.Fatalf("warned %d times with fresh keys", n)
+	}
+	e.f.set(func() { e.f.status = 503 })
+	e.advance(6 * time.Minute) // expired, the platform is down
+	for i := range 30 {
+		if _, err := e.verify(e.token(nil, nil)); err != nil {
+			t.Fatalf("stale verification %d: %v", i, err)
+		}
+	}
+	if n := e.logs.count(warning); n != 1 {
+		t.Fatalf("30 verifications on stale keys logged %d warnings, want 1", n)
+	}
+	e.advance(59 * time.Second)
+	if _, err := e.verify(e.token(nil, nil)); err != nil || e.logs.count(warning) != 1 {
+		t.Fatalf("within the minute: %v, %d warnings", err, e.logs.count(warning))
+	}
+	e.advance(2 * time.Second) // a minute since the first
+	for range 5 {
+		if _, err := e.verify(e.token(nil, nil)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := e.logs.count(warning); n != 2 {
+		t.Fatalf("a minute later: %d warnings, want 2", n)
+	}
+}
+
 func TestStaleWhileError(t *testing.T) {
 	e := newEnv(t)
 	e.trust()
