@@ -23,7 +23,7 @@ COPY web/ ./
 COPY api/ /api/
 RUN npm run build && test -f dist/index.html
 
-FROM --platform=$BUILDPLATFORM golang:1.26@sha256:5c3f3f28a273c9b61698b2d34f18375929790ab1f1d3835d032d21e2b31eae0c AS gobase
+FROM --platform=$BUILDPLATFORM golang:1.26@sha256:672c944cfd07599b5f1bb179869270cdc94c6254e41db4d431259693cb286b82 AS gobase
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
