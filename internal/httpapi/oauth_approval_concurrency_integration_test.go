@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/ncecere/open-mcp-portal/internal/testutil"
 )
 
 // An audit BEFORE INSERT trigger pauses a real service transaction after it
@@ -40,7 +42,7 @@ func pauseOAuthAudit(t *testing.T, e *oauthEnv, grantID, action string) *oauthAu
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(719229, 1)`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.app.Pool.Exec(ctx, fmt.Sprintf(`
+	if _, err := testutil.OwnerPool(t, e.app.Pool).Exec(ctx, fmt.Sprintf(`
 CREATE FUNCTION pause_oauth_audit() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   PERFORM pg_advisory_xact_lock(719229, 1);

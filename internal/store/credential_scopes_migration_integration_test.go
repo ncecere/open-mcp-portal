@@ -16,7 +16,9 @@ import (
 func TestCredentialScopesMigration(t *testing.T) {
 	pool, _ := testutil.NewDB(t)
 	ctx := context.Background()
-	db := stdlib.OpenDBFromPool(pool)
+	// Schema changes use the migration owner; compatibility writes below
+	// deliberately remain on the genuinely authenticated runtime pool.
+	db := stdlib.OpenDBFromPool(testutil.OwnerPool(t, pool))
 	defer db.Close()
 	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrations.FS)
 	if err != nil {
@@ -51,6 +53,7 @@ func TestCredentialScopesMigration(t *testing.T) {
 	if _, err := provider.Up(ctx); err != nil {
 		t.Fatal(err)
 	}
+	testutil.Regrant(t, pool)
 	for _, table := range []string{"api_keys", "service_accounts", "service_account_keys", "oauth_grants", "gateway_grants"} {
 		if got := scalar(fmt.Sprintf(`SELECT count(*)::text FROM %s WHERE tool_scope IS NULL`, table)); got != "1" {
 			t.Fatalf("%s existing row changed: %s", table, got)
@@ -78,4 +81,5 @@ func TestCredentialScopesMigration(t *testing.T) {
 	if _, err := provider.Up(ctx); err != nil {
 		t.Fatal(err)
 	}
+	testutil.Regrant(t, pool)
 }
