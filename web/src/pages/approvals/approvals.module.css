@@ -22,6 +22,7 @@
   font-size: var(--font-size-sm);
 }
 
+.rule,
 .digest {
   overflow-wrap: anywhere;
   word-break: break-word;

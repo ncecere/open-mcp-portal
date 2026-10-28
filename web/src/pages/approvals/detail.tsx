@@ -31,7 +31,11 @@ function Review({ id }: { id: string }) {
   const deadline = receipt ? Math.min(Date.parse(receipt.expiresAt), receipt.status === "approved" && receipt.validUntil ? Date.parse(receipt.validUntil) : Infinity) : Infinity;
   useEffect(() => {
     if (!Number.isFinite(deadline)) return;
-    const timer = setTimeout(() => { setNow(Date.now()); void qc.invalidateQueries({ queryKey: approvalKey(id) }); }, Math.max(0, deadline - Date.now()) + 10);
+    const timer = setTimeout(() => {
+      setNow(Date.now());
+      qc.setQueryData<Approval>(approvalKey(id), (old) => old ? { ...old, preview: undefined } : old);
+      void qc.invalidateQueries({ queryKey: approvalKey(id) });
+    }, Math.max(0, deadline - Date.now()) + 10);
     return () => clearTimeout(timer);
   }, [deadline, id, qc]);
   const mutation = useMutation({

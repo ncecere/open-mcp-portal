@@ -34,6 +34,6 @@ export function TargetPicker({ team, kind, value, onChange, disabled }: { team?:
     </Field>
     <ErrorAlert error={targets.error} title="Couldn't load targets" />
     {targets.error && <Button variant="secondary" disabled={disabled} onClick={() => void targets.refetch()}>Retry targets</Button>}
-    <PagerBar pager={pager} pageSize={50} shown={targets.data?.items.length ?? 0} nextCursor={targets.data?.nextCursor} label="Target pages" />
+    {!disabled && <PagerBar pager={pager} pageSize={50} shown={targets.data?.items.length ?? 0} nextCursor={targets.data?.nextCursor} label="Target pages" />}
   </>;
 }

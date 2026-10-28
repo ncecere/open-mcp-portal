@@ -5,7 +5,6 @@ import { ApiError } from "../../api/client";
 import { useCurrentUser } from "../../session";
 import { useTeam } from "../team/common";
 import { ConfirmMutationDialog } from "../../components/confirm-dialog";
-import { NotFoundState } from "../../components/not-found";
 import { PagerBar, useCursorPager } from "../../components/pager";
 import { PageSkeleton } from "../../components/page-skeleton";
 import { Alert, ErrorAlert } from "@/components/ui/alert/alert";
@@ -21,7 +20,7 @@ export function TeamApprovalRulesPage() {
   const ctx = useTeam();
   const { capabilities } = useCurrentUser();
   const staff = capabilities.platformAdmin || capabilities.platformAuditor;
-  if (!ctx.isManager && !staff) return <NotFoundState what="forbidden" />;
+  if (!ctx.isManager && !staff) return <Stack gap={6} className={s.page}><PageHeader title="No access" /><Alert tone="info">Approval rules are available to this team's owners/admins and read-only platform staff.</Alert></Stack>;
   return <Rules key={ctx.slug} team={ctx.slug} canWrite={ctx.isManager && !ctx.archived} />;
 }
 export function AdminApprovalRulesPage() {
@@ -54,7 +53,7 @@ function Rules({ team, canWrite }: { team?: string; canWrite: boolean }) {
     {query.isLoading && <PageSkeleton />}
     <ErrorAlert error={query.error} title="Couldn't load approval rules" />
     {query.data?.items.length === 0 && <p>No approval rules in this view.</p>}
-    {query.data?.items.map((r) => <Card key={r.id} title={r.name} actions={writable(r) ? <div className={a.actions}>
+    {query.data?.items.map((r) => <Card key={r.id} className={a.rule} title={r.name} actions={writable(r) ? <div className={a.actions}>
       <Button variant="secondary" disabled={remove.isPending} onClick={() => setEditing(r)}>Edit {r.name}</Button>
       <Button variant="danger" disabled={remove.isPending} onClick={() => { remove.reset(); setDeletedConflict(false); setDeleting(r); }}>Delete {r.name}</Button>
     </div> : undefined}>
@@ -69,6 +68,10 @@ function Rules({ team, canWrite }: { team?: string; canWrite: boolean }) {
     </Card>)}
     <PagerBar pager={pager} pageSize={25} shown={query.data?.items.length ?? 0} nextCursor={query.data?.nextCursor} label="Approval rule pages" />
     {editing && canWrite && <RuleEditor team={team} rule={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} />}
-    <ConfirmMutationDialog target={deleting} mutation={remove} onClose={() => setDeleting(null)} title="Delete approval rule?" description={deletedConflict ? "This revision changed. Close this dialog, reload the rules and review again before deleting." : `Delete ${deleting?.name ?? "this rule"}? Policy changes invalidate existing approvals. This does not undo an already authorized dispatch.`} confirmLabel="Delete rule" tone="danger" onConfirm={(r) => { if (!remove.isPending && !deletedConflict) remove.mutate({ team, id: r.id, revision: r.revision }); }} />
+    <ConfirmMutationDialog target={deleting} mutation={remove} onClose={() => setDeleting(null)} title="Delete approval rule?" description={deletedConflict ? "This revision changed. Close this dialog, reload the rules and review again before deleting." : `Delete ${deleting?.name ?? "this rule"}? Policy changes invalidate existing approvals. This does not undo an already authorized dispatch.`} confirmLabel={deletedConflict ? "Reload rules" : "Delete rule"} tone={deletedConflict ? "primary" : "danger"} onConfirm={(r) => {
+      if (remove.isPending) return;
+      if (deletedConflict) { setDeleting(null); remove.reset(); void query.refetch(); return; }
+      remove.mutate({ team, id: r.id, revision: r.revision });
+    }} />
   </Stack>;
 }

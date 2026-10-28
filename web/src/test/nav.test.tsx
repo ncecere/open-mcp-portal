@@ -19,6 +19,7 @@ describe("navigation lists", () => {
   it("have the registry's, the gateways' and the operations' sections", () => {
     expect(workspaceNav.map((n) => [n.label, n.to])).toEqual([
       ["Home", "/"],
+      ["Approvals", "/approvals"],
       ["Catalog", "/catalog"],
       ["My gateways", "/gateways"],
     ]);
@@ -32,6 +33,7 @@ describe("navigation lists", () => {
       "/admin/servers",
       "/admin/publishing",
       "/admin/networks",
+      "/admin/approval-rules",
       "/admin/gateways",
       "/admin/trusted-clients",
       "/admin/auth-providers",
@@ -73,11 +75,12 @@ describe("navigation lists", () => {
   });
 
   it("give every team role the overview, the MCP servers, the gateways, the service accounts and settings, editors and above usage, and platform staff who aren't members the same", () => {
-    const all = ["Overview", "MCP servers", "Gateways", "Service accounts", "Usage", "Team settings"];
-    for (const role of ["owner", "admin", "editor"] as const) {
+    const all = ["Overview", "MCP servers", "Gateways", "Service accounts", "Approval rules", "Usage", "Team settings"];
+    for (const role of ["owner", "admin"] as const) {
       expect(teamNavFor(meFor("none", role), team.slug).map((n) => n.label)).toEqual(all);
     }
-    expect(teamNavFor(meFor("none", "member"), team.slug).map((n) => n.label)).toEqual(all.filter((l) => l !== "Usage"));
+    expect(teamNavFor(meFor("none", "editor"), team.slug).map((n) => n.label)).toEqual(all.filter((l) => l !== "Approval rules"));
+    expect(teamNavFor(meFor("none", "member"), team.slug).map((n) => n.label)).toEqual(all.filter((l) => l !== "Usage" && l !== "Approval rules"));
     expect(teamNavFor(meFor("platform_auditor", null), team.slug).map((n) => n.label)).toEqual(all);
     // Neither a member nor staff: nothing (the team page says "Team not found").
     expect(teamNavFor(meFor("none", null), team.slug)).toEqual([]);
@@ -140,7 +143,7 @@ describe("workspace sidebar", () => {
     renderApp(`/teams/${team.slug}`);
     const nav = await screen.findByRole("navigation", { name: "Main" });
     await waitFor(() => expect(within(nav).getByRole("link", { name: "Overview" })).toHaveAttribute("aria-current", "page"));
-    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Home", "Catalog", "My gateways", "Overview", "MCP servers", "Gateways", "Service accounts", "Team settings"]);
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Home", "Approvals", "Catalog", "My gateways", "Overview", "MCP servers", "Gateways", "Service accounts", "Team settings"]);
     expect(within(nav).getByRole("link", { name: "Service accounts" })).toHaveAttribute("href", `/teams/${team.slug}/service-accounts`);
     expect(within(nav).getByRole("link", { name: "Gateways" })).toHaveAttribute("href", `/teams/${team.slug}/gateways`);
     expect(within(nav).getByRole("link", { name: "MCP servers" })).toHaveAttribute("href", `/teams/${team.slug}/servers`);

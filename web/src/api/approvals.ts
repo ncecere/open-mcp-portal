@@ -8,7 +8,7 @@ export type ApprovalAction = "approve" | "deny" | "cancel" | "renew";
 export type ReviewSubmission = { id: string; action: ApprovalAction; revision: number; digest: string };
 export const approvalsKey = ["approvals"];
 export const approvalKey = (id: string) => [...approvalsKey, "detail", id];
-export const rulesKey = (team?: string) => ["approval-rules", team ?? "platform"];
+export const rulesKey = (team?: string) => team ? ["approval-rules", "team", team] : ["approval-rules", "platform"];
 
 /** Never retain a terminal/stale preview in this query cache, even if an old replica sends one. */
 export function safeReceipt(receipt: Approval): Approval {
@@ -36,13 +36,15 @@ export const approvalQuery = (approvalId: string) => queryOptions({
 /** All request variables come from the displayed review at click time, not mutable editor state. */
 export async function submitReview(s: ReviewSubmission) {
   const params = { path: { approvalId: s.id } };
-  if (s.action === "approve" || s.action === "deny") return safeReceipt(unwrap(await api.POST("/v1/approvals/{approvalId}/decision", {
-    params, body: { decision: s.action, expectedReviewRevision: s.revision, expectedArgsDigest: s.digest },
-  })));
   const body = { expectedReviewRevision: s.revision };
-  return safeReceipt(unwrap(s.action === "cancel"
-    ? await api.POST("/v1/approvals/{approvalId}/cancel", { params, body })
-    : await api.POST("/v1/approvals/{approvalId}/renew", { params, body })));
+  const receipt = unwrap(s.action === "approve" || s.action === "deny"
+    ? await api.POST("/v1/approvals/{approvalId}/decision", { params, body: { ...body, decision: s.action, expectedArgsDigest: s.digest } })
+    : s.action === "cancel" ? await api.POST("/v1/approvals/{approvalId}/cancel", { params, body })
+    : await api.POST("/v1/approvals/{approvalId}/renew", { params, body }));
+  // Only an authorized GET is a new review. Never keep a mutation's preview in
+  // the mutation cache or allow it to reappear after a later terminal transition.
+  const { preview: _preview, ...metadata } = receipt;
+  return metadata;
 }
 
 export const approvalRulesQuery = (team?: string, cursor?: string) => queryOptions({
