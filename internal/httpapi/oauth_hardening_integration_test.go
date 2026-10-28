@@ -747,7 +747,8 @@ func TestOAuthRefreshAbsoluteLifetimeConfig(t *testing.T) {
 	}
 }
 
-// The upgrade from 0.2.1: grants that existed keep working and get one whole
+// Migration 18 compatibility roundtrip against the expanded latest schema,
+// not a full rollback to 0.2.1: existing grants keep working and get one whole
 // lifetime from the migration, however old they are; registered clients that
 // signed in are kept, ones nobody used are not.
 func TestOAuthMigration00018KeepsWhatWorks(t *testing.T) {
@@ -765,17 +766,22 @@ func TestOAuthMigration00018KeepsWhatWorks(t *testing.T) {
 	q := authQuery(app, used, "support", p, nil)
 	exchange(t, app, used, codeFrom(t, app, "used", consent(t, e.member, q, "allow")), p, nil)
 
-	// Go back to the schema of 0.2.1 (this also runs the migration's Down) and
-	// make the data look like an old installation.
+	// Run only migration 18's Down/Up through Goose. Newer forward-only
+	// migrations cannot be rolled back; leave their schema (including retirement
+	// fences) and all version tracking intact while aging the OAuth artifacts.
 	db := stdlib.OpenDBFromPool(testutil.OwnerPool(t, app.Pool))
 	defer db.Close()
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrations.FS)
+	provider, err := goose.NewProvider(goose.DialectPostgres, db,
+		singleMigrationFS(t, migrations.FS, "00018_oauth_hardening.sql"),
+		goose.WithDisableVersioning(true))
 	if err != nil {
 		t.Fatal(err)
 	}
-	testutil.RemoveRetirementFencesForOldSchema(t, app.Pool)
-	if _, err := provider.DownTo(ctx, 17); err != nil {
+	versionHistory := e.scalar(`SELECT json_agg(v ORDER BY id)::text FROM goose_db_version v`)
+	if result, err := provider.Down(ctx); err != nil {
 		t.Fatalf("down: %v", err)
+	} else if result.Source.Version != 18 {
+		t.Fatalf("down migrated version %d, want 18", result.Source.Version)
 	}
 	for _, stmt := range []string{
 		`UPDATE oauth_grants SET created_at = now() - interval '400 days'`,
@@ -786,11 +792,15 @@ func TestOAuthMigration00018KeepsWhatWorks(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := provider.Up(ctx); err != nil {
+	if results, err := provider.Up(ctx); err != nil {
 		t.Fatalf("up: %v", err)
+	} else if len(results) != 1 || results[0].Source.Version != 18 {
+		t.Fatalf("up = %+v, want only migration 18", results)
+	}
+	if got := e.scalar(`SELECT json_agg(v ORDER BY id)::text FROM goose_db_version v`); got != versionHistory {
+		t.Errorf("migration version history changed: before %s, after %s", versionHistory, got)
 	}
 
-	testutil.Regrant(t, app.Pool)
 	if n := e.scalar(`SELECT count(*)::text FROM oauth_grants WHERE authorized_at > now() - interval '1 minute'`); n != "2" {
 		t.Errorf("grants with a fresh lifetime = %s, want 2 (both active grants)", n)
 	}
