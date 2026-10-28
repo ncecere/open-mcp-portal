@@ -41,7 +41,14 @@ expiry soak, a full mobile/all-page browser pass, Docker/conformance tests or de
 Kubernetes/action lint gates were not applicable: no `deploy/` or `.github/` files changed. Idle boundaries,
 cleanup and activity throttling are covered with an injected clock. Very large session inventories have not
 been load-tested; revoke-all currently deletes pending connect states per ended session.
-The external claim agreement for #62 remains outstanding. Next implementation: **#29 credential tool scopes**.
+The external claim agreement for #62 remains outstanding; its linked upstream repository returned 404 to the
+current credentials, so current upstream fixes/claims could not be verified. Next implementation lanes are
+**#29 scopes**, **#30 curation**, **#26 service connections** and **#44 database roles**, in isolated branches.
+
+The first release-candidate CI passed the full Go race suite, Docker builds, generated-code and deployment
+checks, and kindnet/Calico smoke tests, but failed dependency gates: Go 1.26.9's x509 advisory and Undici 8.12.1.
+The toolchain/builder are updated to Go 1.26.10 and the web lockfile to Undici 8.12.3; release gates are being
+rerun. No tag is published while CI is failing.
 
 ## v0.3.2 (2026-10-20)
 
