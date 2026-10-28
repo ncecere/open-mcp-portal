@@ -251,6 +251,56 @@ func (q *Queries) DenyApprovalRequest(ctx context.Context, arg DenyApprovalReque
 	return i, err
 }
 
+const expireApprovalRequest = `-- name: ExpireApprovalRequest :one
+UPDATE approval_requests SET status = 'expired', review_revision = review_revision + 1, terminal_at = $1
+WHERE id = $2 AND status IN ('pending','approved')
+    AND (expires_at <= $1::timestamptz OR valid_until <= $1::timestamptz)
+RETURNING id, rule_id, rule_revision, context_epoch, requester_kind, requester_id, requester_team_id, gateway_id, server_id, capability_id, exposed_name, tool_class, args_digest, binding_digest, capability_fingerprint, server_origin, preview_cipher, preview_truncated, preview_redacted, status, review_revision, decided_by, created_at, expires_at, valid_until, decided_at, used_at, terminal_at
+`
+
+type ExpireApprovalRequestParams struct {
+	AtTime *time.Time
+	ID     uuid.UUID
+}
+
+// Single-receipt synchronous expiry lets the service reuse a binding and
+// record that receipt's expiry audit atomically before another insert.
+func (q *Queries) ExpireApprovalRequest(ctx context.Context, arg ExpireApprovalRequestParams) (ApprovalRequest, error) {
+	row := q.db.QueryRow(ctx, expireApprovalRequest, arg.AtTime, arg.ID)
+	var i ApprovalRequest
+	err := row.Scan(
+		&i.ID,
+		&i.RuleID,
+		&i.RuleRevision,
+		&i.ContextEpoch,
+		&i.RequesterKind,
+		&i.RequesterID,
+		&i.RequesterTeamID,
+		&i.GatewayID,
+		&i.ServerID,
+		&i.CapabilityID,
+		&i.ExposedName,
+		&i.ToolClass,
+		&i.ArgsDigest,
+		&i.BindingDigest,
+		&i.CapabilityFingerprint,
+		&i.ServerOrigin,
+		&i.PreviewCipher,
+		&i.PreviewTruncated,
+		&i.PreviewRedacted,
+		&i.Status,
+		&i.ReviewRevision,
+		&i.DecidedBy,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ValidUntil,
+		&i.DecidedAt,
+		&i.UsedAt,
+		&i.TerminalAt,
+	)
+	return i, err
+}
+
 const expireApprovalRequests = `-- name: ExpireApprovalRequests :execrows
 WITH doomed AS (
     SELECT id FROM approval_requests WHERE status IN ('pending','approved')
@@ -958,7 +1008,7 @@ func (q *Queries) LockApprovalRule(ctx context.Context, id uuid.UUID) (ApprovalR
 
 const purgeApprovalRequestMetadata = `-- name: PurgeApprovalRequestMetadata :execrows
 WITH doomed AS (
-    SELECT id FROM approval_requests WHERE terminal_at < $1::timestamptz - interval '90 days'
+    SELECT id FROM approval_requests WHERE terminal_at < $1::timestamptz - interval '2160 hours'
     ORDER BY terminal_at, id LIMIT $2::integer FOR UPDATE SKIP LOCKED
 )
 DELETE FROM approval_requests WHERE id IN (SELECT id FROM doomed)

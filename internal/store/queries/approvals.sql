@@ -147,6 +147,14 @@ WHERE approval_requests.id = sqlc.arg(id) AND status = 'approved' AND binding_di
     AND expires_at > sqlc.arg(at_time)::timestamptz AND valid_until > sqlc.arg(at_time)::timestamptz
 RETURNING *;
 
+-- Single-receipt synchronous expiry lets the service reuse a binding and
+-- record that receipt's expiry audit atomically before another insert.
+-- name: ExpireApprovalRequest :one
+UPDATE approval_requests SET status = 'expired', review_revision = review_revision + 1, terminal_at = sqlc.arg(at_time)
+WHERE id = sqlc.arg(id) AND status IN ('pending','approved')
+    AND (expires_at <= sqlc.arg(at_time)::timestamptz OR valid_until <= sqlc.arg(at_time)::timestamptz)
+RETURNING *;
+
 -- Cleanup transactions also follow epoch -> request ordering. Synchronous
 -- transition/consumption queries enforce deadlines independently of this job.
 -- name: ExpireApprovalRequests :execrows
@@ -168,7 +176,7 @@ UPDATE approval_requests SET preview_cipher = NULL WHERE id IN (SELECT id FROM d
 -- Independent 90-day metadata retention, never audit's retention setting.
 -- name: PurgeApprovalRequestMetadata :execrows
 WITH doomed AS (
-    SELECT id FROM approval_requests WHERE terminal_at < sqlc.arg(at_time)::timestamptz - interval '90 days'
+    SELECT id FROM approval_requests WHERE terminal_at < sqlc.arg(at_time)::timestamptz - interval '2160 hours'
     ORDER BY terminal_at, id LIMIT sqlc.arg(batch_size)::integer FOR UPDATE SKIP LOCKED
 )
 DELETE FROM approval_requests WHERE id IN (SELECT id FROM doomed);
