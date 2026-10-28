@@ -78,8 +78,11 @@ func TestServiceConnectionCallbackAdministrativeSuspensionLockOrder(t *testing.T
 			if n := e.scalar(`SELECT count(*)::text FROM sessions WHERE user_id=$1`, e.owner.me.User.Id); n != "0" {
 				t.Fatal("suspension did not end browser access")
 			}
-			if code, _ := e.owner.call("GET", "/v1/me", nil, nil, nil); code == 200 {
-				t.Fatal("suspended browser remained authorized")
+			if code, _ := e.owner.call("GET", "/v1/me", nil, nil, nil); code != 401 {
+				t.Fatalf("suspended browser access = %d, want 401", code)
+			}
+			if got := sharedByName(t, e.editor, "suspension-race"); got.Status != "lapsed" {
+				t.Fatalf("suspended connector's shared access = %s, want lapsed", got.Status)
 			}
 			want := "1"
 			if winner == "suspension" {
