@@ -222,6 +222,22 @@ func TestAttentionHumanAndFreshRole(t *testing.T) {
 			a.PlatformRole = authz.PlatformAdmin
 			assertAttentionQueue(t, f, a)
 			assertAttentionQueue(t, f, f.reviewer, p.Receipt.ID)
+			// Repeat with an empty primary, where the platform role actually decides
+			// fallback eligibility. Both elevation and demotion must be freshly read.
+			in := f.rule.RuleInput
+			group := "fresh-role-fallback"
+			in.Approvers = []Selector{{Kind: "group", GroupName: &group}}
+			rule, replaceErr := f.s.ReplaceRule(context.Background(), f.reviewer, f.team.String(), f.rule.ID, f.rule.Revision, in)
+			if replaceErr != nil {
+				t.Fatal(replaceErr)
+			}
+			f.rule = rule
+			f.input.Binding.Epoch = mustEpoch(t, f.s)
+			fresh := beginFixture(t, f)
+			assertAttentionQueue(t, f, a)
+			a = f.admin
+			a.PlatformRole = authz.PlatformNone
+			assertAttentionQueue(t, f, a, fresh.Receipt.ID)
 			execFixture(t, f.db, `UPDATE users SET status='suspended' WHERE id=$1`, f.reviewer.UserID)
 			_, _, err := f.s.Attention(context.Background(), f.reviewer, nil, 20)
 			requireCode(t, err, "forbidden")
