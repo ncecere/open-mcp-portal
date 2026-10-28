@@ -44,25 +44,38 @@ func TestApprovalsHTTPRuleListMaximumPageAndContinuation(t *testing.T) {
 			if len(first.Items) != 200 || first.NextCursor == nil {
 				t.Fatalf("first page: n=%d cursor=%v", len(first.Items), first.NextCursor)
 			}
-			var next page
-			if code, ec := tc.s.call("GET", path+"?limit=200&cursor="+url.QueryEscape(*first.NextCursor), nil, &next, nil); code != 200 {
-				t.Fatalf("continuation rejected: %d %s", code, ec)
-			}
-			expected := 1
-			if tc.targetKind == "server" {
-				expected++
-			} // the original enabled fixture rule
-			if len(next.Items) != expected || next.NextCursor != nil {
-				t.Fatalf("last page: n=%d cursor=%v", len(next.Items), next.NextCursor)
+			expected := 202 // original enabled fixture plus 201 disabled team rules
+			if tc.targetKind == "gateway" {
+				// Admin reads are portal-wide metadata oversight, so this also
+				// includes the team rules seeded by the preceding subtest.
+				expected += 201
 			}
 			seen := map[string]bool{}
-			for _, r := range first.Items {
-				seen[r.ID.String()] = true
-			}
-			for _, r := range next.Items {
-				if seen[r.ID.String()] {
-					t.Fatal("duplicate across rule pages")
+			current := first
+			for pages := 0; ; pages++ {
+				if pages > 3 {
+					t.Fatal("rule pagination did not terminate")
 				}
+				for _, r := range current.Items {
+					if seen[r.ID.String()] {
+						t.Fatal("duplicate across rule pages")
+					}
+					seen[r.ID.String()] = true
+				}
+				if current.NextCursor == nil {
+					break
+				}
+				cursor := *current.NextCursor
+				current = page{}
+				if code, ec := tc.s.call("GET", path+"?limit=200&cursor="+url.QueryEscape(cursor), nil, &current, nil); code != 200 {
+					t.Fatalf("continuation rejected: %d %s", code, ec)
+				}
+				if len(current.Items) < 1 || len(current.Items) > 200 {
+					t.Fatalf("bad page size: %d", len(current.Items))
+				}
+			}
+			if len(seen) != expected {
+				t.Fatalf("rule pages lost rows: got %d want %d", len(seen), expected)
 			}
 		})
 	}

@@ -83,7 +83,11 @@ semantic writes append positive event IDs without a central transaction-row lock
 protected base plus the **SUM of MVCC-visible committed events**, not MAX or sequence last-value, so an
 older allocated event committing last still invalidates context. An initial epoch read before authentication
 never blesses an uncommitted mutation. Atomic compaction above 1,000 events preserves the exact total.
-Runtime can neither mutate/prune the journal nor advance/reset its sequence or base.
+Runtime can neither mutate/prune the journal nor advance/reset its sequence or base. Forward-only
+`00042` places the context, journal, owned sequence, stable binding-root slot and their protected functions
+in the owner-controlled `omp_private` schema. Runtime has schema usage, not creation; the binding-root
+ciphertext alone can be rewrapped. There are no public compatibility views. This preserves unmodified
+v0.4.0 strict-role startup against the new schema without granting forbidden rights.
 
 Final approval transactions acquire an owner-definer **EXCLUSIVE NOWAIT table fence** over all authority
 tables, including row-locking readers, before validation/consumption. Both legacy shared/exclusive helper
@@ -128,7 +132,8 @@ accounts can create requests and notify humans; no retired impersonation behavio
 
 ## Implementation/verification sequence
 
-1. Add migrations `00035`/`00036`, context journal/fence primitives and focused real split-role/lock-order tests.
+1. Add forward-only migrations `00035`–`00042`, context journal/fence, preview/identity safeguards and stable
+   binding-root storage, with focused real split-role/lock-order and previous-release compatibility tests.
 2. Add transactional rules/requests/review/preview services and OpenAPI-first browser contracts.
 3. Integrate transport-boundary consume/no-replay, live bindings and all three MCP response shapes.
 4. Add notification/attention/retention/rotation integration and browser UI.
@@ -138,4 +143,5 @@ Required regressions include dedup/quota/decision/consume races, audit rollback,
 argument binding, policy change-and-revert, reviewer revocation, connector lapse, no automatic replay,
 post-consume/no-send and effect-before-lost-response cases, secret sentinels, key rotation and retention.
 Do not enable rules with old serving replicas; an image rollback with active rules must block governed
-execution. Schema compatibility is not enforcement compatibility.
+execution. Schema compatibility is not enforcement compatibility. Use the new binary's key-rotation
+utility after applying these migrations; older utilities do not know the new ciphertext columns.
