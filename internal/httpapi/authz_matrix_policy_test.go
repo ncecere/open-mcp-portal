@@ -115,6 +115,52 @@ var matrixPolicies = map[string]policy{
 	"getMe":       {own: signedIn, build: func(*mctx) request { return get("/v1/me") }},
 	"listMyTeams": {own: signedIn, build: func(*mctx) request { return get("/v1/teams") }},
 
+	// Sensitive-call approvals are session-only; human reviewer eligibility is
+	// independent of a person's team role. Fresh bound receipts isolate writes.
+	"listMyApprovals": {own: signedIn, build: func(*mctx) request { return get("/v1/me/approvals") }},
+	"getApproval": {own: signedIn, build: func(c *mctx) request {
+		r := approvalMatrixReceipt(c, "get")
+		return get("/v1/approvals/" + r.ID.String())
+	}},
+	"decideApproval": {own: signedIn, build: func(c *mctx) request {
+		r := approvalMatrixReceipt(c, "decision")
+		return post("/v1/approvals/"+r.ID.String()+"/decision", map[string]any{"decision": "approve", "expectedArgsDigest": r.ArgsDigest, "expectedReviewRevision": r.ReviewRevision})
+	}},
+	"cancelApproval": {own: signedIn, build: func(c *mctx) request {
+		r := approvalMatrixReceipt(c, "cancel")
+		return post("/v1/approvals/"+r.ID.String()+"/cancel", map[string]any{"expectedReviewRevision": r.ReviewRevision})
+	}},
+	"renewApproval": {own: signedIn, build: func(c *mctx) request {
+		r := approvalMatrixReceipt(c, "renew")
+		return post("/v1/approvals/"+r.ID.String()+"/renew", map[string]any{"expectedReviewRevision": r.ReviewRevision})
+	}},
+	"listTeamApprovalRules": {scope: scopeTeam, own: admins, foreign: platform, build: func(c *mctx) request { return get(c.team("/approval-rules")) }},
+	"createTeamApprovalRule": {scope: scopeTeam, own: admins, build: func(c *mctx) request {
+		r := approvalMatrixRule(c, false, false)
+		return post(c.team("/approval-rules"), r.RuleInput)
+	}},
+	"replaceTeamApprovalRule": {scope: scopeTeam, own: admins, build: func(c *mctx) request {
+		r := approvalMatrixRule(c, false, true)
+		return request{method: "PUT", path: c.team("/approval-rules/" + r.ID.String()), body: r.RuleInput, headers: rev1}
+	}},
+	"deleteTeamApprovalRule": {scope: scopeTeam, own: admins, build: func(c *mctx) request {
+		r := approvalMatrixRule(c, false, true)
+		return del(c.team("/approval-rules/" + r.ID.String())).h(rev1)
+	}},
+	"adminListApprovalRules": {own: platform, build: func(*mctx) request { return get("/v1/admin/approval-rules") }},
+	"adminCreateApprovalRule": {own: padmin, build: func(c *mctx) request {
+		r := approvalMatrixRule(c, true, false)
+		return post("/v1/admin/approval-rules", r.RuleInput)
+	}},
+	"adminReplaceApprovalRule": {own: padmin, build: func(c *mctx) request {
+		r := approvalMatrixRule(c, true, true)
+		return request{method: "PUT", path: "/v1/admin/approval-rules/" + r.ID.String(), body: r.RuleInput, headers: rev1}
+	}},
+	"adminDeleteApprovalRule": {own: padmin, build: func(c *mctx) request {
+		r := approvalMatrixRule(c, true, true)
+		return del("/v1/admin/approval-rules/" + r.ID.String()).h(rev1)
+	}},
+
 	// Teams, members, invites and the team audit log.
 	"getTeam":     {scope: scopeTeam, own: members, foreign: platform, build: func(c *mctx) request { return get(c.team("")) }},
 	"listMembers": {scope: scopeTeam, own: members, foreign: platform, build: func(c *mctx) request { return get(c.team("/members")) }},
