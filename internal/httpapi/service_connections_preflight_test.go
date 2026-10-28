@@ -13,6 +13,25 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 )
 
+func TestServiceConnectionBoundProviderPreflightDoesNotWait(t *testing.T) {
+	e, _, _, _, c := serviceOAuthSetup(t)
+	gw := e.createGateway(e.owner, toolsTeam+"/gateways", "other-destination")
+	e.mustSetCaps(e.owner, toolsTeam+"/gateways/"+gw.Id.String(), sel(e.capID(e.owner, e.server, "tool", "whoami")))
+	// e.server is visible, but this OAuth provider is bound to another server.
+	// Keep both possible blocking rows busy until the refusal is returned.
+	pe := &provEnv{gwEnv: e.gwEnv}
+	before := serviceMutationSnapshot(pe)
+	g := pauseServiceMutation(t, pe, `SELECT 1 FROM service_connections WHERE id=$1 FOR UPDATE`, c.Id)
+	if _, err := g.tx.Exec(g.ctx, `SELECT 1 FROM mcp_servers WHERE id=$1 FOR UPDATE`, e.server.Id); err != nil {
+		t.Fatal(err)
+	}
+	done := g.launch("PUT", sharedBase+"/"+c.Id.String(), map[string]any{"accounts": []uuid.UUID{}, "servers": []apitypes.ServiceConnectionGrant{{ServerId: e.server.Id, Origin: registry.OriginOf(e.server.Url), Scopes: []string{"repo"}}}}, c.Revision)
+	g.finish(done, 404, "server_not_found")
+	if after := serviceMutationSnapshot(pe); after != before {
+		t.Fatal("wrong bound destination changed connection state")
+	}
+}
+
 func TestServiceConnectionGrantReachabilityOncePerPass(t *testing.T) {
 	var reads atomic.Int32
 	e := newProvEnvHook(t, func(d *httpapi.Deps) {
