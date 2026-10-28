@@ -2,6 +2,7 @@ package approvals
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -12,6 +13,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ncecere/open-mcp-portal/internal/authz"
+	"github.com/ncecere/open-mcp-portal/internal/secrets"
+	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
+	"github.com/ncecere/open-mcp-portal/internal/testutil"
 )
 
 type queueTrace struct {
@@ -87,13 +91,52 @@ func seedQueue(t *testing.T, f *serviceFixture, base uuid.UUID, n int, requester
 	}
 }
 
+// Unlike the general service fixture (which deliberately forces split roles),
+// this minimal queue fixture migrates and authenticates in each actual mode.
+func newQueueModeFixture(t *testing.T, split bool) *serviceFixture {
+	t.Helper()
+	if split {
+		t.Setenv("OMP_TEST_SPLIT_ROLES", "1")
+	} else {
+		t.Setenv("OMP_TEST_SPLIT_ROLES", "0")
+	}
+	db, _ := testutil.NewDB(t)
+	f := &serviceFixture{db: db, owner: testutil.OwnerPool(t, db), q: dbgen.New(db), team: uuid.New(), saTeam: uuid.New(), server: uuid.New(), cap: uuid.New(), gateway: uuid.New()}
+	for i, a := range []*authz.Actor{&f.requester, &f.reviewer, &f.outsider} {
+		a.UserID = uuid.New()
+		a.PlatformRole = authz.PlatformNone
+		execFixture(t, db, `INSERT INTO users(id,oidc_issuer,oidc_subject,email) VALUES ($1,'queue-mode',$2,$3)`, a.UserID, fmt.Sprint(i), fmt.Sprintf("q%d@test.invalid", i))
+	}
+	execFixture(t, db, `INSERT INTO teams(id,slug,name) VALUES ($1,'queue-team','Queue')`, f.team)
+	execFixture(t, db, `INSERT INTO team_members(team_id,user_id,role) VALUES ($1,$2,'owner')`, f.team, f.reviewer.UserID)
+	execFixture(t, db, `INSERT INTO mcp_servers(id,team_id,slug,name,url,publish_state,published_at,enabled) VALUES ($1,$2,'server','Server','https://server.test/mcp','published',now(),true)`, f.server, f.team)
+	execFixture(t, db, `INSERT INTO mcp_capabilities(id,server_id,kind,name,definition,fingerprint,approved_fingerprint,tool_class) VALUES ($1,$2,'tool','delete','{}',repeat('a',64),repeat('a',64),'destructive')`, f.cap, f.server)
+	execFixture(t, db, `INSERT INTO gateways(id,slug,name,owner_kind,enabled) VALUES ($1,'platform','Platform','platform',true)`, f.gateway)
+	execFixture(t, db, `INSERT INTO gateway_capabilities(gateway_id,capability_id) VALUES ($1,$2)`, f.gateway, f.cap)
+	execFixture(t, db, `INSERT INTO gateway_grants(gateway_id,subject_kind,user_id) VALUES ($1,'user',$2)`, f.gateway, f.requester.UserID)
+	box, err := secrets.New([]byte(strings.Repeat("k", 32)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.s, err = New(db, box, nil, "https://portal.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.rule, err = f.s.CreateRule(context.Background(), f.reviewer, f.team.String(), RuleInput{Name: "Queue", TargetKind: "server", TargetID: f.server, Classes: []string{"destructive"}, Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.input = BeginInput{Binding: Binding{Epoch: mustEpoch(t, f.s), RequesterKind: "user", RequesterID: f.requester.UserID, GatewayID: f.gateway, ServerID: f.server, CapabilityID: f.cap, ExposedName: "server__delete", ToolClass: ptrString("destructive"), CapabilityFingerprint: strings.Repeat("a", 64), ServerOrigin: "https://server.test"}, Arguments: json.RawMessage(`{}`), CredentialExpiresAt: time.Now().Add(time.Hour)}
+	return f
+}
+
 func TestQueueEmptyHistoryHasNoFenceOrWriterWait(t *testing.T) {
-	for _, owner := range []bool{false, true} {
-		t.Run(fmt.Sprintf("owner=%v", owner), func(t *testing.T) {
-			f := newServiceFixture(t)
+	for _, split := range []bool{false, true} {
+		t.Run(fmt.Sprintf("split=%v", split), func(t *testing.T) {
+			f := newQueueModeFixture(t, split)
 			p := beginFixture(t, f)
 			tr := &queueTrace{pause: make(chan uint32, 1), release: make(chan struct{})}
-			traceQueue(t, f, owner, tr)
+			traceQueue(t, f, false, tr)
 			type result struct {
 				rows []Receipt
 				next string
