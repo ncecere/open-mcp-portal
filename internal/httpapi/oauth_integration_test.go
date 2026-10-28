@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 
 	"github.com/ncecere/open-mcp-portal/internal/httpapi"
 	"github.com/ncecere/open-mcp-portal/internal/httpapi/apitypes"
+	"github.com/ncecere/open-mcp-portal/internal/ratelimit"
 	"github.com/ncecere/open-mcp-portal/internal/testutil"
 )
 
@@ -931,36 +933,77 @@ func TestOAuthMetadataDocumentRules(t *testing.T) {
 }
 
 func TestOAuthRateLimits(t *testing.T) {
-	app := newTestApp(t, nil)
-	for i := 1; i <= 11; i++ {
-		status, out, hdr := jsonPost(t, app, "/oauth/register", map[string]any{"redirect_uris": []string{testRedirect}})
-		switch {
-		case i <= 10 && status != 201:
-			t.Fatalf("registration %d = %d %v", i, status, out)
-		case i == 11 && (status != 429 || out["error"] != "slow_down" || hdr.Get("Retry-After") == ""):
-			t.Fatalf("registration 11 = %d %v", i, out)
-		}
+	// Counts belong to clock-aligned minutes, not to a minute after the
+	// first request. Even a sub-second burst can straddle the DB clock's
+	// boundary. Use the real in-memory Store with its clock seam so each
+	// burst stays in one window, while still exercising the HTTP gates.
+	boundary := time.Unix(1020, 0)
+	var now atomic.Int64 // the HTTP server reads the clock in another goroutine
+	now.Store(boundary.Add(-500 * time.Microsecond).UnixNano())
+	app := newTestAppDeps(t, nil, testutil.Logger(), func(d *httpapi.Deps) {
+		d.RateStore = ratelimit.NewWithClock(func() time.Time { return time.Unix(0, now.Load()) })
+	})
+	endpoints := []struct {
+		name         string
+		limit        int
+		allowed      int
+		allowedError string
+		call         func(*testing.T) (int, map[string]any, http.Header)
+	}{
+		{"register", 10, 201, "", func(t *testing.T) (int, map[string]any, http.Header) {
+			return jsonPost(t, app, "/oauth/register", map[string]any{"redirect_uris": []string{testRedirect}})
+		}},
+		{"token", 60, 400, "invalid_grant", func(t *testing.T) (int, map[string]any, http.Header) {
+			return tokenCall(t, app, "/oauth/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"x"}, "refresh_token": {"y"}})
+		}},
+		{"authorize", 60, 302, "", func(t *testing.T) (int, map[string]any, http.Header) {
+			res, body := authorize(t, app, nil, url.Values{"client_id": {"x"}})
+			var out map[string]any
+			if res.StatusCode == 429 {
+				if err := json.Unmarshal([]byte(body), &out); err != nil {
+					t.Fatal(err)
+				}
+			}
+			return res.StatusCode, out, res.Header
+		}},
+		{"revoke", 60, 200, "", func(t *testing.T) (int, map[string]any, http.Header) {
+			return tokenCall(t, app, "/oauth/revoke", url.Values{"token": {"x"}, "client_id": {"x"}})
+		}},
 	}
-	for i := 1; i <= 61; i++ {
-		status, out, _ := tokenCall(t, app, "/oauth/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"x"}, "refresh_token": {"y"}})
-		switch {
-		case i <= 60 && status != 400:
-			t.Fatalf("token %d = %d %v", i, status, out)
-		case i == 61 && status != 429:
-			t.Fatalf("token 61 = %d %v", status, out)
-		}
+	for _, phase := range []struct {
+		name       string
+		now        time.Time
+		retryAfter string
+	}{
+		{"before_boundary", boundary.Add(-500 * time.Microsecond), "1"},
+		// Keep the same Store and client address: the next minute must get
+		// a fresh allowance, not continue the preceding window's counts.
+		{"at_boundary", boundary, "60"},
+	} {
+		t.Run(phase.name, func(t *testing.T) {
+			now.Store(phase.now.UnixNano())
+			for _, endpoint := range endpoints {
+				t.Run(endpoint.name, func(t *testing.T) {
+					for i := 1; i <= endpoint.limit+1; i++ {
+						status, out, hdr := endpoint.call(t)
+						if i <= endpoint.limit {
+							if status != endpoint.allowed || (endpoint.allowedError != "" && out["error"] != endpoint.allowedError) {
+								t.Fatalf("request %d = %d %v, want %d %s", i, status, out, endpoint.allowed, endpoint.allowedError)
+							}
+							if hdr.Get("Retry-After") != "" {
+								t.Fatalf("allowed request %d has Retry-After: %q", i, hdr.Get("Retry-After"))
+							}
+							continue
+						}
+						if status != 429 || out["error"] != "slow_down" || hdr.Get("Retry-After") != phase.retryAfter {
+							t.Fatalf("request %d = %d %v Retry-After=%q, want 429 slow_down Retry-After=%s", i, status, out, hdr.Get("Retry-After"), phase.retryAfter)
+						}
+						if hdr.Get("Content-Type") != "application/json" || hdr.Get("Cache-Control") != "no-store" || hdr.Get("Pragma") != "no-cache" || hdr.Get("WWW-Authenticate") != "" {
+							t.Fatalf("rate-limit response headers = %v", hdr)
+						}
+					}
+				})
+			}
+		})
 	}
-	for i := 1; i <= 61; i++ {
-		res, _ := authorize(t, app, nil, url.Values{"client_id": {"x"}})
-		if want := map[bool]int{true: 302, false: 429}[i <= 60]; res.StatusCode != want {
-			t.Fatalf("authorize %d = %d, want %d", i, res.StatusCode, want)
-		}
-	}
-	for i := 1; i <= 61; i++ {
-		status, _, _ := tokenCall(t, app, "/oauth/revoke", url.Values{"token": {"x"}, "client_id": {"x"}})
-		if want := map[bool]int{true: 200, false: 429}[i <= 60]; status != want {
-			t.Fatalf("revoke %d = %d, want %d", i, status, want)
-		}
-	}
-	_ = time.Second
 }
