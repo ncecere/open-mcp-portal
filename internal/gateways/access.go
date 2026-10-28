@@ -18,6 +18,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 	"github.com/ncecere/open-mcp-portal/internal/teams"
+	"github.com/ncecere/open-mcp-portal/internal/toolscope"
 )
 
 // Who may use a gateway: a team gateway's members, and the teams, people
@@ -41,6 +42,7 @@ const (
 // DeniedRole is why a selected, served capability is refused to a member
 // whose role is below its minimum.
 const DeniedRole = "role"
+const DeniedToolScope = "tool_scope"
 
 // DeniedGatewayDisabled is why a switched-off gateway serves nobody (a team
 // gateway of an archived team serves nobody either: ReasonTeamArchived).
@@ -79,6 +81,7 @@ func groupsOf(u dbgen.User) []string {
 
 // Caller is a person's access to one gateway.
 type Caller struct {
+	ToolPolicy toolscope.Policy
 	// Role is the person's role in a team gateway's team.
 	Role string
 	// Access says why they may use it (empty: they may not).
@@ -101,7 +104,7 @@ func Intersect(person, relay Caller) Caller {
 	if authz.RoleAtLeast(person.Role, relay.Role) {
 		role = relay.Role
 	}
-	return Caller{Role: role, Access: person.Access}
+	return Caller{Role: role, Access: person.Access, ToolPolicy: toolscope.Intersect(person.ToolPolicy, relay.ToolPolicy)}
 }
 
 // CallerOf works out a person's access to a gateway from their current
@@ -119,13 +122,21 @@ func callerOf(ctx context.Context, q *dbgen.Queries, g dbgen.Gateway, u dbgen.Us
 		}
 		return Caller{Role: role, Access: []string{AccessTeamMember}}, nil
 	}
-	kinds, err := q.GatewayGrantKindsForUser(ctx, dbgen.GatewayGrantKindsForUserParams{
+	grants, err := q.GatewayGrantsForUser(ctx, dbgen.GatewayGrantsForUserParams{
 		GatewayID: g.ID, UserID: uuid.NullUUID{UUID: u.ID, Valid: true}, Groups: groupsOf(u),
 	})
 	if err != nil {
 		return Caller{}, err
 	}
-	return Caller{Access: grantKinds(kinds)}, nil
+	kinds := []string{}
+	scopes := []*toolscope.Scope{}
+	for _, gr := range grants {
+		if !slices.Contains(kinds, gr.SubjectKind) {
+			kinds = append(kinds, gr.SubjectKind)
+		}
+		scopes = append(scopes, toolscope.Stored(gr.ToolScope))
+	}
+	return Caller{Access: grantKinds(kinds), ToolPolicy: toolscope.Union(scopes...)}, nil
 }
 
 // Offer is a selected capability as one caller sees it.
@@ -148,6 +159,8 @@ func Evaluate(g dbgen.Gateway, items []Selected, c Caller) []Offer {
 			o.Denied = it.Reason
 		case g.OwnerKind == OwnerTeam && !authz.MinRoleAllows(c.Role, it.MinRole):
 			o.Denied = DeniedRole
+		case it.Capability.Kind == "tool" && !c.ToolPolicy.Allows(toolscope.Class(it.Capability.ToolClass), it.ExposedName):
+			o.Denied = DeniedToolScope
 		default:
 			o.Allowed = true
 		}
@@ -250,11 +263,15 @@ func serviceAccountCaller(ctx context.Context, q *dbgen.Queries, g dbgen.Gateway
 		}
 		return Caller{Role: role, Access: []string{AccessServiceAccount}}, nil
 	}
-	ok, err := q.TeamHasGatewayGrant(ctx, dbgen.TeamHasGatewayGrantParams{GatewayID: g.ID, TeamID: uuid.NullUUID{UUID: teamID, Valid: true}})
-	if err != nil || !ok {
+	grants, err := q.GatewayGrantsForTeam(ctx, dbgen.GatewayGrantsForTeamParams{GatewayID: g.ID, TeamID: uuid.NullUUID{UUID: teamID, Valid: true}})
+	if err != nil || len(grants) == 0 {
 		return Caller{}, err
 	}
-	return Caller{Access: []string{AccessTeamGrant}}, nil
+	scopes := []*toolscope.Scope{}
+	for _, gr := range grants {
+		scopes = append(scopes, toolscope.Stored(gr.ToolScope))
+	}
+	return Caller{Access: []string{AccessTeamGrant}, ToolPolicy: toolscope.Union(scopes...)}, nil
 }
 
 // Resolve finds a gateway by slug (404 gateway_not_found).
@@ -293,10 +310,13 @@ func (s *Service) ListMine(ctx context.Context, u dbgen.User) ([]Mine, error) {
 	}
 	out := make([]Mine, 0, len(rows))
 	for _, r := range rows {
-		c := Caller{Role: r.MemberRole, Access: grantKinds(r.GrantKinds)}
-		if r.Gateway.OwnerKind == OwnerTeam {
-			c.Access = []string{AccessTeamMember}
+		c, err := callerOf(ctx, s.q, r.Gateway, u)
+		if err != nil {
+			return nil, err
 		}
+		if !c.Allowed() {
+			continue
+		} // a grant/membership may have ended since the candidate query
 		offers, err := s.Offers(ctx, r.Gateway, c)
 		if err != nil {
 			return nil, err
@@ -325,9 +345,12 @@ func (s *Service) allowedOffers(ctx context.Context, u dbgen.User) ([]Offer, err
 	}
 	var out []Offer
 	for _, r := range rows {
-		c := Caller{Role: r.MemberRole, Access: grantKinds(r.GrantKinds)}
-		if r.Gateway.OwnerKind == OwnerTeam {
-			c.Access = []string{AccessTeamMember}
+		c, err := callerOf(ctx, s.q, r.Gateway, u)
+		if err != nil {
+			return nil, err
+		}
+		if !c.Allowed() {
+			continue
 		}
 		offers, err := s.Offers(ctx, r.Gateway, c)
 		if err != nil {
@@ -430,7 +453,7 @@ func (s *Service) ReachableServers(ctx context.Context, u dbgen.User) ([]Reachab
 // (AccessTeamGrant). Offered counts what the account reaches now. It doesn't
 // look at whether the account is enabled; an archived team gets none (its
 // accounts' keys are refused).
-func (s *Service) ListForServiceAccount(ctx context.Context, teamID uuid.UUID, role string) ([]Mine, error) {
+func (s *Service) ListForServiceAccount(ctx context.Context, teamID uuid.UUID, role string, scopes ...[]byte) ([]Mine, error) {
 	t, err := s.q.GetTeamByID(ctx, teamID)
 	if err != nil {
 		return nil, err
@@ -444,9 +467,20 @@ func (s *Service) ListForServiceAccount(ctx context.Context, teamID uuid.UUID, r
 	}
 	out := make([]Mine, 0, len(rows))
 	for _, r := range rows {
-		c := Caller{Access: []string{AccessTeamGrant}}
+		c, err := serviceAccountCaller(ctx, s.q, r.Gateway, teamID, role)
+		if err != nil {
+			return nil, err
+		}
+		if !c.Allowed() {
+			continue
+		}
+		// Management views keep their existing MyGatewayAccess vocabulary;
+		// service_account is an internal runtime reason, not an API enum value.
 		if r.Gateway.OwnerKind == OwnerTeam {
-			c = Caller{Role: role, Access: []string{AccessTeamMember}}
+			c.Access = []string{AccessTeamMember}
+		}
+		for _, raw := range scopes {
+			c.ToolPolicy = toolscope.Intersect(c.ToolPolicy, toolscope.Union(toolscope.Stored(raw)))
 		}
 		offers, err := s.Offers(ctx, r.Gateway, c)
 		if err != nil {
@@ -541,6 +575,7 @@ func (s *Service) Grants(ctx context.Context, a authz.Actor, id uuid.UUID) ([]db
 // GrantInput names a grant's subject: exactly one of Team (slug or ID),
 // UserEmail or Group, matching Kind.
 type GrantInput struct {
+	ToolScope              []byte
 	Kind                   string
 	Team, UserEmail, Group *string
 }
@@ -555,6 +590,10 @@ func (s *Service) AddGrant(ctx context.Context, a authz.Actor, id uuid.UUID, in 
 	if !a.IsPlatformAdmin() {
 		return dbgen.ListGatewayGrantsRow{}, errAdminOnly
 	}
+	toolScope, err := toolscope.Canonical(in.ToolScope)
+	if err != nil {
+		return dbgen.ListGatewayGrantsRow{}, err
+	}
 	set := 0
 	for _, p := range []*string{in.Team, in.UserEmail, in.Group} {
 		if p != nil {
@@ -565,7 +604,7 @@ func (s *Service) AddGrant(ctx context.Context, a authz.Actor, id uuid.UUID, in 
 		return dbgen.ListGatewayGrantsRow{}, errInvalidGrant
 	}
 	var grantID uuid.UUID
-	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
+	err = store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
 		g, err := getGateway(ctx, q, id, true)
 		if err != nil {
 			return err
@@ -573,7 +612,7 @@ func (s *Service) AddGrant(ctx context.Context, a authz.Actor, id uuid.UUID, in 
 		if g.OwnerKind != OwnerPlatform {
 			return errTeamGateway
 		}
-		p := dbgen.InsertGatewayGrantParams{GatewayID: g.ID, SubjectKind: in.Kind, AddedBy: by(a)}
+		p := dbgen.InsertGatewayGrantParams{GatewayID: g.ID, SubjectKind: in.Kind, AddedBy: by(a), ToolScope: toolScope}
 		subject := ""
 		switch {
 		case in.Kind == SubjectTeam && in.Team != nil:
@@ -614,7 +653,7 @@ func (s *Service) AddGrant(ctx context.Context, a authz.Actor, id uuid.UUID, in 
 		}
 		grantID = row.ID
 		e := a.Audit("gateway.grant_add", "gateway_grant", row.ID.String())
-		e.After = map[string]any{"subjectKind": in.Kind, "subject": subject}
+		e.After = map[string]any{"subjectKind": in.Kind, "subject": subject, "toolScope": toolscope.Stored(row.ToolScope)}
 		e.Metadata = map[string]any{"name": g.Name + " · " + subject, "gatewayId": g.ID.String(), "gatewayName": g.Name}
 		return audit.Record(ctx, q, e)
 	})
@@ -654,7 +693,7 @@ func (s *Service) RemoveGrant(ctx context.Context, a authz.Actor, id, grantID uu
 			return err
 		}
 		e := a.Audit("gateway.grant_remove", "gateway_grant", row.ID.String())
-		e.Before = map[string]any{"subjectKind": row.SubjectKind, "subject": subject}
+		e.Before = map[string]any{"subjectKind": row.SubjectKind, "subject": subject, "toolScope": toolscope.Stored(row.ToolScope)}
 		e.Metadata = map[string]any{"name": g.Name + " · " + subject, "gatewayId": g.ID.String(), "gatewayName": g.Name}
 		return audit.Record(ctx, q, e)
 	})

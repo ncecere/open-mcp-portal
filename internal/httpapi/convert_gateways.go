@@ -73,7 +73,7 @@ func toAPIGatewayOption(o gateways.Option) apitypes.GatewayOption {
 func toAPIGrant(r dbgen.ListGatewayGrantsRow) apitypes.GatewayGrant {
 	g := r.GatewayGrant
 	out := apitypes.GatewayGrant{Id: g.ID, SubjectKind: apitypes.GatewayGrantSubjectKind(g.SubjectKind), CreatedAt: g.AddedAt,
-		AddedByName: nonEmpty(r.AddedByName)}
+		AddedByName: nonEmpty(r.AddedByName), ToolScope: toAPIToolScope(g.ToolScope)}
 	switch {
 	case g.TeamID.Valid:
 		out.Team = &apitypes.GrantTeam{Id: g.TeamID.UUID, Slug: r.TeamSlug, Name: r.TeamName}
@@ -112,7 +112,7 @@ func toAPIKey(v apikeys.View, now time.Time) apitypes.ApiKey {
 	exp := k.ExpiresAt
 	out := apitypes.ApiKey{
 		Id: k.ID, Name: k.Name, Prefix: k.Prefix, Status: apitypes.ApiKeyStatus(apikeys.Status(k, now)),
-		CreatedAt: k.CreatedAt, ExpiresAt: &exp, LastUsedAt: k.LastUsedAt, RevokedAt: k.RevokedAt,
+		CreatedAt: k.CreatedAt, ExpiresAt: &exp, LastUsedAt: k.LastUsedAt, RevokedAt: k.RevokedAt, ToolScope: toAPIToolScope(k.ToolScope),
 		Gateways: make([]apitypes.ApiKeyGateway, len(v.Gateways)),
 	}
 	for i, g := range v.Gateways {

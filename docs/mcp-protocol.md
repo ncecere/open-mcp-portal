@@ -148,6 +148,12 @@ fresh state).
 
 ## Authorization
 
+Personal keys, service-account keys/accounts, OAuth grants and matching platform gateway grants can also limit
+tools by trusted class or exact exposed name (OAuth: classes only). Matching grants union; independent layers
+intersect. Lists and calls apply the same filter before credentials or consent are requested, in both protocol
+eras. Refusals are normal unknown-tool responses and recorded `denied` / `tool_scope`; prompts and resources
+are unchanged. An account's live ceiling also limits its existing keys and relayed person calls.
+
 Aligned with the 2026-07-28 authorization pages (diff of `internal/oauth` against them):
 
 | Spec | State |
@@ -165,7 +171,7 @@ Aligned with the 2026-07-28 authorization pages (diff of `internal/oauth` agains
 | The authorization endpoint looks at the client only after sign-in | **new in v0.2.2**: `GET /oauth/authorize` without a browser session redirects to sign in before the client's metadata document is fetched or anything about the request is checked; the errors a client would see for a bad `client_id` or `redirect_uri` are shown as a page after sign-in. Metadata document fetches are limited to 20 a minute per source address. Clients are unaffected: they already open the browser and wait for the redirect |
 | Refresh tokens have an absolute lifetime | **new in v0.2.2**: `OAUTH_REFRESH_ABSOLUTE_TTL` (default 180 days, `0` = none) after the person last signed the app in; a refresh after that is `400 invalid_grant` (RFC 6749 §5.2) and the client starts a new authorization. A refresh token presented again within 30 seconds of its rotation gets the same `access_token` and `refresh_token` as the first answer (a client that lost the response, or two refreshes at once), and `expires_in` is what is left of the access token; later it is `invalid_grant` and the connection is revoked. A client that stores the new refresh token after every refresh, as OAuth 2.1 requires, is unaffected |
 | A trusted client signing in from this computer asks once | **new in v0.2.2**: a trusted metadata-document client with a loopback redirect (`http://localhost:<port>/…`) gets a short confirmation page the first time a person signs it in to a gateway (`Continue` or `Cancel`); `Cancel` is `access_denied` to the redirect. Clients with `https` redirects (claude.ai, vscode.dev) are unaffected. Claude Code's flow is otherwise unchanged |
-| `scope` in `WWW-Authenticate`, `scopes_supported` | not applicable: gateway tokens carry no scopes (access is decided per call from the person's grants) |
+| Tool-class scopes (`scopes_supported`) | `omp:read`, `omp:write`, `omp:destructive` are advertised by both metadata endpoints and accepted at authorization. Missing scope is unrestricted, including unclassified tools; explicit all-three excludes unclassified tools. Restricted token responses carry canonical `scope` (empty for deny-all); unrestricted responses omit it. Refresh accepts omitted/equal scope only. Out-of-scope tools remain unknown, not `insufficient_scope`; no step-up challenge. See [credential scopes](credential-scopes.md). |
 | Client credentials bound to the issuer, re-registration when the authorization server changes (SEP-2352) | a client-side rule; for the portal as a *client* of upstream servers see [Authorization of upstream servers](#authorization-of-upstream-servers) |
 
 Claude Code (a metadata document) and pi (self-registration) are covered by tests in both eras

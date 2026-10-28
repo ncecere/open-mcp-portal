@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/ncecere/open-mcp-portal/internal/apperr"
 	"github.com/ncecere/open-mcp-portal/internal/auth"
 	"github.com/ncecere/open-mcp-portal/internal/httpx"
 	"github.com/ncecere/open-mcp-portal/internal/oauth"
@@ -115,6 +116,7 @@ func (a *api) oauthResourceMetadata(w http.ResponseWriter, r *http.Request) {
 		"authorization_servers":    []string{a.OAuth.Issuer()},
 		"bearer_methods_supported": []string{"header"},
 		"resource_name":            a.Config.Instance.Name,
+		"scopes_supported":         []string{"omp:read", "omp:write", "omp:destructive"},
 	})
 }
 
@@ -132,6 +134,7 @@ func (a *api) oauthServerMetadata(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=60")
 	doc := map[string]any{
 		"issuer":                                         iss,
+		"scopes_supported":                               []string{"omp:read", "omp:write", "omp:destructive"},
 		"authorization_endpoint":                         iss + "/oauth/authorize",
 		"token_endpoint":                                 iss + "/oauth/token",
 		"revocation_endpoint":                            iss + "/oauth/revoke",
@@ -206,7 +209,8 @@ func (a *api) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		a.oauthPage(w, r, err)
 		return
 	}
-	state, err := a.OAuth.ConsentState(r.Context(), user.ID, c, g.ID, req.RedirectURI)
+	requested, _ := req.ToolScope() // Check already validated it after the redirect URI.
+	state, err := a.OAuth.ConsentState(r.Context(), user.ID, c, g.ID, req.RedirectURI, requested)
 	if err != nil {
 		a.oauthPage(w, r, err)
 		return
@@ -217,6 +221,10 @@ func (a *api) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := auth.Identity{User: user}.Actor(httpx.RequestID(r.Context()), httpx.ClientIP(r, a.Config.TrustedProxies))
 	to, err := a.OAuth.Approve(r.Context(), actor, c, g, req, oauth.ConsentTrusted)
+	if e, ok := apperr.As(err); ok && e.Code == "consent_required" {
+		http.Redirect(w, r, oauthConsentPath+"?"+r.URL.RawQuery, http.StatusFound)
+		return
+	}
 	if err != nil {
 		a.oauthPage(w, r, err)
 		return
@@ -326,10 +334,14 @@ func (a *api) oauthToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := r.PostForm
+	if len(f["scope"]) > 1 {
+		oauthJSONError(w, http.StatusBadRequest, "invalid_request", "The scope parameter must appear at most once.")
+		return
+	}
 	out, err := a.OAuth.Token(r.Context(), oauth.TokenRequest{
 		GrantType: f.Get("grant_type"), ClientID: formClientID(r), Code: f.Get("code"), RedirectURI: f.Get("redirect_uri"),
 		CodeVerifier: f.Get("code_verifier"), RefreshToken: f.Get("refresh_token"), Resource: f.Get("resource"),
-		RequestID: httpx.RequestID(r.Context()), ClientIP: httpx.ClientIP(r, a.Config.TrustedProxies),
+		RequestID: httpx.RequestID(r.Context()), ClientIP: httpx.ClientIP(r, a.Config.TrustedProxies), Scope: f.Get("scope"), ScopePresent: f.Has("scope"),
 	})
 	if err != nil {
 		a.oauthFail(w, r, err)

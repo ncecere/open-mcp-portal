@@ -99,8 +99,10 @@ Code: `internal/oauth` (authorization server: `authorize.go`, `clients.go`, `met
   `bearer_methods_supported`, `resource_name` = instance name; served for **any** well-formed slug without looking the
   gateway up, so it doesn't reveal which gateways exist; a malformed slug is `404`), `GET /.well-known/oauth-authorization-server`
   (code + `S256` only, `none` auth, `client_id_metadata_document_supported`, `authorization_response_iss_parameter_supported`,
-  registration and revocation endpoints; no `scopes_supported`: there are no scopes, a `scope` parameter is ignored and
-  the token response has none), `GET /oauth/authorize`, `POST /oauth/token`, `POST /oauth/register`, `POST /oauth/revoke`
+  registration and revocation endpoints; `scopes_supported` advertises `omp:read`, `omp:write`, `omp:destructive`.
+  Authorization validates requested classes and restricted token responses carry their `scope`; missing scope is
+  unrestricted, not the explicit three-class set. See [credential scopes](credential-scopes.md)),
+  `GET /oauth/authorize`, `POST /oauth/token`, `POST /oauth/register`, `POST /oauth/revoke`
   (`GET` on the three POST endpoints is `405`, never the web app). The `/mcp` 401 challenge is unchanged.
 - **Authorize order** (as of v0.2.2; see "As built: v0.2.2" for what changed). The **browser session** comes first:
   none → `302` to sign in and back (`/auth/login?next=…` with OIDC; the web app's sign-in page `/?next=…` with only the
@@ -185,7 +187,8 @@ apps, DCR expiry, document fetch rules, rate limits, re-checks without reaching 
 off/archived/expired/revoked/deleted refusals, JWT claims verified by the fake server, scope, call filter, secret
 sentinel), and the authz matrix for every new operation.
 
-**Not built / gaps:** rate limits on `/mcp` itself; per-tool scopes or step-up; private-use redirect schemes; CORS on
+**Original Phase 4 gaps** (tool ceilings are now implemented by [#29](credential-scopes.md); OAuth named scopes and
+step-up remain out of scope): rate limits on `/mcp` itself; private-use redirect schemes; CORS on
 the OAuth endpoints; previous-pepper support; DCR expiry runs only when someone registers (an expired registration is
 refused regardless); rate counters are per process.
 

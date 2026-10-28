@@ -8,7 +8,11 @@ Every gateway has one MCP endpoint, `<gateway URL>/mcp/<gateway>`, for example `
 | You, from a script or a client that can't sign in | A **personal API key** (`omp_…`) | Account › API keys |
 | A pipeline, agent or job that must not depend on one person | A **service account key** (`omp_sa_…`) | Team › Service accounts |
 
-All three see only what the caller may use on that gateway, checked again on every request. The portal never passes your credential on to MCP servers; it sends them a signed identity instead ([upstream-identity.md](upstream-identity.md)).
+All three see only what the caller may use on that gateway, checked again on every request. Credentials and
+platform gateway grants can further limit tools by owner-set class or exact exposed name (OAuth: classes only).
+Matching grants are alternatives; independent ceilings all apply. A read-only ceiling hides write, destructive
+and unclassified tools unless a name is explicitly included. Hidden tools are refused as unknown before any
+upstream sign-in or consent prompt. Prompts and resources are unchanged. See [credential scopes](credential-scopes.md). The portal never passes your credential on to MCP servers; it sends them a signed identity instead ([upstream-identity.md](upstream-identity.md)).
 
 > Which of these clients have actually been run against a gateway, and how to test and report one: [client compatibility](https://docs.omp.bitop.dev/docs/use/client-compatibility).
 
@@ -84,7 +88,7 @@ Cursor shows a sign-in prompt for the server in its MCP settings.
 - It acts as **you**, on **that gateway only**: its token is refused by every other gateway and by the management API.
 - Every request checks your account (suspended people are refused), your current access to the gateway (removing you from the team or the grant stops it at the next request) and that the connection still exists.
 - Access tokens last an hour; the app refreshes them for up to 30 days of inactivity, and in any case it has to sign in again about every 180 days (`OAUTH_REFRESH_ABSOLUTE_TTL`; your administrator can change it or turn it off). Connected apps shows when each app's sign-in expires. If a refresh token is ever used twice (a sign of theft), the connection is revoked and you sign in again. Scripts and agents that run without a person should use a service account or an API key instead: they don't expire the same way and don't depend on someone signing in twice a year.
-- The first time you sign in an app that your administrators trust (such as Claude Code) to a gateway from this computer, the portal shows a short notice ("Your administrators trust Claude Code ... it receives the result on this computer") with **Continue** and **Cancel**. Continue it only if you just started that sign-in yourself; Cancel if you didn't. It asks once per gateway; after that the app signs in without a page, until you disconnect it.
+- The first time you sign in an app that your administrators trust (such as Claude Code) to a gateway from this computer, the portal shows a short notice ("Your administrators trust Claude Code ... it receives the result on this computer") with **Continue** and **Cancel**. Continue it only if you just started that sign-in yourself; Cancel if you didn't. It asks once per gateway; after that the app signs in without a page, until you disconnect it. Increasing the tool ceiling asks again, even for a trusted app; changing it invalidates the old tokens and pending sign-in codes.
 - **Account › Connected apps** lists your connections per gateway, with their last use, and **Disconnect** stops one at once and forgets the consent. Platform admins can disconnect anyone's apps from the person's page.
 
 ### Apps without a metadata document

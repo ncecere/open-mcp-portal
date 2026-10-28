@@ -39,6 +39,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/secrets"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
+	"github.com/ncecere/open-mcp-portal/internal/toolscope"
 )
 
 // Prefix starts every key.
@@ -168,12 +169,13 @@ func snapshot(k dbgen.ApiKey, gatewayIDs []uuid.UUID) map[string]any {
 	for i, id := range gatewayIDs {
 		ids[i] = id.String()
 	}
-	return map[string]any{"name": k.Name, "prefix": k.Prefix, "expiresAt": k.ExpiresAt, "gatewayIds": ids}
+	return map[string]any{"name": k.Name, "prefix": k.Prefix, "expiresAt": k.ExpiresAt, "gatewayIds": ids, "toolScope": toolscope.Stored(k.ToolScope)}
 }
 
 // CreateInput is a new key.
 type CreateInput struct {
-	Name string
+	ToolScope []byte
+	Name      string
 	// Days is its lifetime (0: DefaultDays).
 	Days int32
 	// GatewayIDs limits it to these gateways (empty: every gateway its owner
@@ -195,6 +197,10 @@ func dedupe(ids []uuid.UUID) []uuid.UUID {
 // Audited as api_key.create (with the gateways it is limited to), without
 // the secret.
 func (s *Service) Create(ctx context.Context, a authz.Actor, in CreateInput) (Created, error) {
+	toolScope, err := toolscope.Canonical(in.ToolScope)
+	if err != nil {
+		return Created{}, err
+	}
 	name := strings.TrimSpace(in.Name)
 	if n := utf8.RuneCountInString(name); n < 1 || n > 100 || strings.ContainsAny(name, "\r\n\x00") {
 		return Created{}, errBadName
@@ -212,7 +218,7 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, in CreateInput) (Cr
 	}
 	secret := Prefix + httpx.NewID(32)
 	var out Created
-	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
+	err = store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
 		// Locking the person serialises their creates, so the limit holds.
 		u, err := q.GetUserForUpdate(ctx, a.UserID)
 		if err != nil {
@@ -243,7 +249,7 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, in CreateInput) (Cr
 			return errTooMany
 		}
 		k, err := q.InsertAPIKey(ctx, dbgen.InsertAPIKeyParams{
-			UserID: a.UserID, Name: name, Prefix: secret[:prefixLen], Digest: Digest(s.pepper, secret),
+			UserID: a.UserID, Name: name, Prefix: secret[:prefixLen], Digest: Digest(s.pepper, secret), ToolScope: toolScope,
 			ExpiresAt: time.Now().Add(time.Duration(days) * 24 * time.Hour), PepperID: PepperID(s.pepper),
 		})
 		if err != nil {

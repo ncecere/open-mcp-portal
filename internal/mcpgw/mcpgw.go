@@ -83,6 +83,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/secrets"
 	"github.com/ncecere/open-mcp-portal/internal/serviceaccounts"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
+	"github.com/ncecere/open-mcp-portal/internal/toolscope"
 	"github.com/ncecere/open-mcp-portal/internal/upstream"
 )
 
@@ -382,7 +383,8 @@ func acceptsJSON(values []string) bool {
 // (calls.PrincipalOAuth), or a service account with one of its keys
 // (calls.PrincipalServiceAccount).
 type principal struct {
-	kind string
+	toolPolicy toolscope.Policy
+	kind       string
 	// user is the person (API keys and OAuth clients).
 	user dbgen.User
 	// keyID and keyName are the API key or service account key used.
@@ -456,7 +458,7 @@ func (h *Handler) credential(w http.ResponseWriter, r *http.Request, slug string
 			h.log().WarnContext(ctx, "could not record a connected app's use", "err", err)
 		}
 		g := p.Grant
-		return principal{kind: calls.PrincipalOAuth, user: p.User, grant: &g}, true
+		return principal{kind: calls.PrincipalOAuth, user: p.User, grant: &g, toolPolicy: toolscope.Union(toolscope.OAuthStored(g.ToolScope))}, true
 	case serviceaccounts.LooksLikeKey(token):
 		if h.ServiceAccounts == nil {
 			return invalid("The service account key is invalid, expired or revoked")
@@ -470,7 +472,7 @@ func (h *Handler) credential(w http.ResponseWriter, r *http.Request, slug string
 		if err := h.ServiceAccounts.Touch(ctx, p); err != nil {
 			h.log().WarnContext(ctx, "could not record a service account key's use", "err", err)
 		}
-		return principal{kind: calls.PrincipalServiceAccount, keyID: p.Key.ID, keyName: p.Key.Name, scope: p.Gateways, account: &p}, true
+		return principal{kind: calls.PrincipalServiceAccount, keyID: p.Key.ID, keyName: p.Key.Name, scope: p.Gateways, account: &p, toolPolicy: toolscope.Intersect(toolscope.Union(toolscope.Stored(p.Key.ToolScope)), toolscope.Union(toolscope.Stored(p.Account.ToolScope)))}, true
 	}
 	p, err := h.Keys.Authenticate(ctx, token)
 	if errors.Is(err, apikeys.ErrInvalid) {
@@ -481,7 +483,7 @@ func (h *Handler) credential(w http.ResponseWriter, r *http.Request, slug string
 	if err := h.Keys.Touch(ctx, p.Key.ID); err != nil {
 		h.log().WarnContext(ctx, "could not record API key use", "err", err)
 	}
-	return principal{kind: calls.PrincipalAPIKey, user: p.User, keyID: p.Key.ID, keyName: p.Key.Name, scope: p.Gateways}, true
+	return principal{kind: calls.PrincipalAPIKey, user: p.User, keyID: p.Key.ID, keyName: p.Key.Name, scope: p.Gateways, toolPolicy: toolscope.Union(toolscope.Stored(p.Key.ToolScope))}, true
 }
 
 // request is one exchange.
@@ -932,6 +934,10 @@ func (rc *request) offers(kind string) ([]gateways.Offer, error) {
 	out := make([]gateways.Offer, 0, len(all))
 	for _, o := range all {
 		if o.Capability.Kind == kind {
+			if o.Allowed && kind == upstream.KindTool && !rc.principal.toolPolicy.Allows(toolscope.Class(o.Capability.ToolClass), o.ExposedName) {
+				o.Allowed = false
+				o.Denied = gateways.DeniedToolScope
+			}
 			out = append(out, o)
 		}
 	}

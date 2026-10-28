@@ -18,11 +18,14 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/authz"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
+	"github.com/ncecere/open-mcp-portal/internal/toolscope"
 )
 
 // TokenRequest is a token request's form (RFC 6749 §4.1.3 and §6, with
 // PKCE and a resource indicator).
 type TokenRequest struct {
+	Scope        string
+	ScopePresent bool
 	GrantType    string
 	ClientID     string
 	Code         string
@@ -36,10 +39,11 @@ type TokenRequest struct {
 
 // Tokens is a token response (RFC 6749 §5.1).
 type Tokens struct {
-	AccessToken  string `json:"access_token"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int    `json:"expires_in"`
-	RefreshToken string `json:"refresh_token"`
+	Scope        *string `json:"scope,omitempty"`
+	AccessToken  string  `json:"access_token"`
+	TokenType    string  `json:"token_type"`
+	ExpiresIn    int     `json:"expires_in"`
+	RefreshToken string  `json:"refresh_token"`
 }
 
 // Token answers the token endpoint.
@@ -164,6 +168,17 @@ func (s *Service) refresh(ctx context.Context, r TokenRequest) (Tokens, error) {
 		reused, lapsed bool
 	)
 	err = store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
+		// Same lock order as replacement/revocation: grant before its tokens.
+		g, err := s.usableGrant(ctx, q, row.OauthGrant.ID)
+		if err != nil {
+			return err
+		}
+		if r.ScopePresent || r.Scope != "" {
+			requested, e := toolscope.OAuth(r.Scope, true)
+			if e != nil || !toolscope.Equal(requested, toolscope.OAuthStored(g.ToolScope)) {
+				return oauthError("invalid_scope", "Refresh scope must equal the grant's scope or be omitted.")
+			}
+		}
 		tok, err := q.LockOAuthToken(ctx, row.OauthToken.ID)
 		if errors.Is(store.NotFound(err), store.ErrNotFound) {
 			return errInvalidGrant()
@@ -176,10 +191,6 @@ func (s *Service) refresh(ctx context.Context, r TokenRequest) (Tokens, error) {
 		}
 		if !tok.ExpiresAt.After(s.now()) {
 			return errInvalidGrant()
-		}
-		g, err := s.usableGrant(ctx, q, tok.GrantID)
-		if err != nil {
-			return err
 		}
 		if s.expired(g) {
 			lapsed = true
@@ -237,7 +248,7 @@ func (s *Service) repeat(ctx context.Context, q *dbgen.Queries, g dbgen.OauthGra
 			expires = row.OauthToken.ExpiresAt
 		}
 	}
-	return Tokens{AccessToken: access, RefreshToken: refresh, TokenType: "Bearer", ExpiresIn: max(1, int(expires.Sub(s.now()).Seconds()))}, nil
+	return Tokens{AccessToken: access, RefreshToken: refresh, TokenType: "Bearer", ExpiresIn: max(1, int(expires.Sub(s.now()).Seconds())), Scope: toolscope.OAuthString(toolscope.OAuthStored(g.ToolScope))}, nil
 }
 
 // issue stores an access and a refresh token for a grant, bound to its
@@ -254,7 +265,7 @@ func (s *Service) issue(ctx context.Context, q *dbgen.Queries, g dbgen.OauthGran
 			return Tokens{}, err
 		}
 	}
-	out := Tokens{AccessToken: access, RefreshToken: refresh, TokenType: "Bearer", ExpiresIn: int(AccessTokenTTL.Seconds())}
+	out := Tokens{AccessToken: access, RefreshToken: refresh, TokenType: "Bearer", ExpiresIn: int(AccessTokenTTL.Seconds()), Scope: toolscope.OAuthString(toolscope.OAuthStored(g.ToolScope))}
 	now := s.now()
 	for _, t := range []struct {
 		kind, token string

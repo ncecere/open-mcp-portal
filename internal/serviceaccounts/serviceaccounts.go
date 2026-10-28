@@ -42,6 +42,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 	"github.com/ncecere/open-mcp-portal/internal/teams"
+	"github.com/ncecere/open-mcp-portal/internal/toolscope"
 )
 
 // KeyPrefix starts every service account key.
@@ -86,7 +87,7 @@ var (
 // (internal/gateways).
 type Gateways interface {
 	UsableByServiceAccount(ctx context.Context, teamID uuid.UUID, role string, ids []uuid.UUID) ([]dbgen.Gateway, []uuid.UUID, error)
-	ListForServiceAccount(ctx context.Context, teamID uuid.UUID, role string) ([]gateways.Mine, error)
+	ListForServiceAccount(ctx context.Context, teamID uuid.UUID, role string, scopes ...[]byte) ([]gateways.Mine, error)
 }
 
 // Service manages service accounts.
@@ -183,7 +184,7 @@ func by(a authz.Actor) uuid.NullUUID {
 
 // snapshot is an account's audited configuration.
 func snapshot(sa dbgen.ServiceAccount) map[string]any {
-	return map[string]any{"name": sa.Name, "description": sa.Description, "role": sa.Role, "enabled": sa.Enabled}
+	return map[string]any{"name": sa.Name, "description": sa.Description, "role": sa.Role, "enabled": sa.Enabled, "toolScope": toolscope.Stored(sa.ToolScope)}
 }
 
 func (s *Service) view(ctx context.Context, q *dbgen.Queries, t dbgen.Team, id uuid.UUID) (View, error) {
@@ -236,7 +237,7 @@ func (s *Service) Gateways(ctx context.Context, a authz.Actor, ref string, id uu
 	if err != nil {
 		return nil, err
 	}
-	return s.gateways.ListForServiceAccount(ctx, ta.team.ID, sa.Role)
+	return s.gateways.ListForServiceAccount(ctx, ta.team.ID, sa.Role, sa.ToolScope)
 }
 
 // AdminListParams narrows and pages the list of every team's accounts.
@@ -284,6 +285,7 @@ func (s *Service) AdminList(ctx context.Context, a authz.Actor, p AdminListParam
 
 // CreateInput is a new service account.
 type CreateInput struct {
+	ToolScope               []byte
 	Name, Description, Role string
 	Enabled                 bool
 }
@@ -303,6 +305,10 @@ func checkFields(name, description, role string) error {
 // Create makes a service account (team owners and admins; at most
 // MaxPerTeam). Audited as service_account.create.
 func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in CreateInput) (View, error) {
+	toolScope, err := toolscope.Canonical(in.ToolScope)
+	if err != nil {
+		return View{}, err
+	}
 	in.Name = strings.TrimSpace(in.Name)
 	if in.Role == "" {
 		in.Role = authz.RoleMember
@@ -311,7 +317,7 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 		return View{}, err
 	}
 	var out View
-	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
+	err = store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
 		ta, err := access(ctx, q, a, ref)
 		if err != nil {
 			return err
@@ -330,7 +336,7 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 			return errTooMany
 		}
 		sa, err := q.InsertServiceAccount(ctx, dbgen.InsertServiceAccountParams{
-			TeamID: ta.team.ID, Name: in.Name, Description: in.Description, Role: in.Role, Enabled: in.Enabled, CreatedBy: by(a),
+			TeamID: ta.team.ID, Name: in.Name, Description: in.Description, Role: in.Role, Enabled: in.Enabled, CreatedBy: by(a), ToolScope: toolScope,
 		})
 		if apperr.IsUniqueViolation(err, "service_accounts_team_name_key") {
 			return errNameTaken
@@ -350,6 +356,8 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 
 // UpdateInput holds optional changes.
 type UpdateInput struct {
+	// ToolScope nil retains; non-nil JSON null clears.
+	ToolScope               []byte
 	Name, Description, Role *string
 	Enabled                 *bool
 }
@@ -377,7 +385,13 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 			return apperr.Stale()
 		}
 		p := dbgen.UpdateServiceAccountParams{ID: cur.ID, Name: cur.Name, Description: cur.Description, Role: cur.Role,
-			Enabled: cur.Enabled, UpdatedBy: by(a)}
+			Enabled: cur.Enabled, UpdatedBy: by(a), ToolScope: cur.ToolScope}
+		if in.ToolScope != nil {
+			p.ToolScope, err = toolscope.Canonical(in.ToolScope)
+			if err != nil {
+				return err
+			}
+		}
 		if in.Name != nil {
 			p.Name = strings.TrimSpace(*in.Name)
 		}
@@ -468,7 +482,7 @@ func keySnapshot(k dbgen.ServiceAccountKey, sa dbgen.ServiceAccount, gatewayIDs 
 		ids[i] = id.String()
 	}
 	return map[string]any{"name": k.Name, "prefix": k.Prefix, "expiresAt": k.ExpiresAt, "gatewayIds": ids,
-		"serviceAccountId": sa.ID.String(), "serviceAccount": sa.Name}
+		"serviceAccountId": sa.ID.String(), "serviceAccount": sa.Name, "toolScope": toolscope.Stored(k.ToolScope)}
 }
 
 // account returns one of the team's accounts after the read check.
@@ -541,7 +555,8 @@ func (s *Service) scopes(ctx context.Context, q *dbgen.Queries, keyIDs []uuid.UU
 
 // CreateKeyInput is a new key.
 type CreateKeyInput struct {
-	Name string
+	ToolScope []byte
+	Name      string
 	// Days is its lifetime (0: apikeys.DefaultDays).
 	Days int32
 	// GatewayIDs limits it to these gateways (empty: every gateway the
@@ -563,6 +578,10 @@ func dedupe(ids []uuid.UUID) []uuid.UUID {
 // MaxActiveKeys active; the account must be on). Audited as
 // service_account_key.create, without the secret.
 func (s *Service) CreateKey(ctx context.Context, a authz.Actor, ref string, id uuid.UUID, in CreateKeyInput) (CreatedKey, error) {
+	toolScope, err := toolscope.Canonical(in.ToolScope)
+	if err != nil {
+		return CreatedKey{}, err
+	}
 	name := strings.TrimSpace(in.Name)
 	if n := utf8.RuneCountInString(name); n < 1 || n > 100 || strings.ContainsAny(name, "\r\n\x00") {
 		return CreatedKey{}, errBadKeyName
@@ -580,7 +599,7 @@ func (s *Service) CreateKey(ctx context.Context, a authz.Actor, ref string, id u
 	}
 	secret := KeyPrefix + httpx.NewID(32)
 	var out CreatedKey
-	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
+	err = store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
 		ta, err := access(ctx, q, a, ref)
 		if err != nil {
 			return err
@@ -618,7 +637,7 @@ func (s *Service) CreateKey(ctx context.Context, a authz.Actor, ref string, id u
 			return errTooManyKeys
 		}
 		k, err := q.InsertServiceAccountKey(ctx, dbgen.InsertServiceAccountKeyParams{
-			ServiceAccountID: sa.ID, Name: name, Prefix: secret[:prefixLen], Digest: apikeys.Digest(s.pepper, secret),
+			ServiceAccountID: sa.ID, Name: name, Prefix: secret[:prefixLen], Digest: apikeys.Digest(s.pepper, secret), ToolScope: toolScope,
 			PepperID:  apikeys.PepperID(s.pepper),
 			CreatedBy: by(a), ExpiresAt: time.Now().Add(time.Duration(days) * 24 * time.Hour),
 		})

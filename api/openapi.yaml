@@ -9048,8 +9048,9 @@ components:
           items:
             type: string
             minLength: 1
-            maxLength: 200
-            pattern: '^[A-Za-z0-9_.-]+__[A-Za-z0-9_.-]+$'
+            maxLength: 1100
+            pattern: '^[^\u0000-\u001F\u007F-\u009F*?\[\]{}\\]+$'
+            description: Exact case-sensitive exposed name, including future aliases. At most 1100 UTF-8 bytes (the byte bound is checked by the API); no control characters or glob operators (* ? [ ] { } backslash). No server__ prefix is required.
     GatewayGrant:
       type: object
       required:

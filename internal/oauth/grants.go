@@ -21,6 +21,8 @@ const (
 	ReasonAdmin  = "admin"
 	ReasonClient = "client"
 	ReasonReuse  = "refresh_reuse"
+	// ReasonScopeChanged: a replacement grant carries a different immutable ceiling.
+	ReasonScopeChanged = "scope_changed"
 	// ReasonExpired: the grant's refresh tokens reached the absolute
 	// lifetime (OAUTH_REFRESH_ABSOLUTE_TTL, decision 63).
 	ReasonExpired = "expired_absolute"

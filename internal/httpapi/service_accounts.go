@@ -41,8 +41,8 @@ func (a *api) serviceAccountAdminRoutes() []route {
 func toAPIServiceAccount(v serviceaccounts.View) apitypes.ServiceAccount {
 	sa := v.Account
 	return apitypes.ServiceAccount{
-		RelayPlatform: relayPlatform(sa, v.RelayPlatformName),
-		Id:            sa.ID, TeamId: sa.TeamID, TeamSlug: v.TeamSlug, Name: sa.Name, Description: sa.Description,
+		RelayPlatform: relayPlatform(sa, v.RelayPlatformName), ToolScope: toAPIToolScope(sa.ToolScope),
+		Id: sa.ID, TeamId: sa.TeamID, TeamSlug: v.TeamSlug, Name: sa.Name, Description: sa.Description,
 		Role: apitypes.ServiceAccountRole(sa.Role), Enabled: sa.Enabled, ActiveKeyCount: v.ActiveKeys, LastUsedAt: sa.LastUsedAt,
 		CreatedByName: v.CreatedByName, Revision: sa.Revision, CreatedAt: sa.CreatedAt, UpdatedAt: sa.UpdatedAt,
 	}
@@ -61,7 +61,7 @@ func toAPIServiceAccountKey(v serviceaccounts.KeyView, now time.Time) apitypes.S
 	out := apitypes.ServiceAccountKey{
 		Id: k.ID, Name: k.Name, Prefix: k.Prefix, Status: apitypes.ServiceAccountKeyStatus(serviceaccounts.KeyStatus(k, now)),
 		CreatedAt: k.CreatedAt, CreatedByName: v.CreatedByName, ExpiresAt: k.ExpiresAt, LastUsedAt: k.LastUsedAt,
-		RevokedAt: k.RevokedAt, Gateways: make([]apitypes.ApiKeyGateway, len(v.Gateways)),
+		RevokedAt: k.RevokedAt, Gateways: make([]apitypes.ApiKeyGateway, len(v.Gateways)), ToolScope: toAPIToolScope(k.ToolScope),
 	}
 	for i, g := range v.Gateways {
 		out.Gateways[i] = apitypes.ApiKeyGateway{Id: g.ID, Slug: g.Slug, Name: g.Name, Exists: g.Exists}
@@ -86,7 +86,7 @@ func (a *api) createServiceAccount(w http.ResponseWriter, r *http.Request) {
 	if !httpx.Decode(w, r, &in) {
 		return
 	}
-	ci := serviceaccounts.CreateInput{Name: in.Name, Enabled: true}
+	ci := serviceaccounts.CreateInput{Name: in.Name, Enabled: true, ToolScope: fromAPIToolScope(in.ToolScope)}
 	setIf(&ci.Description, in.Description)
 	setIf(&ci.Enabled, in.Enabled)
 	if in.Role != nil {
@@ -110,11 +110,11 @@ func (a *api) updateServiceAccount(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	in, rev, ok := decodeRevised[apitypes.ServiceAccountUpdate](w, r)
+	in, rev, ok := decodeRevised[serviceAccountScopeUpdate](w, r)
 	if !ok {
 		return
 	}
-	ui := serviceaccounts.UpdateInput{Name: in.Name, Description: in.Description, Enabled: in.Enabled}
+	ui := serviceaccounts.UpdateInput{Name: in.Name, Description: in.Description, Enabled: in.Enabled, ToolScope: in.ToolScope}
 	if in.Role != nil {
 		role := string(*in.Role)
 		ui.Role = &role
@@ -210,7 +210,7 @@ func (a *api) createServiceAccountKey(w http.ResponseWriter, r *http.Request) {
 	if in.ExpiresInDays != nil && days == 0 {
 		days = -1 // explicit 0 is invalid, not the default
 	}
-	ci := serviceaccounts.CreateKeyInput{Name: in.Name, Days: days}
+	ci := serviceaccounts.CreateKeyInput{Name: in.Name, Days: days, ToolScope: fromAPIToolScope(in.ToolScope)}
 	if in.GatewayIds != nil {
 		ci.GatewayIDs = *in.GatewayIds
 	}

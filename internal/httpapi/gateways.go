@@ -472,7 +472,7 @@ func (a *api) adminAddGatewayGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g, err := a.Gateways.AddGrant(r.Context(), a.actor(r), id, gateways.GrantInput{
-		Kind: string(in.SubjectKind), Team: in.Team, UserEmail: in.UserEmail, Group: in.Group,
+		Kind: string(in.SubjectKind), Team: in.Team, UserEmail: in.UserEmail, Group: in.Group, ToolScope: fromAPIToolScope(in.ToolScope),
 	})
 	if failed(w, r, err) {
 		return
@@ -541,7 +541,7 @@ func (a *api) createMyApiKey(w http.ResponseWriter, r *http.Request) {
 	if in.ExpiresInDays != nil && days == 0 {
 		days = -1 // explicit 0 is invalid, not the default
 	}
-	ci := apikeys.CreateInput{Name: in.Name, Days: days}
+	ci := apikeys.CreateInput{Name: in.Name, Days: days, ToolScope: fromAPIToolScope(in.ToolScope)}
 	if in.GatewayIds != nil {
 		ci.GatewayIDs = *in.GatewayIds
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/httpx"
 	"github.com/ncecere/open-mcp-portal/internal/oauth"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
+	"github.com/ncecere/open-mcp-portal/internal/toolscope"
 )
 
 // oauthRESTRoutes: the consent page, connected apps and trusted clients.
@@ -36,10 +37,11 @@ func (a *api) oauthRESTRoutes() []route {
 // consentRequest is a checked authorization request as the consent page
 // sends it: the client and the gateway the caller may use.
 type consentRequest struct {
-	client  oauth.Client
-	req     oauth.AuthorizeRequest
-	gateway dbgen.Gateway
-	user    dbgen.User
+	client    oauth.Client
+	req       oauth.AuthorizeRequest
+	gateway   dbgen.Gateway
+	user      dbgen.User
+	toolScope *toolscope.Scope
 }
 
 // checkConsent reads and checks an authorization request for the consent
@@ -64,6 +66,10 @@ func (a *api) checkConsent(w http.ResponseWriter, r *http.Request, q url.Values)
 	} else if failed(w, r, err) {
 		return cr, false
 	}
+	cr.toolScope, err = cr.req.ToolScope()
+	if failed(w, r, err) {
+		return cr, false
+	}
 	cr.gateway, err = a.OAuth.Gateway(r.Context(), id.User, cr.req)
 	if errors.As(err, &oe) {
 		httpx.Error(w, http.StatusNotFound, "gateway_not_found", "The app asks for a gateway you can't use")
@@ -82,7 +88,7 @@ func (a *api) getOAuthConsent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	state, err := a.OAuth.ConsentState(r.Context(), cr.user.ID, cr.client, cr.gateway.ID, cr.req.RedirectURI)
+	state, err := a.OAuth.ConsentState(r.Context(), cr.user.ID, cr.client, cr.gateway.ID, cr.req.RedirectURI, cr.toolScope)
 	if failed(w, r, err) {
 		return
 	}
@@ -93,12 +99,12 @@ func (a *api) getOAuthConsent(w http.ResponseWriter, r *http.Request) {
 	redirect, _ := url.Parse(cr.req.RedirectURI)
 	httpx.JSON(w, http.StatusOK, apitypes.OAuthConsent{
 		Client: toAPIClientInfo(cr.client, state.Trusted), Gateway: a.toAPIMyGateway(mine),
-		RedirectUri: cr.req.RedirectURI, RedirectHost: redirect.Host, Remembered: state.Remembered, Notice: state.Notice,
+		RedirectUri: cr.req.RedirectURI, RedirectHost: redirect.Host, Remembered: state.Remembered, Notice: state.Notice, RequestedToolScope: toAPIToolScope(toolscope.JSON(cr.toolScope)),
 	})
 }
 
 func (a *api) decideOAuthConsent(w http.ResponseWriter, r *http.Request) {
-	var in apitypes.OAuthConsentDecision
+	var in oauthScopeDecision
 	if !httpx.Decode(w, r, &in) {
 		return
 	}
@@ -113,12 +119,21 @@ func (a *api) decideOAuthConsent(w http.ResponseWriter, r *http.Request) {
 	}
 	to := a.OAuth.DenyRedirect(cr.req)
 	if in.Decision == apitypes.Allow {
+		chosen := cr.toolScope
+		if in.ToolScope != nil {
+			var err error
+			chosen, err = toolscope.Parse(in.ToolScope)
+			if err != nil || chosen != nil && len(chosen.Tools) > 0 || !toolscope.Subset(chosen, cr.toolScope) {
+				httpx.Error(w, http.StatusBadRequest, "oauth_invalid_scope", "Consent may narrow but not widen the requested classes; named tools are not OAuth scopes.")
+				return
+			}
+		}
 		// A trusted client's first loopback sign-in is a confirmation, not a consent.
-		state, err := a.OAuth.ConsentState(r.Context(), cr.user.ID, cr.client, cr.gateway.ID, cr.req.RedirectURI)
+		state, err := a.OAuth.ConsentState(r.Context(), cr.user.ID, cr.client, cr.gateway.ID, cr.req.RedirectURI, cr.toolScope)
 		if failed(w, r, err) {
 			return
 		}
-		if to, err = a.OAuth.Approve(r.Context(), a.actor(r), cr.client, cr.gateway, cr.req, state.How()); failed(w, r, err) {
+		if to, err = a.OAuth.Approve(r.Context(), a.actor(r), cr.client, cr.gateway, cr.req, state.How(), chosen); failed(w, r, err) {
 			return
 		}
 	}
@@ -138,8 +153,8 @@ func (a *api) writeGrants(w http.ResponseWriter, r *http.Request, grants []oauth
 		gr := g.OauthGrant
 		c := oauth.GrantClient(gr)
 		return apitypes.OAuthGrant{Id: gr.ID, Client: toAPIClientInfo(c, trusted[c.ID]), CreatedAt: gr.CreatedAt, LastUsedAt: gr.LastUsedAt,
-			ExpiresAt: a.OAuth.GrantExpiry(gr),
-			Gateway:   apitypes.CallRef{Id: gr.GatewayID, Slug: g.GatewaySlug, Name: g.GatewayName, Exists: true}}
+			ExpiresAt: a.OAuth.GrantExpiry(gr), ToolScope: toAPIToolScope(toolscope.JSON(toolscope.OAuthStored(gr.ToolScope))),
+			Gateway: apitypes.CallRef{Id: gr.GatewayID, Slug: g.GatewaySlug, Name: g.GatewayName, Exists: true}}
 	})
 }
 
