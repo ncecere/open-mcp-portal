@@ -1,16 +1,17 @@
 # Status and handoff
 
-Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.3.3, **release preparation on 2026-10-28**
+Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.3.3, **released on 2026-10-28**
 (release notes: [releases/v0.3.3.md](releases/v0.3.3.md); earlier: [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
-## v0.3.3 (release preparation)
+## v0.3.3 (2026-10-28)
 
-The [implementation order](implementation-order.md) reconciles all 36 open GitHub issues with the v0.3.2
-checkout. Implemented locally: **#28 owner-set tool classification** and independent **#37 browser sessions**.
+The [implementation order](implementation-order.md) reconciled 36 open GitHub issues with the v0.3.2
+checkout. Shipped and closed: **#28 owner-set tool classification** and independent **#37 browser sessions**.
 The classification [design](tool-classification.md) records the trust boundary and migration `00027`;
 [session management](phase4-client-auth.md#browser-sessions-37-decision-76) uses migration `00028`.
-The combined implementation is committed as `9864b75`; release preparation is in progress. No deployment
-has been performed. GitHub issue closure follows that implementation commit landing on `main`.
+The combined implementation is committed as `9864b75`; the release is tagged at `8a10de3` and
+[published on GitHub](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.3.3). No production deployment
+has been performed.
 
 Subagent implementation and independent code reviews found and fixed three regressions before finishing:
 
@@ -37,8 +38,8 @@ incomplete checks remain (the existing search-shortcut contrast and modal backgr
 is not a complete accessibility audit. Existing dev services and database were left untouched.
 
 **Not run:** real-client/provider/pilot verification, a live Pi Durable Platform instance, a wall-clock idle
-expiry soak, a full mobile/all-page browser pass, Docker/conformance tests or deployment smoke tests.
-Kubernetes/action lint gates were not applicable: no `deploy/` or `.github/` files changed. Idle boundaries,
+expiry soak, a full mobile/all-page browser pass or a fresh conformance-suite run. Docker and deployment
+checks subsequently passed in release CI, as recorded below. Idle boundaries,
 cleanup and activity throttling are covered with an injected clock. Very large session inventories have not
 been load-tested; revoke-all currently deletes pending connect states per ended session.
 The external claim agreement for #62 remains outstanding; its linked upstream repository returned 404 to the
@@ -50,8 +51,23 @@ checks, and kindnet/Calico smoke tests, but failed dependency gates: Go 1.26.9's
 The toolchain/builder are updated to Go 1.26.10 and the web lockfile to Undici 8.12.3; patched application CI
 passed. Calico smoke then exposed an orphaned port-forward into a draining pod after eviction: the wrapper
 PID, not `kubectl`, had been stopped. The helper now launches/reaps the real process and waits for the evicted
-pod to disappear. Four deterministic lifecycle tests reproduce the old failure and pass the fix; smoke CI is
-being rerun. No tag is published while required release checks are failing.
+pod to disappear. Four deterministic lifecycle tests reproduce the old failure and pass the fix.
+
+Final [CI](https://github.com/ncecere/open-mcp-portal/actions/runs/40697899296), both
+[kindnet/Calico smoke jobs](https://github.com/ncecere/open-mcp-portal/actions/runs/40697899038), and the
+[native multi-architecture image/release workflow](https://github.com/ncecere/open-mcp-portal/actions/runs/40699155000)
+passed at `8a10de3`. The published index contains linux/amd64 and linux/arm64, with SBOMs and checksums.
+Cosign verification checked the tag-specific workflow identity, GitHub issuer, trusted certificate and
+transparency-log inclusion. The arm64 image ran read-only with no network and reported
+`open-mcp-portal 0.3.3 (8a10de3e34ec)`. The verified index digest is
+`sha256:021672961ead3bc78de0e2383373e780ce1035b34b25d676e433199dcf8c5ed8`; the example overlay is pinned to it.
+GitHub reported zero open Dependabot alerts after publication.
+
+**Next batch, not shipped:** #29 backend and UI and #30 curation are implemented in isolated branches;
+independent reviews and combined-tree enforcement checks remain. #26 service connections is still being
+implemented. #44 database roles passed isolated legacy/split-role tests and kindnet; an independent review
+requires a follow-up fix and validation before integration. These results do not establish that the combined
+feature tree is ready for release.
 
 ## v0.3.2 (2026-10-20)
 

@@ -1,19 +1,19 @@
 # Implementation order for open issues
 
 Reconciled against `gh issue list --state open --limit 200` and the local roadmap at the start of this batch.
-The checkout is v0.3.2; 36 issues were open. Issue proposals were drafted against older releases: their migration
+The starting checkout was v0.3.2; 36 issues were open. v0.3.3 has since shipped #28 and #37, leaving 34 open. Issue proposals were drafted against older releases: their migration
 numbers and file paths are suggestions, not instructions to overwrite existing code.
 
 ## Current batch
 
-1. **#28 — owner-set tool classification.** Implemented locally: backend, API, UI, review binding and
-   regression tests; migration `00027`. Design: [tool-classification.md](tool-classification.md).
-2. **#37 — browser session management and optional idle expiry.** Implemented in an isolated worktree,
-   then integrated locally; migration `00028`. Idle expiry defaults off. Design:
-   [browser sessions](phase4-client-auth.md#browser-sessions-37-decision-76).
+**Shipped in v0.3.3:** #28 owner-set tool classification (migration `00027`) and #37 browser sessions
+(migration `00028`, idle expiry off by default). Both issues are closed. See [classification](tool-classification.md),
+[browser sessions](phase4-client-auth.md#browser-sessions-37-decision-76) and [validation](status.md).
 
-Validation and remaining limitations belong in [status.md](status.md). No release bump, deployment or issue
-closure is implied. The next tool-policy implementation is **#29**, followed by **#30** and **#31**.
+**In isolated implementation/review:** #29 credential scopes, #30 tool curation, #26 service connections
+and #44 database roles. Integrate scopes before curation; approvals (#31) follow their combined enforcement.
+No release or issue closure is implied by a branch's completion; review, merged-tree gates and browser checks
+remain required. No production deployment is implied by publication.
 
 ## Ordered backlog
 
@@ -23,8 +23,8 @@ security boundary before building on it; do not start every large issue at once.
 | Order | Issues | Reason / dependency |
 | --- | --- | --- |
 | 0, external coordination | **#62** gateway/relay token binding | Security priority. Agree the relay claim with Pi Durable Platform first; per-gateway audience can be designed independently. Do not invent a claim or silently break existing integrations. Validate the integrated fix with #63. |
-| 1, current | **#28**, **#37** | Classification unlocks policy; sessions are independent and prepare identity lifecycle work. |
-| 2 | **#29** credential scopes | Needs #28; intersect every credential layer and preserve existing unscoped behavior. |
+| 1, shipped v0.3.3 | **#28**, **#37** | Classification unlocks policy; sessions are independent and prepare identity lifecycle work. |
+| 2, current | **#29** credential scopes | Needs #28; intersect every credential layer and preserve existing unscoped behavior. |
 | 3 | **#30** per-gateway curation | Keep approved definitions immutable; validate merged arguments and stale fingerprints before approval digests depend on them. |
 | 4 | **#31** sensitive-call approvals | Needs #28 and #30; bind approval to the merged arguments, definition, origin and requester, atomically single-use. |
 | 2–4, independent lane | **#26** team service connections; then **#32** access requests | #27 provider access control already shipped, so #26 is unblocked. Validate token delivery, lapse, grant and refresh boundaries before lifecycle integration. #32 is independent, but keep gateway/API edits serialized with scopes and curation. |

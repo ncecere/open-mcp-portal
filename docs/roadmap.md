@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **2026-10-28.** v0.3.2 is the current release. This is an order of work, not a schedule, for one maintainer. Every item below is an
+Status: **2026-10-28.** v0.3.3 is the current release. This is an order of work, not a schedule, for one maintainer. Every item below is an
 issue with its implementation plan (data model, API, packages to change, tests, acceptance criteria, open questions):
 [all roadmap issues](https://github.com/ncecere/open-mcp-portal/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap), grouped by
 [milestone](https://github.com/ncecere/open-mcp-portal/milestones). Sizes are relative effort: **S** a few days, **M** a week or two, **L** several weeks. Each item that needs a
@@ -31,6 +31,7 @@ Decided out of scope:
 | [v0.3.0](releases/v0.3.0.md) | 2026-10-20 | Trust for an external agent platform (Pi Durable Platform): trusted platforms, relay service accounts, calls as the person (access intersected with the relay's), no consent links for agents, a present-person policy, the `act` claim, allowing a server from My connections; an independent security review applied. |
 | [v0.3.1](releases/v0.3.1.md) | 2026-10-20 | A per-provider access list and narrower tokens per call (closes the F-3 residual), a server's own credential as several parts (headers, bearer, Basic, a query key), OpenTelemetry tracing, Grafana dashboards and Prometheus alert rules. |
 | [v0.3.2](releases/v0.3.2.md) | 2026-10-20 | Three more ways to authenticate to a server: each person's own key, the portal's own OAuth client (client credentials), and mTLS with a private CA; found and fixed a migration interplay before release. |
+| [v0.3.3](releases/v0.3.3.md) | 2026-10-28 | Owner-set tool classification and review binding; browser-session inventory/revocation and optional idle expiry; patched dependencies and deterministic smoke-helper lifecycle tests. |
 
 Proven on a real deployment (one Talos cluster, Authentik sign-in, CloudNativePG with continuous archiving and daily backups, a restore tested twice):
 Claude Code over OAuth and an API key on the 2026-07-28 revision; per-person OAuth to GitHub's hosted MCP server; DeepWiki through a gateway.
@@ -40,8 +41,9 @@ the pilot (#20). [status.md](status.md) records what each release verified.
 ## How the next work is ordered
 
 The [implementation order](implementation-order.md) reconciles the open GitHub issues with what has already
-shipped, including the newer agent-platform follow-ups (#62 and #63). The current batch starts **#28
-classification**, with independent **#37 session hardening** in parallel; neither is marked shipped by starting it.
+shipped, including the newer agent-platform follow-ups (#62 and #63). **#28 classification** and
+**#37 session hardening** shipped in v0.3.3. The next batch integrates **#29 scopes**, **#30 curation**,
+**#26 service connections** and **#44 database roles**, subject to independent review and merged-tree gates.
 
 1. **Verify and pilot alongside implementation.** Decisions #5, #6 and #7 shipped in v0.2.2. The
    real-client checks (#14–#17), provider/channel checks (#18–#19), independent review (#13), live
@@ -56,7 +58,7 @@ classification**, with independent **#37 session hardening** in parallel; neithe
 
 ## Owner decisions needed
 
-Each links to an issue that lays out the options and a recommendation. The current #28 implementation takes
+Each links to an issue that lays out the options and a recommendation. The shipped #28 implementation takes
 the fail-closed recommendation and keeps classification with team owners/admins ([decision 75](decisions.md)).
 
 | Issue | Decision | Recommended |
@@ -117,7 +119,7 @@ Making "all MCP servers" true, then governing what runs. Milestone: [v0.3](https
 | [#25](https://github.com/ncecere/open-mcp-portal/issues/25) | ~~Add mTLS client certificates and a per-server CA for upstream connections~~ **done in v0.3.2** | M | Let a server present a client certificate to its upstream and trust a private CA for that server only. The SSRF guard and the internal-network allow-list stay in force, certificate verification is never turned off, and the private key is sealed and never returned. | decision 20, decision 45 |
 | [#26](https://github.com/ncecere/open-mcp-portal/issues/26) | Add team service connections so service accounts can call credentialed tools | L | Let a team own a shared connection (a platform-provider token or an upstream sign-in) that its service accounts can use. Agents and CI can then call tools that today answer `-32010` `service_account`. The team consents per server and origin, exactly as a person does after F-3. | #27, decision 22, decision 23, decision 29, decision 60 |
 | [#27](https://github.com/ncecere/open-mcp-portal/issues/27) | ~~Add a per-provider allow-list and narrower delegated tokens (H-5)~~ **done in v0.3.1** | M | Close the residual of finding F-3 (threat model H-5a): platform admins decide which teams or servers may require a provider, and a call gets a token narrowed to the scopes it needs where the provider supports that. Background refresh falls out naturally; several accounts per provider does not. | decision 60, decision 26 |
-| [#28](https://github.com/ncecere/open-mcp-portal/issues/28) | Let server owners classify each tool as read, write or destructive | M | Add a tool class (read, write, destructive) set by the server's team owners and admins. The server's own annotations are shown as a suggestion and never trusted. The class is the input for scoped credentials, approval rules and read-only retries, and the gateway can publish it back to clients as trustworthy annotations. | decision 48, decision 49 |
+| [#28](https://github.com/ncecere/open-mcp-portal/issues/28) | ~~Let server owners classify each tool as read, write or destructive~~ **done in v0.3.3** | M | Add a tool class (read, write, destructive) set by the server's team owners and admins. The server's own annotations are shown as a suggestion and never trusted. The class is the input for scoped credentials, approval rules and read-only retries, and the gateway can publish it back to clients as trustworthy annotations. | decision 48, decision 49 |
 | [#29](https://github.com/ncecere/open-mcp-portal/issues/29) | Limit keys, OAuth grants, service accounts and grants by tool class or name | L | Let a credential or grant be limited to tool classes or named tools (a read-only key). Scopes only narrow what the owner may already use. The OAuth consent screen shows the scope, the `scope` parameter maps to classes, and tools outside the scope are hidden and refused like unknown tools. | #28, decision 49, decision 24 |
 | [#30](https://github.com/ncecere/open-mcp-portal/issues/30) | Constrain, rename and re-describe tools per gateway | L | Per gateway tool, let owners fix or restrict argument values (pin GitHub's `owner`), show the model a narrowed schema, rename the tool and rewrite its description. Curation is stored beside the approved definition, never replaces it, and fails closed when the upstream definition changes. | decision 49 |
 | [#31](https://github.com/ncecere/open-mcp-portal/issues/31) | Require approval before sensitive tool calls | L | Add rules (for example 'destructive tools need approval') that stop a call and return a multi-round-trip result with an approval link. Named approvers approve in the portal; the person retries. Approvals are bound to the arguments and the definition, expire, are single use and audited, and the requester can never approve their own call. | #28, decision 48, decision 52, decision 59 |
@@ -135,7 +137,7 @@ Leavers lose access automatically, the audit trail leaves the database, and oper
 | Issue | Item | Size | What it does, and why | Depends on |
 | --- | --- | --- | --- | --- |
 | [#36](https://github.com/ncecere/open-mcp-portal/issues/36) | Add SCIM 2.0 provisioning and SSO-group to team-role mapping | L | Let the identity provider create, update and remove people in the portal over SCIM 2.0, and map IdP groups to team roles. Deprovisioning ends sessions and revokes API keys, connected apps and provider connections, closing threat-model gap TN-5, where a leaver's keys and refresh tokens keep working. | #37, #40, decision 38, decision 53, #22, #26 |
-| [#37](https://github.com/ncecere/open-mcp-portal/issues/37) | Add session list, sign out everywhere and an idle timeout | S | Let people see and end their own browser sessions, let platform admins end anyone's, and sign out sessions that have been idle too long (threat-model H-12). The refresh-token absolute lifetime (H-8) is a different credential and gets its own issue. | decision 53 |
+| [#37](https://github.com/ncecere/open-mcp-portal/issues/37) | ~~Add session list, sign out everywhere and an idle timeout~~ **done in v0.3.3** | S | Let people see and end their own browser sessions, let platform admins end anyone's, and sign out sessions that have been idle too long (threat-model H-12). The refresh-token absolute lifetime (H-8) is a different credential and gets its own issue. | decision 53 |
 | [#38](https://github.com/ncecere/open-mcp-portal/issues/38) | Stream the audit log to a SIEM with gap detection and tamper evidence | M | Send every audit entry to a SIEM by signed webhook, syslog over TLS or OTLP, with sequence numbers and a hash chain so a missing or altered entry is detectable. Also add server-side exports of the audit and call logs and a minimum audit retention an admin cannot lower (threat-model H-10). | #44, #39, decision 33 |
 | [#39](https://github.com/ncecere/open-mcp-portal/issues/39) | Add legal holds and per-person data export and erasure | M | Let platform admins place legal holds that suspend retention deletion for a scope, and give each person a data export and an erasure that anonymises them in place. Decision 33 and the `retention` package header currently say legal holds are out of scope. | #38, #36, #44, decision 33 |
 | [#40](https://github.com/ncecere/open-mcp-portal/issues/40) | Add server owner, on-call contact, sensitivity label, re-review and sunset | M | Give every registered server an accountable owner and on-call contact, a data-sensitivity label that caps where it can be exposed, a re-review date, a deprecation and sunset lifecycle and an owner-transfer flow. This turns the catalog from a list into something an operator can govern over time. | #31, #28, #36, decision 26, decision 52 |
