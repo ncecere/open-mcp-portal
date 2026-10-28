@@ -6,7 +6,7 @@ Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 4
 ## v0.4.0 release candidate: MCP-only governance
 
 Scopes (#29), curation (#30), shared service connections (#26), database-role separation (#44) and
-external-platform retirement (#68) are implemented together on `integration/credential-policy`.
+external-platform retirement (#68) were integrated on `integration/credential-policy` for the main release candidate.
 [Release/upgrade notes](releases/v0.4.0.md) cover migrations `00029`–`00034` and mixed-version policy limits.
 The owner withdrew Pi Durable Platform/external-platform impersonation ([decision 81](decisions.md));
 #62/#63 are closed as **not planned**, not completed remediation or verification. Retirement disables
@@ -20,12 +20,14 @@ preservation. A final narrow review approved the five shared transaction fixes a
 confirmed findings. Local deletion/audit commits before upstream revocation HTTP; consent uses user
 `KEY SHARE` → session → connection → state ordering, with final live authorization checks after waits.
 
-**Passed:** a combined full normal Go suite and full race suites in legacy and genuinely authenticated
-split-role modes before the final shared-transaction corrections; those corrections subsequently passed
-three race-enabled repetitions of the service-connection/consent/retirement suites in both modes. Final
-version-preparation generation, lint, Go build and all web gates pass (**796 tests**). Owner-only fixture DDL
-uses `OwnerPool`; application writes still use authenticated runtime. Split-role role changes were tested
-only in an owned disposable PostgreSQL container, never against the development database.
+**Final combined tree passed:** `make generate`, `make lint`, `go build ./...`, `make check-generated`,
+required-PostgreSQL `make test` and full `go test -race -count=1 ./...` in **both** legacy and genuinely
+authenticated split-role modes; web typecheck, **796 tests**, build, styling and size checks; Kubernetes
+validation, actionlint, four smoke-helper lifecycle tests and clean diff checks. The full Go/deployment run
+completed in 1,130 seconds after the final shared-transaction and callback corrections. Those transaction
+regressions also passed three focused race repetitions per mode. Owner-only fixture DDL uses `OwnerPool`;
+application writes still use authenticated runtime. Role changes were tested only in an owned disposable
+PostgreSQL container, never against the development database.
 
 **Browser/wire evidence:** literal-name scope entry preserves commas; fixed-argument `demo_echo` accepts
 injected values and rejects conflicting values/old names. Shared consent through the fake OAuth server,
@@ -33,8 +35,8 @@ explicit service-account assignment and destination grants succeed. Actual legac
 receive the shared credential with verified portal identity and matching provider claim; a normal personal
 caller still needs its own consent and has no personal connection. A 390px shared-connections screen has no
 horizontal overflow and zero axe violations/incomplete checks. Browser checks found and corrected a shared
-completion page that wrongly linked personal connections, and stale relay wording. Full final-tree
-Go/race suites and release CI/deployment/signature gates remain pending.
+completion page that wrongly linked personal connections, and stale relay wording. Main CI, combined
+kindnet/Calico deployment smoke and image/signature/publication gates remain pending.
 Rebuilt mobile completion now shows shared guidance and a safe portal link, never personal-connection
 instructions. Revoking the shared connection in the UI stops the same service key's next call (`-32010`);
 all temporary wire-test keys were revoked. The completion screen has zero axe violations and one gradient
@@ -401,7 +403,7 @@ blind restart/seed of an existing one. The historical dev-database migration hel
 
 ## Next steps
 
-1. Finish final-tree v0.4.0 gates and main CI/kindnet/Calico smoke;
+1. Finish v0.4.0 main CI/kindnet/Calico smoke;
    publish only after image scans/signing succeed, then verify digest/signature/SBOMs and update release status.
    Close #26/#29/#30/#44/#68 only with their actual acceptance evidence.
 2. Implement #31 sensitive-call approvals on the combined scopes/curation path. The next reserved migration
