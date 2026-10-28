@@ -103,7 +103,7 @@ function Review({ id }: { id: string }) {
         <Alert tone="warning">This is an escaped text preview, not the full arguments. The digest binds the exact merged call.</Alert>
         {receipt.previewRedacted && <p>Credential or sensitive values were redacted.</p>}
         {receipt.previewTruncated && <Alert tone="warning">Preview truncated. Not all arguments are shown.</Alert>}
-        <pre className={a.preview} tabIndex={0} aria-label="Redacted argument preview text">{preview}</pre>
+        <pre className={a.preview} role="region" tabIndex={0} aria-label="Redacted argument preview text">{preview}</pre>
       </Stack>
     </Card>}
     <Card title="Actions"><Stack gap={4}>

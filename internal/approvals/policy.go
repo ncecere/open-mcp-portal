@@ -161,6 +161,9 @@ func CanonicalArguments(raw json.RawMessage) ([]byte, error) {
 	if len(raw) > 4<<20 || raw[0] != '{' {
 		return nil, apperr.New(400, "invalid_arguments", "Tool arguments must be a bounded JSON object")
 	}
+	if !losslessJSONStrings(raw) {
+		return nil, apperr.New(400, "invalid_arguments", "Tool arguments must contain valid Unicode strings")
+	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
 	var obj map[string]any

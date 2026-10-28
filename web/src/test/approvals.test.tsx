@@ -59,6 +59,7 @@ describe("Approval receipt", () => {
     expect(pre.textContent).toContain("<img src=x onerror=alert(1)>");
     expect(pre.querySelector("img")).toBeNull();
     expect(pre).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("region", { name: "Redacted argument preview text" })).toBe(pre);
     expect(pre).toHaveAttribute("aria-label", "Redacted argument preview text");
     expect(screen.getByText("Credential or sensitive values were redacted.")).toBeInTheDocument();
     expect(screen.getByText(/Preview truncated/)).toBeInTheDocument();

@@ -422,7 +422,17 @@ blind restart/seed of an existing one. The historical dev-database migration hel
 2. #31 sensitive-call approvals are now in progress on `feature/31-sensitive-call-approvals`. The owner said
    to continue after the proposed defaults; decision **82** records them and [design](tool-approvals.md)
    describes the exact-dispatch boundary, no-replay behavior, live context and preview/retention policy.
-   Reserve migration **`00035`**. Foundational code/design is not completed enforcement or release acceptance.
+   Migrations **`00035`–`00042`**, browser/session APIs, exact-call transport enforcement, private notices,
+   eligible attention, preview retention/rotation and the browser UI are integrated locally. Independent
+   reviews drove writer-lock, identity, preview, key-retirement and queue fixes. The private-schema relocation
+   has an actual unmodified-v0.4.0 strict-role startup/HTTP-write regression; it does not imply old-image policy
+   enforcement. Real browser review→dispatch→spent and metadata-only auditor checks have run on a disposable
+   split-role instance, including consuming a request created before the private-schema relocation afterward.
+   At 390px, receipt/queue/rules/editor pages have no horizontal overflow and axe reports zero violations
+   and zero incomplete checks; the scrollable preview was keyboard-tested. The desktop header shortcut still
+   needs a manual contrast check; this is not a whole-product accessibility audit. Final merged-tree
+   normal/race matrices and release gates are still pending. Nothing from this feature branch is published;
+   #31 remains open.
 3. Continue #32/#33 and the ordered operations/lifecycle/audit lanes in
    [implementation order](implementation-order.md). #43 must prove upgrades, ingress, restore and load before
    Helm packaging; existing kindnet/Calico smoke does not establish those broader requirements.
