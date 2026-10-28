@@ -6232,11 +6232,11 @@ export interface components {
             slug: string;
             name: string;
         };
-        /** @description Where the web app goes for an item (docs/admin-overview.md, Link targets). server: the server page (team page for members, Admin > Servers for platform staff); servers: the team's server list; review_queue: Admin > Publishing; gateways: Admin > Gateways; service_account / service_accounts: the team's service accounts; automation_tokens: Admin > Automation tokens; team_automation_tokens: the team's Settings > Automation tokens; auth_providers: Admin > Auth providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team's Settings > Notifications; service_connections: the team's Service accounts > Connections tab; account_connections: Account > Connections; account_api_keys: Account > API keys. */
+        /** @description Where the web app goes for an item (docs/admin-overview.md, Link targets). server: the server page (team page for members, Admin > Servers for platform staff); servers: the team's server list; review_queue: Admin > Publishing; gateways: Admin > Gateways; service_account / service_accounts: the team's service accounts; automation_tokens: Admin > Automation tokens; team_automation_tokens: the team's Settings > Automation tokens; auth_providers: Admin > Auth providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team's Settings > Notifications; service_connections: the team's Service accounts > Connections tab; account_connections: Account > Connections; account_api_keys: Account > API keys; approval: the private receipt page. */
         LinkTarget: {
             /** @enum {string} */
-            type: "server" | "servers" | "review_queue" | "gateways" | "service_account" | "service_accounts" | "automation_tokens" | "team_automation_tokens" | "auth_providers" | "usage" | "notification_settings" | "team_notification_settings" | "service_connections" | "account_connections" | "account_api_keys";
-            /** @description The object's ID for singular types (server, service_account) */
+            type: "server" | "servers" | "review_queue" | "gateways" | "service_account" | "service_accounts" | "automation_tokens" | "team_automation_tokens" | "auth_providers" | "usage" | "notification_settings" | "team_notification_settings" | "service_connections" | "account_connections" | "account_api_keys" | "approval";
+            /** @description The object's ID for singular types (server, service_account, approval) */
             id?: string;
             /** @description The team's slug, for team pages and for the team's server or service account */
             teamSlug?: string;
@@ -6350,10 +6350,10 @@ export interface components {
             truncated: boolean;
         };
         /**
-         * @description server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent or to personal keys.
+         * @description server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
          * @enum {string}
          */
-        NotificationEventType: "server.unhealthy" | "server.recovered" | "capability.changed" | "publish.requested" | "publish.decided" | "connection.needs_reconsent" | "upstream_signin.lapsed" | "key.expiring";
+        NotificationEventType: "server.unhealthy" | "server.recovered" | "capability.changed" | "publish.requested" | "publish.decided" | "connection.needs_reconsent" | "upstream_signin.lapsed" | "key.expiring" | "approval.requested" | "approval.decided";
         NotificationItem: {
             /** Format: int64 */
             id: number;
@@ -6689,6 +6689,13 @@ export interface components {
             /** @description The server, for server_certificate (its mTLS client certificate expires within 14 days; the team's owners, admins and editors are told) */
             server?: components["schemas"]["NotificationServerRef"] | null;
         };
+        /** @description Private receipt metadata; never arguments, previews, digests, notes or credentials. */
+        ApprovalNotificationData: {
+            /** Format: uuid */
+            approvalId: string;
+            exposedName: string;
+            status: components["schemas"]["ApprovalStatus"];
+        };
         NotificationTestData: {
             message: string;
         };
@@ -6700,7 +6707,7 @@ export interface components {
              */
             id: string;
             /** @enum {string} */
-            type: "server.unhealthy" | "server.recovered" | "capability.changed" | "publish.requested" | "publish.decided" | "connection.needs_reconsent" | "upstream_signin.lapsed" | "key.expiring" | "test";
+            type: "server.unhealthy" | "server.recovered" | "capability.changed" | "publish.requested" | "publish.decided" | "connection.needs_reconsent" | "upstream_signin.lapsed" | "key.expiring" | "approval.requested" | "approval.decided" | "test";
             /** @enum {integer} */
             version: 1;
             /** Format: date-time */
@@ -6714,7 +6721,7 @@ export interface components {
             /** @description A link to the item in the web app (never contains a secret) */
             url: string;
             /** @description The shape follows type */
-            data: components["schemas"]["ServerUnhealthyData"] | components["schemas"]["ServerRecoveredData"] | components["schemas"]["CapabilityChangedData"] | components["schemas"]["PublishRequestedData"] | components["schemas"]["PublishDecidedData"] | components["schemas"]["ConnectionNeedsReconsentData"] | components["schemas"]["UpstreamSigninLapsedData"] | components["schemas"]["KeyExpiringData"] | components["schemas"]["NotificationTestData"];
+            data: components["schemas"]["ServerUnhealthyData"] | components["schemas"]["ServerRecoveredData"] | components["schemas"]["CapabilityChangedData"] | components["schemas"]["PublishRequestedData"] | components["schemas"]["PublishDecidedData"] | components["schemas"]["ConnectionNeedsReconsentData"] | components["schemas"]["UpstreamSigninLapsedData"] | components["schemas"]["KeyExpiringData"] | components["schemas"]["ApprovalNotificationData"] | components["schemas"]["NotificationTestData"];
         };
         /** @enum {string} */
         AutomationTokenKind: "platform_admin" | "team_publisher";

@@ -33,7 +33,6 @@ type serviceFixture struct {
 
 func newServiceFixture(t *testing.T) *serviceFixture {
 	t.Helper()
-	t.Setenv("OMP_TEST_SPLIT_ROLES", "1")
 	db, _ := testutil.NewDB(t)
 	f := &serviceFixture{db: db, owner: testutil.OwnerPool(t, db), q: dbgen.New(db), team: uuid.New(), saTeam: uuid.New(), server: uuid.New(), cap: uuid.New(), gateway: uuid.New(), sa: uuid.New()}
 	users := []*authz.Actor{&f.requester, &f.reviewer, &f.saOwner, &f.admin, &f.auditor, &f.outsider}
@@ -546,6 +545,9 @@ func TestServiceRuleOwnershipTokensAndLegacyArguments(t *testing.T) {
 
 // Assert genuine runtime authentication instead of SET ROLE on an owner.
 func TestServiceRuntimeIsNotOwner(t *testing.T) {
+	// This case specifically verifies split-role authentication. All other
+	// fixture users honor the suite's legacy/split setting.
+	t.Setenv("OMP_TEST_SPLIT_ROLES", "1")
 	f := newServiceFixture(t)
 	var current, owner string
 	if e := f.db.QueryRow(context.Background(), `SELECT current_user,pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database()`).Scan(&current, &owner); e != nil {

@@ -66,15 +66,16 @@ func (s *Service) capturePreview(ctx context.Context, canonical []byte, known []
 	walk = func(v any) any {
 		switch x := v.(type) {
 		case string:
-			clean := replace(x)
-			// A credential containing quotes/brackets can intersect the syntax of
-			// JSON nested inside a string. Never corrupt that syntax before the
-			// structural redactor sees it: conservatively mask the entire string.
+			// Embedded JSON can materialize escaped secrets or member names only
+			// after a second decode. Mask JSON-looking strings in their entirety:
+			// the general capture walker intentionally ignores short credentials
+			// and keys, and is not an approval-specific recursive safety boundary.
 			trimmed := strings.TrimSpace(x)
-			if clean != x && len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
+			if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
+				redacted = true
 				return capture.Redacted
 			}
-			return clean
+			return replace(x)
 		case json.Number:
 			for _, secret := range known {
 				if string(x) == secret {
@@ -274,7 +275,7 @@ func (s *Service) insertRequest(ctx context.Context, q *dbgen.Queries, a *authz.
 	return r, nil
 }
 func (s *Service) Consume(ctx context.Context, plan Plan) error {
-	return s.transaction(ctx, nil, false, func(q *dbgen.Queries, epoch int64) error {
+	err := s.transaction(ctx, nil, false, func(q *dbgen.Queries, epoch int64) error {
 		// Context and credential deadline precede every other guard, including
 		// already-spent detection. Never bless a freshly read current epoch.
 		if epoch != plan.Binding.Epoch {
@@ -346,6 +347,21 @@ func (s *Service) Consume(ctx context.Context, plan Plan) error {
 		}
 		return s.auditRequest(ctx, q, nil, r, "used")
 	})
+	if err != nil {
+		return err
+	}
+	// A slow commit acknowledgement must not turn an elapsed credential or
+	// approval deadline into a dispatch permit. Spending remains committed;
+	// never retry it or claim the upstream side effect happened.
+	at := s.clock()
+	if !credentialLive(at, plan.CredentialExpiresAt) || (plan.Required &&
+		(!at.Before(plan.Receipt.ExpiresAt) || plan.Receipt.ValidUntil == nil || !at.Before(*plan.Receipt.ValidUntil))) {
+		if plan.Required {
+			return ErrSpent
+		}
+		return ErrUnavailable
+	}
+	return nil
 }
 
 // Epoch triggers cover all mutable authority (including credential revocation).

@@ -1068,6 +1068,7 @@ func (e KeyExpiringDataKeyKind) Valid() bool {
 const (
 	LinkTargetTypeAccountApiKeys           LinkTargetType = "account_api_keys"
 	LinkTargetTypeAccountConnections       LinkTargetType = "account_connections"
+	LinkTargetTypeApproval                 LinkTargetType = "approval"
 	LinkTargetTypeAuthProviders            LinkTargetType = "auth_providers"
 	LinkTargetTypeAutomationTokens         LinkTargetType = "automation_tokens"
 	LinkTargetTypeGateways                 LinkTargetType = "gateways"
@@ -1089,6 +1090,8 @@ func (e LinkTargetType) Valid() bool {
 	case LinkTargetTypeAccountApiKeys:
 		return true
 	case LinkTargetTypeAccountConnections:
+		return true
+	case LinkTargetTypeApproval:
 		return true
 	case LinkTargetTypeAuthProviders:
 		return true
@@ -1765,6 +1768,8 @@ func (e NotificationErrorClass) Valid() bool {
 
 // Defines values for NotificationEventType.
 const (
+	NotificationEventTypeApprovalDecided          NotificationEventType = "approval.decided"
+	NotificationEventTypeApprovalRequested        NotificationEventType = "approval.requested"
 	NotificationEventTypeCapabilityChanged        NotificationEventType = "capability.changed"
 	NotificationEventTypeConnectionNeedsReconsent NotificationEventType = "connection.needs_reconsent"
 	NotificationEventTypeKeyExpiring              NotificationEventType = "key.expiring"
@@ -1778,6 +1783,10 @@ const (
 // Valid indicates whether the value is a known member of the NotificationEventType enum.
 func (e NotificationEventType) Valid() bool {
 	switch e {
+	case NotificationEventTypeApprovalDecided:
+		return true
+	case NotificationEventTypeApprovalRequested:
+		return true
 	case NotificationEventTypeCapabilityChanged:
 		return true
 	case NotificationEventTypeConnectionNeedsReconsent:
@@ -1819,6 +1828,8 @@ func (e NotificationFormat) Valid() bool {
 
 // Defines values for NotificationPayloadType.
 const (
+	NotificationPayloadTypeApprovalDecided          NotificationPayloadType = "approval.decided"
+	NotificationPayloadTypeApprovalRequested        NotificationPayloadType = "approval.requested"
 	NotificationPayloadTypeCapabilityChanged        NotificationPayloadType = "capability.changed"
 	NotificationPayloadTypeConnectionNeedsReconsent NotificationPayloadType = "connection.needs_reconsent"
 	NotificationPayloadTypeKeyExpiring              NotificationPayloadType = "key.expiring"
@@ -1833,6 +1844,10 @@ const (
 // Valid indicates whether the value is a known member of the NotificationPayloadType enum.
 func (e NotificationPayloadType) Valid() bool {
 	switch e {
+	case NotificationPayloadTypeApprovalDecided:
+		return true
+	case NotificationPayloadTypeApprovalRequested:
+		return true
 	case NotificationPayloadTypeCapabilityChanged:
 		return true
 	case NotificationPayloadTypeConnectionNeedsReconsent:
@@ -2729,6 +2744,15 @@ type ApprovalDecisionInputDecision string
 
 // ApprovalDigest Lowercase hexadecimal 256-bit digest; argument receipts use a keyed HMAC-SHA-256 so redacted low-entropy values cannot be guessed offline
 type ApprovalDigest = string
+
+// ApprovalNotificationData Private receipt metadata; never arguments, previews, digests, notes or credentials.
+type ApprovalNotificationData struct {
+	ApprovalId  openapi_types.UUID `json:"approvalId"`
+	ExposedName string             `json:"exposedName"`
+
+	// Status pending transitions to approved, denied, expired or cancelled; approved transitions to used, expired or cancelled. Terminal states never return to approved. used means authorization spent, NOT confirmed execution; a crash before sending or an unknown upstream result still spends it, and a repeat may duplicate effects. No automatic replay or restoration of spent approval is permitted.
+	Status ApprovalStatus `json:"status"`
+}
 
 // ApprovalPage Metadata-only page; items NEVER contain preview
 type ApprovalPage struct {
@@ -4256,9 +4280,9 @@ type LimitSettingsUpdate struct {
 	Items []PlatformRateLimitSetting `json:"items"`
 }
 
-// LinkTarget Where the web app goes for an item (docs/admin-overview.md, Link targets). server: the server page (team page for members, Admin > Servers for platform staff); servers: the team's server list; review_queue: Admin > Publishing; gateways: Admin > Gateways; service_account / service_accounts: the team's service accounts; automation_tokens: Admin > Automation tokens; team_automation_tokens: the team's Settings > Automation tokens; auth_providers: Admin > Auth providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team's Settings > Notifications; service_connections: the team's Service accounts > Connections tab; account_connections: Account > Connections; account_api_keys: Account > API keys.
+// LinkTarget Where the web app goes for an item (docs/admin-overview.md, Link targets). server: the server page (team page for members, Admin > Servers for platform staff); servers: the team's server list; review_queue: Admin > Publishing; gateways: Admin > Gateways; service_account / service_accounts: the team's service accounts; automation_tokens: Admin > Automation tokens; team_automation_tokens: the team's Settings > Automation tokens; auth_providers: Admin > Auth providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team's Settings > Notifications; service_connections: the team's Service accounts > Connections tab; account_connections: Account > Connections; account_api_keys: Account > API keys; approval: the private receipt page.
 type LinkTarget struct {
-	// Id The object's ID for singular types (server, service_account)
+	// Id The object's ID for singular types (server, service_account, approval)
 	Id *string `json:"id,omitempty"`
 
 	// TeamSlug The team's slug, for team pages and for the team's server or service account
@@ -5119,7 +5143,7 @@ type NotificationDelivery struct {
 	CreatedAt  time.Time               `json:"createdAt"`
 	ErrorClass *NotificationErrorClass `json:"errorClass,omitempty"`
 
-	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent or to personal keys.
+	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
 	Event NotificationEventType `json:"event"`
 
 	// EventId The id of the event, as in the payload and X-OMP-Event-Id
@@ -5256,7 +5280,7 @@ type NotificationEmailStatusTls string
 // NotificationErrorClass not_allowed: the address isn't allowed (blocked or not in the internal-network allowlist, or a redirect). connect: unreachable. tls: certificate or handshake problem (or STARTTLS missing). timeout. auth: SMTP login refused. rejected: the destination answered 4xx (SMTP 5xx). server_error: it answered 5xx. address: the recipient address was refused. expired: still undelivered after 24 hours. internal.
 type NotificationErrorClass string
 
-// NotificationEventType server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent or to personal keys.
+// NotificationEventType server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
 type NotificationEventType string
 
 // NotificationFormat json: a signed JSON envelope (docs/notifications.md). slack: {"text": ...}, unsigned, for Slack-compatible incoming webhooks.
@@ -5267,7 +5291,7 @@ type NotificationItem struct {
 	Body      string    `json:"body"`
 	CreatedAt time.Time `json:"createdAt"`
 
-	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent or to personal keys.
+	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
 	Event  NotificationEventType `json:"event"`
 	Id     int64                 `json:"id"`
 	Link   *LinkTarget           `json:"link"`
@@ -5327,7 +5351,7 @@ type NotificationPreference struct {
 	Custom bool `json:"custom"`
 	Email  bool `json:"email"`
 
-	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent or to personal keys.
+	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
 	Event NotificationEventType `json:"event"`
 	InApp bool                  `json:"inApp"`
 }
@@ -5336,7 +5360,7 @@ type NotificationPreference struct {
 type NotificationPreferenceChange struct {
 	Email *bool `json:"email,omitempty"`
 
-	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent or to personal keys.
+	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
 	Event NotificationEventType `json:"event"`
 	InApp *bool                 `json:"inApp,omitempty"`
 }
@@ -7739,6 +7763,32 @@ func (t *NotificationPayload_Data) FromKeyExpiringData(v KeyExpiringData) error 
 
 // MergeKeyExpiringData performs a merge with any union data inside the NotificationPayload_Data, using the provided KeyExpiringData
 func (t *NotificationPayload_Data) MergeKeyExpiringData(v KeyExpiringData) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsApprovalNotificationData returns the union data inside the NotificationPayload_Data as a ApprovalNotificationData
+func (t NotificationPayload_Data) AsApprovalNotificationData() (ApprovalNotificationData, error) {
+	var body ApprovalNotificationData
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromApprovalNotificationData overwrites any union data inside the NotificationPayload_Data as the provided ApprovalNotificationData
+func (t *NotificationPayload_Data) FromApprovalNotificationData(v ApprovalNotificationData) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeApprovalNotificationData performs a merge with any union data inside the NotificationPayload_Data, using the provided ApprovalNotificationData
+func (t *NotificationPayload_Data) MergeApprovalNotificationData(v ApprovalNotificationData) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

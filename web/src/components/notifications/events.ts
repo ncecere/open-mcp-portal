@@ -15,6 +15,8 @@ export const allEvents = [
   "connection.needs_reconsent",
   "upstream_signin.lapsed",
   "key.expiring",
+  "approval.requested",
+  "approval.decided",
 ] as const satisfies readonly NotificationEvent[];
 
 export const eventLabels: Record<NotificationEvent, string> = {
@@ -26,6 +28,8 @@ export const eventLabels: Record<NotificationEvent, string> = {
   "connection.needs_reconsent": "A connected account needs you to sign in again",
   "upstream_signin.lapsed": "A server's sign-in lapsed",
   "key.expiring": "A key or token expires soon",
+  "approval.requested": "A tool call is waiting for approval",
+  "approval.decided": "A tool-call approval was decided",
 };
 
 /** What happens and when, in a line. */
@@ -38,6 +42,8 @@ export const eventDescriptions: Record<NotificationEvent, string> = {
   "connection.needs_reconsent": "A personal or team-shared account (GitHub, Google…) stopped working and needs reconnecting.",
   "upstream_signin.lapsed": "The sign-in that discovers an OAuth server's tools expired and needs someone to sign in again.",
   "key.expiring": "A key or token will expire in 7 days: your own API key, a service account key, a publisher token or a platform token.",
+  "approval.requested": "An exact tool call needs human review. The notice links to the private receipt, never its arguments or preview.",
+  "approval.decided": "A reviewer approved or denied an exact tool call. Approval authorizes one attempt, not proof of execution.",
 };
 
 /** Who receives each event in the portal and by email. */
@@ -50,6 +56,8 @@ export const eventRecipients: Record<NotificationEvent, string> = {
   "connection.needs_reconsent": "The person whose account it is, or the owning team's owners and admins for a shared connection",
   "upstream_signin.lapsed": "Team owners, admins and editors",
   "key.expiring": "Your own keys: you. Service account keys and publisher tokens: team owners and admins. Platform tokens: platform admins",
+  "approval.requested": "Currently eligible reviewers, with self-approval and service-account separation of duties enforced",
+  "approval.decided": "The requester, or the requesting service account's current team owners and admins",
 };
 
 /** Events a team's webhook can receive (key.expiring: service account keys and publisher tokens). */
@@ -65,10 +73,4 @@ export const platformDestinationEvents: NotificationEvent[] = ["publish.requeste
 export const destinationEvents = (scope: "team" | "platform", teamEvents: boolean): NotificationEvent[] =>
   scope === "team" ? teamDestinationEvents : teamEvents ? platformDestinationEvents : platformOwnEvents;
 
-// Approval event labels are forward-compatible inbox text only. The current generated
-// preference/webhook enum does not expose these events; do not invent writable options.
-const approvalEventLabels: Record<string, string> = {
-  "approval.requested": "A tool call is waiting for approval",
-  "approval.decided": "A tool-call approval was decided",
-};
-export const eventLabel = (event: string) => eventLabels[event as NotificationEvent] ?? approvalEventLabels[event] ?? event;
+export const eventLabel = (event: string) => eventLabels[event as NotificationEvent] ?? event;

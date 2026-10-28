@@ -97,6 +97,9 @@ func (rc *request) prepareApproval(o gateways.Offer, args json.RawMessage, again
 			return rc.h.Approvals.CheckContext(ctx, plan.Binding.Epoch, plan.CredentialExpiresAt)
 		}
 		if err := rc.h.Approvals.Consume(ctx, plan); err != nil {
+			if errors.Is(err, approvals.ErrSpent) {
+				a.spent.Store(true)
+			}
 			return err
 		}
 		a.spent.Store(true)

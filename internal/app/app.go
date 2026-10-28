@@ -375,6 +375,8 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 	if err != nil {
 		return httpapi.Deps{}, fmt.Errorf("tool approvals: %w", err)
 	}
+	approvalSvc.EmitNotice = notify.ApprovalNotice
+	notifier.ApprovalRecipients = approvalSvc.NotificationRecipients
 	ret.Hooks = append(ret.Hooks, func(ctx context.Context) (int64, error) {
 		return 0, approvalSvc.Cleanup(ctx, min(int32(cfg.RetentionBatchSize), 1000))
 	})

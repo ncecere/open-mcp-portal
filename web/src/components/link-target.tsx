@@ -40,6 +40,10 @@ export const linkTargets: Record<LinkType, Resolver> = {
     element: ({ teamSlug }) => (teamSlug ? <Link to="/teams/$team/servers" params={{ team: teamSlug }} search={{ publishState: "pending" }} /> : null),
   },
   review_queue: { route: "/admin/publishing", element: () => <Link to="/admin/publishing" /> },
+  approval: {
+    route: "/approvals/$approvalId",
+    element: ({ id }) => id ? <Link to="/approvals/$approvalId" params={{ approvalId: id }} /> : null,
+  },
   gateways: { route: "/admin/gateways", element: () => <Link to="/admin/gateways" /> },
   service_account: {
     route: "/teams/$team/service-accounts/$serviceAccountId",

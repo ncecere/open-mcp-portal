@@ -86,6 +86,11 @@ func seed(t *testing.T, pool *pgxpool.Pool, b *secrets.Box) map[string]string {
 	scalar(t, pool, `INSERT INTO mcp_call_payloads (call_id, occurred_at, by_gateway, by_server, arguments_cipher, result_cipher, arguments_bytes) VALUES ($1::bigint, now(), true, false, '\x00', '\x00', 1) RETURNING call_id::text`, keys["mcp_call_payloads"])
 	keys["notification_destinations"] = scalar(t, pool, `INSERT INTO notification_destinations (scope, name, format, url_cipher, url_display, secret_cipher, secret_previous_cipher, events)
 		VALUES ('platform', 'hook', 'json', '\x00', 'https://h.example.com/...', '\x00', '\x00', '{publish.requested}') RETURNING id::text`)
+	keys["approval_requests"] = scalar(t, pool, `INSERT INTO approval_requests
+		(rule_id,rule_revision,context_epoch,requester_kind,requester_id,gateway_id,server_id,capability_id,
+		 exposed_name,args_digest,binding_digest,capability_fingerprint,server_origin,preview_cipher,expires_at)
+		VALUES(gen_random_uuid(),1,public.omp_current_approval_context(),'user',$1,$2,$3,gen_random_uuid(),
+		 's__sensitive',repeat('a',64),repeat('b',64),repeat('c',64),'https://x','\x00',now()+interval '1 hour') RETURNING id::text`, user, gw, keys["mcp_servers"])
 	for _, c := range keyrotation.Columns {
 		ct, err := b.Seal([]byte("secret of "+c.Name()), c.AAD(keys[c.Table]))
 		if err != nil {

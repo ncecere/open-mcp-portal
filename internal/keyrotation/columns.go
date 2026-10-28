@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/ncecere/open-mcp-portal/internal/approvals"
 	"github.com/ncecere/open-mcp-portal/internal/capture"
 	"github.com/ncecere/open-mcp-portal/internal/notify"
 	"github.com/ncecere/open-mcp-portal/internal/personsecrets"
@@ -112,6 +113,7 @@ var Columns = []Column{
 	{Table: "notification_destinations", Column: "url_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(notify.URLAAD)},
 	{Table: "notification_destinations", Column: "secret_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(notify.SecretAAD)},
 	{Table: "notification_destinations", Column: "secret_previous_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(notify.PreviousSecretAAD)},
+	{Table: "approval_requests", Column: "preview_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(approvals.PreviewAAD)},
 	{Table: "mcp_call_payloads", Column: "arguments_cipher", Key: "call_id", KeyType: "bigint", AAD: callAAD(capture.PartArguments)},
 	{Table: "mcp_call_payloads", Column: "result_cipher", Key: "call_id", KeyType: "bigint", AAD: callAAD(capture.PartResult)},
 }

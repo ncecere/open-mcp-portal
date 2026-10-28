@@ -12973,7 +12973,7 @@ components:
         > Automation tokens; team_automation_tokens: the team''s Settings > Automation tokens; auth_providers: Admin > Auth
         providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team''s
         Settings > Notifications; service_connections: the team''s Service accounts > Connections tab;
-        account_connections: Account > Connections; account_api_keys: Account > API keys.'
+        account_connections: Account > Connections; account_api_keys: Account > API keys; approval: the private receipt page.'
       required:
       - type
       properties:
@@ -12995,9 +12995,10 @@ components:
           - service_connections
           - account_connections
           - account_api_keys
+          - approval
         id:
           type: string
-          description: The object's ID for singular types (server, service_account)
+          description: The object's ID for singular types (server, service_account, approval)
         teamSlug:
           type: string
           description: The team's slug, for team pages and for the team's server or service account
@@ -13219,12 +13220,15 @@ components:
       - connection.needs_reconsent
       - upstream_signin.lapsed
       - key.expiring
+      - approval.requested
+      - approval.decided
       description: 'server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts.
         server.recovered. capability.changed: a published server''s definition changed or grew and is held back. publish.requested:
         a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent:
         a person''s connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server''s
         setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can''t subscribe
-        to connection.needs_reconsent or to personal keys.'
+        to connection.needs_reconsent, approval.requested, approval.decided or to personal keys.
+        Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.'
     NotificationItem:
       type: object
       required:
@@ -13989,6 +13993,22 @@ components:
           nullable: true
           description: The server, for server_certificate (its mTLS client certificate expires within 14 days; the
             team's owners, admins and editors are told)
+    ApprovalNotificationData:
+      type: object
+      description: Private receipt metadata; never arguments, previews, digests, notes or credentials.
+      required:
+      - approvalId
+      - exposedName
+      - status
+      properties:
+        approvalId:
+          type: string
+          format: uuid
+        exposedName:
+          type: string
+          maxLength: 1100
+        status:
+          $ref: '#/components/schemas/ApprovalStatus'
     NotificationTestData:
       type: object
       required:
@@ -14026,6 +14046,8 @@ components:
           - connection.needs_reconsent
           - upstream_signin.lapsed
           - key.expiring
+          - approval.requested
+          - approval.decided
           - test
         version:
           type: integer
@@ -14062,6 +14084,7 @@ components:
           - $ref: '#/components/schemas/ConnectionNeedsReconsentData'
           - $ref: '#/components/schemas/UpstreamSigninLapsedData'
           - $ref: '#/components/schemas/KeyExpiringData'
+          - $ref: '#/components/schemas/ApprovalNotificationData'
           - $ref: '#/components/schemas/NotificationTestData'
           description: The shape follows type
     AutomationTokenKind:
