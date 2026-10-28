@@ -137,63 +137,16 @@ func (s *Service) GetRequest(ctx context.Context, a authz.Actor, id uuid.UUID) (
 	}
 	return out, nil
 }
+
+// ListRequests is a first-page compatibility helper for internal callers.
+// Queues must use ListRequestsPage to preserve continuation over filtered rows;
+// offset scans are deliberately not supported.
 func (s *Service) ListRequests(ctx context.Context, a authz.Actor, view string, offset, limit int32) ([]Receipt, error) {
-	out := []Receipt{}
-	err := s.transaction(ctx, &a, false, func(q *dbgen.Queries, epoch int64) error {
-		if view == "" {
-			view = "actionable"
-		}
-		if view != "requested" && view != "actionable" {
-			return apperr.Invalid("invalid_view", "View must be requested or actionable")
-		}
-		if e := pagination(offset, limit); e != nil {
-			return e
-		}
-		scan := dbgen.ApprovalRequestMetadataBatchParams{PageLimit: 200}
-		for {
-			rows, e := q.ApprovalRequestMetadataBatch(ctx, scan)
-			if e != nil {
-				return e
-			}
-			for _, row := range rows {
-				r := metadataRequest(row)
-				p, _, _, e := s.permissions(ctx, q, a, r, epoch, row.HasPreview)
-				if e != nil {
-					return e
-				}
-				include := p.CanDecide
-				if view == "requested" {
-					include, e = requesterAgent(ctx, q, a, r)
-					if e != nil {
-						return e
-					}
-				}
-				if !include {
-					continue
-				}
-				if offset > 0 {
-					offset--
-					continue
-				}
-				// A list never carries a preview (nor cipher); metadata scans are
-				// bounded/keyset-based and visibility is applied BEFORE pagination.
-				out = append(out, p)
-				if int32(len(out)) == limit {
-					return nil
-				}
-			}
-			if len(rows) < int(scan.PageLimit) {
-				return nil
-			}
-			last := rows[len(rows)-1]
-			scan.BeforeTime = &last.CreatedAt
-			scan.BeforeID = nullable(last.ID)
-		}
-	})
-	if err != nil {
-		return nil, err
+	if offset != 0 {
+		return nil, apperr.Invalid("invalid_pagination", "Use a queue cursor instead of an offset")
 	}
-	return out, nil
+	rows, _, err := s.ListRequestsPage(ctx, a, view, "", limit)
+	return rows, err
 }
 func (s *Service) Decide(ctx context.Context, a authz.Actor, id uuid.UUID, in Decision) (Receipt, error) {
 	var out Receipt

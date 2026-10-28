@@ -19,7 +19,7 @@ type ApprovalService interface {
 	CreateRule(context.Context, authz.Actor, string, approvals.RuleInput) (approvals.Rule, error)
 	ReplaceRule(context.Context, authz.Actor, string, uuid.UUID, int64, approvals.RuleInput) (approvals.Rule, error)
 	DeleteRule(context.Context, authz.Actor, string, uuid.UUID, int64) error
-	ListRequests(context.Context, authz.Actor, string, int32, int32) ([]approvals.Receipt, error)
+	ListRequestsPage(context.Context, authz.Actor, string, string, int32) ([]approvals.Receipt, string, error)
 	GetRequest(context.Context, authz.Actor, uuid.UUID) (approvals.Receipt, error)
 	Decide(context.Context, authz.Actor, uuid.UUID, approvals.Decision) (approvals.Receipt, error)
 	Cancel(context.Context, authz.Actor, uuid.UUID, int64) (approvals.Receipt, error)
@@ -106,11 +106,11 @@ func (a *api) listMyApprovals(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 400, "invalid_view", "Choose requested or actionable approvals")
 		return
 	}
-	offset, limit, ok := approvalPage(w, r)
+	limit, ok := pageLimit(w, r)
 	if !ok {
 		return
 	}
-	rows, err := a.Approvals.ListRequests(r.Context(), a.actor(r), view, offset, limit+1)
+	rows, cursor, err := a.Approvals.ListRequestsPage(r.Context(), a.actor(r), view, r.URL.Query().Get("cursor"), limit)
 	if failed(w, r, err) {
 		return
 	}
@@ -119,7 +119,17 @@ func (a *api) listMyApprovals(w http.ResponseWriter, r *http.Request) {
 	for i := range rows {
 		rows[i].Preview = nil
 	}
-	writeApprovalPage(w, r, rows, offset, limit)
+	var next *string
+	if cursor != "" {
+		next = &cursor
+	}
+	if rows == nil {
+		rows = []approvals.Receipt{}
+	}
+	httpx.JSON(w, 200, struct {
+		Items      []approvals.Receipt `json:"items"`
+		NextCursor *string             `json:"nextCursor"`
+	}{rows, next})
 }
 
 func (a *api) getApproval(w http.ResponseWriter, r *http.Request) {
