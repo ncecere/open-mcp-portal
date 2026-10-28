@@ -18,7 +18,7 @@ import (
 // what it checks, and then runs them over the same data.
 func TestCallTraceIDMigration(t *testing.T) {
 	const callTraceID = 23 // 00023_call_trace_id.sql
-	runtime, _ := testutil.NewDB(t)
+	runtime, _ := newHistoricalDB(t, 23)
 	pool := testutil.OwnerPool(t, runtime)
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
@@ -29,14 +29,14 @@ func TestCallTraceIDMigration(t *testing.T) {
 	}
 	exec := func(sql string) {
 		t.Helper()
-		if _, err := pool.Exec(ctx, sql); err != nil {
+		if _, err := runtime.Exec(ctx, sql); err != nil {
 			t.Fatalf("%s: %v", sql, err)
 		}
 	}
 	scalar := func(sql string) string {
 		t.Helper()
 		var out string
-		if err := pool.QueryRow(ctx, sql).Scan(&out); err != nil {
+		if err := runtime.QueryRow(ctx, sql).Scan(&out); err != nil {
 			t.Fatalf("%s: %v", sql, err)
 		}
 		return out
@@ -45,11 +45,10 @@ func TestCallTraceIDMigration(t *testing.T) {
 		return scalar(`SELECT count(*)::text FROM information_schema.columns WHERE table_name = 'mcp_calls' AND column_name = 'trace_id'`) == "1"
 	}
 	if !hasColumn() {
-		t.Fatal("the newest schema has no mcp_calls.trace_id")
+		t.Fatal("the historical schema has no mcp_calls.trace_id")
 	}
-	// Back to the previous release's schema (this runs the Down of 23 and of
-	// every later migration), with a call recorded the way it does.
-	testutil.RemoveRetirementFencesForOldSchema(t, pool)
+	// Run the Down of 23 from its historical schema, with a call recorded as
+	// the previous release would have written it.
 	if _, err := provider.DownTo(ctx, callTraceID-1); err != nil {
 		t.Fatalf("down: %v", err)
 	}
@@ -63,6 +62,7 @@ func TestCallTraceIDMigration(t *testing.T) {
 	if _, err := provider.UpTo(ctx, callTraceID); err != nil {
 		t.Fatalf("up: %v", err)
 	}
+	regrantMigrationFixture(t, runtime)
 	if v, err := provider.GetDBVersion(ctx); err != nil || v != callTraceID {
 		t.Fatalf("schema version after up = %d %v, want %d", v, err, callTraceID)
 	}
@@ -82,13 +82,14 @@ func TestCallTraceIDMigration(t *testing.T) {
 	if got := scalar(`SELECT string_agg(coalesce(trace_id, 'null'), ',' ORDER BY id) FROM mcp_calls`); got != want {
 		t.Errorf("trace_id = %s, want %s", got, want)
 	}
-	if _, err := pool.Exec(ctx, `UPDATE mcp_calls SET trace_id = 'x'`); err == nil {
+	if _, err := runtime.Exec(ctx, `UPDATE mcp_calls SET trace_id = 'x'`); err == nil {
 		t.Error("mcp_calls accepted an update: it is append-only")
 	}
 	// The newer migrations apply over the same data and keep it.
 	if _, err := provider.Up(ctx); err != nil {
 		t.Fatalf("up to the newest: %v", err)
 	}
+	regrantMigrationFixture(t, runtime)
 	if got := scalar(`SELECT string_agg(coalesce(trace_id, 'null'), ',' ORDER BY id) FROM mcp_calls`); got != want {
 		t.Errorf("trace_id after the newer migrations = %s", got)
 	}

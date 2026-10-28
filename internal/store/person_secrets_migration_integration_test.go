@@ -21,7 +21,7 @@ import (
 // later migrations do not change what it checks, and then runs them.
 func TestPersonSecretsMigration(t *testing.T) {
 	const personSecrets = 24 // 00024_person_secrets.sql
-	runtime, _ := testutil.NewDB(t)
+	runtime, _ := newHistoricalDB(t, 24)
 	pool := testutil.OwnerPool(t, runtime)
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
@@ -31,7 +31,7 @@ func TestPersonSecretsMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	exec := func(sql string, args ...any) error {
-		_, err := pool.Exec(ctx, sql, args...)
+		_, err := runtime.Exec(ctx, sql, args...)
 		return err
 	}
 	must := func(sql string, args ...any) {
@@ -43,16 +43,15 @@ func TestPersonSecretsMigration(t *testing.T) {
 	scalar := func(sql string, args ...any) string {
 		t.Helper()
 		var out string
-		if err := pool.QueryRow(ctx, sql, args...).Scan(&out); err != nil {
+		if err := runtime.QueryRow(ctx, sql, args...).Scan(&out); err != nil {
 			t.Fatalf("%s: %v", sql, err)
 		}
 		return out
 	}
 	if scalar(`SELECT to_regclass('person_secrets')::text`) == "" {
-		t.Fatal("the newest schema has no person_secrets")
+		t.Fatal("the historical schema has no person_secrets")
 	}
 	// Back to the previous release's schema, with a server in each older mode.
-	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, personSecrets-1); err != nil {
 		t.Fatalf("down: %v", err)
 	}
@@ -71,6 +70,7 @@ func TestPersonSecretsMigration(t *testing.T) {
 	if _, err := provider.UpTo(ctx, personSecrets); err != nil {
 		t.Fatalf("up: %v", err)
 	}
+	regrantMigrationFixture(t, runtime)
 	if v, err := provider.GetDBVersion(ctx); err != nil || v != personSecrets {
 		t.Fatalf("schema version after up = %d %v, want %d", v, err, personSecrets)
 	}
@@ -120,7 +120,6 @@ func TestPersonSecretsMigration(t *testing.T) {
 
 	// Down puts such a server back to none and restores the older check.
 	must(`INSERT INTO mcp_servers (team_id, slug, name, url, auth_mode, secret_placement) SELECT id, 'again', 'again', 'https://z.example/mcp', 'person_secret', 'bearer' FROM teams`)
-	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, personSecrets-1); err != nil {
 		t.Fatalf("down again: %v", err)
 	}
@@ -134,6 +133,7 @@ func TestPersonSecretsMigration(t *testing.T) {
 	if _, err := provider.Up(ctx); err != nil {
 		t.Fatalf("up to the newest: %v", err)
 	}
+	regrantMigrationFixture(t, runtime)
 	if got := scalar(`SELECT count(*)::text FROM mcp_servers`); got != "4" {
 		t.Errorf("servers after the newer migrations = %s, want 4", got)
 	}

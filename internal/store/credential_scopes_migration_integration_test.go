@@ -14,7 +14,7 @@ import (
 )
 
 func TestCredentialScopesMigration(t *testing.T) {
-	pool, _ := testutil.NewDB(t)
+	pool, _ := newHistoricalDB(t, 29)
 	ctx := context.Background()
 	// Schema changes use the migration owner; compatibility writes below
 	// deliberately remain on the genuinely authenticated runtime pool.
@@ -24,7 +24,6 @@ func TestCredentialScopesMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, 28); err != nil {
 		t.Fatal(err)
 	}
@@ -51,10 +50,10 @@ func TestCredentialScopesMigration(t *testing.T) {
 	exec(`INSERT INTO service_account_keys(service_account_id,name,prefix,digest,expires_at) VALUES ($1,'old','omp_sa_abcdefgh',$2,now()+interval '1 day')`, sa, strings.Repeat("b", 64))
 	exec(`INSERT INTO gateway_grants(gateway_id,subject_kind,user_id) VALUES ($1,'user',$2)`, gateway, u)
 	exec(`INSERT INTO oauth_grants(user_id,gateway_id,client_id,client_kind,client_name,resource) VALUES ($1,$2,'old','registered','Old','http://localhost/mcp/old')`, u, gateway)
-	if _, err := provider.Up(ctx); err != nil {
+	if _, err := provider.UpTo(ctx, 33); err != nil {
 		t.Fatal(err)
 	}
-	testutil.Regrant(t, pool)
+	regrantMigrationFixture(t, pool)
 	for _, table := range []string{"api_keys", "service_accounts", "service_account_keys", "oauth_grants", "gateway_grants"} {
 		if got := scalar(fmt.Sprintf(`SELECT count(*)::text FROM %s WHERE tool_scope IS NULL`, table)); got != "1" {
 			t.Fatalf("%s existing row changed: %s", table, got)
@@ -73,7 +72,6 @@ func TestCredentialScopesMigration(t *testing.T) {
 	// The widened reason check is additive; reversal keeps revocation rather
 	// than resurrecting grants while forgetting their new reason.
 	exec(`UPDATE oauth_grants SET revoked_at=now(),revoked_reason='scope_changed'`)
-	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, 28); err != nil {
 		t.Fatal(err)
 	}
@@ -83,5 +81,5 @@ func TestCredentialScopesMigration(t *testing.T) {
 	if _, err := provider.Up(ctx); err != nil {
 		t.Fatal(err)
 	}
-	testutil.Regrant(t, pool)
+	regrantMigrationFixture(t, pool)
 }

@@ -18,7 +18,7 @@ import (
 )
 
 func TestPlatformRetirementUpgradeAndOldReplicaFences(t *testing.T) {
-	runtime, _ := testutil.NewDB(t)
+	runtime, _ := newHistoricalDB(t, 33)
 	owner := testutil.OwnerPool(t, runtime)
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(owner)
@@ -27,22 +27,17 @@ func TestPlatformRetirementUpgradeAndOldReplicaFences(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Recreate the real previous schema in a disposable fixture only. Down 34
-	// deliberately retains fences; removing them is privileged test setup.
-	testutil.RemoveRetirementFencesForOldSchema(t, runtime)
-	if _, err := provider.DownTo(ctx, 33); err != nil {
-		t.Fatal(err)
-	}
+	// Start before retirement; its forward-only fences are never rolled back.
 	must := func(sql string, args ...any) {
 		t.Helper()
-		if _, err := owner.Exec(ctx, sql, args...); err != nil {
+		if _, err := runtime.Exec(ctx, sql, args...); err != nil {
 			t.Fatal(err)
 		}
 	}
 	scalar := func(sql string) string {
 		t.Helper()
 		var out string
-		if err := owner.QueryRow(ctx, sql).Scan(&out); err != nil {
+		if err := runtime.QueryRow(ctx, sql).Scan(&out); err != nil {
 			t.Fatal(err)
 		}
 		return out
@@ -125,8 +120,18 @@ func TestPlatformRetirementUpgradeAndOldReplicaFences(t *testing.T) {
 	if _, err := runtime.Exec(ctx, `UPDATE service_accounts SET enabled=false WHERE name='ordinary'; UPDATE service_accounts SET enabled=true WHERE name='ordinary'`); err != nil {
 		t.Fatal(err)
 	}
-	// A Down is a security no-op, not a route to restore old authority.
-	if _, err := provider.DownTo(ctx, 33); err != nil {
+	// Exercise 34's actual Down SQL: it is a security no-op, not a route to
+	// restore old authority. Keep the Goose ledger truthful instead of claiming
+	// that forward-only 34/35/36 have been rolled back to schema 33.
+	raw, err := migrations.FS.ReadFile("00034_retire_agent_platforms.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, down, ok := strings.Cut(string(raw), "-- +goose Down")
+	if !ok {
+		t.Fatal("retirement migration has no Down")
+	}
+	if _, err := owner.Exec(ctx, down); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := runtime.Exec(ctx, `UPDATE service_accounts SET enabled=true WHERE name='legacy'`); err == nil {

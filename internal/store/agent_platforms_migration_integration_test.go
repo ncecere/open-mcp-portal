@@ -19,7 +19,7 @@ import (
 // Down works, and running the Up again (after a failure half way) is safe.
 func TestAgentPlatformsMigration00020(t *testing.T) {
 	const agentPlatforms = 20 // 00020_agent_platforms.sql
-	runtime, _ := testutil.NewDB(t)
+	runtime, _ := newHistoricalDB(t, 20)
 	pool := testutil.OwnerPool(t, runtime)
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
@@ -30,7 +30,7 @@ func TestAgentPlatformsMigration00020(t *testing.T) {
 	}
 	exec := func(sql string, args ...any) error {
 		t.Helper()
-		_, err := pool.Exec(ctx, sql, args...)
+		_, err := runtime.Exec(ctx, sql, args...)
 		return err
 	}
 	must := func(sql string, args ...any) {
@@ -42,7 +42,7 @@ func TestAgentPlatformsMigration00020(t *testing.T) {
 	scalar := func(sql string) string {
 		t.Helper()
 		var out string
-		if err := pool.QueryRow(ctx, sql).Scan(&out); err != nil {
+		if err := runtime.QueryRow(ctx, sql).Scan(&out); err != nil {
 			t.Fatalf("%s: %v", sql, err)
 		}
 		return out
@@ -57,7 +57,7 @@ func TestAgentPlatformsMigration00020(t *testing.T) {
 	callColumns := []string{"agent_id", "agent_name", "via_platform_id", "via_platform_name", "person_present"}
 
 	if !hasTable("agent_platforms") || !hasColumn("mcp_servers", "requires_present_person") {
-		t.Fatal("the newest schema lacks the agent platform tables")
+		t.Fatal("the historical schema lacks the agent platform tables")
 	}
 	// The length checks exist, are validated, and are enforced.
 	if got := scalar(`SELECT string_agg(conname || '=' || convalidated::text, ',' ORDER BY conname) FROM pg_constraint
@@ -86,9 +86,8 @@ func TestAgentPlatformsMigration00020(t *testing.T) {
 		t.Fatalf("schema version = %d %v", v, err)
 	}
 
-	// Back to the previous release's schema (the Down of 20 and of every later
-	// migration), and make the data look like an installation of it.
-	testutil.RemoveRetirementFencesForOldSchema(t, pool)
+	// Run the Down of 20 from its historical schema, then seed data as the
+	// previous release would have written it.
 	if _, err := provider.DownTo(ctx, agentPlatforms-1); err != nil {
 		t.Fatalf("down: %v", err)
 	}
@@ -111,6 +110,7 @@ func TestAgentPlatformsMigration00020(t *testing.T) {
 	if _, err := provider.UpTo(ctx, agentPlatforms); err != nil {
 		t.Fatalf("up: %v", err)
 	}
+	regrantMigrationFixture(t, runtime)
 	if v, err := provider.GetDBVersion(ctx); err != nil || v != agentPlatforms {
 		t.Fatalf("schema version after up = %d %v, want %d", v, err, agentPlatforms)
 	}
@@ -142,7 +142,7 @@ func TestAgentPlatformsMigration00020(t *testing.T) {
 		if strings.TrimSpace(stmt) == "" {
 			continue
 		}
-		if err := exec(stmt); err != nil {
+		if _, err := pool.Exec(ctx, stmt); err != nil {
 			t.Fatalf("running the Up again: %v\n%s", err, stmt)
 		}
 	}
@@ -153,15 +153,17 @@ func TestAgentPlatformsMigration00020(t *testing.T) {
 		WHERE conrelid = 'mcp_calls'::regclass AND conname LIKE 'mcp\_calls\_%\_len'`); got != "true,true,true" {
 		t.Errorf("checks after running the Up again = %s", got)
 	}
-	// And the migration runs the whole way up, then down and up once more.
-	if _, err := provider.Up(ctx); err != nil {
-		t.Fatalf("up to the newest: %v", err)
+	// Exercise later reversible migrations, then Down once more before the
+	// final upgrade through forward-only migrations 34 and newer.
+	if _, err := provider.UpTo(ctx, 33); err != nil {
+		t.Fatalf("up to the last reversible schema: %v", err)
 	}
-	testutil.RemoveRetirementFencesForOldSchema(t, pool)
+	regrantMigrationFixture(t, runtime)
 	if _, err := provider.DownTo(ctx, agentPlatforms-1); err != nil {
 		t.Fatalf("second down: %v", err)
 	}
 	if _, err := provider.Up(ctx); err != nil {
 		t.Fatalf("second up: %v", err)
 	}
+	regrantMigrationFixture(t, runtime)
 }

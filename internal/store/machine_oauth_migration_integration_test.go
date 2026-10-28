@@ -23,7 +23,7 @@ import (
 // without authentication and removes only what it added.
 func TestMachineOAuthMigration(t *testing.T) {
 	const machineOAuth = 25 // 00025_machine_oauth.sql
-	runtime, _ := testutil.NewDB(t)
+	runtime, _ := newHistoricalDB(t, 25)
 	pool := testutil.OwnerPool(t, runtime)
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
@@ -33,7 +33,7 @@ func TestMachineOAuthMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	exec := func(sql string, args ...any) error {
-		_, err := pool.Exec(ctx, sql, args...)
+		_, err := runtime.Exec(ctx, sql, args...)
 		return err
 	}
 	mustExec := func(sql string, args ...any) {
@@ -45,7 +45,7 @@ func TestMachineOAuthMigration(t *testing.T) {
 	scalar := func(sql string) string {
 		t.Helper()
 		var out string
-		if err := pool.QueryRow(ctx, sql).Scan(&out); err != nil {
+		if err := runtime.QueryRow(ctx, sql).Scan(&out); err != nil {
 			t.Fatalf("%s: %v", sql, err)
 		}
 		return out
@@ -54,12 +54,11 @@ func TestMachineOAuthMigration(t *testing.T) {
 		return scalar(`SELECT count(*)::text FROM information_schema.tables WHERE table_name = 'mcp_server_machine_oauth'`) == "1"
 	}
 	if !hasTable() {
-		t.Fatal("the newest schema has no mcp_server_machine_oauth")
+		t.Fatal("the historical schema has no mcp_server_machine_oauth")
 	}
 
-	// Back to the previous release's schema (this runs the Down of 25 and of
-	// every later migration), with servers saved the way it does.
-	testutil.RemoveRetirementFencesForOldSchema(t, pool)
+	// Run the Down of 25 from its historical schema, with servers saved as
+	// the previous release would have written them.
 	if _, err := provider.DownTo(ctx, machineOAuth-1); err != nil {
 		t.Fatalf("down: %v", err)
 	}
@@ -77,6 +76,7 @@ func TestMachineOAuthMigration(t *testing.T) {
 	if _, err := provider.UpTo(ctx, machineOAuth); err != nil {
 		t.Fatalf("up: %v", err)
 	}
+	regrantMigrationFixture(t, runtime)
 	if v, err := provider.GetDBVersion(ctx); err != nil || v != machineOAuth {
 		t.Fatalf("schema version after up = %d %v, want %d", v, err, machineOAuth)
 	}
@@ -131,7 +131,6 @@ func TestMachineOAuthMigration(t *testing.T) {
 
 	// Down: machine servers become servers without authentication, the table
 	// goes, nothing else changes. The newer migrations apply again over it.
-	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, machineOAuth-1); err != nil {
 		t.Fatalf("down with data: %v", err)
 	}
@@ -145,6 +144,7 @@ func TestMachineOAuthMigration(t *testing.T) {
 	if _, err := provider.Up(ctx); err != nil {
 		t.Fatalf("up to the newest: %v", err)
 	}
+	regrantMigrationFixture(t, runtime)
 	if !hasTable() || scalar(`SELECT count(*)::text FROM mcp_server_machine_oauth`) != "0" {
 		t.Error("the table after up again")
 	}

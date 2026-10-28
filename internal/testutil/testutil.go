@@ -120,6 +120,16 @@ func Regrant(t testing.TB, pool *pgxpool.Pool) {
 // OMP_TEST_SPLIT_ROLES=1. Only unique new scratch databases/roles are touched.
 func NewDB(t testing.TB) (*pgxpool.Pool, string) {
 	t.Helper()
+	return NewDBWithMigration(t, func(ctx context.Context, owner *pgxpool.Pool, role string) error {
+		return store.Migrate(ctx, owner, Logger(), role)
+	})
+}
+
+// NewDBWithMigration creates the same disposable database and authenticated
+// pools as NewDB, but lets historical-schema fixtures migrate from empty using
+// the owner. The callback must also grant the runtime role access to its schema.
+func NewDBWithMigration(t testing.TB, migrate func(context.Context, *pgxpool.Pool, string) error) (*pgxpool.Pool, string) {
+	t.Helper()
 	ctx := context.Background()
 	admin := adminConn(t, ctx)
 	name := "omp_test_" + randomSuffix()
@@ -187,7 +197,7 @@ func NewDB(t testing.TB) (*pgxpool.Pool, string) {
 	if split {
 		role = runtimeName
 	}
-	if err := store.Migrate(ctx, owner, Logger(), role); err != nil {
+	if err := migrate(ctx, owner, role); err != nil {
 		t.Fatalf("migrate test db: %v", err)
 	}
 	if split {

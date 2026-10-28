@@ -21,8 +21,8 @@ import (
 // don't change what it checks.
 func TestProviderAccessMigrationKeepsProvidersOpen(t *testing.T) {
 	const access = 21 // 00021_provider_access.sql
-	runtime, _ := testutil.NewDB(t)
-	pool := testutil.OwnerPool(t, runtime) // at the newest schema
+	runtime, _ := newHistoricalDB(t, 21)
+	pool := testutil.OwnerPool(t, runtime) // at the historical schema
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()
@@ -32,14 +32,14 @@ func TestProviderAccessMigrationKeepsProvidersOpen(t *testing.T) {
 	}
 	exec := func(sql string, args ...any) {
 		t.Helper()
-		if _, err := pool.Exec(ctx, sql, args...); err != nil {
+		if _, err := runtime.Exec(ctx, sql, args...); err != nil {
 			t.Fatalf("%s: %v", sql, err)
 		}
 	}
 	scalar := func(sql string) string {
 		t.Helper()
 		var out string
-		if err := pool.QueryRow(ctx, sql).Scan(&out); err != nil {
+		if err := runtime.QueryRow(ctx, sql).Scan(&out); err != nil {
 			t.Fatalf("%s: %v", sql, err)
 		}
 		return out
@@ -48,11 +48,10 @@ func TestProviderAccessMigrationKeepsProvidersOpen(t *testing.T) {
 		return scalar(`SELECT count(*)::text FROM information_schema.tables WHERE table_name = '`+name+`'`) == "1"
 	}
 	if !hasTable("auth_provider_teams") || !hasTable("auth_provider_servers") {
-		t.Fatal("the newest schema has no access list tables")
+		t.Fatal("the historical schema has no access list tables")
 	}
 
 	// The schema of the previous release, with a provider as it would have it.
-	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, access-1); err != nil {
 		t.Fatalf("down: %v", err)
 	}
@@ -72,6 +71,7 @@ func TestProviderAccessMigrationKeepsProvidersOpen(t *testing.T) {
 	if _, err := provider.UpTo(ctx, access); err != nil {
 		t.Fatalf("up: %v", err)
 	}
+	regrantMigrationFixture(t, runtime)
 	if got := scalar(`SELECT string_agg(slug || '=' || access_mode || '/' || narrow_on_refresh::text, ',' ORDER BY slug) FROM auth_providers`); got != "github=open/false,google=open/false" {
 		t.Errorf("providers after the upgrade = %s", got)
 	}
@@ -80,7 +80,7 @@ func TestProviderAccessMigrationKeepsProvidersOpen(t *testing.T) {
 	if got := scalar(`SELECT access_mode FROM auth_providers WHERE slug = 'gitlab'`); got != "open" {
 		t.Errorf("a provider inserted without the column = %s", got)
 	}
-	if _, err := pool.Exec(ctx, `UPDATE auth_providers SET access_mode = 'sometimes' WHERE slug = 'gitlab'`); err == nil {
+	if _, err := runtime.Exec(ctx, `UPDATE auth_providers SET access_mode = 'sometimes' WHERE slug = 'gitlab'`); err == nil {
 		t.Error("an unknown access mode was accepted")
 	}
 
@@ -111,6 +111,7 @@ func TestProviderAccessMigrationKeepsProvidersOpen(t *testing.T) {
 	if _, err := provider.Up(ctx); err != nil {
 		t.Fatalf("up to the newest: %v", err)
 	}
+	regrantMigrationFixture(t, runtime)
 	if got := scalar(`SELECT string_agg(slug || '=' || access_mode, ',' ORDER BY slug) FROM auth_providers`); got != "github=restricted,gitlab=open" {
 		t.Errorf("providers after the newer migrations = %s", got)
 	}

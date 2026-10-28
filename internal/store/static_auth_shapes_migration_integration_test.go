@@ -21,7 +21,7 @@ import (
 // migration adds (it applies on a database at 00020, with or without 00021).
 func TestStaticAuthShapesMigration00022(t *testing.T) {
 	const staticAuth = 22 // 00022_static_auth_shapes.sql
-	runtime, _ := testutil.NewDB(t)
+	runtime, _ := newHistoricalDB(t, 22)
 	pool := testutil.OwnerPool(t, runtime)
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
@@ -32,7 +32,7 @@ func TestStaticAuthShapesMigration00022(t *testing.T) {
 	}
 	exec := func(sql string, args ...any) error {
 		t.Helper()
-		_, err := pool.Exec(ctx, sql, args...)
+		_, err := runtime.Exec(ctx, sql, args...)
 		return err
 	}
 	must := func(sql string, args ...any) {
@@ -44,7 +44,7 @@ func TestStaticAuthShapesMigration00022(t *testing.T) {
 	scalar := func(sql string, args ...any) string {
 		t.Helper()
 		var out string
-		if err := pool.QueryRow(ctx, sql, args...).Scan(&out); err != nil {
+		if err := runtime.QueryRow(ctx, sql, args...).Scan(&out); err != nil {
 			t.Fatalf("%s: %v", sql, err)
 		}
 		return out
@@ -54,7 +54,6 @@ func TestStaticAuthShapesMigration00022(t *testing.T) {
 	}
 
 	// The previous release's schema, with a server that has a static header.
-	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, staticAuth-1); err != nil {
 		t.Fatalf("down: %v", err)
 	}
@@ -69,6 +68,7 @@ func TestStaticAuthShapesMigration00022(t *testing.T) {
 	if _, err := provider.UpTo(ctx, staticAuth); err != nil {
 		t.Fatalf("up: %v", err)
 	}
+	regrantMigrationFixture(t, runtime)
 	if v, err := provider.GetDBVersion(ctx); err != nil || v != staticAuth {
 		t.Fatalf("schema version = %d %v", v, err)
 	}
@@ -139,7 +139,6 @@ func TestStaticAuthShapesMigration00022(t *testing.T) {
 	}
 
 	// Down removes the table and nothing else; the servers and their headers stay.
-	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, staticAuth-1); err != nil {
 		t.Fatalf("down again: %v", err)
 	}
@@ -149,17 +148,17 @@ func TestStaticAuthShapesMigration00022(t *testing.T) {
 	if got := scalar(`SELECT count(*)::text FROM mcp_servers WHERE auth_header_name IS NOT NULL`); got != "2" {
 		t.Errorf("servers with a header after the Down = %s, want 2", got)
 	}
-	if _, err := provider.Up(ctx); err != nil {
-		t.Fatalf("up to the newest: %v", err)
+	if _, err := provider.UpTo(ctx, 33); err != nil {
+		t.Fatalf("up to the last reversible schema: %v", err)
 	}
+	regrantMigrationFixture(t, runtime)
 	if !hasTable() {
-		t.Fatal("the table is missing after the whole way up")
+		t.Fatal("the table is missing after the reversible migrations")
 	}
 
 	// It needs nothing from a neighbouring migration: its statements alone, on
 	// the schema of 00020, create the table (what another migration of the same
 	// release adds, or doesn't, makes no difference).
-	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, 20); err != nil {
 		t.Fatalf("down to 20: %v", err)
 	}
@@ -171,14 +170,20 @@ func TestStaticAuthShapesMigration00022(t *testing.T) {
 	up = up[strings.Index(up, "-- +goose Up")+len("-- +goose Up") : strings.Index(up, "-- +goose Down")]
 	for _, stmt := range strings.Split(up, ";\n") {
 		if strings.TrimSpace(stmt) != "" {
-			must(stmt)
+			if _, err := pool.Exec(ctx, stmt); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
+	regrantMigrationFixture(t, runtime)
 	if !hasTable() {
 		t.Error("00022's statements alone did not create the table on a database at 00020")
 	}
-	must(`DROP TABLE mcp_server_credentials`)
+	if _, err := pool.Exec(ctx, `DROP TABLE mcp_server_credentials`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := provider.Up(ctx); err != nil {
 		t.Fatalf("up after the manual run: %v", err)
 	}
+	regrantMigrationFixture(t, runtime)
 }

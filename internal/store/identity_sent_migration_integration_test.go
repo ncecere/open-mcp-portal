@@ -21,8 +21,8 @@ import (
 // same data.
 func TestIdentitySentMigrationKeepsWhatExists(t *testing.T) {
 	const identitySent = 19 // 00019_call_identity_sent.sql
-	runtime, _ := testutil.NewDB(t)
-	pool := testutil.OwnerPool(t, runtime) // at the newest schema
+	runtime, _ := newHistoricalDB(t, 19)
+	pool := testutil.OwnerPool(t, runtime) // at the historical schema
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()
@@ -32,14 +32,14 @@ func TestIdentitySentMigrationKeepsWhatExists(t *testing.T) {
 	}
 	exec := func(sql string, args ...any) {
 		t.Helper()
-		if _, err := pool.Exec(ctx, sql, args...); err != nil {
+		if _, err := runtime.Exec(ctx, sql, args...); err != nil {
 			t.Fatalf("%s: %v", sql, err)
 		}
 	}
 	scalar := func(sql string) string {
 		t.Helper()
 		var out string
-		if err := pool.QueryRow(ctx, sql).Scan(&out); err != nil {
+		if err := runtime.QueryRow(ctx, sql).Scan(&out); err != nil {
 			t.Fatalf("%s: %v", sql, err)
 		}
 		return out
@@ -48,13 +48,11 @@ func TestIdentitySentMigrationKeepsWhatExists(t *testing.T) {
 		return scalar(`SELECT count(*)::text FROM information_schema.columns WHERE table_name = 'mcp_calls' AND column_name = 'identity_sent'`) == "1"
 	}
 	if !hasColumn() {
-		t.Fatal("the newest schema has no mcp_calls.identity_sent")
+		t.Fatal("the historical schema has no mcp_calls.identity_sent")
 	}
 
-	// Back to the schema of the previous release (this runs the Down of 19 and
-	// of every later migration), and make the data look like an installation of
-	// it.
-	testutil.RemoveRetirementFencesForOldSchema(t, pool)
+	// Run the Down of 19 from its historical schema, then seed data as the
+	// previous release would have written it.
 	if _, err := provider.DownTo(ctx, identitySent-1); err != nil {
 		t.Fatalf("down: %v", err)
 	}
@@ -76,6 +74,7 @@ func TestIdentitySentMigrationKeepsWhatExists(t *testing.T) {
 	if _, err := provider.UpTo(ctx, identitySent); err != nil {
 		t.Fatalf("up: %v", err)
 	}
+	regrantMigrationFixture(t, runtime)
 	if v, err := provider.GetDBVersion(ctx); err != nil || v != identitySent {
 		t.Fatalf("schema version after up = %d %v, want %d", v, err, identitySent)
 	}
@@ -100,6 +99,7 @@ func TestIdentitySentMigrationKeepsWhatExists(t *testing.T) {
 	if _, err := provider.Up(ctx); err != nil {
 		t.Fatalf("up to the newest: %v", err)
 	}
+	regrantMigrationFixture(t, runtime)
 	if got := scalar(`SELECT string_agg(coalesce(identity_sent::text, 'null'), ',' ORDER BY id) FROM mcp_calls`); got != "null,null,false" {
 		t.Errorf("identity_sent after the newer migrations = %s", got)
 	}
