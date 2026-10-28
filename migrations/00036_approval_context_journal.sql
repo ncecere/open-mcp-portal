@@ -2,6 +2,22 @@
 -- Replace migration 35's writer-side singleton mutex without changing applied
 -- history. Authority writers append independently; only short approval
 -- transactions fence authority tables. No fence may survive network I/O.
+-- Preserve 35's owner boundary when adding the new definer function: a
+-- different migration role must not leave it owned by an unrelated superuser.
+-- +goose StatementBegin
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_catalog.pg_class
+               WHERE oid IN ('public.approval_context'::regclass,'public.users'::regclass,'public.mcp_servers'::regclass)
+               AND relowner <> (SELECT oid FROM pg_catalog.pg_roles WHERE rolname = current_user))
+       OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc
+                  WHERE oid IN ('public.approval_authority_changed()'::regprocedure,'public.omp_lock_approval_context(boolean)'::regprocedure)
+                  AND proowner <> (SELECT oid FROM pg_catalog.pg_roles WHERE rolname = current_user)) THEN
+        RAISE EXCEPTION 'approval functions and protected tables must be owned by the migration role';
+    END IF;
+END
+$$;
+-- +goose StatementEnd
 CREATE SEQUENCE public.approval_context_events_event_id_seq AS bigint MINVALUE 1 NO CYCLE;
 CREATE TABLE public.approval_context_events (
     event_id bigint PRIMARY KEY DEFAULT nextval('public.approval_context_events_event_id_seq'::regclass)
