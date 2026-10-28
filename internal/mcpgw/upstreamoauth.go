@@ -2,7 +2,6 @@ package mcpgw
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/google/uuid"
 
@@ -225,9 +224,11 @@ func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.C
 			case errors.As(err, &consent):
 				rc.needsAuthorization(o, consent, rec, ClassInsufficientScope)
 			case errors.Is(err, providers.ErrInsufficientScope):
-				n := rc.failData(codeDenied, fmt.Sprintf("%s refused the call: it needs access%s that this gateway can't ask for",
-					o.Requires.Provider.Name, scopeNote(ch.Scopes())),
-					map[string]any{"reason": ClassInsufficientScope, "provider": o.Requires.Provider.Slug, "scopes": ch.Scopes()})
+				// Challenges are untrusted: an upstream can put credentials in
+				// scope/error text. Only StepUp's reviewed scopes may reach consent;
+				// an unfulfillable challenge has no public challenge-derived data.
+				n := rc.failData(codeDenied, "The upstream refused the call: it needs access that this gateway can't ask for",
+					map[string]any{"reason": ClassInsufficientScope, "provider": o.Requires.Provider.Slug})
 				rec.Outcome, rec.ErrorClass = calls.OutcomeDenied, ClassInsufficientScope
 				rc.record(*rec, n)
 			default:

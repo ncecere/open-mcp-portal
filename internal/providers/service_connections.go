@@ -191,21 +191,26 @@ func (s *Service) UpdateServiceConnection(ctx context.Context, a authz.Actor, te
 		if e = serviceOwned(c, t, e); e != nil {
 			return e
 		}
-		p, e := q.GetAuthProvider(ctx, c.ProviderID)
-		if e != nil {
-			return e
-		}
 		// Registry changes lock the server before invalidating its connection
 		// configuration. Match that order, sorting destinations across edits.
 		grants = slices.Clone(grants)
 		slices.SortFunc(grants, func(a, b ServiceGrant) int { return strings.Compare(a.ServerID.String(), b.ServerID.String()) })
 		for _, g := range grants {
-			if e = s.validateServiceGrant(ctx, q, a, p, g); e != nil {
+			if _, e = q.LockMCPServer(ctx, g.ServerID); e != nil {
+				if errors.Is(e, pgx.ErrNoRows) {
+					return apperr.NotFound("server_not_found", "Server not found")
+				}
 				return e
 			}
 		}
 		c, e = q.LockServiceConnection(ctx, id)
 		if e = serviceOwned(c, t, e); e != nil {
+			return e
+		}
+		// All destination and connection waits precede authority and proof
+		// reads. Never carry a pre-wait role, provider or scope snapshot into
+		// this write (including when the connection, not the server, waited).
+		if _, e = serviceAccess(ctx, q, a, team, true); e != nil {
 			return e
 		}
 		if e = serviceRevision(c, rev); e != nil {
@@ -225,7 +230,7 @@ func (s *Service) UpdateServiceConnection(ctx context.Context, a authz.Actor, te
 				}
 				return e
 			}
-			if e = q.InsertServiceConnectionAccount(ctx, dbgen.InsertServiceConnectionAccountParams{ConnectionID: id, TeamID: t.ID, ProviderID: p.ID, ServiceAccountID: aid}); e != nil {
+			if e = q.InsertServiceConnectionAccount(ctx, dbgen.InsertServiceConnectionAccountParams{ConnectionID: id, TeamID: t.ID, ProviderID: c.ProviderID, ServiceAccountID: aid}); e != nil {
 				return e
 			}
 		}
@@ -244,14 +249,40 @@ func (s *Service) UpdateServiceConnection(ctx context.Context, a authz.Actor, te
 		if e = q.DeleteServiceConnectionAuthStates(ctx, id); e != nil {
 			return e
 		}
+		// Assignment uniqueness/FK checks may also have queued. A refusal
+		// rolls back the entire replacement and its revision/state changes.
+		if _, e = serviceAccess(ctx, q, a, team, true); e != nil {
+			return e
+		}
 		if e = serviceAudit(ctx, q, a, c, "update", map[string]any{"name": c.Name, "before": before, "accounts": accounts, "servers": grants}); e != nil {
 			return e
+		}
+		// Even assignment and audit FK checks can wait. Validate the live
+		// authority and destination proof after every potentially waiting
+		// write, rolling back the replacement and audit together on refusal.
+		if _, e = serviceAccess(ctx, q, a, team, true); e != nil {
+			return e
+		}
+		p, e := q.GetAuthProvider(ctx, c.ProviderID)
+		if e != nil {
+			return e
+		}
+		if len(grants) > 0 && (!p.Enabled || s.linkUsable(ctx, p) != nil) {
+			return errNoProvider
+		}
+		for _, g := range grants {
+			if e = s.validateServiceGrant(ctx, q, a, p, g); e != nil {
+				return e
+			}
 		}
 		out, e = s.serviceView(ctx, q, c)
 		return e
 	})
 	return out, serviceConflict(err)
 }
+
+// validateServiceGrant is metadata-only. The caller must hold every sorted
+// destination lock and the connection lock before any of these live reads.
 func (s *Service) validateServiceGrant(ctx context.Context, q *dbgen.Queries, a authz.Actor, p dbgen.AuthProvider, g ServiceGrant) error {
 	if s.Reachable == nil {
 		return apperr.NotFound("server_not_found", "Server not found")
@@ -279,7 +310,7 @@ func (s *Service) validateServiceGrant(ctx context.Context, q *dbgen.Queries, a 
 	if !visible {
 		return apperr.NotFound("server_not_found", "Server not found")
 	}
-	sv, e := q.LockMCPServer(ctx, g.ServerID)
+	sv, e := q.GetMCPServer(ctx, g.ServerID)
 	if e != nil {
 		return e
 	}
@@ -319,6 +350,9 @@ func (s *Service) RevokeServiceConnection(ctx context.Context, a authz.Actor, te
 		if e = serviceOwned(c, t, e); e != nil {
 			return e
 		}
+		if _, e = serviceAccess(ctx, q, a, team, true); e != nil {
+			return e
+		}
 		if e = q.DeleteServiceConnection(ctx, id); e != nil {
 			return e
 		}
@@ -336,7 +370,14 @@ func (s *Service) RevokeServiceConnection(ctx context.Context, a authz.Actor, te
 			}
 			result = token != "" && s.revoke(ctx, p, token, hint)
 		}
-		return serviceAudit(ctx, q, a, c, "revoke", map[string]any{"name": c.Name, "providerRevoked": result})
+		if _, e = serviceAccess(ctx, q, a, team, true); e != nil {
+			return e
+		}
+		if e = serviceAudit(ctx, q, a, c, "revoke", map[string]any{"name": c.Name, "providerRevoked": result}); e != nil {
+			return e
+		}
+		_, e = serviceAccess(ctx, q, a, team, true)
+		return e
 	})
 }
 func serviceName(name string) (string, error) {

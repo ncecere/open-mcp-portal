@@ -48,6 +48,9 @@ func (s *Service) StartServiceConnection(ctx context.Context, a authz.Actor, tea
 		if e = q.LockServiceConnectionTeam(ctx, t.ID.String()); e != nil {
 			return e
 		}
+		if _, e = serviceAccess(ctx, q, a, team, true); e != nil {
+			return e
+		}
 		n, e := q.CountTeamServiceConnections(ctx, t.ID)
 		if e != nil {
 			return e
@@ -96,6 +99,10 @@ func (s *Service) StartServiceConnection(ctx context.Context, a authz.Actor, tea
 			return e
 		}
 		out, e = s.beginService(ctx, q, a, p, c, session)
+		if e != nil {
+			return e
+		}
+		_, e = serviceAccess(ctx, q, a, team, true)
 		return e
 	})
 	return out, serviceConflict(err)
@@ -112,6 +119,10 @@ func (s *Service) ReconnectServiceConnection(ctx context.Context, a authz.Actor,
 		}
 		c, e := q.LockServiceConnection(ctx, id)
 		if e = serviceOwned(c, t, e); e != nil {
+			return e
+		}
+		// Session-first, connection-next; only then trust live team authority.
+		if _, e = serviceAccess(ctx, q, a, team, true); e != nil {
 			return e
 		}
 		if e = serviceRevision(c, rev); e != nil {
@@ -132,6 +143,10 @@ func (s *Service) ReconnectServiceConnection(ctx context.Context, a authz.Actor,
 			return e
 		}
 		out, e = s.beginService(ctx, q, a, p, c, session)
+		if e != nil {
+			return e
+		}
+		_, e = serviceAccess(ctx, q, a, team, true)
 		return e
 	})
 	return out, err
