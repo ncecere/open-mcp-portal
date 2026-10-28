@@ -24,7 +24,7 @@ func newAttentionFixture(t *testing.T, split bool) *serviceFixture {
 	execFixture(t, f.db, `INSERT INTO team_members(team_id,user_id,role) VALUES ($1,$2,'owner')`, f.saTeam, f.saOwner.UserID)
 	execFixture(t, f.db, `INSERT INTO service_accounts(id,team_id,name,enabled) VALUES ($1,$2,'worker',true)`, f.sa, f.saTeam)
 	execFixture(t, f.db, `INSERT INTO gateway_grants(gateway_id,subject_kind,team_id) VALUES ($1,'team',$2)`, f.gateway, f.saTeam)
-	f.input.Epoch = mustEpoch(t, f.s)
+	f.input.Binding.Epoch = mustEpoch(t, f.s)
 	return f
 }
 
@@ -45,7 +45,7 @@ func assertAttentionQueue(t *testing.T, f *serviceFixture, a authz.Actor, want .
 		t.Fatalf("attention actor %s: total=%d rows=%d want=%d", a.UserID, total, len(items), len(expected))
 	}
 	for _, item := range items {
-		if !expected[item.ID] || item.ExposedName != f.input.ExposedName || item.CreatedAt.IsZero() {
+		if !expected[item.ID] || item.ExposedName != f.input.Binding.ExposedName || item.CreatedAt.IsZero() {
 			t.Fatalf("unsafe or unexpected item: %+v", item)
 		}
 	}
@@ -79,7 +79,7 @@ func assertAttentionQueue(t *testing.T, f *serviceFixture, a authz.Actor, want .
 
 func TestAttentionEligibilityMatchesQueue(t *testing.T) {
 	for _, split := range []bool{false, true} {
-		for _, scenario := range []string{"default", "named", "group", "fallback", "self-primary", "sa-exclusion", "sa-opt-in", "named-auditor", "gateway-owner"} {
+		for _, scenario := range []string{"default", "named", "group", "fallback", "inactive-primary", "self-primary", "sa-exclusion", "sa-opt-in", "named-auditor", "gateway-owner"} {
 			t.Run(fmt.Sprintf("split=%v/%s", split, scenario), func(t *testing.T) {
 				f := newAttentionFixture(t, split)
 				in := f.rule.RuleInput
@@ -91,15 +91,20 @@ func TestAttentionEligibilityMatchesQueue(t *testing.T) {
 					execFixture(t, f.db, `UPDATE users SET groups=ARRAY[$2::text] WHERE id=$1`, f.outsider.UserID, group)
 					execFixture(t, f.db, `UPDATE users SET groups=ARRAY['exact:reviewers'] WHERE id=$1`, f.auditor.UserID)
 					in.Approvers = []Selector{{Kind: "group", GroupName: &group}}
+				case "inactive-primary":
+					in.Approvers = []Selector{{Kind: "user", UserID: &f.reviewer.UserID}}
 				case "fallback":
 					group := "empty-primary"
 					in.Approvers = []Selector{{Kind: "group", GroupName: &group}}
 				case "self-primary":
 					in.Approvers = []Selector{{Kind: "user", UserID: &f.requester.UserID}}
 				case "sa-exclusion", "sa-opt-in":
-					f.input.RequesterKind, f.input.RequesterID, f.input.RequesterTeamID = "service_account", f.sa, &f.saTeam
+					f.input.Binding.RequesterKind, f.input.Binding.RequesterID, f.input.Binding.RequesterTeamID = "service_account", f.sa, &f.saTeam
 					in.Approvers = []Selector{{Kind: "user", UserID: &f.saOwner.UserID}}
 					in.AllowServiceAccountAdmins = scenario == "sa-opt-in"
+					// Even platform admins from the SA's owner team are excluded from
+					// fallback unless the rule explicitly opts in.
+					execFixture(t, f.db, `UPDATE users SET platform_role='platform_admin' WHERE id=$1`, f.saOwner.UserID)
 				case "named-auditor":
 					in.Approvers = []Selector{{Kind: "user", UserID: &f.auditor.UserID}}
 				case "gateway-owner":
@@ -114,13 +119,16 @@ func TestAttentionEligibilityMatchesQueue(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				f.input.Epoch = mustEpoch(t, f.s)
+				if scenario == "inactive-primary" {
+					execFixture(t, f.db, `UPDATE users SET status='suspended' WHERE id=$1`, f.reviewer.UserID)
+				}
+				f.input.Binding.Epoch = mustEpoch(t, f.s)
 				p := beginFixture(t, f)
 				winner := f.reviewer.UserID
 				switch scenario {
 				case "named", "group":
 					winner = f.outsider.UserID
-				case "fallback", "self-primary", "sa-exclusion":
+				case "fallback", "inactive-primary", "self-primary", "sa-exclusion":
 					winner = f.admin.UserID
 				case "sa-opt-in":
 					winner = f.saOwner.UserID
@@ -128,6 +136,9 @@ func TestAttentionEligibilityMatchesQueue(t *testing.T) {
 					winner = f.auditor.UserID
 				}
 				for _, actor := range []authz.Actor{f.requester, f.reviewer, f.outsider, f.admin, f.auditor, f.saOwner} {
+					if scenario == "inactive-primary" && actor.UserID == f.reviewer.UserID {
+						continue
+					}
 					if actor.UserID == winner {
 						assertAttentionQueue(t, f, actor, p.Receipt.ID)
 					} else {
