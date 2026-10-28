@@ -32,6 +32,108 @@ func (e ApiKeyStatus) Valid() bool {
 	}
 }
 
+// Defines values for ApprovalApproverKind.
+const (
+	ApprovalApproverKindGroup ApprovalApproverKind = "group"
+	ApprovalApproverKindUser  ApprovalApproverKind = "user"
+)
+
+// Valid indicates whether the value is a known member of the ApprovalApproverKind enum.
+func (e ApprovalApproverKind) Valid() bool {
+	switch e {
+	case ApprovalApproverKindGroup:
+		return true
+	case ApprovalApproverKindUser:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ApprovalDecisionInputDecision.
+const (
+	ApprovalDecisionApprove ApprovalDecisionInputDecision = "approve"
+	ApprovalDecisionDeny    ApprovalDecisionInputDecision = "deny"
+)
+
+// Valid indicates whether the value is a known member of the ApprovalDecisionInputDecision enum.
+func (e ApprovalDecisionInputDecision) Valid() bool {
+	switch e {
+	case ApprovalDecisionApprove:
+		return true
+	case ApprovalDecisionDeny:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ApprovalRequesterKind.
+const (
+	ApprovalRequesterKindServiceAccount ApprovalRequesterKind = "service_account"
+	ApprovalRequesterKindUser           ApprovalRequesterKind = "user"
+)
+
+// Valid indicates whether the value is a known member of the ApprovalRequesterKind enum.
+func (e ApprovalRequesterKind) Valid() bool {
+	switch e {
+	case ApprovalRequesterKindServiceAccount:
+		return true
+	case ApprovalRequesterKindUser:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ApprovalStatus.
+const (
+	ApprovalStatusApproved  ApprovalStatus = "approved"
+	ApprovalStatusCancelled ApprovalStatus = "cancelled"
+	ApprovalStatusDenied    ApprovalStatus = "denied"
+	ApprovalStatusExpired   ApprovalStatus = "expired"
+	ApprovalStatusPending   ApprovalStatus = "pending"
+	ApprovalStatusUsed      ApprovalStatus = "used"
+)
+
+// Valid indicates whether the value is a known member of the ApprovalStatus enum.
+func (e ApprovalStatus) Valid() bool {
+	switch e {
+	case ApprovalStatusApproved:
+		return true
+	case ApprovalStatusCancelled:
+		return true
+	case ApprovalStatusDenied:
+		return true
+	case ApprovalStatusExpired:
+		return true
+	case ApprovalStatusPending:
+		return true
+	case ApprovalStatusUsed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ApprovalTargetKind.
+const (
+	ApprovalTargetKindGateway ApprovalTargetKind = "gateway"
+	ApprovalTargetKindServer  ApprovalTargetKind = "server"
+)
+
+// Valid indicates whether the value is a known member of the ApprovalTargetKind enum.
+func (e ApprovalTargetKind) Valid() bool {
+	switch e {
+	case ApprovalTargetKindGateway:
+		return true
+	case ApprovalTargetKindServer:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AttentionKind.
 const (
 	AttentionKindAutomationTokensExpiring   AttentionKind = "automation_tokens_expiring"
@@ -1023,6 +1125,7 @@ func (e LinkTargetType) Valid() bool {
 const (
 	McpCallOutcomeBadRequest         McpCallOutcome = "bad_request"
 	McpCallOutcomeDenied             McpCallOutcome = "denied"
+	McpCallOutcomeNeedsApproval      McpCallOutcome = "needs_approval"
 	McpCallOutcomeNeedsAuthorization McpCallOutcome = "needs_authorization"
 	McpCallOutcomeOk                 McpCallOutcome = "ok"
 	McpCallOutcomeRateLimited        McpCallOutcome = "rate_limited"
@@ -1038,6 +1141,8 @@ func (e McpCallOutcome) Valid() bool {
 	case McpCallOutcomeBadRequest:
 		return true
 	case McpCallOutcomeDenied:
+		return true
+	case McpCallOutcomeNeedsApproval:
 		return true
 	case McpCallOutcomeNeedsAuthorization:
 		return true
@@ -2411,6 +2516,24 @@ func (e AdminGetUsageParamsMethod) Valid() bool {
 	}
 }
 
+// Defines values for ListMyApprovalsParamsView.
+const (
+	Actionable ListMyApprovalsParamsView = "actionable"
+	Requested  ListMyApprovalsParamsView = "requested"
+)
+
+// Valid indicates whether the value is a known member of the ListMyApprovalsParamsView enum.
+func (e ListMyApprovalsParamsView) Valid() bool {
+	switch e {
+	case Actionable:
+		return true
+	case Requested:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListTeamAuditParamsActorKind.
 const (
 	ListTeamAuditParamsActorKindAutomationToken ListTeamAuditParamsActorKind = "automation_token"
@@ -2581,6 +2704,173 @@ type ApiKeyGateway struct {
 	// Slug The gateway's slug (as it was when the key was created, once deleted)
 	Slug string `json:"slug"`
 }
+
+// ApprovalApprover The service validates the discriminated arms: kind user requires a non-null active userId and null groupName; kind group requires a nonempty groupName and null userId. Named users/groups do not bypass current eligibility, requester separation of duties or underlying access checks.
+type ApprovalApprover struct {
+	GroupName *string              `json:"groupName"`
+	Kind      ApprovalApproverKind `json:"kind"`
+	UserId    *openapi_types.UUID  `json:"userId"`
+}
+
+// ApprovalApproverKind defines model for ApprovalApprover.Kind.
+type ApprovalApproverKind string
+
+// ApprovalDecisionInput Decision on the exact displayed review; both preconditions are checked transactionally
+type ApprovalDecisionInput struct {
+	Decision ApprovalDecisionInputDecision `json:"decision"`
+
+	// ExpectedArgsDigest Lowercase hexadecimal SHA-256 digest
+	ExpectedArgsDigest     ApprovalDigest `json:"expectedArgsDigest"`
+	ExpectedReviewRevision int64          `json:"expectedReviewRevision"`
+}
+
+// ApprovalDecisionInputDecision defines model for ApprovalDecisionInput.Decision.
+type ApprovalDecisionInputDecision string
+
+// ApprovalDigest Lowercase hexadecimal SHA-256 digest
+type ApprovalDigest = string
+
+// ApprovalPage Metadata-only page; items NEVER contain preview
+type ApprovalPage struct {
+	Items      []ApprovalReceipt `json:"items"`
+	NextCursor *string           `json:"nextCursor"`
+}
+
+// ApprovalReceipt Approval metadata bound to one exact merged tool call. Lists NEVER include preview; detail may include it only under the restrictions below. No raw arguments, ciphertext or free-text notes are exposed. Flags are computed from current authority, eligibility, binding and expiry; they grant no authority and are rechecked for every mutation. A stale or terminal approval cannot authorize a dispatch. Identical pending/approved MCP requests reuse their ID without extending deadlines; explicit browser renewal creates a new attempt instead of mutating history.
+type ApprovalReceipt struct {
+	// ArgsDigest Digest of exact merged arguments actually forwarded, normalizing absent/null to {}
+	ArgsDigest ApprovalDigest `json:"argsDigest"`
+
+	// CanCancel Current caller controls the requester and may cancel now
+	CanCancel bool `json:"canCancel"`
+
+	// CanDecide Current caller may decide now; never based on platform/gateway ownership alone
+	CanDecide bool `json:"canDecide"`
+
+	// CanRenew Current caller controls the requester and may explicitly request a new attempt
+	CanRenew bool `json:"canRenew"`
+
+	// CapabilityFingerprint Approved capability fingerprint bound to this request
+	CapabilityFingerprint ApprovalDigest     `json:"capabilityFingerprint"`
+	CapabilityId          openapi_types.UUID `json:"capabilityId"`
+
+	// ContextEpoch Monotonic authorization-context epoch bound at request creation
+	ContextEpoch int64               `json:"contextEpoch"`
+	CreatedAt    time.Time           `json:"createdAt"`
+	DecidedAt    *time.Time          `json:"decidedAt"`
+	DecidedBy    *openapi_types.UUID `json:"decidedBy"`
+
+	// ExpiresAt Absolute pending expiry; never extended by approval or deduplication
+	ExpiresAt time.Time `json:"expiresAt"`
+
+	// ExposedName Curated tool name exposed through the gateway
+	ExposedName string             `json:"exposedName"`
+	GatewayId   openapi_types.UUID `json:"gatewayId"`
+	Id          openapi_types.UUID `json:"id"`
+
+	// Preview Optional redacted argument preview; NEVER included in lists. Only available while pending/approved to the requester, authorized owning-team humans for a service account, or a currently eligible reviewer. Platform-admin/auditor oversight alone NEVER permits it. The service enforces at most 16384 UTF-8 bytes (not merely characters), truncating on a UTF-8 boundary after independent redaction. Display as escaped text, never HTML, with redaction/truncation warnings. No terminal preview is accessible.
+	Preview          *string `json:"preview,omitempty"`
+	PreviewRedacted  bool    `json:"previewRedacted"`
+	PreviewTruncated bool    `json:"previewTruncated"`
+
+	// RequesterId User or service-account ID, never the account's creator/operator
+	RequesterId   openapi_types.UUID    `json:"requesterId"`
+	RequesterKind ApprovalRequesterKind `json:"requesterKind"`
+
+	// RequesterTeamId Owning team for a service-account requester; null for a user
+	RequesterTeamId *openapi_types.UUID `json:"requesterTeamId"`
+
+	// ReviewRevision Revision of the displayed review, sent back in decision/cancel/renew bodies
+	ReviewRevision int64              `json:"reviewRevision"`
+	RuleId         openapi_types.UUID `json:"ruleId"`
+
+	// RuleRevision Increases on every change. Send it back in If-Match.
+	RuleRevision Revision           `json:"ruleRevision"`
+	ServerId     openapi_types.UUID `json:"serverId"`
+
+	// ServerOrigin Canonical upstream server origin bound to this request
+	ServerOrigin string `json:"serverOrigin"`
+
+	// Stale The bound policy, authority context, arguments, fingerprint or origin is no longer current
+	Stale bool `json:"stale"`
+
+	// Status pending transitions to approved, denied, expired or cancelled; approved transitions to used, expired or cancelled. Terminal states never return to approved. used means authorization spent, NOT confirmed execution; a crash before sending or an unknown upstream result still spends it, and a repeat may duplicate effects. No automatic replay or restoration of spent approval is permitted.
+	Status     ApprovalStatus `json:"status"`
+	TerminalAt *time.Time     `json:"terminalAt"`
+
+	// ToolClass Actual owner-set class; null remains unclassified
+	ToolClass *ToolClass `json:"toolClass"`
+	UsedAt    *time.Time `json:"usedAt"`
+
+	// ValidUntil Approved validity deadline, never later than expiresAt
+	ValidUntil *time.Time `json:"validUntil"`
+}
+
+// ApprovalRequesterKind defines model for ApprovalRequesterKind.
+type ApprovalRequesterKind string
+
+// ApprovalReviewInput Cancel/renew precondition; 409 changed_since_review if the displayed revision changed
+type ApprovalReviewInput struct {
+	ExpectedReviewRevision int64 `json:"expectedReviewRevision"`
+}
+
+// ApprovalRule Approval policy metadata. Server rules outrank gateway rules; within a tier, capability-specific rules outrank class rules. Equal-priority overlap is rejected, and ambiguous stored policy fails closed. Exactly one selector is active, as validated for ApprovalRuleInput. Rule mutations invalidate prior authority context even if changed back; rules never grant access.
+type ApprovalRule struct {
+	AllowServiceAccountAdmins bool `json:"allowServiceAccountAdmins"`
+
+	// Approvers Empty means the server team's active owners/admins; fallback and exclusions still apply
+	Approvers      []ApprovalApprover  `json:"approvers"`
+	CapabilityId   *openapi_types.UUID `json:"capabilityId"`
+	Classes        []ToolClass         `json:"classes"`
+	CreatedAt      time.Time           `json:"createdAt"`
+	Enabled        bool                `json:"enabled"`
+	Id             openapi_types.UUID  `json:"id"`
+	Name           string              `json:"name"`
+	PendingMinutes int                 `json:"pendingMinutes"`
+
+	// Revision Increases on every change. Send it back in If-Match.
+	Revision Revision `json:"revision"`
+
+	// TargetId Immutable server or gateway ID
+	TargetId   openapi_types.UUID `json:"targetId"`
+	TargetKind ApprovalTargetKind `json:"targetKind"`
+
+	// TeamId Target's owning team; null only for a platform gateway
+	TeamId    *openapi_types.UUID `json:"teamId"`
+	UpdatedAt time.Time           `json:"updatedAt"`
+
+	// ValidMinutes Approved validity, bounded by the request's absolute pending expiry
+	ValidMinutes int `json:"validMinutes"`
+}
+
+// ApprovalRuleInput Complete editable rule body for creation/replacement. The service requires exactly one selector: a non-null capabilityId with empty classes, OR null capabilityId with nonempty classes. The capability must be a tool belonging to the target (or selected through the target gateway). Unclassified tools match destructive for approval matching only; their actual class/scopes do not change. Target kind and ID must match the existing rule on PUT; they cannot move ownership. Omitted TTLs and the separation-of-duties opt-in use the documented defaults, including on replacement. An empty approvers array selects the server team's active owners/admins by default. Decision 52's non-requester platform-admin fallback applies only when there is no eligible primary reviewer. Gateway owners are not implicit reviewers. An empty eligible reviewer set fails closed. All cross-field checks are authoritative service validation.
+type ApprovalRuleInput struct {
+	// AllowServiceAccountAdmins Explicit separation-of-duties exception allowing otherwise eligible owning-team owners/admins of the requesting service account to review; never permits human self-approval
+	AllowServiceAccountAdmins *bool               `json:"allowServiceAccountAdmins,omitempty"`
+	Approvers                 []ApprovalApprover  `json:"approvers"`
+	CapabilityId              *openapi_types.UUID `json:"capabilityId"`
+	Classes                   []ToolClass         `json:"classes"`
+	Enabled                   bool                `json:"enabled"`
+	Name                      string              `json:"name"`
+	PendingMinutes            *int                `json:"pendingMinutes,omitempty"`
+	TargetId                  openapi_types.UUID  `json:"targetId"`
+	TargetKind                ApprovalTargetKind  `json:"targetKind"`
+
+	// ValidMinutes Approved validity, bounded by the request's absolute pending expiry
+	ValidMinutes *int `json:"validMinutes,omitempty"`
+}
+
+// ApprovalRulePage defines model for ApprovalRulePage.
+type ApprovalRulePage struct {
+	Items      []ApprovalRule `json:"items"`
+	NextCursor *string        `json:"nextCursor"`
+}
+
+// ApprovalStatus pending transitions to approved, denied, expired or cancelled; approved transitions to used, expired or cancelled. Terminal states never return to approved. used means authorization spent, NOT confirmed execution; a crash before sending or an unknown upstream result still spends it, and a repeat may duplicate effects. No automatic replay or restoration of spent approval is permitted.
+type ApprovalStatus string
+
+// ApprovalTargetKind defines model for ApprovalTargetKind.
+type ApprovalTargetKind string
 
 // AttentionItem defines model for AttentionItem.
 type AttentionItem struct {
@@ -4008,7 +4298,7 @@ type McpCall struct {
 	Method     string    `json:"method"`
 	OccurredAt time.Time `json:"occurredAt"`
 
-	// Outcome ok: answered. tool_error: the tool reported an error. denied: refused by policy (logged; the client saw not found, or for a service account calling a capability that requires an account, a clear refusal). upstream_error: unreachable, refused or malformed (also provider_unavailable: the provider's token endpoint failed). bad_request: the client's request was invalid. needs_authorization: not forwarded because the person must connect or reconnect an account; the client got a consent link (JSON-RPC -32042), or, for a call from an agent, a tool error without a link (errorClass needs_connection). rate_limited: not forwarded because a rate limit was exceeded (HTTP 429, JSON-RPC -32029; errorClass names the limit: person_per_minute, credential_per_minute, service_account_per_minute or gateway_per_minute).
+	// Outcome ok: answered. tool_error: the tool reported an error. denied: refused by policy (logged; the client saw not found, or for a service account calling a capability that requires an account, a clear refusal). upstream_error: unreachable, refused or malformed (also provider_unavailable: the provider's token endpoint failed). bad_request: the client's request was invalid. needs_authorization: not forwarded because the person must connect or reconnect an account; the client got a consent link (JSON-RPC -32042), or, for a call from an agent, a tool error without a link (errorClass needs_connection). needs_approval: not forwarded because a sensitive tool call needs human approval; the client receives an approval link (modern URL-capable input_required, modern tool error, or legacy JSON-RPC -32042). rate_limited: not forwarded because a rate limit was exceeded (HTTP 429, JSON-RPC -32029; errorClass names the limit: person_per_minute, credential_per_minute, service_account_per_minute or gateway_per_minute).
 	Outcome   McpCallOutcome `json:"outcome"`
 	Principal CallPrincipal  `json:"principal"`
 
@@ -4027,7 +4317,7 @@ type McpCall struct {
 	TraceUrl *string `json:"traceUrl,omitempty"`
 }
 
-// McpCallOutcome ok: answered. tool_error: the tool reported an error. denied: refused by policy (logged; the client saw not found, or for a service account calling a capability that requires an account, a clear refusal). upstream_error: unreachable, refused or malformed (also provider_unavailable: the provider's token endpoint failed). bad_request: the client's request was invalid. needs_authorization: not forwarded because the person must connect or reconnect an account; the client got a consent link (JSON-RPC -32042), or, for a call from an agent, a tool error without a link (errorClass needs_connection). rate_limited: not forwarded because a rate limit was exceeded (HTTP 429, JSON-RPC -32029; errorClass names the limit: person_per_minute, credential_per_minute, service_account_per_minute or gateway_per_minute).
+// McpCallOutcome ok: answered. tool_error: the tool reported an error. denied: refused by policy (logged; the client saw not found, or for a service account calling a capability that requires an account, a clear refusal). upstream_error: unreachable, refused or malformed (also provider_unavailable: the provider's token endpoint failed). bad_request: the client's request was invalid. needs_authorization: not forwarded because the person must connect or reconnect an account; the client got a consent link (JSON-RPC -32042), or, for a call from an agent, a tool error without a link (errorClass needs_connection). needs_approval: not forwarded because a sensitive tool call needs human approval; the client receives an approval link (modern URL-capable input_required, modern tool error, or legacy JSON-RPC -32042). rate_limited: not forwarded because a rate limit was exceeded (HTTP 429, JSON-RPC -32029; errorClass names the limit: person_per_minute, credential_per_minute, service_account_per_minute or gateway_per_minute).
 type McpCallOutcome string
 
 // McpCallPage defines model for McpCallPage.
@@ -6232,6 +6522,12 @@ type UserUpdate struct {
 	Status       *UserStatus   `json:"status,omitempty"`
 }
 
+// ApprovalIdParam defines model for ApprovalIdParam.
+type ApprovalIdParam = openapi_types.UUID
+
+// ApprovalRuleIdParam defines model for ApprovalRuleIdParam.
+type ApprovalRuleIdParam = openapi_types.UUID
+
 // AuditActionParam Example: team.
 type AuditActionParam = string
 
@@ -6265,7 +6561,7 @@ type CallIdParam = int64
 // CallIdentitySentParam defines model for CallIdentitySentParam.
 type CallIdentitySentParam = bool
 
-// CallOutcomeParam ok: answered. tool_error: the tool reported an error. denied: refused by policy (logged; the client saw not found, or for a service account calling a capability that requires an account, a clear refusal). upstream_error: unreachable, refused or malformed (also provider_unavailable: the provider's token endpoint failed). bad_request: the client's request was invalid. needs_authorization: not forwarded because the person must connect or reconnect an account; the client got a consent link (JSON-RPC -32042), or, for a call from an agent, a tool error without a link (errorClass needs_connection). rate_limited: not forwarded because a rate limit was exceeded (HTTP 429, JSON-RPC -32029; errorClass names the limit: person_per_minute, credential_per_minute, service_account_per_minute or gateway_per_minute).
+// CallOutcomeParam ok: answered. tool_error: the tool reported an error. denied: refused by policy (logged; the client saw not found, or for a service account calling a capability that requires an account, a clear refusal). upstream_error: unreachable, refused or malformed (also provider_unavailable: the provider's token endpoint failed). bad_request: the client's request was invalid. needs_authorization: not forwarded because the person must connect or reconnect an account; the client got a consent link (JSON-RPC -32042), or, for a call from an agent, a tool error without a link (errorClass needs_connection). needs_approval: not forwarded because a sensitive tool call needs human approval; the client receives an approval link (modern URL-capable input_required, modern tool error, or legacy JSON-RPC -32042). rate_limited: not forwarded because a rate limit was exceeded (HTTP 429, JSON-RPC -32029; errorClass names the limit: person_per_minute, credential_per_minute, service_account_per_minute or gateway_per_minute).
 type CallOutcomeParam = McpCallOutcome
 
 // CallServerParam defines model for CallServerParam.
@@ -6358,6 +6654,29 @@ type UsageToParam = time.Time
 // UserIdParam defines model for UserIdParam.
 type UserIdParam = openapi_types.UUID
 
+// ApprovalPageReply defines model for ApprovalPageReply.
+type ApprovalPageReply struct {
+	// Data Metadata-only page; items NEVER contain preview
+	Data ApprovalPage `json:"data"`
+}
+
+// ApprovalReceiptReply defines model for ApprovalReceiptReply.
+type ApprovalReceiptReply struct {
+	// Data Approval metadata bound to one exact merged tool call. Lists NEVER include preview; detail may include it only under the restrictions below. No raw arguments, ciphertext or free-text notes are exposed. Flags are computed from current authority, eligibility, binding and expiry; they grant no authority and are rechecked for every mutation. A stale or terminal approval cannot authorize a dispatch. Identical pending/approved MCP requests reuse their ID without extending deadlines; explicit browser renewal creates a new attempt instead of mutating history.
+	Data ApprovalReceipt `json:"data"`
+}
+
+// ApprovalRulePageReply defines model for ApprovalRulePageReply.
+type ApprovalRulePageReply struct {
+	Data ApprovalRulePage `json:"data"`
+}
+
+// ApprovalRuleReply defines model for ApprovalRuleReply.
+type ApprovalRuleReply struct {
+	// Data Approval policy metadata. Server rules outrank gateway rules; within a tier, capability-specific rules outrank class rules. Equal-priority overlap is rejected, and ambiguous stored policy fails closed. Exactly one selector is active, as validated for ApprovalRuleInput. Rule mutations invalidate prior authority context even if changed back; rules never grant access.
+	Data ApprovalRule `json:"data"`
+}
+
 // AuditPageReply defines model for AuditPageReply.
 type AuditPageReply struct {
 	Data AuditPage `json:"data"`
@@ -6436,6 +6755,26 @@ type UsageReportReply struct {
 type StartLoginParams struct {
 	// Next Same-origin path to return to after sign-in.
 	Next *string `form:"next,omitempty" json:"next,omitempty"`
+}
+
+// AdminListApprovalRulesParams defines parameters for AdminListApprovalRules.
+type AdminListApprovalRulesParams struct {
+	Limit *LimitParam `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor nextCursor from the previous page
+	Cursor *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// AdminDeleteApprovalRuleParams defines parameters for AdminDeleteApprovalRule.
+type AdminDeleteApprovalRuleParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
+// AdminReplaceApprovalRuleParams defines parameters for AdminReplaceApprovalRule.
+type AdminReplaceApprovalRuleParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
 }
 
 // AdminListAuditParams defines parameters for AdminListAudit.
@@ -6754,6 +7093,18 @@ type GetMeParams struct {
 	Optional *bool `form:"optional,omitempty" json:"optional,omitempty"`
 }
 
+// ListMyApprovalsParams defines parameters for ListMyApprovals.
+type ListMyApprovalsParams struct {
+	View  *ListMyApprovalsParamsView `form:"view,omitempty" json:"view,omitempty"`
+	Limit *LimitParam                `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor nextCursor from the previous page
+	Cursor *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListMyApprovalsParamsView defines parameters for ListMyApprovals.
+type ListMyApprovalsParamsView string
+
 // ListMyNotificationsParams defines parameters for ListMyNotifications.
 type ListMyNotificationsParams struct {
 	// Unread Only unread notifications
@@ -6774,6 +7125,26 @@ type GetOAuthConsentParams struct {
 	Resource            string  `form:"resource" json:"resource"`
 	State               *string `form:"state,omitempty" json:"state,omitempty"`
 	Scope               *string `form:"scope,omitempty" json:"scope,omitempty"`
+}
+
+// ListTeamApprovalRulesParams defines parameters for ListTeamApprovalRules.
+type ListTeamApprovalRulesParams struct {
+	Limit *LimitParam `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor nextCursor from the previous page
+	Cursor *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// DeleteTeamApprovalRuleParams defines parameters for DeleteTeamApprovalRule.
+type DeleteTeamApprovalRuleParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
+// ReplaceTeamApprovalRuleParams defines parameters for ReplaceTeamApprovalRule.
+type ReplaceTeamApprovalRuleParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
 }
 
 // ListTeamAuditParams defines parameters for ListTeamAudit.
@@ -6972,6 +7343,12 @@ type GetTeamUsageParamsMethod string
 // DevLoginJSONRequestBody defines body for DevLogin for application/json ContentType.
 type DevLoginJSONRequestBody = DevLoginRequest
 
+// AdminCreateApprovalRuleJSONRequestBody defines body for AdminCreateApprovalRule for application/json ContentType.
+type AdminCreateApprovalRuleJSONRequestBody = ApprovalRuleInput
+
+// AdminReplaceApprovalRuleJSONRequestBody defines body for AdminReplaceApprovalRule for application/json ContentType.
+type AdminReplaceApprovalRuleJSONRequestBody = ApprovalRuleInput
+
 // AdminCreateAuthProviderJSONRequestBody defines body for AdminCreateAuthProvider for application/json ContentType.
 type AdminCreateAuthProviderJSONRequestBody = AuthProviderCreate
 
@@ -7056,6 +7433,15 @@ type AdminUpdateTeamRetentionJSONRequestBody = TeamRetentionUpdate
 // AdminUpdateUserJSONRequestBody defines body for AdminUpdateUser for application/json ContentType.
 type AdminUpdateUserJSONRequestBody = UserUpdate
 
+// CancelApprovalJSONRequestBody defines body for CancelApproval for application/json ContentType.
+type CancelApprovalJSONRequestBody = ApprovalReviewInput
+
+// DecideApprovalJSONRequestBody defines body for DecideApproval for application/json ContentType.
+type DecideApprovalJSONRequestBody = ApprovalDecisionInput
+
+// RenewApprovalJSONRequestBody defines body for RenewApproval for application/json ContentType.
+type RenewApprovalJSONRequestBody = ApprovalReviewInput
+
 // CreateMyApiKeyJSONRequestBody defines body for CreateMyApiKey for application/json ContentType.
 type CreateMyApiKeyJSONRequestBody = ApiKeyCreate
 
@@ -7076,6 +7462,12 @@ type SignOutEverywhereJSONRequestBody = RevokeSessionsInput
 
 // DecideOAuthConsentJSONRequestBody defines body for DecideOAuthConsent for application/json ContentType.
 type DecideOAuthConsentJSONRequestBody = OAuthConsentDecision
+
+// CreateTeamApprovalRuleJSONRequestBody defines body for CreateTeamApprovalRule for application/json ContentType.
+type CreateTeamApprovalRuleJSONRequestBody = ApprovalRuleInput
+
+// ReplaceTeamApprovalRuleJSONRequestBody defines body for ReplaceTeamApprovalRule for application/json ContentType.
+type ReplaceTeamApprovalRuleJSONRequestBody = ApprovalRuleInput
 
 // CreateTeamAutomationTokenJSONRequestBody defines body for CreateTeamAutomationToken for application/json ContentType.
 type CreateTeamAutomationTokenJSONRequestBody = AutomationTokenCreate

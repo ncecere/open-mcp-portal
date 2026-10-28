@@ -58,6 +58,9 @@ tags:
   description: In-app inbox, preferences, webhook destinations and email status (docs/notifications.md)
 - name: automation-tokens
   description: Tokens for CI and scripts that call /v1 (docs/automation-tokens.md); never valid for /mcp
+- name: approvals
+  description: Session-only sensitive tool-call approvals and rules (docs/tool-approvals.md, decision 82).
+    Rules never grant access. No automation token can use these operations.
 paths:
   /healthz:
     get:
@@ -4955,6 +4958,399 @@ paths:
                     $ref: '#/components/schemas/TeamAttention'
         '404':
           $ref: '#/components/responses/ErrorReply'
+  /v1/me/approvals:
+    get:
+      tags:
+      - approvals
+      operationId: listMyApprovals
+      summary: Requested or currently actionable tool-call approvals
+      description: >-
+        Browser session only. requested includes the caller's requests and requests of service accounts whose
+        owning team the caller owns/administers. actionable includes only requests the caller is currently
+        eligible to decide; neither platform-admin status nor gateway ownership alone makes a reviewer.
+        Human self-approval is forbidden. A requesting service account's owners/admins are excluded from
+        review (including fallback) unless the rule explicitly allows them. Visibility and authority are
+        re-evaluated on every read. Lists NEVER contain preview, raw arguments, ciphertext or notes.
+      parameters:
+      - name: view
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [requested, actionable]
+          default: actionable
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalPageReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/approvals/{approvalId}:
+    parameters:
+    - $ref: '#/components/parameters/ApprovalIdParam'
+    get:
+      tags:
+      - approvals
+      operationId: getApproval
+      summary: An authorized approval receipt, with a restricted redacted preview
+      description: >-
+        Browser session only. The requester, authorized owning-team humans for a service account, and
+        currently eligible reviewers can read the receipt. Platform admins/auditors may read metadata for
+        oversight, but that role alone NEVER reveals preview. Preview is available only while pending or
+        approved and only to the requester/authorized service-account humans or an eligible reviewer.
+        Terminal previews are immediately inaccessible. Missing and private receipts both return the same
+        generic 404 approval_not_found, without disclosing existence. Expiry is enforced synchronously.
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalReceiptReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/approvals/{approvalId}/decision:
+    parameters:
+    - $ref: '#/components/parameters/ApprovalIdParam'
+    post:
+      tags:
+      - approvals
+      operationId: decideApproval
+      summary: Approve or deny the exact tool call reviewed by an eligible human
+      description: >-
+        Browser session only; current eligibility and requester authority are checked transactionally.
+        No human self-approval. A requesting service account's owners/admins are excluded, including from
+        platform-admin fallback, unless the rule opts in. Gateway ownership is not review authority.
+        expectedReviewRevision and expectedArgsDigest must match the displayed receipt; 409
+        changed_since_review if either changed. 409 approval_unavailable if the request can no longer be
+        decided (including expiry or stale bindings). Missing/private receipts use generic 404
+        approval_not_found. No notes or raw arguments are accepted. Approval never grants underlying access.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalDecisionInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalReceiptReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/approvals/{approvalId}/cancel:
+    parameters:
+    - $ref: '#/components/parameters/ApprovalIdParam'
+    post:
+      tags:
+      - approvals
+      operationId: cancelApproval
+      summary: Cancel a pending or approved request controlled by the caller
+      description: >-
+        Browser session only; the human requester or the requesting service account's current owning-team
+        owners/admins may cancel. expectedReviewRevision must match the reviewed receipt; 409
+        changed_since_review if changed. 409 approval_unavailable when cancellation is no longer possible.
+        Missing/private receipts use generic 404 approval_not_found. Cancellation makes preview inaccessible.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalReviewInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalReceiptReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/approvals/{approvalId}/renew:
+    parameters:
+    - $ref: '#/components/parameters/ApprovalIdParam'
+    post:
+      tags:
+      - approvals
+      operationId: renewApproval
+      summary: Explicitly request a new approval attempt, returning a new receipt
+      description: >-
+        Browser session only; the human requester or the requesting service account's current owning-team
+        owners/admins may renew when canRenew is true. Current authority and policy are re-evaluated;
+        renewal never resurrects or extends the old approval. Denied requests remain denied on ordinary MCP
+        retries. expectedReviewRevision must match; 409 changed_since_review if changed. 409
+        approval_unavailable if renewal cannot safely create a new attempt. Missing/private receipts use
+        generic 404 approval_not_found. A used receipt means authorization spent, not confirmed execution;
+        repeating an uncertain call may duplicate effects.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalReviewInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalReceiptReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/approval-rules:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    get:
+      tags:
+      - approvals
+      operationId: listTeamApprovalRules
+      summary: The team's approval rules (team owners/admins; platform staff may read)
+      description: Browser session only. Only rules targeting this team's servers or team gateways are listed.
+        A missing or private team returns generic 404 team_not_found.
+      parameters:
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalRulePageReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags:
+      - approvals
+      operationId: createTeamApprovalRule
+      summary: Create a rule for the team's server or gateway (team owners/admins)
+      description: >-
+        Browser session only. The caller must own/administer this team, and the target must belong to this
+        team. A platform role alone does not authorize team-server or team-gateway policy writes. The service
+        validates selector exclusivity, capability/target membership and consistent user/group approver arms.
+        Server rules outrank gateway rules; capability selectors outrank class selectors. Equal-priority
+        overlapping rules are rejected with 409 approval_unavailable. Rules never grant access.
+        Missing/private targets return generic 404 rule_not_found without disclosing their existence.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRuleInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/ApprovalRuleReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/approval-rules/{ruleId}:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/ApprovalRuleIdParam'
+    put:
+      tags:
+      - approvals
+      operationId: replaceTeamApprovalRule
+      summary: Replace a team's approval rule (team owners/admins)
+      description: >-
+        Browser session only. The caller must own/administer the target's team; a platform role cannot bypass
+        this. Target kind and ID are immutable and must match the existing rule in the replacement body;
+        moving a rule across ownership boundaries is forbidden. The service validates selectors and approver
+        arms as on creation. If-Match is the rule revision (428 missing, 412 stale); 409 approval_unavailable
+        for overlapping policy. Missing/private rules or targets return generic 404 rule_not_found.
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRuleInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalRuleReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+    delete:
+      tags:
+      - approvals
+      operationId: deleteTeamApprovalRule
+      summary: Delete a team's approval rule (team owners/admins)
+      description: >-
+        Browser session only. Only this team's owners/admins may delete its server/gateway rules;
+        a platform role alone cannot bypass team ownership. If-Match is the rule revision (428 missing,
+        412 stale). Missing/private rules return generic 404 rule_not_found.
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/approval-rules:
+    get:
+      tags:
+      - approvals
+      - admin
+      operationId: adminListApprovalRules
+      summary: Approval-rule metadata across the portal (platform admins and auditors)
+      description: Browser session only. Oversight does not grant team-policy write authority or access to
+        approval previews. Only platform-gateway rules may be written through admin approval-rule routes.
+      parameters:
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalRulePageReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags:
+      - approvals
+      - admin
+      operationId: adminCreateApprovalRule
+      summary: Create an approval rule for a platform gateway (platform admins)
+      description: >-
+        Browser session only. targetKind must be gateway and targetId must identify a platform-owned gateway;
+        team servers and team gateways cannot be managed through this route, even by platform admins.
+        The service validates selectors and approver arms as on team creation; 409 approval_unavailable for
+        equal-priority overlap. Missing/private or out-of-scope targets return generic 404 rule_not_found.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRuleInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/ApprovalRuleReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/approval-rules/{ruleId}:
+    parameters:
+    - $ref: '#/components/parameters/ApprovalRuleIdParam'
+    put:
+      tags:
+      - approvals
+      - admin
+      operationId: adminReplaceApprovalRule
+      summary: Replace a platform-gateway approval rule (platform admins)
+      description: >-
+        Browser session only. Only platform-gateway rules are writable here, never team-server or team-gateway
+        rules. Target kind and ID are immutable and must match the existing rule. The service validates
+        selectors and approver arms as on creation. If-Match is the rule revision (428 missing, 412 stale);
+        409 approval_unavailable for overlapping policy. Missing/private or out-of-scope rules/targets return
+        generic 404 rule_not_found, without exposing their existence.
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRuleInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalRuleReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+    delete:
+      tags:
+      - approvals
+      - admin
+      operationId: adminDeleteApprovalRule
+      summary: Delete a platform-gateway approval rule (platform admins)
+      description: >-
+        Browser session only. Only platform-gateway rules are writable here, never team-server or team-gateway
+        rules. If-Match is the rule revision (428 missing, 412 stale). Missing/private or out-of-scope rules
+        return generic 404 rule_not_found.
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
   /v1/me/notifications:
     get:
       tags:
@@ -5957,6 +6353,20 @@ components:
       description: nextCursor from the previous page
       schema:
         type: string
+    ApprovalIdParam:
+      name: approvalId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ApprovalRuleIdParam:
+      name: ruleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     IfMatchHeader:
       name: If-Match
       in: header
@@ -6220,6 +6630,59 @@ components:
         type: string
         format: uuid
   responses:
+    ApprovalReceiptReply:
+      description: Approval receipt; preview is restricted to authorized detail reads, never list results
+      headers:
+        Cache-Control:
+          description: Always no-store
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                $ref: '#/components/schemas/ApprovalReceipt'
+    ApprovalPageReply:
+      description: A page of visible approval metadata, newest first; NEVER includes preview
+      headers:
+        Cache-Control:
+          description: Always no-store
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                $ref: '#/components/schemas/ApprovalPage'
+    ApprovalRuleReply:
+      description: Approval rule; ETag is its revision for replacement or deletion
+      headers:
+        ETag:
+          $ref: '#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                $ref: '#/components/schemas/ApprovalRule'
+    ApprovalRulePageReply:
+      description: A page of approval rules
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                $ref: '#/components/schemas/ApprovalRulePage'
     SessionListReply:
       description: Active browser sessions, newest first
       content:
@@ -6402,6 +6865,345 @@ components:
               data:
                 $ref: '#/components/schemas/UsageReport'
   schemas:
+    ApprovalTargetKind:
+      type: string
+      enum: [server, gateway]
+    ApprovalApprover:
+      type: object
+      additionalProperties: false
+      required: [kind, userId, groupName]
+      description: >-
+        The service validates the discriminated arms: kind user requires a non-null active userId and null
+        groupName; kind group requires a nonempty groupName and null userId. Named users/groups do not
+        bypass current eligibility, requester separation of duties or underlying access checks.
+      properties:
+        kind:
+          type: string
+          enum: [user, group]
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        groupName:
+          type: string
+          minLength: 1
+          nullable: true
+    ApprovalRuleInput:
+      type: object
+      additionalProperties: false
+      required: [name, targetKind, targetId, capabilityId, classes, enabled, approvers]
+      description: >-
+        Complete editable rule body for creation/replacement. The service requires exactly one selector:
+        a non-null capabilityId with empty classes, OR null capabilityId with nonempty classes. The capability
+        must be a tool belonging to the target (or selected through the target gateway). Unclassified tools
+        match destructive for approval matching only; their actual class/scopes do not change. Target kind
+        and ID must match the existing rule on PUT; they cannot move ownership. Omitted TTLs and the
+        separation-of-duties opt-in use the documented defaults, including on replacement. An empty approvers
+        array selects the server team's active owners/admins by default. Decision 52's non-requester
+        platform-admin fallback applies only when there is no eligible primary reviewer. Gateway owners are
+        not implicit reviewers. An empty eligible reviewer set fails closed. All cross-field checks are
+        authoritative service validation.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        targetKind:
+          $ref: '#/components/schemas/ApprovalTargetKind'
+        targetId:
+          type: string
+          format: uuid
+        capabilityId:
+          type: string
+          format: uuid
+          nullable: true
+        classes:
+          type: array
+          uniqueItems: true
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/ToolClass'
+        enabled:
+          type: boolean
+        pendingMinutes:
+          type: integer
+          minimum: 5
+          maximum: 1440
+          default: 1440
+        validMinutes:
+          type: integer
+          minimum: 1
+          maximum: 60
+          default: 15
+          description: Approved validity, bounded by the request's absolute pending expiry
+        allowServiceAccountAdmins:
+          type: boolean
+          default: false
+          description: Explicit separation-of-duties exception allowing otherwise eligible owning-team
+            owners/admins of the requesting service account to review; never permits human self-approval
+        approvers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalApprover'
+    ApprovalRule:
+      type: object
+      additionalProperties: false
+      required: [id, name, teamId, targetKind, targetId, capabilityId, classes, enabled, pendingMinutes,
+        validMinutes, allowServiceAccountAdmins, approvers, revision, createdAt, updatedAt]
+      description: >-
+        Approval policy metadata. Server rules outrank gateway rules; within a tier, capability-specific
+        rules outrank class rules. Equal-priority overlap is rejected, and ambiguous stored policy fails
+        closed. Exactly one selector is active, as validated for ApprovalRuleInput. Rule mutations invalidate
+        prior authority context even if changed back; rules never grant access.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        teamId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Target's owning team; null only for a platform gateway
+        targetKind:
+          $ref: '#/components/schemas/ApprovalTargetKind'
+        targetId:
+          type: string
+          format: uuid
+          description: Immutable server or gateway ID
+        capabilityId:
+          type: string
+          format: uuid
+          nullable: true
+        classes:
+          type: array
+          uniqueItems: true
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/ToolClass'
+        enabled:
+          type: boolean
+        pendingMinutes:
+          type: integer
+          minimum: 5
+          maximum: 1440
+          default: 1440
+        validMinutes:
+          type: integer
+          minimum: 1
+          maximum: 60
+          default: 15
+          description: Approved validity, bounded by the request's absolute pending expiry
+        allowServiceAccountAdmins:
+          type: boolean
+          default: false
+        approvers:
+          type: array
+          description: Empty means the server team's active owners/admins; fallback and exclusions still apply
+          items:
+            $ref: '#/components/schemas/ApprovalApprover'
+        revision:
+          $ref: '#/components/schemas/Revision'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ApprovalRulePage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalRule'
+        nextCursor:
+          type: string
+          nullable: true
+    ApprovalDigest:
+      type: string
+      pattern: '^[0-9a-f]{64}$'
+      description: Lowercase hexadecimal SHA-256 digest
+    ApprovalRequesterKind:
+      type: string
+      enum: [user, service_account]
+    ApprovalStatus:
+      type: string
+      enum: [pending, approved, denied, expired, used, cancelled]
+      description: >-
+        pending transitions to approved, denied, expired or cancelled; approved transitions to used, expired
+        or cancelled. Terminal states never return to approved. used means authorization spent, NOT confirmed
+        execution; a crash before sending or an unknown upstream result still spends it, and a repeat may
+        duplicate effects. No automatic replay or restoration of spent approval is permitted.
+    ApprovalReceipt:
+      type: object
+      additionalProperties: false
+      required: [id, ruleId, ruleRevision, contextEpoch, requesterKind, requesterId, requesterTeamId, gatewayId,
+        serverId, capabilityId, exposedName, toolClass, argsDigest, capabilityFingerprint, serverOrigin, status,
+        reviewRevision, createdAt, expiresAt, validUntil, decidedBy, decidedAt, usedAt, terminalAt, stale,
+        canDecide, canCancel, canRenew, previewTruncated, previewRedacted]
+      description: >-
+        Approval metadata bound to one exact merged tool call. Lists NEVER include preview; detail may
+        include it only under the restrictions below. No raw arguments, ciphertext or free-text notes are
+        exposed. Flags are computed from current authority, eligibility, binding and expiry; they grant no
+        authority and are rechecked for every mutation. A stale or terminal approval cannot authorize a
+        dispatch. Identical pending/approved MCP requests reuse their ID without extending deadlines;
+        explicit browser renewal creates a new attempt instead of mutating history.
+      properties:
+        id:
+          type: string
+          format: uuid
+        ruleId:
+          type: string
+          format: uuid
+        ruleRevision:
+          $ref: '#/components/schemas/Revision'
+        contextEpoch:
+          type: integer
+          format: int64
+          description: Monotonic authorization-context epoch bound at request creation
+        requesterKind:
+          $ref: '#/components/schemas/ApprovalRequesterKind'
+        requesterId:
+          type: string
+          format: uuid
+          description: User or service-account ID, never the account's creator/operator
+        requesterTeamId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Owning team for a service-account requester; null for a user
+        gatewayId:
+          type: string
+          format: uuid
+        serverId:
+          type: string
+          format: uuid
+        capabilityId:
+          type: string
+          format: uuid
+        exposedName:
+          type: string
+          description: Curated tool name exposed through the gateway
+        toolClass:
+          allOf:
+          - $ref: '#/components/schemas/ToolClass'
+          nullable: true
+          description: Actual owner-set class; null remains unclassified
+        argsDigest:
+          allOf:
+          - $ref: '#/components/schemas/ApprovalDigest'
+          description: Digest of exact merged arguments actually forwarded, normalizing absent/null to {}
+        capabilityFingerprint:
+          allOf:
+          - $ref: '#/components/schemas/ApprovalDigest'
+          description: Approved capability fingerprint bound to this request
+        serverOrigin:
+          type: string
+          description: Canonical upstream server origin bound to this request
+        status:
+          $ref: '#/components/schemas/ApprovalStatus'
+        reviewRevision:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Revision of the displayed review, sent back in decision/cancel/renew bodies
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          description: Absolute pending expiry; never extended by approval or deduplication
+        validUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: Approved validity deadline, never later than expiresAt
+        decidedBy:
+          type: string
+          format: uuid
+          nullable: true
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        usedAt:
+          type: string
+          format: date-time
+          nullable: true
+        terminalAt:
+          type: string
+          format: date-time
+          nullable: true
+        stale:
+          type: boolean
+          description: The bound policy, authority context, arguments, fingerprint or origin is no longer current
+        canDecide:
+          type: boolean
+          description: Current caller may decide now; never based on platform/gateway ownership alone
+        canCancel:
+          type: boolean
+          description: Current caller controls the requester and may cancel now
+        canRenew:
+          type: boolean
+          description: Current caller controls the requester and may explicitly request a new attempt
+        previewTruncated:
+          type: boolean
+        previewRedacted:
+          type: boolean
+        preview:
+          type: string
+          maxLength: 16384
+          description: >-
+            Optional redacted argument preview; NEVER included in lists. Only available
+            while pending/approved to the requester, authorized owning-team humans for a service account, or
+            a currently eligible reviewer. Platform-admin/auditor oversight alone NEVER permits it. The
+            service enforces at most 16384 UTF-8 bytes (not merely characters), truncating on a UTF-8 boundary
+            after independent redaction. Display as escaped text, never HTML, with redaction/truncation
+            warnings. No terminal preview is accessible.
+    ApprovalPage:
+      type: object
+      required: [items, nextCursor]
+      description: Metadata-only page; items NEVER contain preview
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalReceipt'
+        nextCursor:
+          type: string
+          nullable: true
+    ApprovalReviewInput:
+      type: object
+      additionalProperties: false
+      required: [expectedReviewRevision]
+      description: Cancel/renew precondition; 409 changed_since_review if the displayed revision changed
+      properties:
+        expectedReviewRevision:
+          type: integer
+          format: int64
+          minimum: 1
+    ApprovalDecisionInput:
+      type: object
+      additionalProperties: false
+      required: [decision, expectedReviewRevision, expectedArgsDigest]
+      description: Decision on the exact displayed review; both preconditions are checked transactionally
+      properties:
+        decision:
+          type: string
+          enum: [approve, deny]
+          x-enum-varnames: [ApprovalDecisionApprove, ApprovalDecisionDeny]
+        expectedReviewRevision:
+          type: integer
+          format: int64
+          minimum: 1
+        expectedArgsDigest:
+          $ref: '#/components/schemas/ApprovalDigest'
     ServiceConnectionGrant:
       type: object
       additionalProperties: false
@@ -9099,6 +9901,7 @@ components:
       - too_large
       - bad_request
       - needs_authorization
+      - needs_approval
       - rate_limited
       description: 'ok: answered. tool_error: the tool reported an error. denied: refused by policy (logged; the
         client saw not found, or for a service account calling a capability that requires an account, a clear
@@ -9106,6 +9909,8 @@ components:
         endpoint failed). bad_request: the client''s request was invalid. needs_authorization: not forwarded because
         the person must connect or reconnect an account; the client got a consent link (JSON-RPC -32042), or, for a
         call from an agent, a tool error without a link (errorClass needs_connection).
+        needs_approval: not forwarded because a sensitive tool call needs human approval; the client receives
+        an approval link (modern URL-capable input_required, modern tool error, or legacy JSON-RPC -32042).
         rate_limited: not forwarded because a rate limit was exceeded (HTTP 429, JSON-RPC -32029; errorClass names
         the limit: person_per_minute, credential_per_minute, service_account_per_minute or gateway_per_minute).'
     McpCall:

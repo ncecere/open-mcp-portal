@@ -2666,6 +2666,219 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Requested or currently actionable tool-call approvals
+         * @description Browser session only. requested includes the caller's requests and requests of service accounts whose owning team the caller owns/administers. actionable includes only requests the caller is currently eligible to decide; neither platform-admin status nor gateway ownership alone makes a reviewer. Human self-approval is forbidden. A requesting service account's owners/admins are excluded from review (including fallback) unless the rule explicitly allows them. Visibility and authority are re-evaluated on every read. Lists NEVER contain preview, raw arguments, ciphertext or notes.
+         */
+        get: operations["listMyApprovals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approvals/{approvalId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approvalId: components["parameters"]["ApprovalIdParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * An authorized approval receipt, with a restricted redacted preview
+         * @description Browser session only. The requester, authorized owning-team humans for a service account, and currently eligible reviewers can read the receipt. Platform admins/auditors may read metadata for oversight, but that role alone NEVER reveals preview. Preview is available only while pending or approved and only to the requester/authorized service-account humans or an eligible reviewer. Terminal previews are immediately inaccessible. Missing and private receipts both return the same generic 404 approval_not_found, without disclosing existence. Expiry is enforced synchronously.
+         */
+        get: operations["getApproval"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approvals/{approvalId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approvalId: components["parameters"]["ApprovalIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or deny the exact tool call reviewed by an eligible human
+         * @description Browser session only; current eligibility and requester authority are checked transactionally. No human self-approval. A requesting service account's owners/admins are excluded, including from platform-admin fallback, unless the rule opts in. Gateway ownership is not review authority. expectedReviewRevision and expectedArgsDigest must match the displayed receipt; 409 changed_since_review if either changed. 409 approval_unavailable if the request can no longer be decided (including expiry or stale bindings). Missing/private receipts use generic 404 approval_not_found. No notes or raw arguments are accepted. Approval never grants underlying access.
+         */
+        post: operations["decideApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approvals/{approvalId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approvalId: components["parameters"]["ApprovalIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a pending or approved request controlled by the caller
+         * @description Browser session only; the human requester or the requesting service account's current owning-team owners/admins may cancel. expectedReviewRevision must match the reviewed receipt; 409 changed_since_review if changed. 409 approval_unavailable when cancellation is no longer possible. Missing/private receipts use generic 404 approval_not_found. Cancellation makes preview inaccessible.
+         */
+        post: operations["cancelApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approvals/{approvalId}/renew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approvalId: components["parameters"]["ApprovalIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Explicitly request a new approval attempt, returning a new receipt
+         * @description Browser session only; the human requester or the requesting service account's current owning-team owners/admins may renew when canRenew is true. Current authority and policy are re-evaluated; renewal never resurrects or extends the old approval. Denied requests remain denied on ordinary MCP retries. expectedReviewRevision must match; 409 changed_since_review if changed. 409 approval_unavailable if renewal cannot safely create a new attempt. Missing/private receipts use generic 404 approval_not_found. A used receipt means authorization spent, not confirmed execution; repeating an uncertain call may duplicate effects.
+         */
+        post: operations["renewApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teams/{team}/approval-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The team's approval rules (team owners/admins; platform staff may read)
+         * @description Browser session only. Only rules targeting this team's servers or team gateways are listed. A missing or private team returns generic 404 team_not_found.
+         */
+        get: operations["listTeamApprovalRules"];
+        put?: never;
+        /**
+         * Create a rule for the team's server or gateway (team owners/admins)
+         * @description Browser session only. The caller must own/administer this team, and the target must belong to this team. A platform role alone does not authorize team-server or team-gateway policy writes. The service validates selector exclusivity, capability/target membership and consistent user/group approver arms. Server rules outrank gateway rules; capability selectors outrank class selectors. Equal-priority overlapping rules are rejected with 409 approval_unavailable. Rules never grant access. Missing/private targets return generic 404 rule_not_found without disclosing their existence.
+         */
+        post: operations["createTeamApprovalRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teams/{team}/approval-rules/{ruleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                ruleId: components["parameters"]["ApprovalRuleIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a team's approval rule (team owners/admins)
+         * @description Browser session only. The caller must own/administer the target's team; a platform role cannot bypass this. Target kind and ID are immutable and must match the existing rule in the replacement body; moving a rule across ownership boundaries is forbidden. The service validates selectors and approver arms as on creation. If-Match is the rule revision (428 missing, 412 stale); 409 approval_unavailable for overlapping policy. Missing/private rules or targets return generic 404 rule_not_found.
+         */
+        put: operations["replaceTeamApprovalRule"];
+        post?: never;
+        /**
+         * Delete a team's approval rule (team owners/admins)
+         * @description Browser session only. Only this team's owners/admins may delete its server/gateway rules; a platform role alone cannot bypass team ownership. If-Match is the rule revision (428 missing, 412 stale). Missing/private rules return generic 404 rule_not_found.
+         */
+        delete: operations["deleteTeamApprovalRule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/approval-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Approval-rule metadata across the portal (platform admins and auditors)
+         * @description Browser session only. Oversight does not grant team-policy write authority or access to approval previews. Only platform-gateway rules may be written through admin approval-rule routes.
+         */
+        get: operations["adminListApprovalRules"];
+        put?: never;
+        /**
+         * Create an approval rule for a platform gateway (platform admins)
+         * @description Browser session only. targetKind must be gateway and targetId must identify a platform-owned gateway; team servers and team gateways cannot be managed through this route, even by platform admins. The service validates selectors and approver arms as on team creation; 409 approval_unavailable for equal-priority overlap. Missing/private or out-of-scope targets return generic 404 rule_not_found.
+         */
+        post: operations["adminCreateApprovalRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/approval-rules/{ruleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: components["parameters"]["ApprovalRuleIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a platform-gateway approval rule (platform admins)
+         * @description Browser session only. Only platform-gateway rules are writable here, never team-server or team-gateway rules. Target kind and ID are immutable and must match the existing rule. The service validates selectors and approver arms as on creation. If-Match is the rule revision (428 missing, 412 stale); 409 approval_unavailable for overlapping policy. Missing/private or out-of-scope rules/targets return generic 404 rule_not_found, without exposing their existence.
+         */
+        put: operations["adminReplaceApprovalRule"];
+        post?: never;
+        /**
+         * Delete a platform-gateway approval rule (platform admins)
+         * @description Browser session only. Only platform-gateway rules are writable here, never team-server or team-gateway rules. If-Match is the rule revision (428 missing, 412 stale). Missing/private or out-of-scope rules return generic 404 rule_not_found.
+         */
+        delete: operations["adminDeleteApprovalRule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/notifications": {
         parameters: {
             query?: never;
@@ -3184,6 +3397,186 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        ApprovalTargetKind: "server" | "gateway";
+        /** @description The service validates the discriminated arms: kind user requires a non-null active userId and null groupName; kind group requires a nonempty groupName and null userId. Named users/groups do not bypass current eligibility, requester separation of duties or underlying access checks. */
+        ApprovalApprover: {
+            /** @enum {string} */
+            kind: "user" | "group";
+            /** Format: uuid */
+            userId: string | null;
+            groupName: string | null;
+        };
+        /** @description Complete editable rule body for creation/replacement. The service requires exactly one selector: a non-null capabilityId with empty classes, OR null capabilityId with nonempty classes. The capability must be a tool belonging to the target (or selected through the target gateway). Unclassified tools match destructive for approval matching only; their actual class/scopes do not change. Target kind and ID must match the existing rule on PUT; they cannot move ownership. Omitted TTLs and the separation-of-duties opt-in use the documented defaults, including on replacement. An empty approvers array selects the server team's active owners/admins by default. Decision 52's non-requester platform-admin fallback applies only when there is no eligible primary reviewer. Gateway owners are not implicit reviewers. An empty eligible reviewer set fails closed. All cross-field checks are authoritative service validation. */
+        ApprovalRuleInput: {
+            name: string;
+            targetKind: components["schemas"]["ApprovalTargetKind"];
+            /** Format: uuid */
+            targetId: string;
+            /** Format: uuid */
+            capabilityId: string | null;
+            classes: components["schemas"]["ToolClass"][];
+            enabled: boolean;
+            /** @default 1440 */
+            pendingMinutes: number;
+            /**
+             * @description Approved validity, bounded by the request's absolute pending expiry
+             * @default 15
+             */
+            validMinutes: number;
+            /**
+             * @description Explicit separation-of-duties exception allowing otherwise eligible owning-team owners/admins of the requesting service account to review; never permits human self-approval
+             * @default false
+             */
+            allowServiceAccountAdmins: boolean;
+            approvers: components["schemas"]["ApprovalApprover"][];
+        };
+        /** @description Approval policy metadata. Server rules outrank gateway rules; within a tier, capability-specific rules outrank class rules. Equal-priority overlap is rejected, and ambiguous stored policy fails closed. Exactly one selector is active, as validated for ApprovalRuleInput. Rule mutations invalidate prior authority context even if changed back; rules never grant access. */
+        ApprovalRule: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /**
+             * Format: uuid
+             * @description Target's owning team; null only for a platform gateway
+             */
+            teamId: string | null;
+            targetKind: components["schemas"]["ApprovalTargetKind"];
+            /**
+             * Format: uuid
+             * @description Immutable server or gateway ID
+             */
+            targetId: string;
+            /** Format: uuid */
+            capabilityId: string | null;
+            classes: components["schemas"]["ToolClass"][];
+            enabled: boolean;
+            /** @default 1440 */
+            pendingMinutes: number;
+            /**
+             * @description Approved validity, bounded by the request's absolute pending expiry
+             * @default 15
+             */
+            validMinutes: number;
+            /** @default false */
+            allowServiceAccountAdmins: boolean;
+            /** @description Empty means the server team's active owners/admins; fallback and exclusions still apply */
+            approvers: components["schemas"]["ApprovalApprover"][];
+            revision: components["schemas"]["Revision"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ApprovalRulePage: {
+            items: components["schemas"]["ApprovalRule"][];
+            nextCursor: string | null;
+        };
+        /** @description Lowercase hexadecimal SHA-256 digest */
+        ApprovalDigest: string;
+        /** @enum {string} */
+        ApprovalRequesterKind: "user" | "service_account";
+        /**
+         * @description pending transitions to approved, denied, expired or cancelled; approved transitions to used, expired or cancelled. Terminal states never return to approved. used means authorization spent, NOT confirmed execution; a crash before sending or an unknown upstream result still spends it, and a repeat may duplicate effects. No automatic replay or restoration of spent approval is permitted.
+         * @enum {string}
+         */
+        ApprovalStatus: "pending" | "approved" | "denied" | "expired" | "used" | "cancelled";
+        /** @description Approval metadata bound to one exact merged tool call. Lists NEVER include preview; detail may include it only under the restrictions below. No raw arguments, ciphertext or free-text notes are exposed. Flags are computed from current authority, eligibility, binding and expiry; they grant no authority and are rechecked for every mutation. A stale or terminal approval cannot authorize a dispatch. Identical pending/approved MCP requests reuse their ID without extending deadlines; explicit browser renewal creates a new attempt instead of mutating history. */
+        ApprovalReceipt: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            ruleId: string;
+            ruleRevision: components["schemas"]["Revision"];
+            /**
+             * Format: int64
+             * @description Monotonic authorization-context epoch bound at request creation
+             */
+            contextEpoch: number;
+            requesterKind: components["schemas"]["ApprovalRequesterKind"];
+            /**
+             * Format: uuid
+             * @description User or service-account ID, never the account's creator/operator
+             */
+            requesterId: string;
+            /**
+             * Format: uuid
+             * @description Owning team for a service-account requester; null for a user
+             */
+            requesterTeamId: string | null;
+            /** Format: uuid */
+            gatewayId: string;
+            /** Format: uuid */
+            serverId: string;
+            /** Format: uuid */
+            capabilityId: string;
+            /** @description Curated tool name exposed through the gateway */
+            exposedName: string;
+            /** @description Actual owner-set class; null remains unclassified */
+            toolClass: components["schemas"]["ToolClass"] | null;
+            /** @description Digest of exact merged arguments actually forwarded, normalizing absent/null to {} */
+            argsDigest: components["schemas"]["ApprovalDigest"];
+            /** @description Approved capability fingerprint bound to this request */
+            capabilityFingerprint: components["schemas"]["ApprovalDigest"];
+            /** @description Canonical upstream server origin bound to this request */
+            serverOrigin: string;
+            status: components["schemas"]["ApprovalStatus"];
+            /**
+             * Format: int64
+             * @description Revision of the displayed review, sent back in decision/cancel/renew bodies
+             */
+            reviewRevision: number;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description Absolute pending expiry; never extended by approval or deduplication
+             */
+            expiresAt: string;
+            /**
+             * Format: date-time
+             * @description Approved validity deadline, never later than expiresAt
+             */
+            validUntil: string | null;
+            /** Format: uuid */
+            decidedBy: string | null;
+            /** Format: date-time */
+            decidedAt: string | null;
+            /** Format: date-time */
+            usedAt: string | null;
+            /** Format: date-time */
+            terminalAt: string | null;
+            /** @description The bound policy, authority context, arguments, fingerprint or origin is no longer current */
+            stale: boolean;
+            /** @description Current caller may decide now; never based on platform/gateway ownership alone */
+            canDecide: boolean;
+            /** @description Current caller controls the requester and may cancel now */
+            canCancel: boolean;
+            /** @description Current caller controls the requester and may explicitly request a new attempt */
+            canRenew: boolean;
+            previewTruncated: boolean;
+            previewRedacted: boolean;
+            /** @description Optional redacted argument preview; NEVER included in lists. Only available while pending/approved to the requester, authorized owning-team humans for a service account, or a currently eligible reviewer. Platform-admin/auditor oversight alone NEVER permits it. The service enforces at most 16384 UTF-8 bytes (not merely characters), truncating on a UTF-8 boundary after independent redaction. Display as escaped text, never HTML, with redaction/truncation warnings. No terminal preview is accessible. */
+            preview?: string;
+        };
+        /** @description Metadata-only page; items NEVER contain preview */
+        ApprovalPage: {
+            items: components["schemas"]["ApprovalReceipt"][];
+            nextCursor: string | null;
+        };
+        /** @description Cancel/renew precondition; 409 changed_since_review if the displayed revision changed */
+        ApprovalReviewInput: {
+            /** Format: int64 */
+            expectedReviewRevision: number;
+        };
+        /** @description Decision on the exact displayed review; both preconditions are checked transactionally */
+        ApprovalDecisionInput: {
+            /** @enum {string} */
+            decision: "approve" | "deny";
+            /** Format: int64 */
+            expectedReviewRevision: number;
+            expectedArgsDigest: components["schemas"]["ApprovalDigest"];
+        };
         ServiceConnectionGrant: {
             /** Format: uuid */
             serverId: string;
@@ -4400,10 +4793,10 @@ export interface components {
             secret: string;
         };
         /**
-         * @description ok: answered. tool_error: the tool reported an error. denied: refused by policy (logged; the client saw not found, or for a service account calling a capability that requires an account, a clear refusal). upstream_error: unreachable, refused or malformed (also provider_unavailable: the provider's token endpoint failed). bad_request: the client's request was invalid. needs_authorization: not forwarded because the person must connect or reconnect an account; the client got a consent link (JSON-RPC -32042), or, for a call from an agent, a tool error without a link (errorClass needs_connection). rate_limited: not forwarded because a rate limit was exceeded (HTTP 429, JSON-RPC -32029; errorClass names the limit: person_per_minute, credential_per_minute, service_account_per_minute or gateway_per_minute).
+         * @description ok: answered. tool_error: the tool reported an error. denied: refused by policy (logged; the client saw not found, or for a service account calling a capability that requires an account, a clear refusal). upstream_error: unreachable, refused or malformed (also provider_unavailable: the provider's token endpoint failed). bad_request: the client's request was invalid. needs_authorization: not forwarded because the person must connect or reconnect an account; the client got a consent link (JSON-RPC -32042), or, for a call from an agent, a tool error without a link (errorClass needs_connection). needs_approval: not forwarded because a sensitive tool call needs human approval; the client receives an approval link (modern URL-capable input_required, modern tool error, or legacy JSON-RPC -32042). rate_limited: not forwarded because a rate limit was exceeded (HTTP 429, JSON-RPC -32029; errorClass names the limit: person_per_minute, credential_per_minute, service_account_per_minute or gateway_per_minute).
          * @enum {string}
          */
-        McpCallOutcome: "ok" | "tool_error" | "denied" | "upstream_error" | "timeout" | "too_large" | "bad_request" | "needs_authorization" | "rate_limited";
+        McpCallOutcome: "ok" | "tool_error" | "denied" | "upstream_error" | "timeout" | "too_large" | "bad_request" | "needs_authorization" | "needs_approval" | "rate_limited";
         McpCall: {
             /** Format: int64 */
             id: number;
@@ -6393,6 +6786,55 @@ export interface components {
         };
     };
     responses: {
+        /** @description Approval receipt; preview is restricted to authorized detail reads, never list results */
+        ApprovalReceiptReply: {
+            headers: {
+                /** @description Always no-store */
+                "Cache-Control"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["ApprovalReceipt"];
+                };
+            };
+        };
+        /** @description A page of visible approval metadata, newest first; NEVER includes preview */
+        ApprovalPageReply: {
+            headers: {
+                /** @description Always no-store */
+                "Cache-Control"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["ApprovalPage"];
+                };
+            };
+        };
+        /** @description Approval rule; ETag is its revision for replacement or deletion */
+        ApprovalRuleReply: {
+            headers: {
+                ETag: components["headers"]["ETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["ApprovalRule"];
+                };
+            };
+        };
+        /** @description A page of approval rules */
+        ApprovalRulePageReply: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["ApprovalRulePage"];
+                };
+            };
+        };
         /** @description Active browser sessions, newest first */
         SessionListReply: {
             headers: {
@@ -6580,6 +7022,8 @@ export interface components {
         AuditToParam: string;
         /** @description nextCursor from the previous page */
         CursorParam: string;
+        ApprovalIdParam: string;
+        ApprovalRuleIdParam: string;
         /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
         IfMatchHeader: string;
         LimitParam: number;
@@ -11066,6 +11510,303 @@ export interface operations {
                 };
             };
             404: components["responses"]["ErrorReply"];
+        };
+    };
+    listMyApprovals: {
+        parameters: {
+            query?: {
+                view?: "requested" | "actionable";
+                limit?: components["parameters"]["LimitParam"];
+                /** @description nextCursor from the previous page */
+                cursor?: components["parameters"]["CursorParam"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ApprovalPageReply"];
+            400: components["responses"]["ErrorReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+        };
+    };
+    getApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approvalId: components["parameters"]["ApprovalIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ApprovalReceiptReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+        };
+    };
+    decideApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approvalId: components["parameters"]["ApprovalIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalDecisionInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ApprovalReceiptReply"];
+            400: components["responses"]["ErrorReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+        };
+    };
+    cancelApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approvalId: components["parameters"]["ApprovalIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalReviewInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ApprovalReceiptReply"];
+            400: components["responses"]["ErrorReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+        };
+    };
+    renewApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approvalId: components["parameters"]["ApprovalIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalReviewInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ApprovalReceiptReply"];
+            400: components["responses"]["ErrorReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+        };
+    };
+    listTeamApprovalRules: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["LimitParam"];
+                /** @description nextCursor from the previous page */
+                cursor?: components["parameters"]["CursorParam"];
+            };
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ApprovalRulePageReply"];
+            400: components["responses"]["ErrorReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+        };
+    };
+    createTeamApprovalRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalRuleInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["ApprovalRuleReply"];
+            400: components["responses"]["ErrorReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+        };
+    };
+    replaceTeamApprovalRule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                ruleId: components["parameters"]["ApprovalRuleIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalRuleInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ApprovalRuleReply"];
+            400: components["responses"]["ErrorReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            412: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+        };
+    };
+    deleteTeamApprovalRule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                ruleId: components["parameters"]["ApprovalRuleIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            412: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+        };
+    };
+    adminListApprovalRules: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["LimitParam"];
+                /** @description nextCursor from the previous page */
+                cursor?: components["parameters"]["CursorParam"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ApprovalRulePageReply"];
+            400: components["responses"]["ErrorReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+        };
+    };
+    adminCreateApprovalRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalRuleInput"];
+            };
+        };
+        responses: {
+            201: components["responses"]["ApprovalRuleReply"];
+            400: components["responses"]["ErrorReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+        };
+    };
+    adminReplaceApprovalRule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                ruleId: components["parameters"]["ApprovalRuleIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalRuleInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ApprovalRuleReply"];
+            400: components["responses"]["ErrorReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            412: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+        };
+    };
+    adminDeleteApprovalRule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                ruleId: components["parameters"]["ApprovalRuleIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            412: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
         };
     };
     listMyNotifications: {
