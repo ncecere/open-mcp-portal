@@ -1,11 +1,11 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { redirectTo } from "../components/providers/labels";
 import { serverId, serviceAccount, serviceAccountId, team } from "./fixtures";
 import { providerId, providerSummary } from "./fixtures-providers";
-import { mockApi, renderApp, shellRoutes, type Handler } from "./harness";
+import { mockApi, renderApp, Reply, shellRoutes, type Handler } from "./harness";
 
 const base = `/v1/teams/${team.slug}/service-connections`;
 const record = `/teams/${team.slug}/service-accounts/${serviceAccountId}?tab=connections`;
@@ -57,6 +57,63 @@ describe("Service account shared connections", () => {
     const saved = calls.find((c) => c.method === "PUT" && c.url === `${base}/${shared.id}`)!;
     expect(saved.headers.get("If-Match")).toBe('"3"');
     expect(saved.body).toEqual({ accounts: [serviceAccountId], servers: [{ serverId, origin: destination.origin, scopes: ["repo"] }] });
+  });
+
+  it("freezes all access controls while saving and preserves the submitted selection on failure", async () => {
+    const u = userEvent.setup();
+    let reply!: (value: unknown) => void;
+    const pending = new Promise((resolve) => { reply = resolve; });
+    const unavailable = "26262626-2626-4626-8626-262626262626";
+    const c = { ...shared, servers: [{ serverId: unavailable, origin: "https://retired.example", scopes: ["repo"] }] };
+    const calls = mockApi(routes("owner", { [`GET ${base}`]: () => [c], [`PUT ${base}/${shared.id}`]: () => pending }));
+    renderApp(record);
+    await u.click(await screen.findByRole("button", { name: "Manage access to Release account" }));
+    await u.click(await screen.findByRole("checkbox", { name: "ci-release-bot" }));
+    await u.click(await screen.findByRole("checkbox", { name: "Status (Platform Tools)" }));
+    await u.click(screen.getByRole("button", { name: "Save access" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
+    for (const control of screen.getAllByRole("checkbox")) expect(control).toHaveAttribute("aria-disabled", "true");
+    await u.click(screen.getByRole("checkbox", { name: "ci-release-bot" }));
+    expect(screen.getByRole("checkbox", { name: "ci-release-bot" })).toBeChecked();
+    const submitted = calls.find((c) => c.method === "PUT")!;
+    expect(submitted.headers.get("If-Match")).toBe('"3"');
+    expect(submitted.body).toEqual({ accounts: [serviceAccountId], servers: [...c.servers, { serverId, origin: destination.origin, scopes: ["repo"] }] });
+    await act(async () => reply(Reply.error(409, "server_changed")));
+    expect(await screen.findByText("Couldn't save access")).toBeInTheDocument();
+    for (const control of screen.getAllByRole("checkbox")) expect(control).not.toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("checkbox", { name: "ci-release-bot" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Status (Platform Tools)" })).toBeChecked();
+  });
+
+  it.each(["same", "another"])("does not let an old success close or mark a newly opened %s target as saved", async (target) => {
+    const u = userEvent.setup();
+    let reply!: (value: unknown) => void;
+    const pending = new Promise((resolve) => { reply = resolve; });
+    const other = { ...shared, id: "27272727-2727-4727-8727-272727272727", name: "Second account", revision: 8 };
+    const calls = mockApi(routes("owner", {
+      [`GET ${base}`]: () => [shared, other],
+      [`GET ${base}/${other.id}/allowable-servers`]: () => [destination],
+      [`PUT ${base}/${shared.id}`]: () => pending,
+    }));
+    renderApp(record);
+    await u.click(await screen.findByRole("button", { name: "Manage access to Release account" }));
+    await u.click(await screen.findByRole("checkbox", { name: "ci-release-bot" }));
+    await u.click(screen.getByRole("button", { name: "Save access" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
+    await u.click(screen.getByRole("button", { name: "Cancel" }));
+    const next = target === "same" ? shared : other;
+    await u.click(await screen.findByRole("button", { name: `Manage access to ${next.name}` }));
+    expect(await screen.findByRole("checkbox", { name: "ci-release-bot" })).not.toBeChecked();
+    await u.click(await screen.findByRole("checkbox", { name: "Status (Platform Tools)" }));
+    await act(async () => reply({ ...shared, revision: 4 }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: `Access to ${next.name}` })).toBeInTheDocument());
+    expect(screen.getByRole("checkbox", { name: "Status (Platform Tools)" })).toBeChecked();
+    const submitted = calls.find((c) => c.method === "PUT")!;
+    expect(submitted.url).toBe(`${base}/${shared.id}`);
+    expect(submitted.headers.get("If-Match")).toBe('"3"');
+    expect(submitted.body).toEqual({ accounts: [serviceAccountId], servers: [] });
+    await u.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(await screen.findByRole("alertdialog", { name: "Leave without saving?" })).toBeInTheDocument();
   });
 
   it("starts explicit shared consent and reconnects with the current revision", async () => {

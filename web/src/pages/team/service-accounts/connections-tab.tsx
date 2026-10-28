@@ -67,7 +67,7 @@ export function TeamConnectionsTab({ team, canManage, account }: { team: string;
       </div>
     </Card>)}
     {canManage && <CreateConnection team={team} />}
-    {editing && <ConnectionEditor key={editing.id} team={team} connection={editing} onClose={() => setEditing(null)} />}
+    {editing && <ConnectionEditor key={editing.id} team={team} connection={editing} onClose={() => setEditing((current) => current === editing ? null : current)} />}
     <ConfirmMutationDialog target={revoking} mutation={revoke} onClose={() => setRevoking(null)} title={`Revoke ${revoking?.name ?? "connection"}?`} description="This erases its tokens, assignments, destination grants and pending consent. No service account can use it afterwards." confirmLabel="Revoke connection" onConfirm={(c) => revoke.mutate(c)} />
   </div>;
 }
