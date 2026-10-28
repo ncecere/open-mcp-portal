@@ -10,6 +10,8 @@
  * the link was for (decision 69), so no server was allowed.
  * Anything else: a generic failure. The page only reads the address: it
  * never starts anything, and works whether or not the person is signed in.
+ * Exact ?context=service changes only the guidance for a team-shared connection;
+ * it grants no authority and identifies no owning team or return destination.
  * The address is untrusted (anyone can link here): the provider is named
  * only when ?provider= is a provider the person can see in GET
  * /v1/auth-providers (or, for an MCP server's own sign-in, one of the
@@ -65,6 +67,28 @@ export function resultText(result: ConnectResult, provider: string): { title: st
   }
 }
 
+/** Service context is an untrusted display hint, never proof of ownership or access. */
+function serviceResultText(result: ConnectResult, provider: string): ReturnType<typeof resultText> {
+  const review = "In the owning team's Service accounts › Connections, review explicit account assignments and destination grants before use.";
+  const retry = "Return to the owning team's Service accounts › Connections to reconnect or retry, then review explicit account assignments and destination grants.";
+  switch (result) {
+    case "connected":
+      return { tone: "success", title: `Team-shared connection to ${provider} connected`, text: review };
+    case "missing_scopes":
+      return { tone: "warning", title: `Team-shared connection: ${provider} didn't allow everything`, text: `Some requested permissions weren't granted. ${retry}` };
+    case "denied":
+      return { tone: "danger", title: "Team-shared connection not connected", text: `Access wasn't allowed at ${provider}. ${retry}` };
+    case "expired":
+      return { tone: "danger", title: "Team-shared connection attempt expired", text: `This attempt can no longer finish. ${retry}` };
+    case "not_allowed":
+      return { tone: "warning", title: "Team-shared connection isn't allowed for the destination", text: `Connecting alone doesn't allow a destination to use it. ${review}` };
+    case "wrong_person":
+      return { tone: "danger", title: "Team-shared connection needs the original browser session", text: `Sign in as the person who started connecting. ${retry}` };
+    default:
+      return { tone: "danger", title: "Couldn't connect the team-shared connection", text: `Something went wrong while connecting. ${retry}` };
+  }
+}
+
 const icons = { success: CircleCheck, warning: CircleAlert, danger: CircleX };
 
 /** The scopes the provider left out (?missing=, repeated or split on spaces and commas). */
@@ -88,6 +112,7 @@ export function safeMissingScopes(v: unknown): string[] | null {
 export function ConnectDonePage() {
   const instance = useInstance();
   const search = useSearch({ from: "/connect/done" });
+  const shared = search.context === "service";
   const slug = typeof search.provider === "string" ? search.provider : "";
   const result: ConnectResult = results.includes(search.result as ConnectResult) ? (search.result as ConnectResult) : "error";
   const missing = result === "missing_scopes" ? safeMissingScopes(search.missing) : [];
@@ -102,7 +127,7 @@ export function ConnectDonePage() {
   });
   const mine = own.data?.find((c) => c.provider.slug === slug)?.provider;
   const name = providers.data?.find((p) => p.slug === slug)?.name ?? (mine ? connectionName(mine) : "the provider");
-  const { title, text, tone } = resultText(result, name);
+  const { title, text, tone } = shared ? serviceResultText(result, name) : resultText(result, name);
   const Icon = icons[tone];
   const titleId = useId();
   useEffect(() => {
@@ -122,7 +147,7 @@ export function ConnectDonePage() {
                 </h1>
               </div>
               <p className={styles.muted}>{text}</p>
-              {missing === null && <p className={styles.muted}>Some of the permissions the tool needs weren't allowed.</p>}
+              {missing === null && <p className={styles.muted}>{shared ? "Some requested permissions for the team-shared connection weren't allowed." : "Some of the permissions the tool needs weren't allowed."}</p>}
               {missing !== null && missing.length > 0 && (
                 <section aria-labelledby={`${titleId}-missing`}>
                   <h2 id={`${titleId}-missing`} className={styles.heading}>
@@ -137,7 +162,8 @@ export function ConnectDonePage() {
                   </ul>
                 </section>
               )}
-              {signedIn && (result === "connected" || result === "missing_scopes") && (
+              {shared && <TextLink render={<Link to="/" />}>Back to the portal</TextLink>}
+              {!shared && signedIn && (result === "connected" || result === "missing_scopes") && (
                 <p className={styles.muted}>
                   See or disconnect it in <TextLink render={<Link to="/settings/connections" />}>Account › My connections</TextLink>.
                 </p>

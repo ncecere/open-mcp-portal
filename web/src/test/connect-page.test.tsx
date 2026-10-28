@@ -273,6 +273,50 @@ describe("Connect result page", () => {
     expect(await screen.findByRole("region", { name: "Not allowed" })).toHaveTextContent("https://www.googleapis.com/auth/drive.readonly");
   });
 
+  it.each([
+    ["connected", "Team-shared connection to GitHub connected"],
+    ["missing_scopes", "Team-shared connection: GitHub didn't allow everything"],
+    ["error", "Couldn't connect the team-shared connection"],
+    ["denied", "Team-shared connection not connected"],
+    ["expired", "Team-shared connection attempt expired"],
+    ["wrong_person", "Team-shared connection needs the original browser session"],
+    ["not_allowed", "Team-shared connection isn't allowed for the destination"],
+  ])("gives team-shared %s guidance without claiming tool readiness or choosing a team", async (result, title) => {
+    const { calls, container } = open({ "GET /v1/auth-providers": () => providerSummaries }, `/connect/done?provider=github&context=service&result=${result}&missing=repo&team=ForeignTeam&returnTo=https://evil.example`);
+    expect(await screen.findByRole("heading", { level: 1, name: title })).toBeInTheDocument();
+    expect(screen.getByText(/Service accounts › Connections/)).toBeInTheDocument();
+    expect(screen.getByText(/explicit account assignments and destination grants/)).toBeInTheDocument();
+    if (["missing_scopes", "error", "denied", "expired", "wrong_person"].includes(result)) {
+      expect(screen.getByText(/reconnect or retry/)).toBeInTheDocument();
+    }
+    expect(screen.getByRole("link", { name: "Back to the portal" })).toHaveAttribute("href", "/");
+    expect(screen.queryByRole("link", { name: /My connections/ })).toBeNull();
+    expect(screen.queryByText(/AI client|run the tool|ForeignTeam|evil\.example/)).toBeNull();
+    expect(calls.some((call) => call.method !== "GET")).toBe(false);
+    if (result === "missing_scopes") expect(screen.getByRole("region", { name: "Not allowed" })).toHaveTextContent("repo");
+    else expect(screen.queryByRole("region", { name: "Not allowed" })).toBeNull();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it.each(["unknown", "Service", "service%20", "service&context=personal"])("keeps personal guidance for non-exact context %s", async (context) => {
+    open({ "GET /v1/auth-providers": () => providerSummaries }, `/connect/done?provider=github&result=connected&context=${context}`);
+    expect(await screen.findByRole("heading", { level: 1, name: "Connected to GitHub" })).toBeInTheDocument();
+    expect(screen.getByText(/Go back to your AI client and run the tool again/)).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Account › My connections" })).toHaveAttribute("href", "/settings/connections");
+    expect(screen.queryByRole("link", { name: "Back to the portal" })).toBeNull();
+  });
+
+  it("keeps shared hints generic when provider names or missing scopes cannot be trusted", async () => {
+    const { calls } = open({ "GET /v1/me": () => Reply.error(401, "unauthorized") }, "/connect/done?context=service&provider=PrivateProvider&result=missing_scopes&missing=%3Cscript%3E");
+    expect(await screen.findByRole("heading", { level: 1, name: "Team-shared connection: the provider didn't allow everything" })).toBeInTheDocument();
+    expect(screen.getByText("Some requested permissions for the team-shared connection weren't allowed.")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Not allowed" })).toBeNull();
+    expect(screen.queryByText(/PrivateProvider|script/)).toBeNull();
+    expect(screen.queryByRole("link", { name: /My connections/ })).toBeNull();
+    expect(screen.getByRole("link", { name: "Back to the portal" })).toHaveAttribute("href", "/");
+    expect(calls.some((call) => call.url === "/v1/auth-providers" || call.url === "/v1/me/connections")).toBe(false);
+  });
+
   it("helpers", () => {
     expect(missingScopes("repo, admin:org  user")).toEqual(["repo", "admin:org", "user"]);
     expect(missingScopes(undefined)).toEqual([]);

@@ -329,7 +329,7 @@ const connectRoute = createRoute({
 const connectDoneRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "connect/done",
-  validateSearch: (s: Record<string, unknown>): Record<string, unknown> => s,
+  validateSearch: ({ context, ...s }: Record<string, unknown>): Record<string, unknown> => ({ ...s, ...(context === "service" ? { context } : {}) }),
   component: lazy(pages.connect, "ConnectDonePage"),
 });
 

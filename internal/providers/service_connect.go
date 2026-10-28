@@ -241,6 +241,11 @@ func (s *Service) validateServiceCallback(ctx context.Context, q *dbgen.Queries,
 	return c, p, nil
 }
 
+// serviceDone adds only a display hint; it conveys no team or credential authority.
+func serviceDone(provider, result string, missing []string) string {
+	return done(provider, result, missing) + "&context=service"
+}
+
 // serviceCallback consumes its own state before exchange and revalidates under
 // user/session-first locks before committing; never calls the personal store adapter.
 func (s *Service) serviceCallback(ctx context.Context, st dbgen.ServiceConnectionAuthState, in CallbackInput) (string, error) {
@@ -265,25 +270,25 @@ func (s *Service) serviceCallback(ctx context.Context, st dbgen.ServiceConnectio
 	})
 	if err != nil { // consume invalid states as well, never leaving reusable consent
 		_, _ = s.q.TakeServiceConnectionAuthState(ctx, st.StateDigest)
-		return done("", ResultExpired, nil), nil
+		return serviceDone("", ResultExpired, nil), nil
 	}
 	if in.Error != "" {
-		return done(p.Slug, ResultDenied, nil), nil
+		return serviceDone(p.Slug, ResultDenied, nil), nil
 	}
 	if in.Code == "" || len(in.Code) > 4096 {
-		return done(p.Slug, ResultError, nil), nil
+		return serviceDone(p.Slug, ResultError, nil), nil
 	}
 	verifier := ""
 	if st.CodeVerifierCipher != nil {
 		b, e := s.box.Open(st.CodeVerifierCipher, ServiceStateAAD(st.StateDigest))
 		if e != nil {
-			return done(p.Slug, ResultError, nil), nil
+			return serviceDone(p.Slug, ResultError, nil), nil
 		}
 		verifier = string(b)
 	}
 	tok, ee := s.exchange(ctx, p, in.Code, verifier)
 	if ee != nil {
-		return done(p.Slug, ResultError, nil), nil
+		return serviceDone(p.Slug, ResultError, nil), nil
 	}
 	label := s.accountLabel(ctx, p, tok.Access)
 	granted := st.Scopes
@@ -329,7 +334,7 @@ func (s *Service) serviceCallback(ctx context.Context, st dbgen.ServiceConnectio
 		if p.RevocationUrl != nil && token != "" {
 			_ = s.revoke(ctx, p, token, hint)
 		}
-		return done(p.Slug, ResultExpired, nil), nil
+		return serviceDone(p.Slug, ResultExpired, nil), nil
 	}
 	var missing []string
 	for _, scope := range st.Scopes {
@@ -338,7 +343,7 @@ func (s *Service) serviceCallback(ctx context.Context, st dbgen.ServiceConnectio
 		}
 	}
 	if len(missing) > 0 {
-		return done(p.Slug, ResultMissingScopes, missing), nil
+		return serviceDone(p.Slug, ResultMissingScopes, missing), nil
 	}
-	return done(p.Slug, ResultConnected, nil), nil
+	return serviceDone(p.Slug, ResultConnected, nil), nil
 }
