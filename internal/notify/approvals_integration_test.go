@@ -182,6 +182,27 @@ func TestApprovalFanOutFailClosedAndEmailRechecks(t *testing.T) {
 	}
 }
 
+func TestApprovalWebhookNeverLeavesEvenWithMalformedStoredSubscription(t *testing.T) {
+	a := newApprovalEnv(t)
+	rcv := newReceiver(t)
+	d, _ := a.destination(adminActor(a.observer), Scope{}, "json", rcv.URL+"/private")
+	// Model a corrupt/legacy subscription that bypassed API validation. It
+	// still cannot turn a private workflow notice into an external event.
+	a.run(`UPDATE notification_destinations SET events=array_append(events,$2::text) WHERE id=$1`, d.D.ID, ApprovalRequested)
+	a.begin()
+	a.runOnce()
+	if len(rcv.deliveries()) != 0 || a.count(`SELECT count(*) FROM notification_outbox WHERE channel='webhook'`) != 0 {
+		t.Fatal("private approval fanned out to a stored webhook subscription")
+	}
+	// A malformed outbox row is rejected at delivery too, before any network I/O.
+	a.run(`INSERT INTO notification_outbox(event_id,channel,destination_id,dedup_key)
+		SELECT id,'webhook',$1,'forced-private-hook' FROM notification_events WHERE event=$2`, d.D.ID, ApprovalRequested)
+	a.runOnce()
+	if len(rcv.deliveries()) != 0 || a.count(`SELECT count(*) FROM notification_outbox WHERE channel='webhook' AND state='skipped'`) != 1 {
+		t.Fatal("malformed private outbox row was not skipped")
+	}
+}
+
 func TestApprovalPreferencesEnumerateAndApply(t *testing.T) {
 	a := newApprovalEnv(t)
 	for _, u := range []uuid.UUID{a.requester, a.reviewer, a.observer} {
