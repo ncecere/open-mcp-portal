@@ -332,6 +332,10 @@ type Principal struct {
 	User  dbgen.User
 	// GatewaySlug is the gateway the token is for.
 	GatewaySlug string
+	// TokenID and ExpiresAt permit a dispatch boundary to retain the exact
+	// authenticated credential's identity/deadline without retaining its secret.
+	TokenID   uuid.UUID
+	ExpiresAt time.Time
 }
 
 // Authenticate checks an access token presented to /mcp/{slug}: its digest
@@ -349,7 +353,7 @@ func (s *Service) Authenticate(ctx context.Context, token, slug string) (Princip
 		row.GatewaySlug != slug || row.OauthToken.Resource != resource || g.Resource != resource {
 		return Principal{}, ErrInvalidToken
 	}
-	return Principal{Grant: g, User: row.User, GatewaySlug: row.GatewaySlug}, nil
+	return Principal{Grant: g, User: row.User, GatewaySlug: row.GatewaySlug, TokenID: row.OauthToken.ID, ExpiresAt: row.OauthToken.ExpiresAt}, nil
 }
 
 // Touch records that a grant was used (at most once a minute).

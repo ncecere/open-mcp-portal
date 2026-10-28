@@ -381,6 +381,9 @@ func acceptsJSON(values []string) bool {
 type principal struct {
 	toolPolicy toolscope.Policy
 	kind       string
+	// expiresAt is the exact MCP credential deadline; nil means no fixed
+	// expiry. Approval dispatch must not rely on an earlier authentication.
+	expiresAt *time.Time
 	// user is the person (API keys and OAuth clients).
 	user dbgen.User
 	// keyID and keyName are the API key or service account key used.
@@ -447,7 +450,7 @@ func (h *Handler) credential(w http.ResponseWriter, r *http.Request, slug string
 			h.log().WarnContext(ctx, "could not record a connected app's use", "err", err)
 		}
 		g := p.Grant
-		return principal{kind: calls.PrincipalOAuth, user: p.User, grant: &g, toolPolicy: toolscope.Union(toolscope.OAuthStored(g.ToolScope))}, true
+		return principal{kind: calls.PrincipalOAuth, user: p.User, grant: &g, expiresAt: &p.ExpiresAt, toolPolicy: toolscope.Union(toolscope.OAuthStored(g.ToolScope))}, true
 	case serviceaccounts.LooksLikeKey(token):
 		if h.ServiceAccounts == nil {
 			return invalid("The service account key is invalid, expired or revoked")
@@ -461,7 +464,7 @@ func (h *Handler) credential(w http.ResponseWriter, r *http.Request, slug string
 		if err := h.ServiceAccounts.Touch(ctx, p); err != nil {
 			h.log().WarnContext(ctx, "could not record a service account key's use", "err", err)
 		}
-		return principal{kind: calls.PrincipalServiceAccount, keyID: p.Key.ID, keyName: p.Key.Name, scope: p.Gateways, account: &p, toolPolicy: toolscope.Intersect(toolscope.Union(toolscope.Stored(p.Key.ToolScope)), toolscope.Union(toolscope.Stored(p.Account.ToolScope)))}, true
+		return principal{kind: calls.PrincipalServiceAccount, keyID: p.Key.ID, keyName: p.Key.Name, scope: p.Gateways, account: &p, expiresAt: &p.Key.ExpiresAt, toolPolicy: toolscope.Intersect(toolscope.Union(toolscope.Stored(p.Key.ToolScope)), toolscope.Union(toolscope.Stored(p.Account.ToolScope)))}, true
 	}
 	p, err := h.Keys.Authenticate(ctx, token)
 	if errors.Is(err, apikeys.ErrInvalid) {
@@ -472,7 +475,7 @@ func (h *Handler) credential(w http.ResponseWriter, r *http.Request, slug string
 	if err := h.Keys.Touch(ctx, p.Key.ID); err != nil {
 		h.log().WarnContext(ctx, "could not record API key use", "err", err)
 	}
-	return principal{kind: calls.PrincipalAPIKey, user: p.User, keyID: p.Key.ID, keyName: p.Key.Name, scope: p.Gateways, toolPolicy: toolscope.Union(toolscope.Stored(p.Key.ToolScope))}, true
+	return principal{kind: calls.PrincipalAPIKey, user: p.User, keyID: p.Key.ID, keyName: p.Key.Name, scope: p.Gateways, expiresAt: &p.Key.ExpiresAt, toolPolicy: toolscope.Union(toolscope.Stored(p.Key.ToolScope))}, true
 }
 
 // request is one exchange.
