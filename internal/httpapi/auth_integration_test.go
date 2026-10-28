@@ -445,12 +445,12 @@ func TestAuditLogIsAppendOnly(t *testing.T) {
 	if _, err := app.Pool.Exec(ctx, "DELETE FROM audit_log"); err == nil {
 		t.Fatal("audit_log DELETE succeeded without purge flag")
 	}
-	tx, err := app.Pool.Begin(ctx)
+	tx, err := testutil.OwnerPool(t, app.Pool).Begin(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tx.Rollback(ctx)
-	// omp.audit_purge is the setting a retention job sets for its transaction.
+	// Owner-only legacy retention compatibility: omp.audit_purge is the setting a retention job sets for its transaction.
 	if _, err := tx.Exec(ctx, "SELECT set_config('omp.audit_purge', 'on', true)"); err != nil {
 		t.Fatal(err)
 	}
@@ -460,7 +460,7 @@ func TestAuditLogIsAppendOnly(t *testing.T) {
 	// The setting's name before the rename (migration 00013) still works, for
 	// a previous release during a rolling update.
 	_ = tx.Rollback(ctx)
-	old, err := app.Pool.Begin(ctx)
+	old, err := testutil.OwnerPool(t, app.Pool).Begin(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -120,14 +120,8 @@ func (s *Service) purge(ctx context.Context, kind string, days int32, watermark 
 				if watermark.IsZero() {
 					return nil
 				}
-				if err := q.EnableCallsPurge(ctx); err != nil {
-					return err
-				}
 				n, err = q.PurgeMCPCalls(ctx, dbgen.PurgeMCPCallsParams{Watermark: watermark, PlatformDays: days, BatchSize: s.cfg.BatchSize})
 			case AuditLog:
-				if err := q.EnableAuditPurge(ctx); err != nil {
-					return err
-				}
 				n, err = q.PurgeAuditLog(ctx, dbgen.PurgeAuditLogParams{Days: days, BatchSize: s.cfg.BatchSize})
 			case UsageRollups:
 				n, err = q.PurgeUsageRollups(ctx, dbgen.PurgeUsageRollupsParams{Days: days, BatchSize: s.cfg.BatchSize})

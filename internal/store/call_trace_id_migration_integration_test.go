@@ -18,7 +18,8 @@ import (
 // what it checks, and then runs them over the same data.
 func TestCallTraceIDMigration(t *testing.T) {
 	const callTraceID = 23 // 00023_call_trace_id.sql
-	pool, _ := testutil.NewDB(t)
+	runtime, _ := testutil.NewDB(t)
+	pool := testutil.OwnerPool(t, runtime)
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()

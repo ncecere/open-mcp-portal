@@ -19,7 +19,8 @@ import (
 // Down works, and running the Up again (after a failure half way) is safe.
 func TestAgentPlatformsMigration00020(t *testing.T) {
 	const agentPlatforms = 20 // 00020_agent_platforms.sql
-	pool, _ := testutil.NewDB(t)
+	runtime, _ := testutil.NewDB(t)
+	pool := testutil.OwnerPool(t, runtime)
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()

@@ -72,7 +72,9 @@ spec:
         # Applies pending migrations before the new version serves traffic.
         # A PostgreSQL advisory lock serialises concurrent runs, so every
         # starting pod may run it; only the first does any work. It needs
-        # only DATABASE_URL (and APP_URL, for the safety checks).
+        # only the separate migration Secret (and non-secret configuration).
+        # Even a legacy single-role install copies its URL to that Secret;
+        # the serving container never receives this credential.
         - name: migrate
           image: ghcr.io/ncecere/open-mcp-portal
           imagePullPolicy: IfNotPresent
@@ -81,11 +83,12 @@ spec:
             - configMapRef:
                 name: open-mcp-portal-config
           env:
-            - name: DATABASE_URL
+            - name: DATABASE_MIGRATE_URL
               valueFrom:
                 secretKeyRef:
-                  name: open-mcp-portal-runtime
-                  key: DATABASE_URL
+                  name: open-mcp-portal-migrate
+                  key: DATABASE_MIGRATE_URL
+                  optional: true
           resources:
             requests:
               cpu: 50m

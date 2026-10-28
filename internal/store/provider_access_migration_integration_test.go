@@ -20,8 +20,9 @@ import (
 // It names migration 21 explicitly (down to 20, up to 21), so later migrations
 // don't change what it checks.
 func TestProviderAccessMigrationKeepsProvidersOpen(t *testing.T) {
-	const access = 21            // 00021_provider_access.sql
-	pool, _ := testutil.NewDB(t) // at the newest schema
+	const access = 21 // 00021_provider_access.sql
+	runtime, _ := testutil.NewDB(t)
+	pool := testutil.OwnerPool(t, runtime) // at the newest schema
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()

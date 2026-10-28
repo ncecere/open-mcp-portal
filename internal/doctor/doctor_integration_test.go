@@ -87,7 +87,7 @@ func TestDoctorHealthyInstall(t *testing.T) {
 
 func TestDoctorPendingMigrations(t *testing.T) {
 	pool, dbURL := testutil.NewDB(t)
-	if _, err := pool.Exec(context.Background(), "DELETE FROM goose_db_version WHERE version_id = 3"); err != nil {
+	if _, err := testutil.OwnerPool(t, pool).Exec(context.Background(), "DELETE FROM goose_db_version WHERE version_id = 3"); err != nil {
 		t.Fatal(err)
 	}
 	rep := doctor.Run(context.Background(), devConfig(dbURL), doctor.Options{})

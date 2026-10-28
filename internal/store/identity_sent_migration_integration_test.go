@@ -20,8 +20,9 @@ import (
 // migrations don't change what it checks; it then runs the newer ones over the
 // same data.
 func TestIdentitySentMigrationKeepsWhatExists(t *testing.T) {
-	const identitySent = 19      // 00019_call_identity_sent.sql
-	pool, _ := testutil.NewDB(t) // at the newest schema
+	const identitySent = 19 // 00019_call_identity_sent.sql
+	runtime, _ := testutil.NewDB(t)
+	pool := testutil.OwnerPool(t, runtime) // at the newest schema
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()

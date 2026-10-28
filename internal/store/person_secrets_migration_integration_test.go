@@ -21,7 +21,8 @@ import (
 // later migrations do not change what it checks, and then runs them.
 func TestPersonSecretsMigration(t *testing.T) {
 	const personSecrets = 24 // 00024_person_secrets.sql
-	pool, _ := testutil.NewDB(t)
+	runtime, _ := testutil.NewDB(t)
+	pool := testutil.OwnerPool(t, runtime)
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()

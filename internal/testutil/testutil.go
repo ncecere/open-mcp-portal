@@ -88,44 +88,117 @@ func Logger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-// NewDB creates a fresh, fully migrated database for one test and drops it
-// afterwards.
+type fixture struct {
+	owner *pgxpool.Pool
+	role  string
+}
+
+var fixtures sync.Map // runtime pool -> explicit privileged fixture access
+
+// OwnerPool is only for migrations, DDL and privileged test instrumentation.
+// Application/service operations must keep using the pool returned by NewDB.
+func OwnerPool(t testing.TB, pool *pgxpool.Pool) *pgxpool.Pool {
+	t.Helper()
+	if f, ok := fixtures.Load(pool); ok {
+		return f.(fixture).owner
+	}
+	return pool
+}
+
+// Regrant reconciles after a fixture recreates application tables.
+func Regrant(t testing.TB, pool *pgxpool.Pool) {
+	t.Helper()
+	if f, ok := fixtures.Load(pool); ok {
+		v := f.(fixture)
+		if err := store.Migrate(context.Background(), v.owner, Logger(), v.role); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// NewDB returns a genuinely authenticated runtime pool when
+// OMP_TEST_SPLIT_ROLES=1. Only unique new scratch databases/roles are touched.
 func NewDB(t testing.TB) (*pgxpool.Pool, string) {
 	t.Helper()
 	ctx := context.Background()
 	admin := adminConn(t, ctx)
 	name := "omp_test_" + randomSuffix()
-	if _, err := admin.Exec(ctx, "CREATE DATABASE "+name); err != nil {
+	ownerName, runtimeName := name+"_owner", name+"_app"
+	split := os.Getenv("OMP_TEST_SPLIT_ROLES") == "1"
+	var pool, owner *pgxpool.Pool
+	var createdRoles []string
+	// Register before creating anything so failures also clean up immediately.
+	t.Cleanup(func() {
+		if pool != nil {
+			fixtures.Delete(pool)
+			pool.Close()
+		}
+		if owner != nil && owner != pool {
+			owner.Close()
+		}
+		cctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		conn, err := pgx.Connect(cctx, DatabaseURL())
+		if err != nil {
+			t.Logf("cleanup connect: %v", err)
+			return
+		}
+		defer conn.Close(cctx)
+		if _, err := conn.Exec(cctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)"); err != nil {
+			t.Logf("cleanup database: %v", err)
+		}
+		for _, role := range createdRoles {
+			if _, err := conn.Exec(cctx, "DROP ROLE "+pgx.Identifier{role}.Sanitize()); err != nil {
+				t.Logf("cleanup role: %v", err)
+			}
+		}
+	})
+	defer admin.Close(ctx)
+	password := "scratch-" + randomSuffix()
+	if split {
+		for _, role := range []string{ownerName, runtimeName} {
+			// Random hex suffixes/passwords are generated here, never user input.
+			if _, err := admin.Exec(ctx, "CREATE ROLE "+pgx.Identifier{role}.Sanitize()+" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '"+password+"'"); err != nil {
+				t.Fatal(err)
+			}
+			createdRoles = append(createdRoles, role)
+		}
+	}
+	create := "CREATE DATABASE " + pgx.Identifier{name}.Sanitize()
+	if split {
+		create += " OWNER " + pgx.Identifier{ownerName}.Sanitize()
+	}
+	if _, err := admin.Exec(ctx, create); err != nil {
 		t.Fatalf("create database: %v", err)
 	}
-	_ = admin.Close(ctx)
-
 	u, err := url.Parse(DatabaseURL())
 	if err != nil {
 		t.Fatal(err)
 	}
 	u.Path = "/" + name
-	dbURL := u.String()
-	pool, err := store.Open(ctx, dbURL)
-	if err != nil {
-		t.Fatalf("open test db: %v", err)
+	if split {
+		u.User = url.UserPassword(ownerName, password)
 	}
-	if err := store.Migrate(ctx, pool, Logger()); err != nil {
+	owner, err = store.Open(ctx, u.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	role := ""
+	if split {
+		role = runtimeName
+	}
+	if err := store.Migrate(ctx, owner, Logger(), role); err != nil {
 		t.Fatalf("migrate test db: %v", err)
 	}
-	t.Cleanup(func() {
-		pool.Close()
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		admin, err := pgx.Connect(ctx, DatabaseURL())
+	if split {
+		u.User = url.UserPassword(runtimeName, password)
+		pool, err = store.Open(ctx, u.String())
 		if err != nil {
-			t.Logf("cleanup connect: %v", err)
-			return
+			t.Fatal(err)
 		}
-		defer admin.Close(ctx)
-		if _, err := admin.Exec(ctx, "DROP DATABASE IF EXISTS "+name+" WITH (FORCE)"); err != nil {
-			t.Logf("drop test database: %v", err)
-		}
-	})
-	return pool, dbURL
+		fixtures.Store(pool, fixture{owner: owner, role: runtimeName})
+	} else {
+		pool = owner
+	}
+	return pool, u.String()
 }

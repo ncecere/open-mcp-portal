@@ -23,7 +23,8 @@ import (
 // without authentication and removes only what it added.
 func TestMachineOAuthMigration(t *testing.T) {
 	const machineOAuth = 25 // 00025_machine_oauth.sql
-	pool, _ := testutil.NewDB(t)
+	runtime, _ := testutil.NewDB(t)
+	pool := testutil.OwnerPool(t, runtime)
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()

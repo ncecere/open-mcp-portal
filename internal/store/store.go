@@ -31,7 +31,7 @@ var ErrNotFound = errors.New("not found")
 func Open(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(url)
 	if err != nil {
-		return nil, fmt.Errorf("DATABASE_URL: %w", err)
+		return nil, errors.New("DATABASE_URL: invalid PostgreSQL connection configuration")
 	}
 	if cfg.ConnConfig.RuntimeParams == nil {
 		cfg.ConnConfig.RuntimeParams = map[string]string{}
@@ -45,7 +45,7 @@ func Open(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	defer cancel()
 	if err := pool.Ping(pingCtx); err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("postgres ping: %w", err)
+		return nil, errors.New("postgres ping failed (check connectivity and credentials)")
 	}
 	return pool, nil
 }
@@ -81,7 +81,20 @@ func OpenWait(ctx context.Context, url string, wait time.Duration, log *slog.Log
 
 // Migrate applies the goose migrations while holding a session advisory
 // lock, so concurrent starts are safe.
-func Migrate(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) error {
+func Migrate(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger, runtimeRole ...string) error {
+	role := ""
+	if len(runtimeRole) > 0 {
+		role = runtimeRole[0]
+	}
+	if role != "" {
+		safety, err := InspectRoles(ctx, pool, role, false)
+		if err != nil {
+			return fmt.Errorf("database role preflight: %w", err)
+		}
+		if !safety.Safe() {
+			return fmt.Errorf("unsafe split database roles: %s", safety.Detail())
+		}
+	}
 	// The advisory lock lives on its own connection, outside the pool: a
 	// caller waiting for the lock must not hold a pool slot, or concurrent
 	// callers sharing a small pool would leave the lock holder no
@@ -117,6 +130,11 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) error {
 	}
 	if err != nil {
 		return fmt.Errorf("apply migrations: %w", err)
+	}
+	if role != "" {
+		if err := ReconcileRuntimeGrants(ctx, conn, role); err != nil {
+			return fmt.Errorf("runtime grants: %w", err)
+		}
 	}
 	return nil
 }

@@ -110,36 +110,12 @@ WITH doomed AS (
 )
 DELETE FROM mcp_call_payloads WHERE call_id IN (SELECT call_id FROM doomed);
 
--- name: EnableCallsPurge :exec
--- Lets this transaction delete call records (the append-only trigger).
-SELECT set_config('omp.calls_purge', 'on', true);
+-- name: PurgeMCPCalls :one
+-- Missing functions are a migration error, never a direct DELETE fallback.
+SELECT public.omp_purge_mcp_calls(@watermark::timestamptz, @platform_days::int, @batch_size::int)::bigint AS deleted;
 
--- name: EnableAuditPurge :exec
-SELECT set_config('omp.audit_purge', 'on', true);
-
--- name: PurgeMCPCalls :execrows
--- One batch of call records older than their period (as for payloads, with
--- call_metadata periods) and older than watermark (rolled up).
-WITH doomed AS (
-    SELECT c.id
-    FROM mcp_calls c
-    LEFT JOIN teams gt ON gt.id = c.gateway_team_id
-    LEFT JOIN teams st ON st.id = c.server_team_id
-    WHERE c.occurred_at < @watermark::timestamptz
-      AND c.occurred_at < now() - make_interval(days => COALESCE(LEAST(
-        CASE WHEN gt.id IS NOT NULL THEN COALESCE((gt.retention_overrides ->> 'call_metadata')::int, @platform_days::int) END,
-        CASE WHEN st.id IS NOT NULL THEN COALESCE((st.retention_overrides ->> 'call_metadata')::int, @platform_days::int) END),
-        @platform_days::int))
-    ORDER BY c.id
-    LIMIT @batch_size
-)
-DELETE FROM mcp_calls WHERE id IN (SELECT id FROM doomed);
-
--- name: PurgeAuditLog :execrows
-WITH doomed AS (
-    SELECT id FROM audit_log WHERE occurred_at < now() - make_interval(days => @days::int) ORDER BY id LIMIT @batch_size
-)
-DELETE FROM audit_log WHERE id IN (SELECT id FROM doomed);
+-- name: PurgeAuditLog :one
+SELECT public.omp_purge_audit_log(@days::int, @batch_size::int)::bigint AS deleted;
 
 -- name: PurgeUsageRollups :execrows
 WITH doomed AS (

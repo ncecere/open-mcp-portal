@@ -21,9 +21,12 @@ func TestSessionActivityWriteThrottleConcurrent(t *testing.T) {
 		d.Auth.WithClock(func() time.Time { return time.Unix(0, nanos.Load()).UTC() })
 	})
 	me := app.signIn("alex")
-	sessionExec(t, app, `CREATE TABLE session_touch_test (writes integer NOT NULL); INSERT INTO session_touch_test VALUES (0);
+	if _, err := testutil.OwnerPool(t, app.Pool).Exec(context.Background(), `CREATE TABLE session_touch_test (writes integer NOT NULL); INSERT INTO session_touch_test VALUES (0);
  CREATE FUNCTION count_session_touch() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN UPDATE session_touch_test SET writes = writes + 1; RETURN NEW; END $$;
- CREATE TRIGGER count_session_touch AFTER UPDATE ON sessions FOR EACH ROW EXECUTE FUNCTION count_session_touch()`)
+ CREATE TRIGGER count_session_touch AFTER UPDATE ON sessions FOR EACH ROW EXECUTE FUNCTION count_session_touch()`); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Regrant(t, app.Pool)
 	count := func() int {
 		var n int
 		if err := app.Pool.QueryRow(context.Background(), `SELECT writes FROM session_touch_test`).Scan(&n); err != nil {

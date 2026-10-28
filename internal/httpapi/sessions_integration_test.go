@@ -249,8 +249,10 @@ func TestSessionRevocationAuditRollback(t *testing.T) {
 	me, remote := app.signIn("alex"), app.signIn("alex")
 	id := browserSessionID(t, remote)
 	// Force the audit insert to fail: the mutation must roll back with it.
-	sessionExec(t, app, `CREATE FUNCTION reject_session_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action LIKE 'session.%' THEN RAISE EXCEPTION 'audit unavailable'; END IF; RETURN NEW; END $$;
- CREATE TRIGGER reject_session_audit BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION reject_session_audit()`)
+	if _, err := testutil.OwnerPool(t, app.Pool).Exec(context.Background(), `CREATE FUNCTION reject_session_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action LIKE 'session.%' THEN RAISE EXCEPTION 'audit unavailable'; END IF; RETURN NEW; END $$;
+ CREATE TRIGGER reject_session_audit BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION reject_session_audit()`); err != nil {
+		t.Fatal(err)
+	}
 	code, raw := me.raw("DELETE", "/v1/me/sessions/"+id, nil, nil)
 	if code != 500 {
 		t.Fatalf("failed audit = %d %s", code, raw)
@@ -258,7 +260,9 @@ func TestSessionRevocationAuditRollback(t *testing.T) {
 	if remote.get("/v1/me", nil) != 200 {
 		t.Fatal("revocation escaped rollback")
 	}
-	sessionExec(t, app, `DROP TRIGGER reject_session_audit ON audit_log; DROP FUNCTION reject_session_audit()`)
+	if _, err := testutil.OwnerPool(t, app.Pool).Exec(context.Background(), `DROP TRIGGER reject_session_audit ON audit_log; DROP FUNCTION reject_session_audit()`); err != nil {
+		t.Fatal(err)
+	}
 	code, raw = me.raw("DELETE", "/v1/me/sessions/"+id, nil, nil)
 	if code != 200 {
 		t.Fatalf("retry = %d %s", code, raw)

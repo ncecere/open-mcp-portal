@@ -73,7 +73,7 @@ func TestRetentionPass(t *testing.T) {
 		RETURNING 1`)
 
 	// Call records can't be deleted outside the retention transaction.
-	if _, err := pool.Exec(ctx, `DELETE FROM mcp_calls WHERE id = $1::bigint`, shortCall); err == nil || !strings.Contains(err.Error(), "append-only") {
+	if _, err := pool.Exec(ctx, `DELETE FROM mcp_calls WHERE id = $1::bigint`, shortCall); err == nil || (!strings.Contains(err.Error(), "append-only") && !strings.Contains(err.Error(), "permission denied")) {
 		t.Fatalf("delete outside retention: %v", err)
 	}
 

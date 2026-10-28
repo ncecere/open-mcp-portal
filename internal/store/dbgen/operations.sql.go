@@ -78,25 +78,6 @@ func (q *Queries) DeleteUsageHour(ctx context.Context, hour time.Time) (int64, e
 	return result.RowsAffected(), nil
 }
 
-const enableAuditPurge = `-- name: EnableAuditPurge :exec
-SELECT set_config('omp.audit_purge', 'on', true)
-`
-
-func (q *Queries) EnableAuditPurge(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, enableAuditPurge)
-	return err
-}
-
-const enableCallsPurge = `-- name: EnableCallsPurge :exec
-SELECT set_config('omp.calls_purge', 'on', true)
-`
-
-// Lets this transaction delete call records (the append-only trigger).
-func (q *Queries) EnableCallsPurge(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, enableCallsPurge)
-	return err
-}
-
 const getCaptureSettings = `-- name: GetCaptureSettings :one
 SELECT id, patterns, revision, updated_by, updated_at FROM capture_settings WHERE id = 1
 `
@@ -442,11 +423,8 @@ func (q *Queries) OldestMCPCall(ctx context.Context) (time.Time, error) {
 	return oldest, err
 }
 
-const purgeAuditLog = `-- name: PurgeAuditLog :execrows
-WITH doomed AS (
-    SELECT id FROM audit_log WHERE occurred_at < now() - make_interval(days => $1::int) ORDER BY id LIMIT $2
-)
-DELETE FROM audit_log WHERE id IN (SELECT id FROM doomed)
+const purgeAuditLog = `-- name: PurgeAuditLog :one
+SELECT public.omp_purge_audit_log($1::int, $2::int)::bigint AS deleted
 `
 
 type PurgeAuditLogParams struct {
@@ -455,11 +433,10 @@ type PurgeAuditLogParams struct {
 }
 
 func (q *Queries) PurgeAuditLog(ctx context.Context, arg PurgeAuditLogParams) (int64, error) {
-	result, err := q.db.Exec(ctx, purgeAuditLog, arg.Days, arg.BatchSize)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	row := q.db.QueryRow(ctx, purgeAuditLog, arg.Days, arg.BatchSize)
+	var deleted int64
+	err := row.Scan(&deleted)
+	return deleted, err
 }
 
 const purgeMCPCallPayloads = `-- name: PurgeMCPCallPayloads :execrows
@@ -495,21 +472,8 @@ func (q *Queries) PurgeMCPCallPayloads(ctx context.Context, arg PurgeMCPCallPayl
 	return result.RowsAffected(), nil
 }
 
-const purgeMCPCalls = `-- name: PurgeMCPCalls :execrows
-WITH doomed AS (
-    SELECT c.id
-    FROM mcp_calls c
-    LEFT JOIN teams gt ON gt.id = c.gateway_team_id
-    LEFT JOIN teams st ON st.id = c.server_team_id
-    WHERE c.occurred_at < $1::timestamptz
-      AND c.occurred_at < now() - make_interval(days => COALESCE(LEAST(
-        CASE WHEN gt.id IS NOT NULL THEN COALESCE((gt.retention_overrides ->> 'call_metadata')::int, $2::int) END,
-        CASE WHEN st.id IS NOT NULL THEN COALESCE((st.retention_overrides ->> 'call_metadata')::int, $2::int) END),
-        $2::int))
-    ORDER BY c.id
-    LIMIT $3
-)
-DELETE FROM mcp_calls WHERE id IN (SELECT id FROM doomed)
+const purgeMCPCalls = `-- name: PurgeMCPCalls :one
+SELECT public.omp_purge_mcp_calls($1::timestamptz, $2::int, $3::int)::bigint AS deleted
 `
 
 type PurgeMCPCallsParams struct {
@@ -518,14 +482,12 @@ type PurgeMCPCallsParams struct {
 	BatchSize    int32
 }
 
-// One batch of call records older than their period (as for payloads, with
-// call_metadata periods) and older than watermark (rolled up).
+// Missing functions are a migration error, never a direct DELETE fallback.
 func (q *Queries) PurgeMCPCalls(ctx context.Context, arg PurgeMCPCallsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, purgeMCPCalls, arg.Watermark, arg.PlatformDays, arg.BatchSize)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	row := q.db.QueryRow(ctx, purgeMCPCalls, arg.Watermark, arg.PlatformDays, arg.BatchSize)
+	var deleted int64
+	err := row.Scan(&deleted)
+	return deleted, err
 }
 
 const purgeUsageRollups = `-- name: PurgeUsageRollups :execrows

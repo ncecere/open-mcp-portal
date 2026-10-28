@@ -23,7 +23,7 @@ platform admins see usage. Operators get Prometheus metrics, a key rotation proc
 | `teams` (+) | `limit_overrides jsonb`, `retention_overrides jsonb` (default `{}`; edits bump the team's revision, as the publishing override does) |
 | `gateways` (+) | `rate_limit_per_minute integer NULL` (null: inherit); `capture_payloads` (exists since `00004`) becomes live |
 | `mcp_servers` (+) | `capture_payloads boolean NOT NULL DEFAULT false` |
-| `mcp_calls` (±) | outcome `rate_limited`. The append-only trigger allows `DELETE` only when `omp.calls_purge = 'on'` (the retention transaction), like `omp.audit_purge` |
+| `mcp_calls` (±) | outcome `rate_limited`. The append-only trigger requires an owner-effective purge context and an accepted purge flag (migration 00032); runtime retention uses bounded definer functions, like audit retention |
 | `mcp_call_payloads` | call_id (PK), occurred_at, gateway_team_id, server_team_id, by_gateway, by_server, arguments and result (sealed with `ENCRYPTION_KEY`, AAD `mcp_call_payload:<id>:<part>`), original sizes, truncated flags, redaction counts, captured_at |
 | `rate_limit_counters` (UNLOGGED) | bucket text, window_start timestamptz, count int; PK (bucket, window_start) |
 | `usage_hourly` | hour, gateway (id, slug, name, team), server (id, slug, name, team), capability_id, exposed_name, method, principal_kind, service_account_team_id, outcome → calls, latency_sum_ms, latency_buckets `int[]`, request/response bytes. `UNIQUE NULLS NOT DISTINCT` over the dimensions |
@@ -135,7 +135,10 @@ Platform roles never read payloads through team routes (SPEC §4); they use the 
   with neither, the platform period. Payloads go when their own period passes or with their call.
 - A leader-elected loop (advisory lock `omp.retention`, every `RETENTION_INTERVAL`, default 15m) deletes each kind in
   batches (`RETENTION_BATCH_SIZE`, default 1000 rows per transaction, at most 100 batches per kind per run): payloads,
-  then calls (never newer than the usage rollup watermark), audit entries (`omp.audit_purge`), rollups. It also clears
+  then calls (before the persisted rollup UTC hour minus one hour), audit entries, rollups. Call/audit batches use
+  `public.omp_purge_mcp_calls` / `public.omp_purge_audit_log` (migration 00032), never direct DELETE or caller-set flags.
+  Missing functions fail closed. Calls retain their 1-day floor; audit has a 30-day floor. Payload cascades count as
+  call deletions, not additional payload deletions. See [database-roles.md](database-roles.md). It also clears
   expired consent requests and rate counters. Idempotent; a failing kind doesn't stop the others.
 - Each run that deleted something writes a system audit entry `retention.purge` with counts only; `last_run` (time,
   counts, errors per kind) is shown in Admin › Retention. Legal holds and dry runs are out of scope.

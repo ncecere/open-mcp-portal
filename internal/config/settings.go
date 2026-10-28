@@ -131,6 +131,9 @@ var settings = []setting{
 	{key: "APP_URL", apply: str(func(c *Config) *string { return &c.AppURL })},
 	{key: "LISTEN_ADDR", apply: str(func(c *Config) *string { return &c.ListenAddr })},
 	{key: "DATABASE_URL", secret: true, apply: str(func(c *Config) *string { return &c.DatabaseURL })},
+	{key: "DATABASE_MIGRATE_URL", secret: true, apply: str(func(c *Config) *string { return &c.DatabaseMigrateURL })},
+	{key: "DB_RUNTIME_ROLE", apply: func(c *Config, v string) error { c.DBRuntimeRole = v; return nil }},
+	{key: "DB_REQUIRE_SPLIT_ROLES", apply: boolean(func(c *Config) *bool { return &c.DBRequireSplitRoles })},
 	{key: "MIGRATE_ON_START", apply: boolean(func(c *Config) *bool { return &c.MigrateOnStart })},
 	{key: "INSTANCE_NAME", apply: func(c *Config, v string) error {
 		c.Instance.Name = cmp.Or(strings.TrimSpace(v), DefaultInstanceName)

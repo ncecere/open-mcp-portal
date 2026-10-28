@@ -63,7 +63,10 @@ file named by `OMP_CONFIG_FILE`. Each secret can also be read from a file named 
 | Setting | Required | Notes |
 |---|---|---|
 | `APP_URL` | yes | Public **https** origin, for example `https://mcp.example.org`. It must match the Ingress host. |
-| `DATABASE_URL` | yes (secret) | `postgres://user:pass@host:5432/db?sslmode=require`. URL-encode the password. |
+| `DATABASE_URL` | serving (secret) | Runtime URL, `postgres://user:pass@host:5432/db?sslmode=require`. URL-encode the password. |
+| `DATABASE_MIGRATE_URL` | no (secret) | Migration owner URL, only for `migrate` / `MIGRATE_ON_START`; falls back to `DATABASE_URL`. Supports `_FILE` and YAML. |
+| `DB_RUNTIME_ROLE` | no | Existing role to reconcile grants to after every migrate; empty retains single-owner operation. |
+| `DB_REQUIRE_SPLIT_ROLES` | no | `false` by default; `true` refuses unsafe serving privileges and requires a target role for migration. |
 | `ENCRYPTION_KEY` | yes (secret) | 32 random bytes, base64. Encrypts MCP server header values, identity signing keys, auth provider client secrets, people's provider tokens and captured call payloads. |
 | `ENCRYPTION_KEY_PREVIOUS` | while rotating (secret) | The old key, still accepted for decryption until `rotate-keys` re-encrypts everything. See [Key rotation](#key-rotation). |
 | `API_KEY_PEPPER` | yes (secret) | 32 random bytes, base64. Keys the HMAC that stores API keys, service account keys and connected apps' tokens. Rotate it with `API_KEY_PEPPER_PREVIOUS`, never by just replacing it. |
@@ -144,13 +147,91 @@ address but the policy drops it, the server's health shows `unavailable` (a time
 the sealed secrets to the digests of every key and token. Generate each with `openssl rand -base64 32`.
 
 `serve` also requires a sign-in method. Without `DEV_AUTH`, that means OIDC. OIDC discovery runs on the first sign-in,
-not at startup, so a misconfigured issuer shows up at sign-in and in the logs. `migrate` needs only `DATABASE_URL`, and it
+not at startup, so a misconfigured issuer shows up at sign-in and in the logs. `migrate` needs only `DATABASE_MIGRATE_URL`
+(or its `DATABASE_URL` fallback), not runtime connectivity, and it
 applies the safety checks only when `APP_URL` is set. `open-mcp-portal doctor` prints all of this and also checks
 Postgres and the migration state:
 
 ```sh
 kubectl -n open-mcp-portal exec deploy/open-mcp-portal -c portal -- /open-mcp-portal doctor
 ```
+
+## Database roles
+
+Use distinct non-superuser logins in production. See [database-roles.md](database-roles.md) for the security design,
+including the 30-day audit and 1-day call age floors, rollup limitation and rollback compatibility.
+
+### PostgreSQL setup
+
+As a trusted PostgreSQL administrator (substitute generated passwords, URL-encoded in URLs):
+
+```sql
+CREATE ROLE omp_owner LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '<owner-password>';
+CREATE ROLE omp_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '<runtime-password>';
+CREATE DATABASE omp OWNER omp_owner;
+```
+
+In that database, ensure `public` belongs to `pg_database_owner` (PostgreSQL 17's default) or `omp_owner`, and
+`REVOKE CREATE ON SCHEMA public FROM PUBLIC` for a database upgraded from older PostgreSQL defaults. Never grant
+`omp_app` membership in `omp_owner`, even with NOINHERIT. The application does not create roles or change passwords.
+Run `open-mcp-portal migrate` with `DATABASE_MIGRATE_URL` set to the owner URL and `DB_RUNTIME_ROLE=omp_app`.
+Then serve with only the runtime `DATABASE_URL`, `MIGRATE_ON_START=false`, and optionally
+`DB_REQUIRE_SPLIT_ROLES=true`. Doctor uses the runtime URL and reports effective catalog privileges, including
+PUBLIC/column/inherited grants, memberships and owner rights. Single-owner mode warns rather than failing by default.
+The grants step runs on every migration invocation, even with no pending migrations, to cover new tables and repair
+stale direct grants. Unsafe PUBLIC or inherited rights require an administrator's fix; direct REVOKE cannot remove them.
+
+### CloudNativePG
+
+A new CloudNativePG Cluster can provision the two identities without superuser application credentials:
+
+```yaml
+spec:
+  bootstrap:
+    initdb:
+      database: omp
+      owner: omp_owner
+      secret:
+        name: omp-owner-password
+  managed:
+    roles:
+      - name: omp_app
+        ensure: present
+        login: true
+        superuser: false
+        createdb: false
+        createrole: false
+        inherit: false
+        passwordSecret:
+          name: omp-app-password
+```
+
+Create `omp-owner-password` and `omp-app-password` as `kubernetes.io/basic-auth` Secrets (`username` and `password`),
+using different generated passwords. The owner created by initdb is non-superuser. Using your secrets operator
+(for example External Secrets templating), assemble **two** URL Secrets against the cluster's read-write service,
+`sslmode=require`: `open-mcp-portal-migrate.DATABASE_MIGRATE_URL` as owner, and
+`open-mcp-portal-runtime.DATABASE_URL` as runtime. Retain the runtime encryption/pepper/IdP keys in its Secret.
+Add `DB_RUNTIME_ROLE=omp_app` and `DB_REQUIRE_SPLIT_ROLES=true` to the portal's non-secret configuration.
+The serving pod must not mount the owner basic-auth Secret or URL. Existing Cluster bootstrap settings do not
+recreate roles: use managed roles or an administrator for an existing database, not re-bootstrap.
+
+### Existing installation
+
+1. Back up the database and encryption keys. Identify the current database, public schema, table and function owners.
+   Keep the existing owner login for migration; do not migrate as a different superuser. Purge functions and the two
+   protected tables must share that owner. Correct historical inconsistent ownership as a trusted administrator first.
+2. Create a new non-superuser runtime login, without owner membership or administrative grants. Remove historical
+   PUBLIC CREATE/write grants where necessary, scoped to this database; do not change unrelated deployments' roles.
+3. Set the owner URL in the init-only migration Secret and `DB_RUNTIME_ROLE` in configuration; run the new binary's
+   migration before switching serving credentials. It applies migration 00032 and reconciles least-privilege grants.
+4. Update only the runtime Secret's `DATABASE_URL`, disable migrate-on-start, and roll serving pods. Run `doctor`
+   from the portal container and check Admin › Retention for successful passes. Enable `DB_REQUIRE_SPLIT_ROLES=true`.
+5. Verify raw SQL as runtime refuses UPDATE/DELETE on `audit_log` and `mcp_calls`, and TRUNCATE on all tables,
+   even after setting purge flags. Reads, inserts and normal retention through the functions must still work.
+
+The previous binary works with the new schema **as owner**, including its legacy retention flags; its retention
+cannot run with restricted runtime credentials. If rolling back the binary, also restore the old owner credentials
+(or accept retention failures temporarily). Never remove the additive migration to roll back.
 
 ## Kubernetes
 
@@ -162,21 +243,29 @@ secrets operator (an `ExternalSecret`, for example) or by hand:
 ```sh
 kubectl create namespace open-mcp-portal   # or apply the overlay's namespace.yaml first
 kubectl -n open-mcp-portal create secret generic open-mcp-portal-runtime \
-  --from-literal=DATABASE_URL='postgres://omp:<password>@db.example.org:5432/omp?sslmode=require' \
+  --from-literal=DATABASE_URL='postgres://omp_app:<password>@db.example.org:5432/omp?sslmode=require' \
   --from-literal=ENCRYPTION_KEY="$(openssl rand -base64 32)" \
   --from-literal=API_KEY_PEPPER="$(openssl rand -base64 32)" \
   --from-literal=OIDC_CLIENT_SECRET='<from your IdP>'
+kubectl -n open-mcp-portal create secret generic open-mcp-portal-migrate \
+  --from-literal=DATABASE_MIGRATE_URL='postgres://omp_owner:<password>@db.example.org:5432/omp?sslmode=require'
 ```
 
 | Key | Used by |
 |---|---|
-| `DATABASE_URL` | `migrate` init container and `portal` |
+| `DATABASE_URL` (runtime Secret) | `portal` only |
+| `DATABASE_MIGRATE_URL` (separate `open-mcp-portal-migrate` Secret) | `migrate` init container only |
 | `ENCRYPTION_KEY`, `API_KEY_PEPPER`, `OIDC_CLIENT_SECRET` | `portal` (required: a missing key stops the pod with `CreateContainerConfigError`) |
 | `ENCRYPTION_KEY_PREVIOUS`, `API_KEY_PEPPER_PREVIOUS` | `portal`, optional, only during a rotation |
 
 Store `ENCRYPTION_KEY` and `API_KEY_PEPPER` in your secrets store as well. A database backup is useless without them:
 see [Backups](#backups). Secrets are not hashed into the pod template, so after changing one, run
 `kubectl -n open-mcp-portal rollout restart deploy/open-mcp-portal` (or use your operator's reloader).
+
+The init container references only the separate migration Secret, not the runtime Secret. Its key reference is
+optional so overlays can inject credentials another way; without either database URL, migration fails clearly.
+For a legacy single-role install, copy the same owner URL into the separate migration Secret. Never put an owner
+URL or its `_FILE` mount in the serving container or shared ConfigMap. The base forces `MIGRATE_ON_START=false`.
 
 ### Configuration
 

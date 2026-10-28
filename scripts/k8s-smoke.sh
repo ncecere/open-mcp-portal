@@ -502,19 +502,23 @@ done
 # API_KEY_PEPPER differ (the portal refuses equal values).
 umask 077
 PG_PASSWORD="$(openssl rand -hex 16)"
+OWNER_PASSWORD="$(openssl rand -hex 16)"
+RUNTIME_PASSWORD="$(openssl rand -hex 16)"
 ENC_KEY="$(openssl rand -base64 32)"
 PEPPER="$(openssl rand -base64 32)"
 [ "$ENC_KEY" != "$PEPPER" ] || fail "random ENCRYPTION_KEY equals API_KEY_PEPPER"
-printf 'password=%s\n' "$PG_PASSWORD" >"$TMP/postgres.env"
+printf 'password=%s\nowner_password=%s\nruntime_password=%s\n' "$PG_PASSWORD" "$OWNER_PASSWORD" "$RUNTIME_PASSWORD" >"$TMP/postgres.env"
+printf 'DATABASE_MIGRATE_URL=postgres://omp_owner:%s@postgres.%s.svc.cluster.local:5432/omp?sslmode=disable\n' "$OWNER_PASSWORD" "$NS" >"$TMP/migrate.env"
 {
-  printf 'DATABASE_URL=postgres://omp:%s@postgres.%s.svc.cluster.local:5432/omp?sslmode=disable\n' "$PG_PASSWORD" "$NS"
+  printf 'DATABASE_URL=postgres://omp_app:%s@postgres.%s.svc.cluster.local:5432/omp?sslmode=disable\n' "$RUNTIME_PASSWORD" "$NS"
   printf 'ENCRYPTION_KEY=%s\nAPI_KEY_PEPPER=%s\n' "$ENC_KEY" "$PEPPER"
   # The base requires the key; dev sign-in never uses it.
   printf 'OIDC_CLIENT_SECRET=smoke-unused\n'
 } >"$TMP/runtime.env"
 kn create secret generic omp-smoke-postgres --from-env-file="$TMP/postgres.env" >/dev/null
 kn create secret generic open-mcp-portal-runtime --from-env-file="$TMP/runtime.env" >/dev/null
-rm -f "$TMP/postgres.env" "$TMP/runtime.env"
+kn create secret generic open-mcp-portal-migrate --from-env-file="$TMP/migrate.env" >/dev/null
+rm -f "$TMP/postgres.env" "$TMP/runtime.env" "$TMP/migrate.env"
 ok "secrets created at run time (DATABASE_URL, ENCRYPTION_KEY, API_KEY_PEPPER, OIDC_CLIENT_SECRET)"
 
 render >"$TMP/rendered.yaml"
@@ -561,6 +565,19 @@ doctor_pod="$(portal_pods | head -n 1)"
 kn exec "$doctor_pod" -c portal -- /open-mcp-portal doctor >"$TMP/doctor.out" 2>&1 || fail "doctor failed:
 $(cat "$TMP/doctor.out")"
 ok "doctor passes in the pod"
+# Authenticate over TCP as runtime, never SET ROLE from the bootstrap superuser.
+for sql in 'UPDATE audit_log SET action=action' 'DELETE FROM audit_log' 'TRUNCATE audit_log' \
+  'UPDATE mcp_calls SET method=method' 'DELETE FROM mcp_calls' 'TRUNCATE mcp_calls' 'TRUNCATE teams CASCADE'; do
+  if kn exec postgres-0 -- sh -c 'PGPASSWORD="$RUNTIME_PASSWORD" psql -h 127.0.0.1 -U omp_app -d omp -v ON_ERROR_STOP=1 -c "$1"' sh "$sql" >"$TMP/denial.out" 2>&1; then
+    fail "runtime SQL unexpectedly allowed: $sql"
+  fi
+  grep -q 'permission denied' "$TMP/denial.out" || fail "runtime denial was not a permission error"
+done
+for pod in $(portal_pods); do
+  env_names="$(kn get pod "$pod" -o jsonpath='{.spec.containers[?(@.name=="portal")].env[*].name}')"
+  case "$env_names" in *DATABASE_MIGRATE_URL*) fail "portal has owner URL" ;; esac
+done
+ok "runtime direct SQL writes/TRUNCATE refused; portal has no owner URL"
 sed 's/^/        /' "$TMP/doctor.out"
 
 # ---------------------------------------------------------------- API

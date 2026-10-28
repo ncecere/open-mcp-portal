@@ -21,7 +21,8 @@ import (
 // migration adds (it applies on a database at 00020, with or without 00021).
 func TestStaticAuthShapesMigration00022(t *testing.T) {
 	const staticAuth = 22 // 00022_static_auth_shapes.sql
-	pool, _ := testutil.NewDB(t)
+	runtime, _ := testutil.NewDB(t)
+	pool := testutil.OwnerPool(t, runtime)
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()

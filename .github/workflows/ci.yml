@@ -84,8 +84,14 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - name: Unit and integration tests (race detector, Postgres required)
+      - name: Unit and integration tests (legacy owner, race detector, Postgres required)
         run: make test-ci
+        env:
+          OMP_TEST_SPLIT_ROLES: "0"
+      - name: Unit and integration tests (authenticated split roles, race detector, Postgres required)
+        run: make test-ci
+        env:
+          OMP_TEST_SPLIT_ROLES: "1"
 
   web:
     runs-on: ubuntu-latest

@@ -21,10 +21,13 @@ import (
 type Config struct {
 	// AppURL is the public origin (scheme://host[:port]) used for cookies,
 	// OIDC redirects and Origin checks.
-	AppURL         string
-	ListenAddr     string // HTTP listener (LISTEN_ADDR)
-	DatabaseURL    string
-	MigrateOnStart bool
+	AppURL              string
+	ListenAddr          string // HTTP listener (LISTEN_ADDR)
+	DatabaseURL         string
+	DatabaseMigrateURL  string
+	DBRuntimeRole       string
+	DBRequireSplitRoles bool
+	MigrateOnStart      bool
 
 	LogLevel  string
 	LogFormat string
@@ -194,6 +197,14 @@ func Defaults() Config {
 		ShutdownDelay:                   5 * time.Second,
 		ShutdownTimeout:                 60 * time.Second,
 	}
+}
+
+// MigrationURL is used only by migration, never doctor or key rotation.
+func (c Config) MigrationURL() string {
+	if c.DatabaseMigrateURL != "" {
+		return c.DatabaseMigrateURL
+	}
+	return c.DatabaseURL
 }
 
 // LogoOrigin is the origin of an absolute UI_LOGO_URL (for the Content

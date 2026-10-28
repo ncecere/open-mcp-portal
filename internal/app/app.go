@@ -68,20 +68,35 @@ func Run(ctx context.Context, mode string, cfg config.Config, log *slog.Logger) 
 	log = log.With("mode", mode)
 	log.Info("starting", "version", buildinfo.Version, "commit", buildinfo.Commit)
 
-	pool, err := store.OpenWait(ctx, cfg.DatabaseURL, dbConnectWait, log)
-	if err != nil {
-		return err
-	}
-	defer pool.Close()
-
 	if mode == ModeMigrate || cfg.MigrateOnStart {
-		if err := store.Migrate(ctx, pool, log); err != nil {
+		owner, err := store.OpenWait(ctx, cfg.MigrationURL(), dbConnectWait, log)
+		if err != nil {
+			return err
+		}
+		err = store.Migrate(ctx, owner, log, cfg.DBRuntimeRole)
+		owner.Close()
+		if err != nil {
 			return err
 		}
 		if mode == ModeMigrate {
 			log.Info("migrations complete")
 			return nil
 		}
+	}
+	pool, err := store.OpenWait(ctx, cfg.DatabaseURL, dbConnectWait, log)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	safety, err := store.InspectRoles(ctx, pool, "", true)
+	if err != nil {
+		return fmt.Errorf("postgres roles: %w", err)
+	}
+	if !safety.Safe() {
+		if cfg.DBRequireSplitRoles {
+			return fmt.Errorf("unsafe split database roles: %s", safety.Detail())
+		}
+		log.Warn("postgres roles: single-owner or unsafe runtime privileges", "detail", safety.Detail())
 	}
 	if st, err := store.Migrations(ctx, pool); err != nil {
 		return fmt.Errorf("migration state: %w", err)

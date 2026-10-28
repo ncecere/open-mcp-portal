@@ -767,7 +767,7 @@ func TestOAuthMigration00018KeepsWhatWorks(t *testing.T) {
 
 	// Go back to the schema of 0.2.1 (this also runs the migration's Down) and
 	// make the data look like an old installation.
-	db := stdlib.OpenDBFromPool(app.Pool)
+	db := stdlib.OpenDBFromPool(testutil.OwnerPool(t, app.Pool))
 	defer db.Close()
 	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrations.FS)
 	if err != nil {
@@ -789,6 +789,7 @@ func TestOAuthMigration00018KeepsWhatWorks(t *testing.T) {
 		t.Fatalf("up: %v", err)
 	}
 
+	testutil.Regrant(t, app.Pool)
 	if n := e.scalar(`SELECT count(*)::text FROM oauth_grants WHERE authorized_at > now() - interval '1 minute'`); n != "2" {
 		t.Errorf("grants with a fresh lifetime = %s, want 2 (both active grants)", n)
 	}

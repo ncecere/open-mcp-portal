@@ -18,7 +18,7 @@ func TestConcurrentMigrationsAreSafe(t *testing.T) {
 	// A pool smaller than the number of concurrent callers: waiting for the
 	// migration lock must not use pool connections (it deadlocked on 2-CPU
 	// CI runners, where pgxpool defaults to 4 connections).
-	cfg := pool.Config().Copy()
+	cfg := testutil.OwnerPool(t, pool).Config().Copy()
 	cfg.MaxConns = 2
 	small, err := pgxpool.NewWithConfig(context.Background(), cfg)
 	if err != nil {

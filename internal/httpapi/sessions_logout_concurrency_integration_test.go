@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ncecere/open-mcp-portal/internal/auth"
+	"github.com/ncecere/open-mcp-portal/internal/testutil"
 )
 
 func TestLogoutConcurrentWithSessionRevocation(t *testing.T) {
@@ -40,7 +41,7 @@ func TestLogoutConcurrentWithSessionRevocation(t *testing.T) {
 	// This trigger exists only in this test's scratch database. AFTER DELETE
 	// means revocation already owns the session row lock when it reaches the
 	// advisory gate, but has not yet tried to delete the pending provider state.
-	if _, err := e.app.Pool.Exec(ctx, fmt.Sprintf(`
+	if _, err := testutil.OwnerPool(t, e.app.Pool).Exec(ctx, fmt.Sprintf(`
 CREATE FUNCTION pause_session_delete() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   PERFORM pg_advisory_xact_lock(719203, 1);
@@ -91,10 +92,10 @@ FOR EACH ROW WHEN (OLD.id = '%s'::uuid) EXECUTE FUNCTION pause_session_delete();
 		for {
 			var pid int32
 			err := e.app.Pool.QueryRow(wait, `
-SELECT coalesce((SELECT pid FROM pg_stat_activity
- WHERE datname=current_database() AND wait_event_type='Lock'
+SELECT coalesce((SELECT pid FROM pg_locks
+ WHERE NOT granted
    AND $1::int = ANY(pg_blocking_pids(pid))
-   AND ($2::text = '' OR wait_event=$2)
+   AND ($2::text = '' OR locktype=$2)
  LIMIT 1), 0)`, blocker, event).Scan(&pid)
 			if err != nil {
 				t.Fatalf("wait for %s: %v", label, err)

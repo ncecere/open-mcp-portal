@@ -21,7 +21,8 @@ import (
 // before it restores the old check.
 func TestUpstreamTLSMigration(t *testing.T) {
 	const callTraceID = 23 // the newest schema of v0.3.1
-	pool, _ := testutil.NewDB(t)
+	runtime, _ := testutil.NewDB(t)
+	pool := testutil.OwnerPool(t, runtime)
 	ctx := context.Background()
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()

@@ -7,7 +7,7 @@
 # for a real install: copy overlays/example for that.
 #
 # Not in this file, because it is made at run time: the secrets
-# open-mcp-portal-runtime and omp-smoke-postgres (random keys, never in git),
+# open-mcp-portal-runtime, open-mcp-portal-migrate and omp-smoke-postgres (random keys, never in git),
 # the image tags (the script builds both images and loads them into kind) and
 # the port in APP_URL (the script picks a free one). Applied by hand, it
 # needs the same secrets and `kubectl -n omp-smoke port-forward
@@ -39,6 +39,8 @@ configMapGenerator:
       # The portal refuses DEV_AUTH unless APP_URL is loopback.
       - APP_URL=http://localhost:18088
       - DEV_AUTH=true
+      - DB_RUNTIME_ROLE=omp_app
+      - DB_REQUIRE_SPLIT_ROLES=true
       # Internal MCP servers (docs/deploy.md): the fake, over plain http.
       - UPSTREAM_ALLOWED_NETWORKS=http:*.svc.cluster.local
 

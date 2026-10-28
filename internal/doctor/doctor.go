@@ -208,6 +208,18 @@ func (r *runner) postgres(ctx context.Context) *pgxpool.Pool {
 	}
 	r.add(c)
 	if r.migrations(cctx, pool) {
+		safety, err := store.InspectRoles(cctx, pool, "", true)
+		c := Check{Group: "postgres", Name: "roles", Status: OK, Detail: safety.Detail()}
+		if err != nil {
+			c.Status, c.Detail = Fail, "cannot inspect database roles: "+err.Error()
+		} else if !safety.Safe() {
+			c.Status = Info
+			if r.cfg.DBRequireSplitRoles {
+				c.Status = Fail
+			}
+			c.Fix = "Use distinct owner/runtime logins; see docs/database-roles.md"
+		}
+		r.add(c)
 		r.keys(cctx, pool)
 		r.oauthRegistration(cctx, pool)
 	}

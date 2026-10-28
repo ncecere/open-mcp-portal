@@ -14,14 +14,25 @@ import (
 	"unicode/utf8"
 
 	"github.com/ncecere/open-mcp-portal/internal/secrets"
+	"github.com/ncecere/open-mcp-portal/internal/store"
 )
 
 // Validate checks the configuration needed by a process mode ("serve" or
 // "migrate"). It includes the production safety checks (SafetyErrors).
 func (c Config) Validate(mode string) error {
 	errs := c.SafetyErrors(mode)
-	if c.DatabaseURL == "" {
+	if mode == "migrate" {
+		if c.MigrationURL() == "" {
+			errs = append(errs, errors.New("DATABASE_MIGRATE_URL or DATABASE_URL is required"))
+		}
+	} else if c.DatabaseURL == "" {
 		errs = append(errs, errors.New("DATABASE_URL is required"))
+	}
+	if c.DBRuntimeRole != "" {
+		errs = append(errs, store.ValidateRoleName(c.DBRuntimeRole))
+	}
+	if mode == "migrate" && c.DBRequireSplitRoles && c.DBRuntimeRole == "" {
+		errs = append(errs, errors.New("DB_RUNTIME_ROLE is required for split-role migration"))
 	}
 	if mode == "migrate" {
 		return errors.Join(errs...)

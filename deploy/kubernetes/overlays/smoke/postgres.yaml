@@ -60,9 +60,19 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: POSTGRES_USER
-              value: omp
+              value: postgres
             - name: POSTGRES_DB
-              value: omp
+              value: postgres
+            - name: OWNER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: omp-smoke-postgres
+                  key: owner_password
+            - name: RUNTIME_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: omp-smoke-postgres
+                  key: runtime_password
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -78,7 +88,7 @@ spec:
               protocol: TCP
           readinessProbe:
             exec:
-              command: [pg_isready, -U, omp, -d, omp, -h, 127.0.0.1]
+              command: [pg_isready, -U, postgres, -d, omp, -h, 127.0.0.1]
             periodSeconds: 3
             timeoutSeconds: 3
             failureThreshold: 10
@@ -96,6 +106,13 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            - name: bootstrap
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: omp-smoke-postgres-bootstrap
   volumeClaimTemplates:
     - metadata:
         name: data
@@ -104,3 +121,18 @@ spec:
         resources:
           requests:
             storage: 1Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: omp-smoke-postgres-bootstrap
+data:
+  01-roles.sh: |
+    #!/bin/sh
+    set -eu
+    psql -v ON_ERROR_STOP=1 --username postgres --dbname postgres \
+      --set=owner_password="$OWNER_PASSWORD" --set=runtime_password="$RUNTIME_PASSWORD" <<'SQL'
+    CREATE ROLE omp_owner LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD :'owner_password';
+    CREATE ROLE omp_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD :'runtime_password';
+    CREATE DATABASE omp OWNER omp_owner;
+    SQL

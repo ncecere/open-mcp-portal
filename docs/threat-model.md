@@ -373,7 +373,15 @@ Revocation timing: every `/mcp` request goes back to PostgreSQL for the credenti
 - `rotate-keys` re-seals every column in `keyrotation.Columns`; a test fails when the schema gains a `*_cipher` column that is not listed (`TestColumnsCoverTheSchema`, `TestRotateKeys`). Pepper rotation is by use (`TestPepperRotation`).
 - Start-up refuses the public example key and pepper off loopback (`TestSafetyChecks`, `TestExampleKeyHashesMatchEnvExample`). `serve` refuses an `ENCRYPTION_KEY` equal to the `API_KEY_PEPPER`, as text or as decoded bytes (`config/validate.go`; `TestValidate`; H-7, `ea920a4`).
 - The CSRF token is stored in the clear next to the digest of the session secret: a database read gives CSRF tokens but not sessions.
-- One database role does everything; the append-only triggers and the retention purge use a session setting (`omp.audit_purge`, `omp.calls_purge`) that anyone with SQL access can set. Defence in depth for a stolen database credential would be a split role (as in the sister project).
+- **Split database roles (#44):** optional migration-only `DATABASE_MIGRATE_URL` and restricted runtime credentials.
+  Migration 00032's SECURITY DEFINER purge functions have fixed `pg_catalog, pg_temp` search paths, public-qualified
+  relations, bounded batches and age floors (audit 30 days, calls 1 day). Triggers require the effective table owner
+  plus a purge flag, not merely a caller-set flag or `current_user <> session_user`. Direct runtime UPDATE/DELETE
+  and all TRUNCATE are denied. Reconciliation and doctor check actual ownership, PUBLIC/inherited/column grants,
+  grant options and SET ROLE paths. `DB_REQUIRE_SPLIT_ROLES` optionally enforces this at serve startup.
+  **Residual:** default single-owner installs still trust that credential. Owners/superusers are trusted. Runtime
+  can edit settings and rollup state, delete ordinary tables and insert invented records: the guarantee is the age
+  floor, not tamper-proof rollup history or retention longer than that floor. See [database-roles.md](database-roles.md).
 
 ### 7.9 Logging, audit and payload capture
 
@@ -480,7 +488,7 @@ The review read `internal/auth`, `authz`, `httpapi`, `mcpgw`, `oauth`, `provider
 | H-8 refresh token lifetime | **Done (v0.2.2, decision 63)** | `OAUTH_REFRESH_ABSOLUTE_TTL` (180 days, `0` = off) from the last sign-in; a repeat inside the grace gets the same pair; existing grants got one whole window at the upgrade. Residual: a leaver's grants last up to the lifetime unless disconnected. Tracked in #7. |
 | H-9 image and scan hardening | **Done (v0.2.2), with a residual** | `govulncheck` and `npm audit` block CI (and, since 2026-10-18, the docs and website CI); Trivy fails the release on fixable HIGH and CRITICAL findings; Dependabot alerts and security updates are on; the Dockerfile's base images are pinned by digest (v0.2.2). Residual: digests are current only as far as Dependabot's weekly pull request is merged. Tracked in #11. |
 | H-10 off-host audit export | **Open** | Operational: needs a destination. The audit log is append-only and exportable as CSV. Tracked in #38. |
-| H-11 split database roles | **Open** | Needs separate migration and runtime connection strings in the product, then CloudNativePG roles in a deployment. Tracked in #44. |
+| H-11 split database roles | **Implemented, opt-in (#44)** | Separate migration/runtime URLs, least-privilege reconciliation, owner-only bounded purge functions and effective catalog checks. Kubernetes keeps the owner Secret init-only; CloudNativePG setup is in deploy.md. Default single-owner mode warns; age floors do not make runtime-writable settings or rollup state trustworthy. |
 | H-12 idle timeout and session list | **Done (#37, decision 76)** | Account list/revoke/revoke-all, admin list/revoke-all (platform admins only; no automation tokens), transactional count-only audit, connect-state cancellation. `SESSION_IDLE_TIMEOUT` defaults off, accepts 5m through `SESSION_TTL`; expiry checked by all browser entry points and cleanup. Activity written at most once a minute. Migration `00028` gives existing sessions an idle window from upgrade. Tests: session integration tests, authz/token matrices, config and web page with axe. |
 
 ## 10. v0.2 additions under review
@@ -543,6 +551,6 @@ These are designs, not code. They are reviewed here so tests exist before the fi
 | No content scanning of tool descriptions, arguments or results | 7.5 | Decision 50 (design first) |
 | Trusted clients still skip consent after the first loopback confirmation (v0.2.2) | OA-3 | H-1 |
 | Open DCR: a shared address is one caller, many addresses can fill the global cap (the cap since v0.2.1; switch, 24-hour life and per-address cap since v0.2.2) | OA-7, OA-2 | H-4 |
-| No off-host audit export; single database role | BR-10, 7.8 | H-10, H-11 |
+| No off-host audit export; split database roles remain opt-in | BR-10, 7.8 | H-10; enable H-11 (#44) and enforce `DB_REQUIRE_SPLIT_ROLES`; runtime can still alter ordinary data/settings and insert invented records |
 | Shared-ingress rate-limit address without `TRUSTED_PROXIES`; no body read timeout (header and idle timeouts set, `ea920a4`) | BR-9, 7.10 | H-5b; H-7 (warning, done in v0.2.2) |
 | v0.2 designs: notifications, automation tokens, MRTR state | Section 10 | Tests listed there before merge |
