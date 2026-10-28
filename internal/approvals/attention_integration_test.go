@@ -156,13 +156,16 @@ func TestAttentionExactTotalHistoryTeamExpiryAndEpoch(t *testing.T) {
 	for _, split := range []bool{false, true} {
 		t.Run(fmt.Sprintf("split=%v", split), func(t *testing.T) {
 			f := newAttentionFixture(t, split)
+			f.input.CredentialExpiresAt = time.Now().Add(time.Second)
 			p := beginFixture(t, f)
-			seedQueue(t, f, p.Receipt.ID, 45, f.requester.UserID, "user", "pending")
+			// Credential expiry is a dispatch boundary, not review-request expiry.
+			f.s.SetClock(func() time.Time { return time.Now().Add(2 * time.Second) })
+			seedQueue(t, f, p.Receipt.ID, 245, f.requester.UserID, "user", "pending")
 			seedQueue(t, f, p.Receipt.ID, 1200, f.requester.UserID, "user", "cancelled")
 			tr := &queueTrace{}
 			traceQueue(t, f, false, tr)
 			items, total, err := f.s.Attention(context.Background(), f.reviewer, &f.team, 20)
-			if err != nil || len(items) != 20 || total != 46 {
+			if err != nil || len(items) != 20 || total != 246 {
 				t.Fatalf("bounded exact total: %d %d %v", len(items), total, err)
 			}
 			for i := 1; i < len(items); i++ {
