@@ -159,7 +159,10 @@ func TestAuditFilters(t *testing.T) {
 	if n := len(auditPage(t, admin, "/v1/admin/audit", url.Values{"action": {"auth."}}).Items); n == 0 {
 		t.Error("expected sign-ins in the platform log")
 	}
-	only(auditPage(t, admin, "/v1/admin/audit", url.Values{"actorKind": {"system"}}), isAction("platform.bootstrap_role"), 1, "system entries")
+	only(auditPage(t, admin, "/v1/admin/audit", url.Values{"actorKind": {"system"}}),
+		func(e apitypes.AuditEntry) bool {
+			return e.Action == "platform.bootstrap_role" || e.Action == "agent_platform.retire"
+		}, 2, "system entries")
 
 	for _, bad := range []struct{ query, code string }{
 		{"action=team", "invalid_action"},

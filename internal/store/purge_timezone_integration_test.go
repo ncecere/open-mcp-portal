@@ -109,7 +109,13 @@ func TestPurgeHostileTimeZoneFloors(t *testing.T) {
 				t.Fatalf("hostile TimeZone bypassed %s elapsed-time floor: deleted %d rows, want only 1 truly old row", kind, n)
 			}
 			assertPurgeCallerSettings(t, conn, zone)
-			if n := roleCount(t, conn, `SELECT count(*) FROM public.`+table); n != 1 {
+			// The migration's system retirement audit entry is also recent and
+			// protected. Count only this test's audit fixtures, not that history.
+			filter := ""
+			if kind == "audit" {
+				filter = " WHERE target_type='fixture'"
+			}
+			if n := roleCount(t, conn, `SELECT count(*) FROM public.`+table+filter); n != 1 {
 				t.Fatal("protected recent row did not survive")
 			}
 			if n := roleCount(t, conn, query); n != 0 {

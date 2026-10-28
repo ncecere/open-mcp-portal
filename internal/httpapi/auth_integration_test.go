@@ -201,7 +201,7 @@ func TestDevLoginSessionAndCSRF(t *testing.T) {
 	if code, _ := app.me(); code != 401 {
 		t.Fatalf("after logout /v1/me = %d, want 401", code)
 	}
-	if got := auditActionsInDB(t, app.Pool); got != "platform.bootstrap_role,auth.login,auth.logout" {
+	if got := auditActionsInDB(t, app.Pool); got != "agent_platform.retire,platform.bootstrap_role,auth.login,auth.logout" {
 		t.Fatalf("audit actions = %s", got)
 	}
 }

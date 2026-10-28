@@ -773,6 +773,7 @@ func TestOAuthMigration00018KeepsWhatWorks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	testutil.RemoveRetirementFencesForOldSchema(t, app.Pool)
 	if _, err := provider.DownTo(ctx, 17); err != nil {
 		t.Fatalf("down: %v", err)
 	}

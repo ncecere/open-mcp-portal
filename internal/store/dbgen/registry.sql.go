@@ -782,7 +782,7 @@ type ListMCPCapabilityFingerprintsRow struct {
 }
 
 // What a reviewer's digest covers: the listed (not gone) capabilities of
-// servers, as (kind, name, fingerprint) and owner-set tool class (NULL: the server's switch decides).
+// servers, as (kind, name, fingerprint) and owner-set tool class (NULL: unclassified).
 func (q *Queries) ListMCPCapabilityFingerprints(ctx context.Context, serverIds []uuid.UUID) ([]ListMCPCapabilityFingerprintsRow, error) {
 	rows, err := q.db.Query(ctx, listMCPCapabilityFingerprints, serverIds)
 	if err != nil {

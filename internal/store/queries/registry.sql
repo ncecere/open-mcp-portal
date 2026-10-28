@@ -171,7 +171,7 @@ GROUP BY c.server_id, c.kind;
 
 -- name: ListMCPCapabilityFingerprints :many
 -- What a reviewer's digest covers: the listed (not gone) capabilities of
--- servers, as (kind, name, fingerprint) and owner-set tool class (NULL: the server's switch decides).
+-- servers, as (kind, name, fingerprint) and owner-set tool class (NULL: unclassified).
 SELECT c.server_id, c.kind, c.name, c.fingerprint, c.tool_class
 FROM mcp_capabilities c
 WHERE c.server_id = ANY(@server_ids::uuid[]) AND c.gone_at IS NULL
