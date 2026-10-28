@@ -131,6 +131,7 @@ func TestApprovalBindingKeyMigrationInvalidatesLegacyBindings(t *testing.T) {
 }
 
 func TestApprovalBindingKeyMigrationRejectsDifferentOwner(t *testing.T) {
+	t.Setenv("OMP_TEST_SPLIT_ROLES", "1")
 	runtime, _ := testutil.NewDBWithMigration(t, func(ctx context.Context, owner *pgxpool.Pool, role string) error {
 		db := stdlib.OpenDBFromPool(owner)
 		defer db.Close()

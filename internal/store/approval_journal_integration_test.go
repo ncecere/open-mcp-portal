@@ -42,13 +42,13 @@ func TestApprovalJournalMVCCOutOfOrderCommit(t *testing.T) {
 		older := approvalBegin(t, ctx, db)
 		roleExec(t, older, `UPDATE teams SET status='archived'`)
 		var olderID int64
-		if err := older.QueryRow(ctx, `SELECT max(event_id) FROM approval_context_events`).Scan(&olderID); err != nil {
+		if err := older.QueryRow(ctx, `SELECT max(event_id) FROM omp_private.approval_context_events`).Scan(&olderID); err != nil {
 			t.Fatal(err)
 		}
 		newer := approvalBegin(t, ctx, db)
 		roleExec(t, newer, `UPDATE users SET status='suspended'`)
 		var newerID int64
-		if err := newer.QueryRow(ctx, `SELECT max(event_id) FROM approval_context_events`).Scan(&newerID); err != nil {
+		if err := newer.QueryRow(ctx, `SELECT max(event_id) FROM omp_private.approval_context_events`).Scan(&newerID); err != nil {
 			t.Fatal(err)
 		}
 		if olderID >= newerID {
@@ -101,7 +101,7 @@ func TestApprovalJournalCompactionIsAtomicAndEpochNeutral(t *testing.T) {
 		ctx := context.Background()
 		roleExec(t, db, `INSERT INTO teams(slug,name) SELECT 'journal-'||n,'Journal' FROM generate_series(1,1001) n`)
 		before := approvalEpoch(t, db)
-		count := roleCount(t, db, `SELECT count(*) FROM approval_context_events`)
+		count := roleCount(t, db, `SELECT count(*) FROM omp_private.approval_context_events`)
 		if count <= 1000 {
 			t.Fatal("fixture did not exceed compaction threshold")
 		}
@@ -113,12 +113,12 @@ func TestApprovalJournalCompactionIsAtomicAndEpochNeutral(t *testing.T) {
 				t.Fatalf("compacted epoch=%d want %d: %v", got, before, err)
 			}
 			var remaining int64
-			if err := tx.QueryRow(ctx, `SELECT count(*) FROM approval_context_events`).Scan(&remaining); err != nil || remaining != 0 {
+			if err := tx.QueryRow(ctx, `SELECT count(*) FROM omp_private.approval_context_events`).Scan(&remaining); err != nil || remaining != 0 {
 				t.Fatalf("events not compacted: %d %v", remaining, err)
 			}
 			// A normal reader neither waits for the table fence nor sees half the
 			// base/journal swap. It sees the old committed journal and old base.
-			if approvalEpoch(t, db) != before || roleCount(t, db, `SELECT count(*) FROM approval_context_events`) != count {
+			if approvalEpoch(t, db) != before || roleCount(t, db, `SELECT count(*) FROM omp_private.approval_context_events`) != count {
 				t.Fatal("uncommitted compaction leaked to reader")
 			}
 			if commit {
@@ -129,7 +129,7 @@ func TestApprovalJournalCompactionIsAtomicAndEpochNeutral(t *testing.T) {
 			} else if err := tx.Rollback(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if approvalEpoch(t, db) != before || roleCount(t, db, `SELECT count(*) FROM approval_context_events`) != count {
+			if approvalEpoch(t, db) != before || roleCount(t, db, `SELECT count(*) FROM omp_private.approval_context_events`) != count {
 				t.Fatal("compaction changed epoch or rollback lost events")
 			}
 		}
@@ -232,7 +232,7 @@ func TestApprovalJournalFenceBusyDoesNotSpend(t *testing.T) {
 			for _, exclusive := range []bool{false, true} {
 				consumer := approvalBegin(t, ctx, db)
 				var epoch int64
-				err := consumer.QueryRow(ctx, `SELECT public.omp_lock_approval_context($1)`, exclusive).Scan(&epoch)
+				err := consumer.QueryRow(ctx, `SELECT omp_private.omp_lock_approval_context($1)`, exclusive).Scan(&epoch)
 				if !approvalIsSQLState(err, "55P03") {
 					t.Fatalf("busy fence did not fail fast (%s): %v", sql, err)
 				}
@@ -264,19 +264,19 @@ func TestApprovalJournalRuntimePrivileges(t *testing.T) {
 	runtime, owner, role := splitFixture(t)
 	ctx := context.Background()
 	for _, sql := range []string{
-		`INSERT INTO approval_context_events DEFAULT VALUES`,
-		`UPDATE approval_context_events SET event_id=1`,
-		`DELETE FROM approval_context_events`, `TRUNCATE approval_context_events`,
-		`SELECT nextval('approval_context_events_event_id_seq')`,
-		`SELECT setval('approval_context_events_event_id_seq',1)`,
-		`SELECT last_value FROM approval_context_events_event_id_seq`,
-		`UPDATE approval_context SET epoch=epoch+1`,
-		`SELECT public.approval_authority_changed()`,
+		`INSERT INTO omp_private.approval_context_events DEFAULT VALUES`,
+		`UPDATE omp_private.approval_context_events SET event_id=1`,
+		`DELETE FROM omp_private.approval_context_events`, `TRUNCATE omp_private.approval_context_events`,
+		`SELECT nextval('omp_private.approval_context_events_event_id_seq')`,
+		`SELECT setval('omp_private.approval_context_events_event_id_seq',1)`,
+		`SELECT last_value FROM omp_private.approval_context_events_event_id_seq`,
+		`UPDATE omp_private.approval_context SET epoch=epoch+1`,
+		`SELECT omp_private.approval_authority_changed()`,
 	} {
 		roleDenied(t, runtime, sql, "42501")
 	}
 	outsider, _ := auxiliaryRole(t, owner, "journal_outsider_"+role)
-	roleDenied(t, outsider, `SELECT public.omp_current_approval_context()`, "42501")
+	roleDenied(t, outsider, `SELECT omp_private.omp_current_approval_context()`, "42501")
 	if _, err := dbgen.New(runtime).GetApprovalContext(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -284,8 +284,8 @@ func TestApprovalJournalRuntimePrivileges(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, sql := range []string{
-		"GRANT INSERT ON approval_context_events TO " + pgx.Identifier{role}.Sanitize(),
-		"GRANT USAGE,UPDATE ON SEQUENCE approval_context_events_event_id_seq TO " + pgx.Identifier{role}.Sanitize(),
+		"GRANT INSERT ON omp_private.approval_context_events TO " + pgx.Identifier{role}.Sanitize(),
+		"GRANT USAGE,UPDATE ON SEQUENCE omp_private.approval_context_events_event_id_seq TO " + pgx.Identifier{role}.Sanitize(),
 	} {
 		roleExec(t, owner, sql)
 		safety, err := store.InspectRoles(ctx, runtime, "", true)
@@ -336,7 +336,7 @@ func TestApprovalJournalOverflowFailsClosed(t *testing.T) {
 	approvalModes(t, func(t *testing.T, db *pgxpool.Pool) {
 		ctx := context.Background()
 		owner := testutil.OwnerPool(t, db)
-		roleExec(t, owner, `UPDATE approval_context SET epoch=9223372036854775807-(SELECT coalesce(sum(event_id),0)::bigint FROM approval_context_events)`)
+		roleExec(t, owner, `UPDATE omp_private.approval_context SET epoch=9223372036854775807-(SELECT coalesce(sum(event_id),0)::bigint FROM omp_private.approval_context_events)`)
 		roleExec(t, db, `INSERT INTO teams(slug,name) VALUES ('overflow','Overflow')`)
 		if _, err := dbgen.New(db).GetApprovalContext(ctx); !approvalIsSQLState(err, "22003") {
 			t.Fatal("overflow reused an epoch:", err)

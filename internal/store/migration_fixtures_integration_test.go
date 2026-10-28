@@ -42,7 +42,7 @@ func regrantMigrationFixture(t testing.TB, runtime *pgxpool.Pool) {
 	t.Helper()
 	owner := testutil.OwnerPool(t, runtime)
 	var approvalsExist bool
-	if err := owner.QueryRow(context.Background(), `SELECT to_regclass('public.approval_context') IS NOT NULL`).Scan(&approvalsExist); err != nil {
+	if err := owner.QueryRow(context.Background(), `SELECT to_regclass('omp_private.approval_context') IS NOT NULL`).Scan(&approvalsExist); err != nil {
 		t.Fatal(err)
 	}
 	if approvalsExist {

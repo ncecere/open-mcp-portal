@@ -139,7 +139,7 @@ func TestApprovalEpochAuthority(t *testing.T) {
 			}
 			roleExec(t, tx, "DELETE FROM "+table)
 			var after int64
-			if err := tx.QueryRow(context.Background(), `SELECT public.omp_current_approval_context()`).Scan(&after); err != nil {
+			if err := tx.QueryRow(context.Background(), `SELECT omp_private.omp_current_approval_context()`).Scan(&after); err != nil {
 				t.Fatal(err)
 			}
 			if after <= before {
@@ -347,7 +347,7 @@ func TestApprovalSchemaRetentionAndRuntimeFence(t *testing.T) {
 		if n := roleCount(t, db, `SELECT count(*) FROM pg_constraint WHERE conrelid IN ('approval_requests'::regclass,'approval_rules'::regclass,'approval_rule_approvers'::regclass) AND contype='f' AND confrelid<>'approval_rules'::regclass`); n != 0 {
 			t.Fatal("snapshot FK locks authority tables")
 		}
-		for _, sql := range []string{`UPDATE approval_context SET epoch=epoch-1`, `DELETE FROM approval_context`, `TRUNCATE approval_context`, `INSERT INTO approval_context VALUES (1,1)`} {
+		for _, sql := range []string{`UPDATE omp_private.approval_context SET epoch=epoch-1`, `DELETE FROM omp_private.approval_context`, `TRUNCATE omp_private.approval_context`, `INSERT INTO omp_private.approval_context VALUES (1,1)`} {
 			roleDenied(t, owner, sql, "P0001")
 		}
 		tx, err := db.Begin(ctx)
@@ -363,12 +363,12 @@ func TestApprovalSchemaRetentionAndRuntimeFence(t *testing.T) {
 		}
 		_ = tx.Rollback(ctx)
 		if db != owner {
-			for _, sql := range []string{`UPDATE approval_context SET epoch=2`, `DELETE FROM approval_context`, `TRUNCATE approval_context`, `INSERT INTO approval_context DEFAULT VALUES`, `SELECT approval_authority_changed()`} {
+			for _, sql := range []string{`UPDATE omp_private.approval_context SET epoch=2`, `DELETE FROM omp_private.approval_context`, `TRUNCATE omp_private.approval_context`, `INSERT INTO omp_private.approval_context DEFAULT VALUES`, `SELECT omp_private.approval_authority_changed()`} {
 				roleDenied(t, db, sql, "42501")
 			}
-			roleDenied(t, db, `UPDATE approval_context SET id=id`, "42501")
+			roleDenied(t, db, `UPDATE omp_private.approval_context SET id=id`, "42501")
 			role := db.Config().ConnConfig.User
-			roleExec(t, owner, "GRANT UPDATE ON approval_context TO "+pgx.Identifier{role}.Sanitize())
+			roleExec(t, owner, "GRANT UPDATE ON omp_private.approval_context TO "+pgx.Identifier{role}.Sanitize())
 			safety, err := store.InspectRoles(ctx, db, "", true)
 			if err != nil || safety.Safe() {
 				t.Fatalf("unsafe epoch grants missed: %+v %v", safety, err)
@@ -376,7 +376,7 @@ func TestApprovalSchemaRetentionAndRuntimeFence(t *testing.T) {
 			if err := store.Migrate(ctx, owner, testutil.Logger(), role); err != nil {
 				t.Fatal(err)
 			}
-			roleDenied(t, db, `UPDATE approval_context SET epoch=2`, "42501")
+			roleDenied(t, db, `UPDATE omp_private.approval_context SET epoch=2`, "42501")
 		}
 		// Nonexistent UUID snapshots work, rule approvers alone cascade.
 		roleExec(t, db, `INSERT INTO approval_rules(id,name,target_kind,target_id,created_by) VALUES ('00000000-0000-0000-0000-000000000012','Snapshot','server',gen_random_uuid(),gen_random_uuid())`)

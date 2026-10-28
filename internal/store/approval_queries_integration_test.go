@@ -213,9 +213,9 @@ func TestApprovalMetadataRetentionUTC(t *testing.T) {
 func TestApprovalLockHelperPrivileges(t *testing.T) {
 	runtime, owner, role := splitFixture(t)
 	outsider, _ := auxiliaryRole(t, owner, "approval_outsider_"+role)
-	roleDenied(t, outsider, `SELECT public.omp_lock_approval_context(false)`, "42501")
-	roleDenied(t, runtime, `SELECT public.omp_lock_approval_context(NULL)`, "22023")
-	if n := roleCount(t, runtime, `SELECT count(*) FROM pg_proc p WHERE p.oid='public.omp_lock_approval_context(boolean)'::regprocedure AND p.prosecdef AND p.proowner=(SELECT relowner FROM pg_class WHERE oid='approval_context'::regclass) AND p.proconfig @> ARRAY['search_path=pg_catalog, pg_temp']`); n != 1 {
+	roleDenied(t, outsider, `SELECT omp_private.omp_lock_approval_context(false)`, "42501")
+	roleDenied(t, runtime, `SELECT omp_private.omp_lock_approval_context(NULL)`, "22023")
+	if n := roleCount(t, runtime, `SELECT count(*) FROM pg_proc p WHERE p.oid='omp_private.omp_lock_approval_context(boolean)'::regprocedure AND p.prosecdef AND p.proowner=(SELECT relowner FROM pg_class WHERE oid='omp_private.approval_context'::regclass) AND p.proconfig @> ARRAY['search_path=pg_catalog, pg_temp']`); n != 1 {
 		t.Fatal("lock helper is not fixed-path schema-owner definer")
 	}
 	if n := roleCount(t, runtime, `SELECT count(*) FROM pg_proc p,LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE p.proname IN ('omp_lock_approval_context','approval_authority_changed') AND a.grantee=0 AND a.privilege_type='EXECUTE'`); n != 0 {
