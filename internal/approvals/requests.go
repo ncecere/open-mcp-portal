@@ -122,8 +122,8 @@ func (s *Service) GetRequest(ctx context.Context, a authz.Actor, id uuid.UUID) (
 		if e != nil {
 			return e
 		}
-		if preview && len(r.PreviewCipher) > 0 {
-			plain, e := s.box.Open(r.PreviewCipher, PreviewAAD(id))
+		if preview {
+			plain, e := s.openPreview(r)
 			if e != nil {
 				return ErrUnavailable
 			}
@@ -230,6 +230,9 @@ func (s *Service) Decide(ctx context.Context, a authz.Actor, id uuid.UUID, in De
 		if e != nil {
 			return ErrUnavailable
 		}
+		if _, e = s.openPreview(r); e != nil {
+			return e
+		}
 		at := s.clock()
 		if in.Decision == "approve" {
 			r, e = q.ApproveApprovalRequest(ctx, dbgen.ApproveApprovalRequestParams{ID: id, AtTime: &at, DecidedBy: nullable(a.UserID), ValidUntil: at.Add(time.Duration(rule.ValidMinutes) * time.Minute), BindingDigest: r.BindingDigest, ExpectedReviewRevision: in.ExpectedReviewRevision})
@@ -330,7 +333,7 @@ func (s *Service) Renew(ctx context.Context, a authz.Actor, id uuid.UUID, expect
 		if e != nil {
 			return ErrUnavailable
 		}
-		plain, e := s.box.Open(r.PreviewCipher, PreviewAAD(id))
+		plain, e := s.openPreview(r)
 		if e != nil {
 			return ErrUnavailable
 		}

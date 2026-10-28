@@ -66,7 +66,15 @@ func (s *Service) capturePreview(ctx context.Context, canonical []byte, known []
 	walk = func(v any) any {
 		switch x := v.(type) {
 		case string:
-			return replace(x)
+			clean := replace(x)
+			// A credential containing quotes/brackets can intersect the syntax of
+			// JSON nested inside a string. Never corrupt that syntax before the
+			// structural redactor sees it: conservatively mask the entire string.
+			trimmed := strings.TrimSpace(x)
+			if clean != x && len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
+				return capture.Redacted
+			}
+			return clean
 		case json.Number:
 			for _, secret := range known {
 				if string(x) == secret {
@@ -152,6 +160,9 @@ func (s *Service) Begin(ctx context.Context, in BeginInput) (Plan, error) {
 			return e
 		}
 		if rule == nil {
+			if !credentialLive(s.clock(), in.CredentialExpiresAt) {
+				return ErrUnavailable
+			}
 			return nil
 		}
 		if preliminary == nil {
@@ -197,16 +208,25 @@ func (s *Service) Begin(ctx context.Context, in BeginInput) (Plan, error) {
 				return e
 			}
 			if found.Status == Pending || found.Status == Approved || found.Status == Denied {
+				if !credentialLive(s.clock(), in.CredentialExpiresAt) {
+					return ErrUnavailable
+				}
 				plan.Receipt = receipt(found)
 				plan.BindingDigest = found.BindingDigest
 				return nil
 			}
+		}
+		if !credentialLive(s.clock(), in.CredentialExpiresAt) {
+			return ErrUnavailable
 		}
 		args := argumentDigest(s.keys[0], canonical)
 		digest := bindingDigest(s.keys[0], in.Binding, rule.ID, rule.Revision, args)
 		r, e := s.insertRequest(ctx, q, nil, in.Binding, *rule, id, args, digest, cipher, truncated, redacted)
 		if e != nil {
 			return e
+		}
+		if !credentialLive(s.clock(), in.CredentialExpiresAt) {
+			return ErrUnavailable
 		}
 		plan.Receipt = receipt(r)
 		plan.BindingDigest = digest
@@ -218,6 +238,11 @@ func (s *Service) Begin(ctx context.Context, in BeginInput) (Plan, error) {
 	return plan, nil
 }
 func (s *Service) insertRequest(ctx context.Context, q *dbgen.Queries, a *authz.Actor, b Binding, rule Rule, id uuid.UUID, args, digest string, cipher []byte, truncated, redacted bool) (dbgen.ApprovalRequest, error) {
+	// The advisory lock is held by Begin/Renew. Old-epoch pending rows
+	// otherwise consume quota despite having an entirely different digest.
+	if err := s.clearStaleRequester(ctx, q, b); err != nil {
+		return dbgen.ApprovalRequest{}, err
+	}
 	at := s.clock().Truncate(time.Microsecond)
 	// PostgreSQL timestamps have microsecond precision. A new attempt must
 	// sort after the previous one even with a fixed test clock or fast renewal;
@@ -258,7 +283,7 @@ func (s *Service) Consume(ctx context.Context, plan Plan) error {
 			if e != nil {
 				return e
 			}
-			if rule != nil {
+			if rule != nil || !credentialLive(s.clock(), plan.CredentialExpiresAt) {
 				return ErrUnavailable
 			}
 			return nil
@@ -300,6 +325,9 @@ func (s *Service) Consume(ctx context.Context, plan Plan) error {
 		}
 		if !r.DecidedBy.Valid || !slices.Contains(eligible, r.DecidedBy.UUID) {
 			return ErrUnavailable
+		}
+		if _, e = s.openPreview(r); e != nil {
+			return e
 		}
 		// Waiting for the requester/request lock must not freeze the time guard.
 		at = s.clock()

@@ -405,6 +405,78 @@ func (q *Queries) ApprovalSelectionRole(ctx context.Context, arg ApprovalSelecti
 	return min_team_role, err
 }
 
+const approvalStaleRequesterRequests = `-- name: ApprovalStaleRequesterRequests :many
+SELECT id, rule_id, rule_revision, context_epoch, requester_kind, requester_id, requester_team_id, gateway_id, server_id, capability_id, exposed_name, tool_class, args_digest, binding_digest, capability_fingerprint, server_origin, preview_cipher, preview_truncated, preview_redacted, status, review_revision, decided_by, created_at, expires_at, valid_until, decided_at, used_at, terminal_at FROM approval_requests
+WHERE requester_kind = $1 AND requester_id = $2
+ AND status IN ('pending','approved')
+ AND (context_epoch <> $3::bigint OR expires_at <= $4::timestamptz
+      OR valid_until <= $4::timestamptz)
+ORDER BY id LIMIT 200 FOR UPDATE
+`
+
+type ApprovalStaleRequesterRequestsParams struct {
+	RequesterKind string
+	RequesterID   uuid.UUID
+	ContextEpoch  int64
+	AtTime        time.Time
+}
+
+// The requester advisory lock is already held. Materialize stale/expired
+// requests before counting quota, including bindings from an OLD epoch.
+func (q *Queries) ApprovalStaleRequesterRequests(ctx context.Context, arg ApprovalStaleRequesterRequestsParams) ([]ApprovalRequest, error) {
+	rows, err := q.db.Query(ctx, approvalStaleRequesterRequests,
+		arg.RequesterKind,
+		arg.RequesterID,
+		arg.ContextEpoch,
+		arg.AtTime,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApprovalRequest{}
+	for rows.Next() {
+		var i ApprovalRequest
+		if err := rows.Scan(
+			&i.ID,
+			&i.RuleID,
+			&i.RuleRevision,
+			&i.ContextEpoch,
+			&i.RequesterKind,
+			&i.RequesterID,
+			&i.RequesterTeamID,
+			&i.GatewayID,
+			&i.ServerID,
+			&i.CapabilityID,
+			&i.ExposedName,
+			&i.ToolClass,
+			&i.ArgsDigest,
+			&i.BindingDigest,
+			&i.CapabilityFingerprint,
+			&i.ServerOrigin,
+			&i.PreviewCipher,
+			&i.PreviewTruncated,
+			&i.PreviewRedacted,
+			&i.Status,
+			&i.ReviewRevision,
+			&i.DecidedBy,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.ValidUntil,
+			&i.DecidedAt,
+			&i.UsedAt,
+			&i.TerminalAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const approvalTarget = `-- name: ApprovalTarget :one
 SELECT s.id, s.team_id, 'server'::text AS target_kind FROM mcp_servers s WHERE s.id = $1 AND $2::text = 'server'
 UNION ALL

@@ -19,10 +19,10 @@ func pagination(offset, limit int32) error {
 }
 func ruleRevision(actual, expected int64) error {
 	if expected < 1 {
-		return apperr.New(http.StatusPreconditionRequired, "precondition_required", "The rule revision is required")
+		return apperr.New(http.StatusPreconditionRequired, "revision_required", "The rule revision is required")
 	}
 	if actual != expected {
-		return apperr.New(http.StatusPreconditionFailed, "precondition_failed", "The rule changed; reload it")
+		return apperr.Stale()
 	}
 	return nil
 }

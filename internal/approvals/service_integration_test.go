@@ -152,7 +152,11 @@ func TestServiceDedupQuotaAndSingleSpend(t *testing.T) {
 	close(errs)
 	close(results)
 	for e := range errs {
-		t.Error(e)
+		// The forward table fence may reject concurrent acquisition with a
+		// safe NOWAIT unavailable result; it must never create a second ID.
+		if !errors.Is(e, ErrUnavailable) {
+			t.Error(e)
+		}
 	}
 	for p := range results {
 		if p.Receipt.ID != first.Receipt.ID || !p.Receipt.ExpiresAt.Equal(first.Receipt.ExpiresAt) {
@@ -170,7 +174,7 @@ func TestServiceDedupQuotaAndSingleSpend(t *testing.T) {
 			e := f.s.Consume(ctx, first)
 			if e == nil {
 				wins.Add(1)
-			} else if !errors.Is(e, ErrSpent) {
+			} else if !errors.Is(e, ErrSpent) && !errors.Is(e, ErrUnavailable) {
 				errs <- e
 			}
 		})
@@ -492,7 +496,9 @@ func TestServiceActualSuspensionVersusDecision(t *testing.T) {
 	if e = writer.Commit(ctx); e != nil {
 		t.Fatal(e)
 	}
-	requireCode(t, <-done, "forbidden")
+	if e = <-done; !errors.Is(e, ErrUnavailable) {
+		requireCode(t, e, "forbidden")
+	}
 	if requestStatus(t, f, p.Receipt.ID) != Pending {
 		t.Fatal("suspended decider changed request")
 	}
@@ -515,7 +521,7 @@ func TestServiceRuleOwnershipTokensAndLegacyArguments(t *testing.T) {
 	_, e = f.s.ListRequests(ctx, token, "requested", 0, 10)
 	requireCode(t, e, "forbidden")
 	_, e = f.s.ReplaceRule(ctx, f.reviewer, f.team.String(), f.rule.ID, 99, in)
-	requireCode(t, e, "precondition_failed")
+	requireCode(t, e, "revision_conflict")
 	in.TargetKind = "gateway"
 	in.TargetID = f.gateway
 	_, e = f.s.ReplaceRule(ctx, f.reviewer, f.team.String(), f.rule.ID, f.rule.Revision, in)

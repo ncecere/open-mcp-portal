@@ -33,6 +33,14 @@ func TestPreviewRedactsBeforeTruncation(t *testing.T) {
 		}
 	}
 }
+func TestPreviewKnownSecretCannotBreakNestedJSONRedaction(t *testing.T) {
+	s := &Service{}
+	raw, _ := json.Marshal(map[string]string{"nested": `{"ordinary":"quoted","password":"private-inner-sentinel"}`})
+	clean, _, redacted, e := s.capturePreview(context.Background(), raw, []string{`"quoted"`})
+	if e != nil || !redacted || strings.Contains(clean, "private-inner-sentinel") {
+		t.Fatalf("known credential corrupted nested structural redaction: %q %v", clean, e)
+	}
+}
 func TestPreviewPatternFailureIsClosed(t *testing.T) {
 	s := &Service{patterns: func(context.Context) ([]*regexp.Regexp, error) { return nil, errors.New("private loader internals") }}
 	_, _, _, e := s.capturePreview(context.Background(), []byte(`{"password":"secret"}`), nil)

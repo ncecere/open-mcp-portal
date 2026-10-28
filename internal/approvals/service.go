@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -279,6 +280,14 @@ func (s *Service) expire(ctx context.Context, q *dbgen.Queries, r dbgen.Approval
 		return r, err
 	}
 	return out, s.auditRequest(ctx, q, a, out, action)
+}
+
+func (s *Service) openPreview(r dbgen.ApprovalRequest) ([]byte, error) {
+	plain, err := s.box.Open(r.PreviewCipher, PreviewAAD(r.ID))
+	if err != nil || len(plain) > 16<<10 || !utf8.Valid(plain) {
+		return nil, ErrUnavailable
+	}
+	return plain, nil
 }
 
 // Keep pgx linked here for helpers sharing the no-rows classification.

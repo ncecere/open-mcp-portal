@@ -83,6 +83,16 @@ FROM approval_requests
 WHERE (sqlc.narg(before_time)::timestamptz IS NULL OR (created_at,id) < (sqlc.narg(before_time)::timestamptz,sqlc.narg(before_id)::uuid))
 ORDER BY created_at DESC,id DESC LIMIT @page_limit::integer;
 
+-- The requester advisory lock is already held. Materialize stale/expired
+-- requests before counting quota, including bindings from an OLD epoch.
+-- name: ApprovalStaleRequesterRequests :many
+SELECT * FROM approval_requests
+WHERE requester_kind = sqlc.arg(requester_kind) AND requester_id = sqlc.arg(requester_id)
+ AND status IN ('pending','approved')
+ AND (context_epoch <> sqlc.arg(context_epoch)::bigint OR expires_at <= sqlc.arg(at_time)::timestamptz
+      OR valid_until <= sqlc.arg(at_time)::timestamptz)
+ORDER BY id LIMIT 200 FOR UPDATE;
+
 -- name: ApprovalCleanupCandidates :many
 SELECT id FROM approval_requests WHERE status IN ('pending','approved')
  AND (context_epoch <> (SELECT epoch FROM approval_context WHERE id=1)
