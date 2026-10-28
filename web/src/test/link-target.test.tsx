@@ -31,6 +31,7 @@ describe("link targets", () => {
       [{ type: "server", id: serverId, teamSlug: t }, `/teams/${t}/servers/${serverId}`],
       [{ type: "servers", teamSlug: t }, `/teams/${t}/servers?publishState=pending`],
       [{ type: "review_queue" }, "/admin/publishing"],
+      [{ type: "approval", id: "receipt1" }, "/approvals/receipt1"],
       [{ type: "gateways" }, "/admin/gateways"],
       [{ type: "service_account", id: "sa1", teamSlug: t }, `/teams/${t}/service-accounts/sa1`],
       [{ type: "service_accounts", teamSlug: t }, `/teams/${t}/service-accounts`],
@@ -54,6 +55,7 @@ describe("link targets", () => {
 
   it("resolve to nothing without what a type needs, or for a type the app doesn't know", () => {
     expect(linkElement({ type: "server" }, member)).toBeNull();
+    expect(linkElement({ type: "approval" }, member)).toBeNull();
     expect(linkElement({ type: "servers" }, member)).toBeNull();
     expect(linkElement({ type: "team_notification_settings" }, member)).toBeNull();
     expect(linkElement({ type: "service_account", teamSlug: team.slug }, member)).toBeNull();

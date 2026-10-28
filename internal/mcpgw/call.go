@@ -220,6 +220,14 @@ func (rc *request) forwardCall(o gateways.Offer, rec calls.Call, cred *providers
 	}
 	switch {
 	case fr.Tool != nil:
+		// The legacy SDK can preserve modern continuation fields in its tool
+		// DTO instead of returning ForwardResult.Input. Spending never permits
+		// forwarding an upstream continuation, regardless of negotiated era.
+		if rc.approval != nil && rc.approval.spent.Load() &&
+			(fr.Tool.NeedsInput() || len(fr.Tool.InputRequests) > 0 || fr.Tool.RequestState != "") {
+			rc.approvalUnknown(rec)
+			return
+		}
 		rc.relay(rec, fr.Tool, fr.Tool.IsError)
 	case fr.Prompt != nil:
 		rc.relay(rec, fr.Prompt, false)

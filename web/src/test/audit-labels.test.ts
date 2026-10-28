@@ -16,6 +16,16 @@ describe("audit labels", () => {
     expect(valueText(undefined)).toBe("Not set");
   });
 
+  it("distinguishes exact-call decisions from spent authorization", () => {
+    expect(actionLabel("approval_request.approved")).toBe("Approved an exact call");
+    expect(actionLabel("approval_request.used")).toBe("Spent exact-call authorization");
+    expect(actionLabel("approval_request.renewed")).toBe("Explicitly requested a new approval attempt");
+    expect(targetTypeLabel("approval_rule")).toBe("Approval rule");
+    expect(targetTypeLabel("approval_request")).toBe("Exact-call approval");
+    expect(areaOf("approval_rule.created")).toBe("Approval rules");
+    expect(areaOf("approval_request.used")).toBe("Exact-call approvals");
+  });
+
   it("knows the registry's target types", () => {
     expect(targetTypeLabel("mcp_server")).toBe("MCP server");
     expect(targetTypeLabel("mcp_capability")).toBe("Capability");
