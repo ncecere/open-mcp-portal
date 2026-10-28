@@ -3,9 +3,11 @@ package store_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"os/exec"
 	"strconv"
@@ -261,7 +263,34 @@ func TestApprovalPrivatePreviousReleaseStrictStartup(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	defer func() { cancel(); <-done }()
-	client := http.Client{Timeout: time.Second}
+	jar, _ := cookiejar.New(nil)
+	client := http.Client{Timeout: time.Second, Jar: jar}
+	request := func(method, path, body, csrf, revision string) []byte {
+		t.Helper()
+		req, err := http.NewRequestWithContext(ctx, method, "http://"+addr+path, strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", "http://"+addr)
+		req.Header.Set("X-CSRF-Token", csrf)
+		if revision != "" {
+			req.Header.Set("If-Match", revision)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		raw, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			t.Fatalf("released HTTP %s %s: %d %s", method, path, resp.StatusCode, raw)
+		}
+		return raw
+	}
 	tick := time.NewTicker(25 * time.Millisecond)
 	defer tick.Stop()
 	for {
@@ -282,10 +311,19 @@ func TestApprovalPrivatePreviousReleaseStrictStartup(t *testing.T) {
 				// Reconcile not run by the old process; the unchanged strict inspector
 				// genuinely accepted current grants before its HTTP server was started.
 				roleExec(t, runtime, `INSERT INTO teams(slug,name) VALUES('released-writer','Released writer')`)
+				request("POST", "/auth/dev", `{"account":"admin"}`, "", "")
+				var me struct {
+					Data struct {
+						CSRF string `json:"csrfToken"`
+					} `json:"data"`
+				}
+				if err := json.Unmarshal(request("GET", "/v1/me", "", "", ""), &me); err != nil || me.Data.CSRF == "" {
+					t.Fatal("released login has no CSRF token", err)
+				}
 				before := approvalEpoch(t, runtime)
-				roleExec(t, runtime, `UPDATE teams SET status='archived' WHERE slug='released-writer'`)
-				if approvalEpoch(t, runtime) <= before {
-					t.Fatal("old-style authority mutation did not journal")
+				request("PATCH", "/v1/admin/teams/released-writer", `{"status":"archived"}`, me.Data.CSRF, `"1"`)
+				if approvalEpoch(t, runtime) <= before || roleCount(t, runtime, `SELECT count(*) FROM teams WHERE slug='released-writer' AND status='archived'`) != 1 {
+					t.Fatal("released HTTP authority UPDATE did not append private journal")
 				}
 				t.Log("unmodified v0.4.0 strict split-role startup and HTTP readiness passed")
 				return
