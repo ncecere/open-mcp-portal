@@ -30,7 +30,6 @@ func TestBeforeTransportBoundary(t *testing.T) {
 		{"legacy tool", "POST", `{"jsonrpc":"2.0","method":"tools/call"}`, "", true},
 		{"modern tool", "POST", `{"jsonrpc":"2.0","method":"tools/call"}`, "tools/call", true},
 		{"header is not authority", "POST", `{"jsonrpc":"2.0","method":"prompts/get"}`, "tools/call", false},
-		{"invalid body", "POST", `not json`, "tools/call", false},
 		{"get", "GET", "", "tools/call", false},
 		{"delete", "DELETE", "", "", false},
 	} {
@@ -113,10 +112,11 @@ func TestNoReplayTransportRequest(t *testing.T) {
 							if (out.GetBody == nil) != blocked {
 								t.Errorf("GetBody nil = %v, want %v", out.GetBody == nil, blocked)
 							}
-							for k := range out.Header {
-								if blocked && (strings.EqualFold(k, "Idempotency-Key") || strings.EqualFold(k, "X-Idempotency-Key")) {
-									t.Errorf("replay header survived: %s", k)
-								}
+							if out.Header.Get("Idempotency-Key") != "credential" {
+								t.Error("configured idempotency credential was removed")
+							}
+							if method == "tools/call" && out.Header.Get("X-Idempotency-Key") != "parameter" {
+								t.Error("configured idempotency parameter was removed")
 							}
 							got, _ := io.ReadAll(out.Body)
 							if string(got) != body || out.ContentLength != int64(len(body)) {
@@ -212,8 +212,8 @@ func boolName(v bool) string {
 func TestToolsCallInspectionDoesNotTruncateArguments(t *testing.T) {
 	body := `{"jsonrpc":"2.0","method":"tools/call","params":{"text":"` + strings.Repeat("x", 4<<20) + `"}}`
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://example.com", strings.NewReader(body))
-	if !isToolsCall(req) {
-		t.Fatal("large tools/call not recognized")
+	if tool, err := isToolsCall(req); err != nil || !tool {
+		t.Fatalf("large tools/call not recognized: %v", err)
 	}
 	got, _ := io.ReadAll(req.Body)
 	if string(got) != body {

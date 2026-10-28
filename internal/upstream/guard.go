@@ -333,7 +333,16 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	toolCall := false
 	if len(t.params) > 0 || t.beforeTransport != nil || t.noReplay {
-		toolCall = isToolsCall(req)
+		var err error
+		toolCall, err = isToolsCall(req)
+		if err != nil {
+			// An uninspectable POST is not a non-tool request: never let it
+			// bypass the tool authorization or single-dispatch boundary.
+			if req.Body != nil {
+				_ = req.Body.Close()
+			}
+			return nil, t.ex.refuse(err)
+		}
 	}
 	if len(t.params) > 0 && toolCall {
 		for k, v := range t.params {
@@ -357,15 +366,11 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		req.Header.Set("MCP-Gateway-Provider-Token", t.providerToken)
 	}
 	if t.noReplay && toolCall {
-		// Do this after all body inspection and credential/header handling:
-		// isToolsCall can install GetBody and credentials can mark a POST as
-		// idempotent. Neither may allow net/http to replay an authorized call.
+		// Do this after body inspection, which can install GetBody. A tool
+		// POST has a nonempty body: without GetBody net/http cannot replay it,
+		// even with idempotency headers. Preserve configured headers: they may
+		// be required credentials or the server's own duplicate-effect guard.
 		req.GetBody = nil
-		for k := range req.Header {
-			if strings.EqualFold(k, "Idempotency-Key") || strings.EqualFold(k, "X-Idempotency-Key") {
-				delete(req.Header, k)
-			}
-		}
 	}
 	if t.beforeTransport != nil {
 		if err := t.beforeTransport(req.Context(), toolCall); err != nil {
@@ -413,9 +418,9 @@ func (t *headerTransport) occupied(header string) bool {
 // isToolsCall reports whether a request posts a JSON-RPC tools/call (the
 // only request that carries parameter headers). The body is read and put
 // back unchanged.
-func isToolsCall(req *http.Request) bool {
+func isToolsCall(req *http.Request) (bool, error) {
 	if req.Method != http.MethodPost || req.Body == nil || req.Body == http.NoBody {
-		return false
+		return false, nil
 	}
 	// Inspect the internally constructed JSON-RPC body, not a header that
 	// could disagree with it. Do not truncate a large outgoing arguments
@@ -426,12 +431,18 @@ func isToolsCall(req *http.Request) bool {
 	req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(body)), nil }
 	req.ContentLength = int64(len(body))
 	if err != nil {
-		return false
+		return false, fmt.Errorf("cannot inspect outbound MCP body: %w", err)
 	}
 	var msg struct {
 		Method string `json:"method"`
 	}
-	return json.Unmarshal(body, &msg) == nil && msg.Method == "tools/call"
+	if err := json.Unmarshal(body, &msg); err != nil {
+		return false, fmt.Errorf("cannot inspect outbound MCP method: %w", err)
+	}
+	if msg.Method == "" {
+		return false, errors.New("outbound MCP POST has no method")
+	}
+	return msg.Method == "tools/call", nil
 }
 
 // cappedBody fails a read past its limit.
