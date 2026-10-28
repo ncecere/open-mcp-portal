@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/ncecere/open-mcp-portal/internal/apperr"
 	"github.com/ncecere/open-mcp-portal/internal/authz"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
@@ -97,6 +100,11 @@ func (s *Service) ListRequestsPage(ctx context.Context, a authz.Actor, view, cur
 	if err != nil {
 		return nil, "", safeError(err)
 	}
+	// Many candidates share the same requester/rule/target. Memoize exact
+	// authority reads only within this immutable snapshot, so applying the
+	// existing permissions predicate does not repeat those round trips 200
+	// times. Nothing survives the transaction or caches a decision authority.
+	q = dbgen.New(&queueSnapshotReads{Tx: tx, cache: make(map[string]queueResult)})
 	out := []Receipt{}
 	next := ""
 	for i, row := range rows {
@@ -133,6 +141,115 @@ func (s *Service) ListRequestsPage(ctx context.Context, a authz.Actor, view, cur
 	}
 	return out, next, nil
 }
+
+// queueSnapshotReads is transaction-local memoization of SELECT results. Raw
+// wire values are copied, then scanned afresh using pgx's own codecs; callers
+// cannot mutate a cached result. Only use this with the read-only RR transaction.
+// In particular, do not reuse it for detail projections or mutating methods.
+// Candidate count bounds the number of distinct cached reads.
+type queueSnapshotReads struct {
+	pgx.Tx
+	cache map[string]queueResult
+}
+
+type queueResult struct {
+	fields []pgconn.FieldDescription
+	data   [][][]byte
+}
+
+func (q *queueSnapshotReads) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	encoded, err := json.Marshal(args)
+	if err != nil {
+		return nil, err
+	}
+	key := sql + "\x00" + string(encoded)
+	result, ok := q.cache[key]
+	if !ok {
+		rows, err := q.Tx.Query(ctx, sql, args...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		result.fields = append([]pgconn.FieldDescription(nil), rows.FieldDescriptions()...)
+		for rows.Next() {
+			values := make([][]byte, len(result.fields))
+			for i, v := range rows.RawValues() {
+				if v != nil {
+					values[i] = append([]byte{}, v...)
+				}
+			}
+			result.data = append(result.data, values)
+		}
+		if err = rows.Err(); err != nil {
+			return nil, err
+		}
+		q.cache[key] = result
+	}
+	return &queueRows{result: result, conn: q.Tx.Conn(), index: -1}, nil
+}
+
+func (q *queueSnapshotReads) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	rows, err := q.Query(ctx, sql, args...)
+	return queueRow{rows: rows, err: err}
+}
+
+type queueRow struct {
+	rows pgx.Rows
+	err  error
+}
+
+func (r queueRow) Scan(dest ...any) error {
+	if r.err != nil {
+		return r.err
+	}
+	defer r.rows.Close()
+	if !r.rows.Next() {
+		return pgx.ErrNoRows
+	}
+	return r.rows.Scan(dest...)
+}
+
+type queueRows struct {
+	result queueResult
+	conn   *pgx.Conn
+	index  int
+	closed bool
+}
+
+func (r *queueRows) Close()     { r.closed = true }
+func (r *queueRows) Err() error { return nil }
+func (r *queueRows) CommandTag() pgconn.CommandTag {
+	return pgconn.NewCommandTag("SELECT " + strconv.Itoa(len(r.result.data)))
+}
+func (r *queueRows) FieldDescriptions() []pgconn.FieldDescription { return r.result.fields }
+func (r *queueRows) Next() bool {
+	if r.closed {
+		return false
+	}
+	r.index++
+	if r.index >= len(r.result.data) {
+		r.Close()
+		return false
+	}
+	return true
+}
+func (r *queueRows) Scan(dest ...any) error {
+	return pgx.ScanRow(r.conn.TypeMap(), r.result.fields, r.RawValues(), dest...)
+}
+func (r *queueRows) Values() ([]any, error) {
+	values := make([]any, len(r.result.fields))
+	dest := make([]any, len(values))
+	for i := range values {
+		dest[i] = &values[i]
+	}
+	return values, r.Scan(dest...)
+}
+func (r *queueRows) RawValues() [][]byte  { return r.result.data[r.index] }
+func (r *queueRows) Conn() *pgx.Conn      { return r.conn }
+func (r *queueRows) TypeMap() *pgtype.Map { return r.conn.TypeMap() }
 
 func (s *Service) queueCanRenew(ctx context.Context, q *dbgen.Queries, r dbgen.ApprovalRequest, epoch int64) (bool, error) {
 	latest, err := q.ApprovalQueueLatestBindingID(ctx, r.BindingDigest)
