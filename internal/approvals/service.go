@@ -21,6 +21,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/audit"
 	"github.com/ncecere/open-mcp-portal/internal/authz"
 	"github.com/ncecere/open-mcp-portal/internal/secrets"
+	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 )
 
@@ -58,13 +59,17 @@ var (
 // Service performs no network I/O inside a transaction. Pattern loading and
 // redaction happen before acquiring any locks. SetClock is safe during tests.
 type Service struct {
-	pool     *pgxpool.Pool
-	box      *secrets.Box
-	keys     [][]byte
-	patterns func(context.Context) ([]*regexp.Regexp, error)
-	appURL   string
-	clockMu  sync.RWMutex
-	now      func() time.Time
+	// EmitNotice is optional, configured at construction, and called only for
+	// new requests/decisions inside their transaction. Implementations must use
+	// an isolated outbox savepoint; notices carry metadata, never previews.
+	EmitNotice func(context.Context, *dbgen.Queries, Receipt, bool)
+	pool       *pgxpool.Pool
+	box        *secrets.Box
+	keys       [][]byte
+	patterns   func(context.Context) ([]*regexp.Regexp, error)
+	appURL     string
+	clockMu    sync.RWMutex
+	now        func() time.Time
 }
 
 func New(pool *pgxpool.Pool, box *secrets.Box, patterns func(context.Context) ([]*regexp.Regexp, error), appURL string) (*Service, error) {
@@ -139,42 +144,41 @@ func terminal(status string) bool { return status != Pending && status != Approv
 // Human audit FK protection MUST precede the epoch lock. Reads after the
 // fence are intentionally non-locking, including the actor's current status.
 func (s *Service) transaction(ctx context.Context, a *authz.Actor, exclusive bool, fn func(*dbgen.Queries, int64) error) error {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return ErrUnavailable
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := dbgen.New(tx)
-	if a != nil {
-		if a.IsToken() || (a.Kind != "" && a.Kind != authz.KindUser) || a.UserID == uuid.Nil {
-			return apperr.Forbidden("A human browser session is required")
+	// InTx registers TxOf(q), allowing optional notification outbox writes to
+	// use savepoints without poisoning an audited approval transition.
+	return safeError(store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
+		var err error
+		if a != nil {
+			if a.IsToken() || (a.Kind != "" && a.Kind != authz.KindUser) || a.UserID == uuid.Nil {
+				return apperr.Forbidden("A human browser session is required")
+			}
+			if _, err = q.LockApprovalActor(ctx, a.UserID); err != nil {
+				return apperr.Forbidden("An active human browser session is required")
+			}
 		}
-		if _, err = q.LockApprovalActor(ctx, a.UserID); err != nil {
-			return apperr.Forbidden("An active human browser session is required")
+		var epoch int64
+		if exclusive {
+			epoch, err = q.LockApprovalContextExclusive(ctx)
+		} else {
+			epoch, err = q.LockApprovalContext(ctx)
 		}
-	}
-	var epoch int64
-	if exclusive {
-		epoch, err = q.LockApprovalContextExclusive(ctx)
-	} else {
-		epoch, err = q.LockApprovalContext(ctx)
-	}
-	if err != nil {
-		return ErrUnavailable
-	}
-	if a != nil {
-		u, e := q.GetUser(ctx, a.UserID)
-		if e != nil || u.Status != "active" {
-			return apperr.Forbidden("An active human browser session is required")
+		if err != nil {
+			return ErrUnavailable
 		}
-		a.PlatformRole = u.PlatformRole
-	}
-	if err = fn(q, epoch); err != nil {
-		return safeError(err)
-	}
-	// NEVER retry this commit or a failed Consume. A possibly committed spend
-	// yields no dispatch permit: only a confirmed commit returns nil.
-	return safeError(tx.Commit(ctx))
+		if a != nil {
+			u, e := q.GetUser(ctx, a.UserID)
+			if e != nil || u.Status != "active" {
+				return apperr.Forbidden("An active human browser session is required")
+			}
+			a.PlatformRole = u.PlatformRole
+		}
+		if err = fn(q, epoch); err != nil {
+			return safeError(err)
+		}
+		// InTx commits once. NEVER retry an uncertain commit or failed Consume:
+		// a possibly committed spend yields no dispatch permit.
+		return nil
+	}))
 }
 func (s *Service) CheckContext(ctx context.Context, epoch int64, expires time.Time) error {
 	return s.transaction(ctx, nil, false, func(_ *dbgen.Queries, current int64) error {

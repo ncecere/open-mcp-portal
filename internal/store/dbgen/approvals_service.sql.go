@@ -33,7 +33,7 @@ func (q *Queries) ApprovalCapabilityBelongs(ctx context.Context, arg ApprovalCap
 
 const approvalCleanupCandidates = `-- name: ApprovalCleanupCandidates :many
 SELECT id FROM approval_requests WHERE status IN ('pending','approved')
- AND (context_epoch <> (SELECT epoch FROM approval_context WHERE id=1)
+ AND (context_epoch <> public.omp_current_approval_context()
       OR expires_at <= $1::timestamptz OR valid_until <= $1::timestamptz)
 ORDER BY expires_at,id LIMIT $2::integer FOR UPDATE SKIP LOCKED
 `

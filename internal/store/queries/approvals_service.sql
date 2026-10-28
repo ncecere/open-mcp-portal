@@ -95,6 +95,6 @@ ORDER BY id LIMIT 200 FOR UPDATE;
 
 -- name: ApprovalCleanupCandidates :many
 SELECT id FROM approval_requests WHERE status IN ('pending','approved')
- AND (context_epoch <> (SELECT epoch FROM approval_context WHERE id=1)
+ AND (context_epoch <> public.omp_current_approval_context()
       OR expires_at <= @at_time::timestamptz OR valid_until <= @at_time::timestamptz)
 ORDER BY expires_at,id LIMIT @batch_size::integer FOR UPDATE SKIP LOCKED;

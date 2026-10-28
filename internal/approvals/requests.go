@@ -245,6 +245,9 @@ func (s *Service) Decide(ctx context.Context, a authz.Actor, id uuid.UUID, in De
 		if e = s.auditRequest(ctx, q, &a, r, r.Status); e != nil {
 			return e
 		}
+		if s.EmitNotice != nil {
+			s.EmitNotice(ctx, q, receipt(r), false)
+		}
 		out, _, _, e = s.permissions(ctx, q, a, r, epoch)
 		return e
 	})

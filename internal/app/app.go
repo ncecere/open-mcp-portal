@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ncecere/open-mcp-portal/internal/apikeys"
+	"github.com/ncecere/open-mcp-portal/internal/approvals"
 	"github.com/ncecere/open-mcp-portal/internal/auth"
 	"github.com/ncecere/open-mcp-portal/internal/automation"
 	"github.com/ncecere/open-mcp-portal/internal/buildinfo"
@@ -370,6 +371,13 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 		},
 		Failed: observability.PayloadCaptureErrors.Inc,
 	}
+	approvalSvc, err := approvals.New(pool, box, capt.Patterns, cfg.AppURL)
+	if err != nil {
+		return httpapi.Deps{}, fmt.Errorf("tool approvals: %w", err)
+	}
+	ret.Hooks = append(ret.Hooks, func(ctx context.Context) (int64, error) {
+		return 0, approvalSvc.Cleanup(ctx, min(int32(cfg.RetentionBatchSize), 1000))
+	})
 	use := usage.New(pool, log)
 	use.Observe = func(leader bool, success time.Time) {
 		observability.SetLeader("usage_rollup", leader)
@@ -402,8 +410,9 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 		PersonSecrets:   pers,
 		Automation:      autoSvc,
 		Notify:          notifier,
+		Approvals:       approvalSvc,
 		Overview:        overview.New(pool),
-		MCP: &mcpgw.Handler{Gateways: gws, Keys: keys, OAuth: as, ServiceAccounts: sas, Identity: ids, Registry: reg, Providers: provs, PersonSecrets: pers, Secrets: box,
+		MCP: &mcpgw.Handler{Approvals: approvalSvc, Gateways: gws, Keys: keys, OAuth: as, ServiceAccounts: sas, Identity: ids, Registry: reg, Providers: provs, PersonSecrets: pers, Secrets: box,
 			Limits: lims, RateStore: rates, Capture: capt, Pool: pool, AppURL: cfg.AppURL, Log: log},
 	}, nil
 }

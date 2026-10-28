@@ -265,7 +265,13 @@ func (s *Service) insertRequest(ctx context.Context, q *dbgen.Queries, a *authz.
 	if err != nil {
 		return r, err
 	}
-	return r, s.auditRequest(ctx, q, a, r, "requested")
+	if err = s.auditRequest(ctx, q, a, r, "requested"); err != nil {
+		return r, err
+	}
+	if s.EmitNotice != nil {
+		s.EmitNotice(ctx, q, receipt(r), true)
+	}
+	return r, nil
 }
 func (s *Service) Consume(ctx context.Context, plan Plan) error {
 	return s.transaction(ctx, nil, false, func(q *dbgen.Queries, epoch int64) error {
