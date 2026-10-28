@@ -20,6 +20,10 @@ Migration 00032 adds two static-SQL, owner-owned SECURITY DEFINER functions:
 `public.omp_purge_audit_log(integer,integer)` and
 `public.omp_purge_mcp_calls(timestamptz,integer,integer)`. Their search path is
 `pg_catalog, pg_temp`; all application relations are explicitly public-qualified.
+Migration 00033 additionally pins both functions' `TimeZone` to `UTC`, so caller
+session settings (including POSIX zones with extreme DST shifts) cannot shorten
+the elapsed 30-day audit or 1-day call floor. Both function-local settings restore
+the caller's settings on return or error; the migration preserves owners and ACLs.
 PUBLIC EXECUTE is revoked in the migration transaction. Functions and protected
 tables must have the same owner: running a superuser migration over somebody
 else's tables must fail rather than silently create a different definer owner.
@@ -87,6 +91,12 @@ Privileged migration/schema fixtures explicitly request the owner pool. CI runs 
 whole race-enabled Go suite in both legacy and authenticated split modes; test raw SQL denials,
 flags, quoting, repeated/concurrent reconciliation, PUBLIC/inherited privileges,
 search-path shadowing, age floors, team combinations, watermark and cascades.
+Timezone regressions probe a bounded set of date-relative POSIX rules to prove
+that the caller's zone actually shortens calendar subtraction before testing
+purges. Under that hostile zone, 29.5-day audit rows and already-rolled-up
+2-hour call rows survive while truly old rows purge; UTC function configuration
+and caller timezone/purge-flag restoration are checked on success and error.
+The SELECT-only probe also covers leap-day and year-wrap dates.
 No live cluster or development database is needed or changed.
 
 For a local run (replace the disposable password; do not reuse a development
