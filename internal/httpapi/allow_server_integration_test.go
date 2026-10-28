@@ -380,7 +380,9 @@ func TestAllowServerRequiresTheProviderAndVisibility(t *testing.T) {
 // automation token, connected app or service account can do it (and none is
 // counted against the person's limit).
 func TestAllowServerIsSessionOnlyAndRateLimited(t *testing.T) {
-	e, fx := newAgentEnv(t)
+	e := newProvEnv(t)
+	sa := createSA(t, e.owner, map[string]any{"name": "ordinary", "role": "editor"})
+	saKey := createSAKey(t, e.owner, sa.Id.String(), map[string]any{"name": "key"}).Secret
 	e.connectBroadly("repo")
 	conn := e.myConnID()
 	st := findAllowable(t, e.allowable(e.member, conn), "status")
@@ -391,7 +393,7 @@ func TestAllowServerIsSessionOnlyAndRateLimited(t *testing.T) {
 	var plat struct{ Secret string }
 	code, ec = e.admin.call("POST", "/v1/admin/automation-tokens", map[string]any{"name": "ops", "scopes": []string{"platform:write"}, "expiresInDays": 30}, &plat, nil)
 	mustCode(t, "platform token", code, ec, 201, "")
-	for name, secret := range map[string]string{"personal key": e.key, "service account key": fx.key, "team token": tok.Secret, "platform token": plat.Secret} {
+	for name, secret := range map[string]string{"personal key": e.key, "service account key": saKey, "team token": tok.Secret, "platform token": plat.Secret} {
 		for _, req := range []struct{ method, path string }{
 			{"POST", "/v1/me/connections/" + conn + "/allow-server"},
 			{"GET", "/v1/me/connections/" + conn + "/allowable-servers"},
@@ -442,61 +444,28 @@ func TestAllowServerIsSessionOnlyAndRateLimited(t *testing.T) {
 // An agent calling for a person gets no link (decision 66): when the server
 // isn't allowed it is told to allow it under Account › My connections; once
 // the person has, with no call of their own, the agent's call goes through.
-func TestAgentCallsAfterAllowingFromMyConnections(t *testing.T) {
-	e, fx := newAgentEnv(t)
-	blair := agentSpec{Email: "blair@localhost"}
-	const tool = "status__provider_token"
+func TestOrdinaryCallsAfterAllowingFromMyConnections(t *testing.T) {
+	e := newProvEnv(t)
 	e.connectBroadly("repo")
-
-	// Before: link-free, names the server and where to allow it.
-	code, out := fx.callTool(blair, tool, nil)
-	text, isErr := toolText(t, out)
-	const want = "needs you to allow STATUS (tools) to use your Github account (repo), which you haven't. Allow STATUS under Account › My connections in Open MCP Portal, then try again."
-	if code != 200 || !isErr || !strings.HasSuffix(text, want) {
-		t.Fatalf("before allowing = %d %q", code, text)
-	}
-	noLink(t, out, "before allowing")
-	if strings.Contains(text, "yourself") || strings.Contains(text, "MCP client") {
-		t.Fatalf("the message still sends the person to a call: %q", text)
-	}
-	if n := e.connectRequests(); n != "0" || e.toolCalls("provider_token") != 0 {
-		t.Fatalf("%s consent requests, %d calls", n, e.toolCalls("provider_token"))
-	}
-
-	// The person allows it from My connections, making no call.
+	const tool = "status__provider_token"
+	// Session consent management remains useful independently of external platforms.
 	st := findAllowable(t, e.allowable(e.member, e.myConnID()), "status")
 	e.mustAllow(e.myConnID(), st)
-	if n := e.connectRequests(); n != "0" {
-		t.Fatalf("%s consent requests", n)
+	if e.connectRequests() != "0" {
+		t.Fatal("self-service consent unexpectedly required an MCP call")
 	}
-
-	// After: the agent's call is served with the person's token, no link.
-	id := fx.lastCallID()
-	code, out = fx.callTool(blair, tool, nil)
-	rep := e.providerReport(out)
-	issued := e.oauth.Issued()
-	if code != 200 || !rep.Received || rep.TokenSHA256 != testutil.TokenDigest(issued[len(issued)-1]) {
-		t.Fatalf("after allowing = %d %+v", code, rep)
+	out := e.callTool(e.key, tool)
+	if !e.providerReport(out).Received {
+		t.Fatalf("allowed ordinary call: %v", out)
 	}
-	noLink(t, out, "after allowing")
-	if r := fx.recordAfter(id); r.Outcome != "ok" || r.User != e.userID("blair@localhost") || r.Agent == "" {
-		t.Fatalf("record = %+v", r)
-	}
-	// Another person's agent still can't use blair's allowance.
-	_, out = fx.callTool(agentSpec{Email: "user@localhost"}, tool, nil)
-	if text, isErr := toolText(t, out); !isErr || !strings.HasSuffix(text, wantConnect) {
-		t.Fatalf("owner through the relay = %q", text)
-	}
-
-	// Revoking the allowance sends the agent back to the same message.
 	if code, ec := e.member.call("DELETE", fmt.Sprintf("/v1/me/connections/%s/allowed-servers/%s", e.myConnID(), e.server.Id), nil, nil, nil); code != 200 {
-		t.Fatalf("revoke = %d %s", code, ec)
+		t.Fatalf("revoke: %d %s", code, ec)
 	}
-	_, out = fx.callTool(blair, tool, nil)
-	if text, isErr := toolText(t, out); !isErr || !strings.HasSuffix(text, want) {
-		t.Fatalf("after revoking = %q", text)
+	before := e.toolCalls("provider_token")
+	out = e.callTool(e.key, tool)
+	e.consentURL(out, "server_not_allowed")
+	if e.toolCalls("provider_token") != before {
+		t.Fatal("revoked consent reached the server")
 	}
-	noLink(t, out, "after revoking")
-	fx.noSecrets(e.logs)
 	e.noSecretsAnywhere()
 }

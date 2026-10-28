@@ -13,7 +13,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ncecere/open-mcp-portal/internal/agentidentity"
 	"github.com/ncecere/open-mcp-portal/internal/apikeys"
 	"github.com/ncecere/open-mcp-portal/internal/auth"
 	"github.com/ncecere/open-mcp-portal/internal/automation"
@@ -339,10 +338,6 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 	pers := personsecrets.New(pool, box, cfg.AppURL, log)
 	pers.Reachable = gws.ReachableServers
 	pers.Registry = reg
-	// Trusted agent platforms (decisions 65 and 66): their keys are fetched
-	// behind the same address guard as MCP servers; a person named in an
-	// agent token must have signed in with this portal's own issuer.
-	agents := agentidentity.New(pool, client, cfg.AppURL, personIssuer(cfg), log)
 	// Automation tokens (docs/automation-tokens.md) and notifications
 	// (docs/notifications.md). Webhook URLs get their own address guard,
 	// never the MCP servers' internal-network allowlist.
@@ -361,7 +356,7 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 	provs.Notify = notifier
 	callSvc := calls.New(pool)
 	ret := retention.New(pool, retention.Config{Interval: cfg.RetentionInterval, BatchSize: int32(cfg.RetentionBatchSize)}, log)
-	ret.Hooks = []retention.Hook{provs.Cleanup, pers.Cleanup, rates.Cleanup, agents.Cleanup, func(ctx context.Context) (int64, error) {
+	ret.Hooks = []retention.Hook{provs.Cleanup, pers.Cleanup, rates.Cleanup, func(ctx context.Context) (int64, error) {
 		return notifier.Purge(ctx, int32(cfg.RetentionBatchSize), func(kind string, n int64) {
 			observability.RetentionDeleted.WithLabelValues(kind).Add(float64(n))
 		})
@@ -403,28 +398,14 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 		RateStore:       rates,
 		OAuth:           as,
 		ServiceAccounts: sas,
-		AgentPlatforms:  agents,
 		Providers:       provs,
 		PersonSecrets:   pers,
 		Automation:      autoSvc,
 		Notify:          notifier,
 		Overview:        overview.New(pool),
-		MCP: &mcpgw.Handler{Gateways: gws, Keys: keys, OAuth: as, ServiceAccounts: sas, Agents: agents, Identity: ids, Registry: reg, Providers: provs, PersonSecrets: pers, Secrets: box,
+		MCP: &mcpgw.Handler{Gateways: gws, Keys: keys, OAuth: as, ServiceAccounts: sas, Identity: ids, Registry: reg, Providers: provs, PersonSecrets: pers, Secrets: box,
 			Limits: lims, RateStore: rates, Capture: capt, Pool: pool, AppURL: cfg.AppURL, Log: log},
 	}, nil
-}
-
-// personIssuer is the issuer people sign in with here: OIDC_ISSUER, or the
-// development issuer when only DEV_AUTH is on. An agent token's person.iss
-// must equal it (decision 65).
-func personIssuer(cfg config.Config) string {
-	if cfg.OIDC.Issuer != "" {
-		return cfg.OIDC.Issuer
-	}
-	if cfg.DevAuth {
-		return auth.DevIssuer
-	}
-	return ""
 }
 
 // observeRetention records a retention run's metrics.

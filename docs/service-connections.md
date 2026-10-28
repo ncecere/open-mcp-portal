@@ -51,8 +51,8 @@ scope separator, refuses `invalid_scope` without full-token fallback and uses a
 bounded owner-namespaced generation/scope cache, populated only after commit.
 Live authorization precedes every cache hit and is repeated after waiting/refresh.
 
-A genuine service-account principal uses `ServiceCredential`; a relayed person
-uses only their own credentials and retains person-intersection-relay policy.
+An ordinary service-account principal uses `ServiceCredential`; a person uses only
+their own credentials. External-platform impersonation is [retired](platform-retirement.md).
 Missing/not-allowed/reconsent/lapsed answers are `-32010` without URL, elicitation
 or pending request. OAuth 401 retries once with the original connection and
 consent generation pinned; a second rejection invalidates only that credential.
@@ -85,7 +85,7 @@ can or cannot use the capability.
 Cover both provider kinds, browser/token/team authz matrix, assignment conflicts,
 foreign IDs, callback session/configuration/resource/revision/revoke races, live
 admin lapse/reactivation, destination access lists, origin/path edits, concurrent
-refresh on two handlers, narrowed/reduced scopes, 401/403 and relayed-person
+refresh on two handlers, narrowed/reduced scopes, 401/403 and personal
 no-fallback. Verify live notification recipients, encryption rotation, sentinel
 redaction and accessible web workflows. Integration tests use only throwaway
 databases on localhost:55442/postgres; never the development `omp` database.
@@ -101,7 +101,7 @@ databases on localhost:55442/postgres; never the development `omp` database.
 - `internal/httpapi/service_connections*.go`: management contract, authorization
   matrix, first-consent and reconnect flows, callback commit races, live lapse,
   cross-team destination policy, refresh/narrowing across two handlers, 401/403,
-  no relayed-person fallback, metadata pagination, FK/uniqueness enforcement,
+  no personal fallback, metadata pagination, FK/uniqueness enforcement,
   atomic audit rollback and response/progress/span/capture sentinels.
 - `internal/notify/service_connections*`: team-owned re-consent delivery to live
   active owners/admins, deduplication, shared wording and a link to the team's

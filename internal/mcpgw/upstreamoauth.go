@@ -182,7 +182,7 @@ func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.C
 			// wasn't accepted, and a 401 means nothing was executed.
 			var next providers.Credential
 			var err error
-			if rc.principal.isServiceAccount() {
+			if rc.principal.account != nil {
 				next, err = rc.h.Providers.ServiceUpstreamRejected(ctx, o.Requires, rc.serviceCallContext(o), *cred, attempt == 0 && cred.Refreshable)
 			} else {
 				next, err = rc.h.Providers.UpstreamRejected(ctx, o.Requires, cc, *cred, attempt == 0 && cred.Refreshable)
@@ -216,7 +216,7 @@ func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.C
 			return nil, false, false
 		case ue.HTTPStatus == 403 && ch != nil && ch.Error() == "insufficient_scope":
 			var err error = providers.ErrInsufficientScope
-			if !rc.principal.isServiceAccount() {
+			if !(rc.principal.account != nil) {
 				err = rc.h.Providers.StepUp(ctx, o.Requires, cc, ch.Scopes())
 			}
 			var consent *providers.ConsentNeeded
@@ -242,6 +242,6 @@ func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.C
 }
 
 func (rc *request) callContext(o gateways.Offer) providers.CallContext {
-	return providers.CallContext{User: rc.principal.actingUser(), NoConsent: rc.relayedPerson(), Gateway: rc.gateway, CapabilityID: o.Capability.ID, Kind: o.Capability.Kind,
+	return providers.CallContext{User: rc.principal.user, Gateway: rc.gateway, CapabilityID: o.Capability.ID, Kind: o.Capability.Kind,
 		ServerID: o.Server.ID, ServerOrigin: registry.OriginOf(o.Server.URL), ExposedName: o.ExposedName, Title: o.Capability.Title}
 }

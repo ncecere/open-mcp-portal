@@ -47,7 +47,6 @@ import (
 const (
 	ClassSecretMissing  = personsecrets.ReasonMissing
 	ClassSecretRejected = personsecrets.ReasonRejected
-	ClassAgentsNotAllow = personsecrets.ReasonAgentsNotAllowed
 )
 
 // personSecret returns the acting person's secret for a call to a
@@ -58,7 +57,7 @@ func (rc *request) personSecret(o gateways.Offer, rec *calls.Call) (*personsecre
 		return nil, true
 	}
 	noun := kindNoun(o.Capability.Kind)
-	if rc.principal.isServiceAccount() {
+	if rc.principal.account != nil {
 		n := rc.failData(codeDenied, fmt.Sprintf("This %s needs a person's own key for %s; service accounts can't use it", noun, serverLabel(o)),
 			map[string]any{"reason": DeniedServiceAccount})
 		rec.Outcome, rec.ErrorClass = calls.OutcomeDenied, DeniedServiceAccount
@@ -82,8 +81,8 @@ func (rc *request) personSecret(o gateways.Offer, rec *calls.Call) (*personsecre
 		rc.needsSecret(o, need, rec)
 	case errors.Is(err, personsecrets.ErrInactive):
 		sp.End()
-		n := rc.refuseText(o.Capability.Kind == upstream.KindTool, "Your Open MCP Portal account is suspended, so the call wasn't run.", DeniedPersonSuspended, "")
-		rec.Outcome, rec.ErrorClass = calls.OutcomeDenied, DeniedPersonSuspended
+		n := rc.refuseText(o.Capability.Kind == upstream.KindTool, "Your Open MCP Portal account is suspended, so the call wasn't run.", "person_suspended", "")
+		rec.Outcome, rec.ErrorClass = calls.OutcomeDenied, "person_suspended"
 		rc.record(*rec, n)
 	default:
 		observability.Fail(sp, "unavailable")
@@ -94,8 +93,8 @@ func (rc *request) personSecret(o gateways.Offer, rec *calls.Call) (*personsecre
 }
 
 func (rc *request) secretContext(o gateways.Offer) personsecrets.CallContext {
-	return personsecrets.CallContext{User: rc.principal.actingUser(), Server: o.Server, Gateway: rc.gateway, CapabilityID: o.Capability.ID,
-		Kind: o.Capability.Kind, ExposedName: o.ExposedName, Title: o.Capability.Title, NoConsent: rc.relayedPerson()}
+	return personsecrets.CallContext{User: rc.principal.user, Server: o.Server, Gateway: rc.gateway, CapabilityID: o.Capability.ID,
+		Kind: o.Capability.Kind, ExposedName: o.ExposedName, Title: o.Capability.Title}
 }
 
 // withPersonSecret adds the person's secret to the forwarded call's target
@@ -141,10 +140,6 @@ func (rc *request) secretRefusal(err error) bool {
 	return rc.personSecretUsed != nil && errors.As(err, &ue) && (ue.HTTPStatus == http.StatusUnauthorized || ue.HTTPStatus == http.StatusForbidden)
 }
 
-// secretWhere is where a person enters or allows their key, for the answers
-// that carry no link.
-const secretWhere = "under Account › My connections in Open MCP Portal"
-
 // needsSecret answers a call that needs the person to enter, enter again or
 // allow their key: the link in the three shapes of decision 59, or for an
 // agent's call (decision 66) a tool error that names where, and never a link,
@@ -153,21 +148,6 @@ func (rc *request) needsSecret(o gateways.Offer, n *personsecrets.NeedsSecret, r
 	class := n.Reason
 	label, server := n.Label, fmt.Sprintf("%s (%s)", n.Server.Name, n.Server.TeamSlug)
 	rec.Outcome, rec.ErrorClass = calls.OutcomeNeedsAuthorization, class
-	if n.URL == "" {
-		var msg string
-		switch n.Reason {
-		case personsecrets.ReasonRejected:
-			msg = fmt.Sprintf("%s: %s refused your %s. Enter it again %s, then try again.", o.ExposedName, server, label, secretWhere)
-		case personsecrets.ReasonAgentsNotAllowed:
-			msg = fmt.Sprintf("%s needs your own %s for %s, and you haven't allowed agents to use it. Allow it %s, then try again.",
-				o.ExposedName, label, server, secretWhere)
-		default:
-			msg = fmt.Sprintf("%s needs your own %s for %s. Enter it %s, then try again.", o.ExposedName, label, server, secretWhere)
-		}
-		out := rc.refuseText(o.Capability.Kind == upstream.KindTool, msg, class, "")
-		rc.record(*rec, out)
-		return
-	}
 	verb := "Enter"
 	if n.Reason == personsecrets.ReasonRejected {
 		verb = "Enter again"

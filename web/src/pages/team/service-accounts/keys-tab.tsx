@@ -63,6 +63,7 @@ const columns: DataTableColumn<ServiceAccountKey>[] = [
 
 /** Why Create key can't run now, or undefined. */
 export function createKeyBlocked(account: ServiceAccount, active: number): string | undefined {
+  if (account.retired) return "Permanently retired. Create a new ordinary service account and key.";
   if (!account.enabled) return "The account is turned off. Turn it on in Settings to create a key.";
   if (active >= maxActiveKeys) return `It already has ${maxActiveKeys} active keys, the most it can have. Revoke the old one once the new one is deployed.`;
   return undefined;

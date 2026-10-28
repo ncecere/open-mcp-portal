@@ -42,6 +42,7 @@ func TestAuthModeConstraintAcceptsEveryMode(t *testing.T) {
 	setup := func(t *testing.T) (ctx context.Context, provider *goose.Provider, exec func(string, ...any) error, must func(string, ...any), scalar func(string, ...any) string) {
 		runtime, _ := testutil.NewDB(t)
 		pool := testutil.OwnerPool(t, runtime)
+		testutil.RemoveRetirementFencesForOldSchema(t, runtime)
 		ctx = context.Background()
 		db := stdlib.OpenDBFromPool(pool)
 		t.Cleanup(func() { _ = db.Close() })

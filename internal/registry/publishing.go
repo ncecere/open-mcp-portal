@@ -408,7 +408,7 @@ func approve(ctx context.Context, q *dbgen.Queries, a authz.Actor, sv dbgen.McpS
 			name = u.Email
 		}
 	}
-	return CapabilityView{Capability: row, ApprovedByName: name, Published: true, EffectivePresentPerson: PresentPersonRequired(sv, row)}, nil
+	return CapabilityView{Capability: row, ApprovedByName: name, Published: true}, nil
 }
 
 // Settings is the platform's default publishing policy.

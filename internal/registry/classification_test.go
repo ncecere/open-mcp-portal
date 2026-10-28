@@ -52,14 +52,14 @@ func TestReviewDigestToolClasses(t *testing.T) {
 	sv := dbgen.McpServer{URL: "https://example.org/mcp"}
 	seen := map[string]bool{}
 	for _, class := range []*string{nil, ptr(ClassRead), ptr(ClassWrite), ptr(ClassDestructive)} {
-		ref := CapabilityRefOf(sv, "tool", "x", "fingerprint", nil, class)
+		ref := CapabilityRefOf("tool", "x", "fingerprint", class)
 		digest := ReviewDigest(sv, []CapabilityRef{ref})
 		if seen[digest] {
 			t.Fatal("class does not change digest")
 		}
 		seen[digest] = true
 	}
-	a := CapabilityRefOf(sv, "prompt", "x", "fingerprint", nil, nil)
+	a := CapabilityRefOf("prompt", "x", "fingerprint", nil)
 	b := a
 	b.ToolClass = ptr(ClassRead)
 	if ReviewDigest(sv, []CapabilityRef{a}) != ReviewDigest(sv, []CapabilityRef{b}) {

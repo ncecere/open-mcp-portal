@@ -54,6 +54,7 @@ func TestIdentitySentMigrationKeepsWhatExists(t *testing.T) {
 	// Back to the schema of the previous release (this runs the Down of 19 and
 	// of every later migration), and make the data look like an installation of
 	// it.
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, identitySent-1); err != nil {
 		t.Fatalf("down: %v", err)
 	}

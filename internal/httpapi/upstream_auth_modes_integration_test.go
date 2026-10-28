@@ -756,94 +756,8 @@ func TestAChangedCAOrModeSettingSendsEveryModeBackToReview(t *testing.T) {
 // machine_oauth, whoever calls (the relay's service account alone included),
 // and a person's own key only when that person allowed agents to use it. All
 // of it over the server's mTLS.
-func TestRelayedCallsApplyEveryAuthMode(t *testing.T) {
-	e := newModesEnv(t)
-	for _, mode := range []string{"none", "static_header", "machine_oauth", "person_secret"} {
-		e.add(mode)
-	}
-	e.setupGateway()
-	fx := setupRelay(t, e.gwEnv)
-	agent := agentSpec{Email: "blair@localhost"}
-	relay := func(m *modeSrv, who any) (map[string]any, []testutil.HTTPRequest) {
-		t.Helper()
-		mark := len(m.fake.HTTPRequests())
-		_, out := fx.callTool(who, m.tool(), nil)
-		return out, requestsSince(m, mark)
-	}
-	ok := func(m *modeSrv, who any, key string) {
-		t.Helper()
-		out, reqs := relay(m, who)
-		if text, isErr := toolText(t, out); isErr {
-			t.Fatalf("%s: the relayed call failed: %s", m.mode, text)
-		}
-		if len(reqs) == 0 {
-			t.Fatalf("%s: nothing reached the server", m.mode)
-		}
-		_ = key
-	}
-
-	// none, static and machine: the agent's call is the person's call and carries the
-	// server's own credential; no switch of the person's is involved.
-	for _, mode := range []string{"none", "static_header", "machine_oauth"} {
-		m := e.servers[mode]
-		mark := len(m.fake.HTTPRequests())
-		ok(m, agent, "")
-		e.wantCredential(m, mark, "", true)
-		// The identity token is the person's, with the agent that acted for them.
-		who := whoamiOf(t, mustToolCall(t, fx, agent, m.tool()))
-		if who.Claims["email"] != "blair@localhost" || who.Act == nil {
-			t.Errorf("%s: the identity token a relayed call carried = %+v", mode, who)
-		}
-		// The relay's own account, with nobody behind it, is a service account's
-		// call: the server's own credential applies to it as to anyone.
-		mark = len(m.fake.HTTPRequests())
-		ok(m, "", "")
-		e.wantCredential(m, mark, "", true)
-		if sa := whoamiOf(t, mustToolCall(t, fx, agentSpec{}, m.tool())); sa.Claims["principal_type"] != "service_account" {
-			t.Errorf("%s: a service account's call carried %+v", mode, sa.Claims)
-		}
-	}
-
-	// person_secret: nothing without a key, nothing without the switch, the
-	// person's own key with it, and never anyone else's; a service account has
-	// no key at all.
-	ps := e.servers["person_secret"]
-	if out, reqs := relay(ps, ""); len(reqs) != 0 {
-		t.Fatalf("person_secret: a service account's call reached the server: %v", out)
-	} else if c, _, data := rpcErr(out); c != -32010 || data["reason"] != "service_account" {
-		t.Fatalf("person_secret: a service account's call = %v", out)
-	}
-	e.putSecret(e.member, ps, modeKeyBlair, nil, 200)
-	mark := len(ps.fake.HTTPRequests())
-	out, _ := relay(ps, agent)
-	if text, isErr := toolText(t, out); !isErr || !strings.Contains(text, "allowed agents") || len(requestsSince(ps, mark)) != 0 {
-		t.Fatalf("person_secret, agents not allowed: %v", out)
-	}
-	e.putSecret(e.member, ps, "", map[string]any{"allowAgents": true}, 200)
-	mark = len(ps.fake.HTTPRequests())
-	ok(ps, agent, modeKeyBlair)
-	e.wantCredential(ps, mark, modeKeyBlair, true)
-	// The owner has a key (the setup key) but hasn't allowed agents.
-	mark = len(ps.fake.HTTPRequests())
-	out, _ = relay(ps, agentSpec{Email: "user@localhost"})
-	if text, isErr := toolText(t, out); !isErr || !strings.Contains(text, "allowed agents") || len(requestsSince(ps, mark)) != 0 {
-		t.Fatalf("the owner's agent used a key the owner hadn't allowed: %v", out)
-	}
-	e.wantTLSIdentity(ps)
-	for _, m := range e.servers {
-		e.wantTLSIdentity(m)
-	}
-	// Nothing of any key or token is in the call records, the audit log or what the relay answered.
-	secrets := append([]string{modeStaticKey, modeKeyOwner, modeKeyBlair, machineSecret}, e.as.Issued()...)
-	fx.noSecrets(e.logs, secrets...)
-}
 
 // mustToolCall makes a relayed call and returns the answer (it must have succeeded).
-func mustToolCall(t *testing.T, fx *relayFx, who agentSpec, tool string) map[string]any {
-	t.Helper()
-	_, out := fx.callTool(who, tool, nil)
-	return out
-}
 
 // One of every secret at once (a static key, two people's keys, a machine
 // client secret and the tokens it buys, and a TLS client key), servers that
@@ -858,7 +772,7 @@ func TestEverySecretKindNeverLeaksAnywhere(t *testing.T) {
 		e.add(mode)
 	}
 	e.setupGateway()
-	e.putSecret(e.member, e.servers["person_secret"], modeKeyBlair, map[string]any{"allowAgents": true}, 200)
+	e.putSecret(e.member, e.servers["person_secret"], modeKeyBlair, nil, 200)
 	// Record the contents of calls.
 	g := e.gateway(e.owner, e.gwPath)
 	if code, ec := e.owner.call("PATCH", e.gwPath, map[string]any{"capturePayloads": true}, nil, ifMatch(g.Revision)); code != 200 {

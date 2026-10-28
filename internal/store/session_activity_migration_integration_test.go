@@ -22,6 +22,7 @@ func TestSessionActivityMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, 26); err != nil {
 		t.Fatal(err)
 	}
@@ -58,6 +59,7 @@ func TestSessionActivityMigration(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM sessions WHERE token_digest='old-release-insert' AND expires_at > now() AND last_seen_at IS NOT NULL`).Scan(&count); err != nil || count != 1 {
 		t.Fatalf("default activity = %d %v", count, err)
 	}
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, 26); err != nil {
 		t.Fatal(err)
 	}

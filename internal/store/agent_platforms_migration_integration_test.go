@@ -88,6 +88,7 @@ func TestAgentPlatformsMigration00020(t *testing.T) {
 
 	// Back to the previous release's schema (the Down of 20 and of every later
 	// migration), and make the data look like an installation of it.
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, agentPlatforms-1); err != nil {
 		t.Fatalf("down: %v", err)
 	}
@@ -156,6 +157,7 @@ func TestAgentPlatformsMigration00020(t *testing.T) {
 	if _, err := provider.Up(ctx); err != nil {
 		t.Fatalf("up to the newest: %v", err)
 	}
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, agentPlatforms-1); err != nil {
 		t.Fatalf("second down: %v", err)
 	}

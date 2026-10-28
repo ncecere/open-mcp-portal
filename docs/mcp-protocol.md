@@ -94,10 +94,7 @@ arrays; the same data is in the text content). A tool's `x-mcp-header` annotatio
 ## Consent as a multi round-trip request
 
 Where a call needs your account on another service (a delegated provider, phase 5; a per-person sign-in to an
-OAuth-protected server, phase 7), the answer depends on the client. **Except** for a call an agent platform relays for a
-person ([agent-platforms.md](agent-platforms.md), decision 66): an agent has no browser, so such a call never gets
-`-32042`, a link or an `input_required` result, whatever the client declared; it answers a tool error (a prompt or
-resource read: `-32010`) that names the provider and says to connect under Account › My connections.
+OAuth-protected server, phase 7), the answer depends on the client.
 
 - **Modern request, `clientCapabilities.elicitation` has a `url` key** (an empty `elicitation: {}` means form only):
   HTTP 200 and

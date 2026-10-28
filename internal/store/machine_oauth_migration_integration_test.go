@@ -59,6 +59,7 @@ func TestMachineOAuthMigration(t *testing.T) {
 
 	// Back to the previous release's schema (this runs the Down of 25 and of
 	// every later migration), with servers saved the way it does.
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, machineOAuth-1); err != nil {
 		t.Fatalf("down: %v", err)
 	}
@@ -130,6 +131,7 @@ func TestMachineOAuthMigration(t *testing.T) {
 
 	// Down: machine servers become servers without authentication, the table
 	// goes, nothing else changes. The newer migrations apply again over it.
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, machineOAuth-1); err != nil {
 		t.Fatalf("down with data: %v", err)
 	}

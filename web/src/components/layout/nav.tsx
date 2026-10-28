@@ -139,7 +139,6 @@ export type AdminPath =
   | "/admin/networks"
   | "/admin/gateways"
   | "/admin/trusted-clients"
-  | "/admin/agent-platforms"
   | "/admin/auth-providers"
   | "/admin/automation-tokens"
   | "/admin/audit"
@@ -181,7 +180,6 @@ export const adminSections: { label?: string; defaultOpen?: boolean; items: Admi
     items: [
       { to: "/admin/gateways", label: terms.gateways, icon: icon(Network) },
       { to: "/admin/trusted-clients", label: terms.trustedClients, icon: icon(ShieldCheck) },
-      { to: "/admin/agent-platforms", label: terms.agentPlatforms, icon: icon(Bot) },
       { to: "/admin/auth-providers", label: terms.authProviders, icon: icon(KeySquare) },
       { to: "/admin/automation-tokens", label: terms.automationTokens, icon: icon(Terminal) },
     ],
@@ -227,7 +225,6 @@ export const adminKeywords: Partial<Record<AdminPath, string[]>> = {
   "/admin/networks": ["internal", "network", "cidr", "allowlist", "private address", "host", "http", "ssrf", "egress"],
   "/admin/gateways": ["gateway", "platform gateway", "grant", "grants", "access", "sso group", "team gateway", "disable"],
   "/admin/trusted-clients": ["oauth", "trusted", "client", "clients", "consent", "skip consent", "allowlist", "claude", "vs code", "metadata document", "cimd"],
-  "/admin/agent-platforms": ["agent", "agents", "platform", "pi durable platform", "pdp", "relay", "identity token", "jwks", "keys", "issuer", "act for", "person", "trusted platform"],
   "/admin/auth-providers": ["oauth", "provider", "providers", "github", "google", "microsoft", "atlassian", "slack", "gitlab", "delegated", "token", "client secret", "redirect uri", "connections", "scopes"],
   "/admin/audit": ["audit log", "history", "changes", "who changed", "sign-ins", "export", "csv"],
   "/admin/calls": ["calls", "call log", "tool calls", "activity", "denied", "errors", "latency", "rate limited", "contents", "payload"],

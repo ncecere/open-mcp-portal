@@ -53,12 +53,11 @@ export type KeyFormState = ReturnType<typeof useKeyForm>;
 export function useKeyForm(entry: ServerSecret, onSaved?: (saved: ServerSecret) => void) {
   const qc = useQueryClient();
   const [value, setValue] = useState("");
-  const [allowAgents, setAllowAgents] = useState(entry.allowAgents);
   const [useForSetup, setUseForSetup] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const save = useMutation({
     mutationFn: async (): Promise<ServerSecret> => {
-      const body: Schemas["SetServerSecret"] = { origin: entry.origin, value: value.trim(), allowAgents, ...(useForSetup ? { useForSetup } : {}) };
+      const body: Schemas["SetServerSecret"] = { origin: entry.origin, value: value.trim(), ...(useForSetup ? { useForSetup } : {}) };
       return unwrap(await api.PUT("/v1/me/server-secrets/{serverId}", { params: { path: { serverId: entry.server.id } }, body }));
     },
     onSuccess: (saved) => {
@@ -76,8 +75,6 @@ export function useKeyForm(entry: ServerSecret, onSaved?: (saved: ServerSecret) 
       if (save.isError) save.reset();
       setValue(v);
     },
-    allowAgents,
-    setAllowAgents,
     useForSetup,
     setUseForSetup,
     submitted,
@@ -123,12 +120,6 @@ export function KeyFields({ entry, form }: Props) {
       >
         <Input type="password" name="server-key" autoComplete="off" spellCheck={false} autoCapitalize="off" value={form.value} onChange={(e) => form.setValue(e.target.value)} />
       </Field>
-      <Switch
-        label="Let my agents use this key"
-        description="An agent acting for you can't open a link to enter one, so it uses this key only when you allow it. Off, it is told to ask you here."
-        checked={form.allowAgents}
-        onCheckedChange={form.setAllowAgents}
-      />
       {entry.canSetup && (
         <Switch
           label="Use my key to read this server's capabilities"

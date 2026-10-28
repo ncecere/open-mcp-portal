@@ -48,14 +48,10 @@ function columns(team: string): DataTableColumn<ServiceAccount>[] {
       ),
     },
     { id: "role", header: "Role", accessor: (a) => roleLabel(a.role), sortable: true, cell: (a) => <Badge tone={a.role === "editor" ? "info" : "neutral"}>{roleLabel(a.role)}</Badge> },
-    { id: "enabled", header: "Status", accessor: (a) => (a.enabled ? "Enabled" : "Disabled"), sortable: true, cell: (a) => (
+    { id: "enabled", header: "Status", accessor: (a) => (a.retired ? "Retired" : a.enabled ? "Enabled" : "Disabled"), sortable: true, cell: (a) => (
         <span className={s.badges}>
           <EnabledBadge enabled={a.enabled} />
-          {a.relayPlatform && (
-            <Badge tone="info" title="Calls with its keys may carry the agent platform's identity token (set by a platform admin)">
-              Relay for {a.relayPlatform.name}
-            </Badge>
-          )}
+          {a.retired && <Badge tone="warning">Retired</Badge>}
         </span>
       ),
     },

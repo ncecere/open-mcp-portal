@@ -45,6 +45,8 @@ name, prefix, label or help keeps them. A published server goes back to review u
 this mode or the placement, name or prefix changes (`upstream_auth_changed`); the review digest covers them.
 An automation token can't switch a server to this mode or send `personSecret` (`403 token_not_allowed`).
 
+The former `allowAgents` field is retired and rejected. Existing stored values have no active effect; see [platform retirement](platform-retirement.md).
+
 ## For a person
 
 The first time a call needs your key, your AI client shows a link to a page (`/connect/secret/<id>`; 10 minutes, once, only for you)
@@ -53,9 +55,6 @@ You can also do it ahead of time, replace it or remove it under **Account › My
 
 * **Nobody can read it back**, you included: the API and the pages show its last four characters (when it has at least
   eight). Keys are 8 to 4096 characters on one line.
-* **Agents.** An agent acting for you (decisions 65 to 68) uses your key only when you switch on *Let my agents use this key*
-  for that server (off by default; it is the counterpart of allowing a server for a connected account, decision 68), and it
-  **never gets a link**: a tool error says to enter or allow the key under Account › My connections.
 * **Suspension** (decision 53) blocks your calls and keeps your keys; reactivating restores them. Deleting you deletes them.
   Platform admins can remove anyone's key (Admin › Users › person).
 * **A server that refuses your key** (HTTP 401 or 403 on a call) marks it **rejected**: it is not sent again, nothing is
@@ -73,12 +72,9 @@ After the usual checks and the provider credential step (a server in this mode h
    error (or `-32010` for a prompt or a read) with the link in its text otherwise. Recorded `needs_authorization`, class
    `secret_missing` (never entered, or entered for another origin) or `secret_rejected`. **Nothing is forwarded and there is no
    fallback to any other credential.**
-3. **relayed for a person** is the person's call: their key if they allowed agents (class `agents_not_allowed` and a tool
-   error otherwise); no link, no stored request, whatever the client declared. An agent-only call (no person) is a service
-   account's call: refused.
-4. is forwarded with the key in the chosen placement, and the identity token where
+3. is forwarded with the key in the chosen placement, and the identity token where
    [upstream-identity.md](upstream-identity.md) says;
-5. answered 401 or 403 marks the key rejected (compare-and-set on the value that was sent: a key entered meanwhile is not
+4. answered 401 or 403 marks the key rejected (compare-and-set on the value that was sent: a key entered meanwhile is not
    touched), and asks again as in 2 (class `secret_rejected`).
 
 A suspended person's key is never used (the call is refused before it).
@@ -87,10 +83,10 @@ A suspended person's key is never used (the call is refused before it).
 
 * Table `person_secrets` (`secret_cipher`, sealed with `ENCRYPTION_KEY`, AAD `person_secret:<id>`, so a ciphertext moved to
   another row doesn't open), unique per (person, server), with the **origin** it was entered for, a hint, `status`
-  (`active`/`rejected`), `allow_agents`, `last_used_at` (once a minute). Links are `secret_requests` (ID sealed like
+  (`active`/`rejected`), `last_used_at` (once a minute). Links are `secret_requests` (ID sealed like
   `provider_connect_requests`, AAD `secret_request:<digest>`). `rotate-keys` re-seals both columns.
 * **Never**: returned by any API response, in a log line, an audit entry (`person_secret.create`, `rotate`, `revoke`,
-  `agents_update` and `mcp_server.person_secrets_reset` name the person, server and origin only), a call record, a captured
+  `mcp_server.person_secrets_reset` name the person, server and origin only), a call record, a captured
   payload, a health message, an error, a trace attribute (the tracing allow-list of decision 71 is unchanged), or the answer
   to the client (a server that echoes the key back gets it redacted: the bare value, the value with its prefix and their
   URL-encoded forms; the same redaction as decision 70's parts). The query value is added to a copy of the request, never to a
@@ -106,7 +102,7 @@ service account or agent can enter, read or remove a key.
 | Operation | |
 |---|---|
 | `listMyServerSecrets` `GET /v1/me/server-secrets` | the servers the caller may use through a gateway (and, for an editor, their team's), with their entry (never the key), and every key they have |
-| `setMyServerSecret` `PUT /v1/me/server-secrets/{serverId}` | `{origin, value?, allowAgents?, useForSetup?}`; 20 changes a minute per person |
+| `setMyServerSecret` `PUT /v1/me/server-secrets/{serverId}` | `{origin, value?, useForSetup?}`; 20 changes a minute per person |
 | `revokeMyServerSecret` `DELETE …` | |
 | `getSecretRequest` `GET /v1/connect/secret-requests/{requestId}` | what a link is for; `404` for another person's, `410` expired or used or the server moved |
 | `adminListUserServerSecrets`, `adminRevokeUserServerSecret` `/v1/admin/users/{userId}/server-secrets` | platform admins and auditors read, admins remove |

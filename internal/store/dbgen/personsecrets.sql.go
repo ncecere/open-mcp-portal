@@ -208,8 +208,8 @@ func (q *Queries) GetSecretRequest(ctx context.Context, idDigest string) (Secret
 }
 
 const insertPersonSecret = `-- name: InsertPersonSecret :one
-INSERT INTO person_secrets (id, user_id, server_id, origin, secret_cipher, hint, allow_agents)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO person_secrets (id, user_id, server_id, origin, secret_cipher, hint)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, user_id, server_id, origin, secret_cipher, hint, status, allow_agents, created_at, rotated_at, rejected_at, last_used_at
 `
 
@@ -220,7 +220,6 @@ type InsertPersonSecretParams struct {
 	Origin       string
 	SecretCipher []byte
 	Hint         string
-	AllowAgents  bool
 }
 
 func (q *Queries) InsertPersonSecret(ctx context.Context, arg InsertPersonSecretParams) (PersonSecret, error) {
@@ -231,7 +230,6 @@ func (q *Queries) InsertPersonSecret(ctx context.Context, arg InsertPersonSecret
 		arg.Origin,
 		arg.SecretCipher,
 		arg.Hint,
-		arg.AllowAgents,
 	)
 	var i PersonSecret
 	err := row.Scan(
@@ -568,9 +566,8 @@ func (q *Queries) RejectPersonSecret(ctx context.Context, arg RejectPersonSecret
 
 const replacePersonSecret = `-- name: ReplacePersonSecret :one
 UPDATE person_secrets
-SET origin = $1, secret_cipher = $2, hint = $3, status = 'active', rotated_at = now(), rejected_at = NULL,
-    allow_agents = $4
-WHERE id = $5
+SET origin = $1, secret_cipher = $2, hint = $3, status = 'active', rotated_at = now(), rejected_at = NULL
+WHERE id = $4
 RETURNING id, user_id, server_id, origin, secret_cipher, hint, status, allow_agents, created_at, rotated_at, rejected_at, last_used_at
 `
 
@@ -578,7 +575,6 @@ type ReplacePersonSecretParams struct {
 	Origin       string
 	SecretCipher []byte
 	Hint         string
-	AllowAgents  bool
 	ID           uuid.UUID
 }
 
@@ -588,7 +584,6 @@ func (q *Queries) ReplacePersonSecret(ctx context.Context, arg ReplacePersonSecr
 		arg.Origin,
 		arg.SecretCipher,
 		arg.Hint,
-		arg.AllowAgents,
 		arg.ID,
 	)
 	var i PersonSecret
@@ -759,35 +754,6 @@ func (q *Queries) SetMCPServerSecretSetup(ctx context.Context, arg SetMCPServerS
 		&i.SecretHelp,
 		&i.SecretSetupUserID,
 		&i.SecretSetupAt,
-	)
-	return i, err
-}
-
-const setPersonSecretAllowAgents = `-- name: SetPersonSecretAllowAgents :one
-UPDATE person_secrets SET allow_agents = $1 WHERE id = $2 RETURNING id, user_id, server_id, origin, secret_cipher, hint, status, allow_agents, created_at, rotated_at, rejected_at, last_used_at
-`
-
-type SetPersonSecretAllowAgentsParams struct {
-	AllowAgents bool
-	ID          uuid.UUID
-}
-
-func (q *Queries) SetPersonSecretAllowAgents(ctx context.Context, arg SetPersonSecretAllowAgentsParams) (PersonSecret, error) {
-	row := q.db.QueryRow(ctx, setPersonSecretAllowAgents, arg.AllowAgents, arg.ID)
-	var i PersonSecret
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.ServerID,
-		&i.Origin,
-		&i.SecretCipher,
-		&i.Hint,
-		&i.Status,
-		&i.AllowAgents,
-		&i.CreatedAt,
-		&i.RotatedAt,
-		&i.RejectedAt,
-		&i.LastUsedAt,
 	)
 	return i, err
 }

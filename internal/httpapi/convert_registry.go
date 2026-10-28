@@ -66,7 +66,7 @@ func (a *api) toAPIServer(v registry.ServerView) apitypes.McpServer {
 		Counts: toAPICounts(v.Counts), PendingChanges: v.PendingChanges, Health: withWarnings(toAPIHealth(v.Health, true), v.Warnings), Tls: toAPITLS(v.TLS),
 		RefreshedAt: s.RefreshedAt, LastRefreshError: s.LastRefreshError,
 		Requirement: toAPIServerRequirement(v.Requirement), CapturePayloads: &s.CapturePayloads,
-		AuthMode: authModePtr(s), Oauth: a.toAPIServerOAuth(v), PersonSecret: toAPIPersonSecretSettings(v.PersonSecret), MachineOAuth: toAPIMachineOAuth(v), SendIdentity: &s.SendIdentity, RequiresPresentPerson: &s.RequiresPresentPerson, Protocol: toAPIProtocol(s), ReviewDigest: nonEmpty(v.ReviewDigest),
+		AuthMode: authModePtr(s), Oauth: a.toAPIServerOAuth(v), PersonSecret: toAPIPersonSecretSettings(v.PersonSecret), MachineOAuth: toAPIMachineOAuth(v), SendIdentity: &s.SendIdentity, Protocol: toAPIProtocol(s), ReviewDigest: nonEmpty(v.ReviewDigest),
 		Revision: s.Revision, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
 	}
 }
@@ -180,7 +180,6 @@ func toAPICapability(c registry.CapabilityView) apitypes.McpCapability {
 		Approved: c.Approved(), Changed: c.Changed(), ToolClass: (*apitypes.ToolClass)(cp.ToolClass), ClassDrift: registry.ClassDrift(cp),
 		FirstSeenAt: cp.FirstSeenAt, LastSeenAt: cp.LastSeenAt, GoneAt: cp.GoneAt,
 		RequirementOverride: toAPIOverride(cp), Requires: toAPIRequirement(c.Requires, nil),
-		PresentPerson: &apitypes.CapabilityPresentPerson{Mode: apitypes.CapabilityPresentPersonMode(registry.PresenceMode(cp)), Effective: c.EffectivePresentPerson},
 	}
 	if cp.Kind == "tool" {
 		suggestion := apitypes.ToolClass(registry.SuggestedClass(cp.Definition))

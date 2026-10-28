@@ -742,31 +742,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/teams/{team}/mcp-servers/{serverId}/capabilities/{capabilityId}/present-person": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Team slug or ID */
-                team: components["parameters"]["TeamParam"];
-                serverId: components["parameters"]["ServerIdParam"];
-                capabilityId: components["parameters"]["CapabilityIdParam"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Require, or stop requiring, a present person for one capability's calls from agents (editors and above)
-         * @description inherit: follow the server's McpServer.requiresPresentPerson. required: a call on a relay service account is refused with a tool error, recorded as denied with error class person_not_present, unless its token names a person the platform says is present (so also when the token says the person is not present, names nobody, or there is no token). not_required: allowed even when the server requires it. Calls that don't arrive on a relay service account are never affected. If-Match is the server's revision, which this bumps (ETag). Requiring never needs review; relaxing a requirement (a capability that required a present person no longer does) sends a published server back to pending under approval_required (audited mcp_server.publish_request, reason requirement_changed). Audited as mcp_capability.presence_set. 400 invalid_mode; 409 team_archived.
-         */
-        put: operations["setTeamMcpCapabilityPresentPerson"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/teams/{team}/mcp-servers/{serverId}/health-checks": {
         parameters: {
             query?: never;
@@ -1065,125 +1040,6 @@ export interface paths {
          */
         post: operations["adminCheckNetworkUrl"];
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/agent-platforms": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * The trusted agent platforms (platform admins and auditors)
-         * @description By name, with the result of each one's last JWKS fetch and how many service accounts relay for it. Session-only, like every operation on agent platforms (automation tokens get 403 token_not_allowed).
-         */
-        get: operations["adminListAgentPlatforms"];
-        put?: never;
-        /**
-         * Trust an agent platform as an issuer of identity tokens (platform admins; browser session only)
-         * @description jwksUrl defaults to <issuer>/.well-known/mcp-identity-jwks.json and audience to this portal's APP_URL (the platform sets it as the server's identityAudience). The JWKS URL follows the rule for MCP servers (an internal address only for a host a platform admin allowed) and is https always, even for an allowed internal host (422 url_not_allowed with details.reason). 422 invalid_issuer; 400 invalid_name or invalid_audience; 409 name_taken, issuer_taken or too_many_agent_platforms (at most 20). Nothing is fetched. Audited as agent_platform.create.
-         */
-        post: operations["adminCreateAgentPlatform"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/agent-platforms/{platformId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                platformId: components["parameters"]["AgentPlatformIdParam"];
-            };
-            cookie?: never;
-        };
-        /** One trusted agent platform (platform admins and auditors) */
-        get: operations["adminGetAgentPlatform"];
-        put?: never;
-        post?: never;
-        /**
-         * Stop trusting an agent platform (platform admins; browser session only)
-         * @description Its tokens are refused from the next request and its relay service accounts are ordinary service accounts again (their keys keep working as before). Audited as agent_platform.delete (relaysCleared).
-         */
-        delete: operations["adminDeleteAgentPlatform"];
-        options?: never;
-        head?: never;
-        /**
-         * Edit, turn on or turn off a trusted agent platform (platform admins; browser session only)
-         * @description If-Match is the platform's revision. A disabled platform's tokens are refused from the next request (relay accounts stay marked). Same validation as create; 409 name_taken or issuer_taken. Audited as agent_platform.update.
-         */
-        patch: operations["adminUpdateAgentPlatform"];
-        trace?: never;
-    };
-    "/v1/admin/agent-platforms/{platformId}/test": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                platformId: components["parameters"]["AgentPlatformIdParam"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Fetch the platform's JWKS now (platform admins; browser session only)
-         * @description Through the same guarded path as a verification (address rule and allowlist of MCP servers, no redirects, 5 seconds, at most 64 KiB, a JSON content type). Always 200; ok false with an error code says why the fetch failed (not_allowed, redirect, timeout, unreachable, http_status, content_type, too_large, invalid_json, no_usable_keys). The result is stored as the platform's last fetch; a good one refreshes this replica's cache. Not audited (it changes nothing but the stored result).
-         */
-        post: operations["adminTestAgentPlatform"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/agent-platforms/{platformId}/relays": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                platformId: components["parameters"]["AgentPlatformIdParam"];
-            };
-            cookie?: never;
-        };
-        /** The service accounts that relay for the platform (platform admins and auditors) */
-        get: operations["adminListAgentPlatformRelays"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/agent-platforms/{platformId}/relays/{serviceAccountId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                platformId: components["parameters"]["AgentPlatformIdParam"];
-                serviceAccountId: components["parameters"]["ServiceAccountIdParam"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Mark a team service account as a relay for the platform (platform admins; browser session only)
-         * @description Only a relay account's calls may carry the platform's identity token; the person it names is authorised as that person limited to what the account itself could reach (docs/agent-platforms.md). Only platform admins can mark an account; a team's owners and admins can't. Moves the account from another platform it relayed for. 409 platform_disabled (turn the platform on first) or team_archived. Bumps the account's revision. Audited as service_account.relay_set.
-         */
-        put: operations["adminSetServiceAccountRelay"];
-        post?: never;
-        /**
-         * Stop a service account relaying for the platform (platform admins; browser session only)
-         * @description 404 relay_not_found unless the account relays for this platform. Its keys keep working as an ordinary service account's; a token sent with them is ignored (and counted). Audited as service_account.relay_clear.
-         */
-        delete: operations["adminClearServiceAccountRelay"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1988,7 +1844,7 @@ export interface paths {
         get: operations["adminGetAuthProviderAccess"];
         /**
          * Replace who may use an auth provider (platform admins; browser session only)
-         * @description Replaces the mode and both lists. open: any team's server may require the provider (the lists are kept but not consulted). restricted: only a server of a listed team, or a listed server, may; it is checked when a requirement is saved (422 provider_not_allowed), when a person allows a server to use their account (a consent link or My connections) and on every call, so removing a team stops delivery on the next call (also an agent's relayed call). Providers created after the upgrade start restricted with empty lists; existing ones stay open. The provider's revision (If-Match) must match and moves. 422 team_not_found or server_not_found for an ID that does not exist; 422 too_many_entries (500 each); 400 invalid_access_mode. Session only: an automation token never decides who may use a credential provider (decision 58). Audited as auth_provider.access_update with the list before and after.
+         * @description Replaces the mode and both lists. open: any team's server may require the provider (the lists are kept but not consulted). restricted: only a server of a listed team, or a listed server, may; it is checked when a requirement is saved (422 provider_not_allowed), when a person allows a server to use their account (a consent link or My connections) and on every call, so removing a team stops delivery on the next call (also an ordinary MCP call). Providers created after the upgrade start restricted with empty lists; existing ones stay open. The provider's revision (If-Match) must match and moves. 422 team_not_found or server_not_found for an ID that does not exist; 422 too_many_entries (500 each); 400 invalid_access_mode. Session only: an automation token never decides who may use a credential provider (decision 58). Audited as auth_provider.access_update with the list before and after.
          */
         put: operations["adminSetAuthProviderAccess"];
         post?: never;
@@ -2092,7 +1948,7 @@ export interface paths {
         get?: never;
         /**
          * Enter, replace or change the caller's own key for a server
-         * @description Browser session only (403 session_required; API keys, automation tokens, service accounts and agents are refused: a key is a person's own decision). The key is sealed with ENCRYPTION_KEY, bound to the person, the server and the origin it has now, and never returned, logged or audited (person_secret.create, person_secret.rotate; person_secret.agents_update when only allowAgents changes). The request names the origin the person was shown. 404 server_not_found (no such server, or one the caller may not use through a gateway); 409 not_person_secret; 409 server_changed (another origin than the one shown: reload); 400 invalid_secret (no origin); 400 invalid_secret_value (8-4096 characters on one line); 400 secret_required (no key stored and none sent); 403 when useForSetup is asked by someone who is not an editor of the server's team. 429 slow_down (20 a minute per person, shared with revokeMyServerSecret).
+         * @description Browser session only (403 session_required; API keys, automation tokens, service accounts and agents are refused: a key is a person's own decision). The key is sealed with ENCRYPTION_KEY, bound to the person, the server and the origin it has now, and never returned, logged or audited (person_secret.create, person_secret.rotate; never the secret value). The request names the origin the person was shown. 404 server_not_found (no such server, or one the caller may not use through a gateway); 409 not_person_secret; 409 server_changed (another origin than the one shown: reload); 400 invalid_secret (no origin); 400 invalid_secret_value (8-4096 characters on one line); 400 secret_required (no key stored and none sent); 403 when useForSetup is asked by someone who is not an editor of the server's team. 429 slow_down (20 a minute per person, shared with revokeMyServerSecret).
          */
         put: operations["setMyServerSecret"];
         post?: never;
@@ -3801,8 +3657,6 @@ export interface components {
             personSecret?: components["schemas"]["PersonSecretSettings"] | null;
             /** @description The portal's own OAuth client for this server when authMode is machine_oauth, else null. The client secret is never returned. Absent from servers before v0.3.2 */
             machineOAuth?: components["schemas"]["McpServerMachineOAuth"] | null;
-            /** @description Refuse calls on a relay service account unless they are for a person the platform says is present (person_present true), for every capability without its own override (McpCapability.presentPerson): scheduled or background work, a token that names nobody and a relay key with no token are refused too. Default false. Calls that don't arrive on a relay service account are never affected. Absent from servers before v0.3 (false) */
-            requiresPresentPerson?: boolean;
             /** @description Send the identity token (decision 45). true (the default) keeps decision 7: every forwarded call carries the signed identity JWT (Authorization: Bearer, or MCP-Gateway-Identity when the server has a static Authorization header or is in oauth mode). false: the JWT is not sent to this server at all (no header), recommended for servers run outside the company such as GitHub's hosted MCP server, so names, emails and teams are not sent to a third party. Absent from servers before Phase 7 (true). New servers with authMode none on a public host default to false (decision 64); servers saved earlier keep their value */
             sendIdentity?: boolean;
             /** @description The MCP protocol version the portal last negotiated with the upstream server (set by refresh, health checks and test); read-only. Null until the first successful exchange. */
@@ -3977,8 +3831,6 @@ export interface components {
             machineOAuth?: components["schemas"]["McpServerMachineOAuthInput"];
             /** @description Omit to keep. Not a review trigger (turning it off sends less). Audited in mcp_server.update */
             sendIdentity?: boolean;
-            /** @description Omit to keep. Turning it on never needs review; turning it off, when it made some capability require a present person, sends a published server back to pending under approval_required (reason requirement_changed), like widening a requirement. Audited in mcp_server.update */
-            requiresPresentPerson?: boolean;
         };
         McpServerCreated: {
             server: components["schemas"]["McpServer"];
@@ -4044,7 +3896,6 @@ export interface components {
             requirementOverride: components["schemas"]["CapabilityRequirementOverride"];
             /** @description The effective requirement (the server's, or the override); null when calls get no provider token */
             requires: components["schemas"]["CapabilityRequirement"] | null;
-            presentPerson?: components["schemas"]["CapabilityPresentPerson"];
         };
         McpRefreshResult: {
             listed: number;
@@ -4157,100 +4008,7 @@ export interface components {
             matchedEntry?: components["schemas"]["NetworkEntry"];
             resolvedAddresses?: components["schemas"]["NetworkCheckAddress"][];
         };
-        /** @description An external agent platform the portal trusts to name the person behind a relayed agent call (decisions 65 and 66). It holds no secrets, because the keys are public. */
-        AgentPlatform: {
-            /** Format: uuid */
-            id: string;
-            name: string;
-            /** @description The iss of the platform's tokens, exactly as it writes it (its APP_URL) */
-            issuer: string;
-            jwksUrl: string;
-            /** @description The aud a token must contain (this portal's APP_URL by default; the platform sets it as the server's identityAudience) */
-            audience: string;
-            enabled: boolean;
-            /**
-             * Format: int64
-             * @description Service accounts marked as relays for the platform
-             */
-            relayCount: number;
-            /** @description The latest JWKS fetch by any replica (a verification or a Test); null before the first */
-            lastFetch?: components["schemas"]["AgentPlatformFetch"] | null;
-            /** @description The key IDs the last successful fetch published (empty after a failed one) */
-            keyIds: string[];
-            revision: components["schemas"]["Revision"];
-            /** Format: date-time */
-            createdAt: string;
-            /** Format: date-time */
-            updatedAt: string;
-        };
-        AgentPlatformFetch: {
-            /** Format: date-time */
-            at: string;
-            ok: boolean;
-            /** @description not_allowed, redirect, timeout, unreachable, http_status, content_type, too_large, invalid_json or no_usable_keys */
-            error?: string | null;
-        };
-        AgentPlatformCreate: {
-            name: string;
-            /** @description An absolute https URL without query or fragment, compared exactly with the token's iss */
-            issuer: string;
-            /** @description Default <issuer>/.well-known/mcp-identity-jwks.json */
-            jwksUrl?: string;
-            /** @description Default this portal's APP_URL */
-            audience?: string;
-            /** @default true */
-            enabled: boolean;
-        };
-        AgentPlatformUpdate: {
-            name?: string;
-            issuer?: string;
-            /** @description An empty string goes back to the default for the issuer */
-            jwksUrl?: string;
-            /** @description An empty string goes back to this portal's APP_URL */
-            audience?: string;
-            enabled?: boolean;
-        };
-        AgentPlatformTestResult: {
-            ok: boolean;
-            /** @description AgentPlatformFetch.error */
-            error?: string | null;
-            /** @description The platform's answer when error is http_status */
-            httpStatus?: number | null;
-            keyIds: string[];
-            /** Format: date-time */
-            checkedAt: string;
-            /** Format: int64 */
-            latencyMs: number;
-            /**
-             * Format: int64
-             * @description How long a replica caches a good answer (Cache-Control max-age within 10 seconds to 5 minutes)
-             */
-            cacheSeconds?: number | null;
-        };
-        AgentPlatformRelay: {
-            /** Format: uuid */
-            serviceAccountId: string;
-            name: string;
-            /** Format: uuid */
-            teamId: string;
-            teamSlug: string;
-            teamName: string;
-            role: components["schemas"]["ServiceAccountRole"];
-            enabled: boolean;
-            /** Format: date-time */
-            markedAt?: string | null;
-        };
-        CapabilityPresentPersonOverride: {
-            /** @enum {string} */
-            mode: "inherit" | "required" | "not_required";
-        };
-        CapabilityPresentPerson: {
-            /** @enum {string} */
-            mode: "inherit" | "required" | "not_required";
-            /** @description Relayed calls of this capability need the person present (the override, else the server's switch) */
-            effective: boolean;
-        };
-        /** @description The agent behind a call relayed by a trusted agent platform. The principal of such a call is the relay service account; person (when the token named one) is who the agent acted for. */
+        /** @description Read-only historical attribution from the retired external-platform integration. The agent behind an old call. The principal of such a call is the relay service account; person (when the token named one) is who the agent acted for. */
         AgentCall: {
             /** Format: uuid */
             platformId?: string | null;
@@ -4664,7 +4422,7 @@ export interface components {
             /** @description clientInfo.name from initialize, when sent */
             clientName?: string;
             outcome: components["schemas"]["McpCallOutcome"];
-            /** @description Why a call was denied or failed, for example no_access, role, unknown, key_scope (the API key is limited to other gateways), tool_scope (a credential, account or matching gateway-grant ceiling excludes the tool), gateway_disabled or an unavailability reason. For capabilities that require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or server_not_allowed (connected, but the person hasn't allowed this server, at its current address, to use the account); denied with service_account, provider_disabled, provider_not_allowed (the provider is restricted and its access list excludes the server), person_not_present (an agent's call whose server or capability requires a present person) or, for an agent's call for a person, person_no_account or person_suspended; needs_authorization with needs_connection for an agent's call (the person must connect an account; the answer was a tool error with no link); upstream_error with provider_unavailable. For a server where each person enters their own key (decision 72): needs_authorization with secret_missing or secret_rejected (the answer carried the link, or for an agent's call a tool error with none) or agents_not_allowed (an agent's call, the person has a key but hasn't allowed agents); denied with service_account or person_suspended. */
+            /** @description Why a call was denied or failed, for example no_access, role, unknown, key_scope (the API key is limited to other gateways), tool_scope (a credential, account or matching gateway-grant ceiling excludes the tool), gateway_disabled or an unavailability reason. For capabilities that require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or server_not_allowed (connected, but the person hasn't allowed this server, at its current address, to use the account); denied with service_account, provider_disabled, provider_not_allowed (the provider is restricted and its access list excludes the server); upstream_error with provider_unavailable. For person-secret mode, needs_authorization with secret_missing or secret_rejected; denied with service_account or person_suspended. Historical rows may retain retired external-platform error classes such as person_not_present, person_no_account, needs_connection and agents_not_allowed. */
             errorClass?: string;
             /** @description The auth provider the capability required at the time of the call (absent when none) */
             providerSlug?: string;
@@ -4684,7 +4442,7 @@ export interface components {
             traceUrl?: string;
             /** @description A captured payload is stored that the caller may open (team views; captured under this team's gateway or server switch; admin views; any). Absent from servers before Phase 6. */
             captured?: boolean;
-            /** @description Set when a trusted agent platform relayed the call (docs/agent-platforms.md); the principal is then the relay service account. Absent from servers before v0.3 */
+            /** @description Read-only historical attribution from a retired external-platform integration; the principal is then the relay service account. Absent from servers before v0.3 */
             agent?: components["schemas"]["AgentCall"] | null;
         };
         CallRef: {
@@ -4802,6 +4560,8 @@ export interface components {
          */
         ServiceAccountRole: "member" | "editor";
         ServiceAccount: {
+            /** @description Legacy external-platform relay; permanently retired. Create a new ordinary account and key instead. */
+            readonly retired?: boolean;
             toolScope?: components["schemas"]["ToolScope"];
             /** Format: uuid */
             id: string;
@@ -4818,18 +4578,11 @@ export interface components {
             /** Format: date-time */
             lastUsedAt?: string | null;
             createdByName?: string | null;
-            /** @description The trusted agent platform this account relays for (set by a platform admin only; null for an ordinary service account). Absent from servers before v0.3 */
-            relayPlatform?: components["schemas"]["ServiceAccountRelayPlatform"] | null;
             revision: components["schemas"]["Revision"];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
-        };
-        ServiceAccountRelayPlatform: {
-            /** Format: uuid */
-            id: string;
-            name: string;
         };
         ServiceAccountPage: {
             items: components["schemas"]["ServiceAccount"][];
@@ -5400,8 +5153,6 @@ export interface components {
              * @enum {string|null}
              */
             status?: "active" | "rejected" | null;
-            /** @description An agent that relays a call for the person may use the key (decisions 66 and 68). Off by default */
-            allowAgents: boolean;
             /** Format: date-time */
             createdAt?: string | null;
             /** Format: date-time */
@@ -5421,10 +5172,8 @@ export interface components {
         SetServerSecret: {
             /** @description The origin the page showed (ServerSecret.origin); refused (409 server_changed) when the server has another now */
             origin: string;
-            /** @description The key, on one line (surrounding space is trimmed). Omit to keep the stored key while changing allowAgents or useForSetup. Sealed, never returned, logged or audited */
+            /** @description The key, on one line (surrounding space is trimmed). Omit to keep the stored key while changing useForSetup. Sealed, never returned, logged or audited */
             value?: string;
-            /** @description Omit to keep (false for a new entry) */
-            allowAgents?: boolean;
             /** @description Read the server's capabilities with this key from now on (editors of the server's team only, else 403). The capabilities are read once it is saved; a failure is stored as the server's refresh error */
             useForSetup?: boolean;
         };
@@ -6857,7 +6606,6 @@ export interface components {
         /** @description Only calls made by this person (any credential) */
         CallUserParam: string;
         OAuthGrantIdParam: string;
-        AgentPlatformIdParam: string;
         ServiceAccountIdParam: string;
         /** @description Only calls made by this service account */
         CallServiceAccountParam: string;
@@ -8133,47 +7881,6 @@ export interface operations {
             428: components["responses"]["ErrorReply"];
         };
     };
-    setTeamMcpCapabilityPresentPerson: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
-                "If-Match": components["parameters"]["IfMatchHeader"];
-            };
-            path: {
-                /** @description Team slug or ID */
-                team: components["parameters"]["TeamParam"];
-                serverId: components["parameters"]["ServerIdParam"];
-                capabilityId: components["parameters"]["CapabilityIdParam"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CapabilityPresentPersonOverride"];
-            };
-        };
-        responses: {
-            /** @description The capability with its new override */
-            200: {
-                headers: {
-                    ETag: components["headers"]["ETag"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["McpCapability"];
-                    };
-                };
-            };
-            400: components["responses"]["ErrorReply"];
-            403: components["responses"]["ErrorReply"];
-            404: components["responses"]["ErrorReply"];
-            409: components["responses"]["ErrorReply"];
-            412: components["responses"]["ErrorReply"];
-            428: components["responses"]["ErrorReply"];
-        };
-    };
     listTeamMcpHealthChecks: {
         parameters: {
             query?: never;
@@ -8672,239 +8379,6 @@ export interface operations {
             };
             400: components["responses"]["ErrorReply"];
             403: components["responses"]["ErrorReply"];
-        };
-    };
-    adminListAgentPlatforms: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The platforms */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["AgentPlatform"][];
-                    };
-                };
-            };
-            403: components["responses"]["ErrorReply"];
-        };
-    };
-    adminCreateAgentPlatform: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentPlatformCreate"];
-            };
-        };
-        responses: {
-            /** @description The platform */
-            201: {
-                headers: {
-                    ETag: components["headers"]["ETag"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["AgentPlatform"];
-                    };
-                };
-            };
-            400: components["responses"]["ErrorReply"];
-            403: components["responses"]["ErrorReply"];
-            409: components["responses"]["ErrorReply"];
-            422: components["responses"]["ErrorReply"];
-        };
-    };
-    adminGetAgentPlatform: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                platformId: components["parameters"]["AgentPlatformIdParam"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The platform */
-            200: {
-                headers: {
-                    ETag: components["headers"]["ETag"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["AgentPlatform"];
-                    };
-                };
-            };
-            403: components["responses"]["ErrorReply"];
-            404: components["responses"]["ErrorReply"];
-        };
-    };
-    adminDeleteAgentPlatform: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                platformId: components["parameters"]["AgentPlatformIdParam"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: components["responses"]["OkReply"];
-            403: components["responses"]["ErrorReply"];
-            404: components["responses"]["ErrorReply"];
-        };
-    };
-    adminUpdateAgentPlatform: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
-                "If-Match": components["parameters"]["IfMatchHeader"];
-            };
-            path: {
-                platformId: components["parameters"]["AgentPlatformIdParam"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentPlatformUpdate"];
-            };
-        };
-        responses: {
-            /** @description The platform */
-            200: {
-                headers: {
-                    ETag: components["headers"]["ETag"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["AgentPlatform"];
-                    };
-                };
-            };
-            400: components["responses"]["ErrorReply"];
-            403: components["responses"]["ErrorReply"];
-            404: components["responses"]["ErrorReply"];
-            409: components["responses"]["ErrorReply"];
-            412: components["responses"]["ErrorReply"];
-            422: components["responses"]["ErrorReply"];
-            428: components["responses"]["ErrorReply"];
-        };
-    };
-    adminTestAgentPlatform: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                platformId: components["parameters"]["AgentPlatformIdParam"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The result */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["AgentPlatformTestResult"];
-                    };
-                };
-            };
-            403: components["responses"]["ErrorReply"];
-            404: components["responses"]["ErrorReply"];
-        };
-    };
-    adminListAgentPlatformRelays: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                platformId: components["parameters"]["AgentPlatformIdParam"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The relay accounts by team and name */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["AgentPlatformRelay"][];
-                    };
-                };
-            };
-            403: components["responses"]["ErrorReply"];
-            404: components["responses"]["ErrorReply"];
-        };
-    };
-    adminSetServiceAccountRelay: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                platformId: components["parameters"]["AgentPlatformIdParam"];
-                serviceAccountId: components["parameters"]["ServiceAccountIdParam"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The relay account */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["AgentPlatformRelay"];
-                    };
-                };
-            };
-            403: components["responses"]["ErrorReply"];
-            404: components["responses"]["ErrorReply"];
-            409: components["responses"]["ErrorReply"];
-        };
-    };
-    adminClearServiceAccountRelay: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                platformId: components["parameters"]["AgentPlatformIdParam"];
-                serviceAccountId: components["parameters"]["ServiceAccountIdParam"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: components["responses"]["OkReply"];
-            403: components["responses"]["ErrorReply"];
-            404: components["responses"]["ErrorReply"];
         };
     };
     adminGetTeamPublishing: {

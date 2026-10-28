@@ -9,7 +9,6 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/httpapi/apitypes"
 	"github.com/ncecere/open-mcp-portal/internal/httpx"
 	"github.com/ncecere/open-mcp-portal/internal/serviceaccounts"
-	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 )
 
 // Service accounts and their keys (api/openapi.yaml, tag service-accounts;
@@ -41,19 +40,11 @@ func (a *api) serviceAccountAdminRoutes() []route {
 func toAPIServiceAccount(v serviceaccounts.View) apitypes.ServiceAccount {
 	sa := v.Account
 	return apitypes.ServiceAccount{
-		RelayPlatform: relayPlatform(sa, v.RelayPlatformName), ToolScope: toAPIToolScope(sa.ToolScope),
+		Retired: &sa.RelayPlatformID.Valid, ToolScope: toAPIToolScope(sa.ToolScope),
 		Id: sa.ID, TeamId: sa.TeamID, TeamSlug: v.TeamSlug, Name: sa.Name, Description: sa.Description,
 		Role: apitypes.ServiceAccountRole(sa.Role), Enabled: sa.Enabled, ActiveKeyCount: v.ActiveKeys, LastUsedAt: sa.LastUsedAt,
 		CreatedByName: v.CreatedByName, Revision: sa.Revision, CreatedAt: sa.CreatedAt, UpdatedAt: sa.UpdatedAt,
 	}
-}
-
-// relayPlatform is the agent platform a service account relays for (nil: none).
-func relayPlatform(sa dbgen.ServiceAccount, name string) *apitypes.ServiceAccountRelayPlatform {
-	if !sa.RelayPlatformID.Valid {
-		return nil
-	}
-	return &apitypes.ServiceAccountRelayPlatform{Id: sa.RelayPlatformID.UUID, Name: name}
 }
 
 func toAPIServiceAccountKey(v serviceaccounts.KeyView, now time.Time) apitypes.ServiceAccountKey {

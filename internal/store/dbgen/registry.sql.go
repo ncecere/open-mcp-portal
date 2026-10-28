@@ -767,24 +767,22 @@ func (q *Queries) ListMCPCapabilities(ctx context.Context, arg ListMCPCapabiliti
 }
 
 const listMCPCapabilityFingerprints = `-- name: ListMCPCapabilityFingerprints :many
-SELECT c.server_id, c.kind, c.name, c.fingerprint, c.requires_present_person, c.tool_class
+SELECT c.server_id, c.kind, c.name, c.fingerprint, c.tool_class
 FROM mcp_capabilities c
 WHERE c.server_id = ANY($1::uuid[]) AND c.gone_at IS NULL
 ORDER BY c.server_id, c.kind, c.name
 `
 
 type ListMCPCapabilityFingerprintsRow struct {
-	ServerID              uuid.UUID
-	Kind                  string
-	Name                  string
-	Fingerprint           string
-	RequiresPresentPerson *bool
-	ToolClass             *string
+	ServerID    uuid.UUID
+	Kind        string
+	Name        string
+	Fingerprint string
+	ToolClass   *string
 }
 
 // What a reviewer's digest covers: the listed (not gone) capabilities of
-// servers, as (kind, name, fingerprint) and the capability's own present-person
-// override (NULL: the server's switch decides).
+// servers, as (kind, name, fingerprint) and owner-set tool class (NULL: the server's switch decides).
 func (q *Queries) ListMCPCapabilityFingerprints(ctx context.Context, serverIds []uuid.UUID) ([]ListMCPCapabilityFingerprintsRow, error) {
 	rows, err := q.db.Query(ctx, listMCPCapabilityFingerprints, serverIds)
 	if err != nil {
@@ -799,7 +797,6 @@ func (q *Queries) ListMCPCapabilityFingerprints(ctx context.Context, serverIds [
 			&i.Kind,
 			&i.Name,
 			&i.Fingerprint,
-			&i.RequiresPresentPerson,
 			&i.ToolClass,
 		); err != nil {
 			return nil, err
@@ -1787,30 +1784,29 @@ UPDATE mcp_servers
 SET name = $1, description = $2, url = $3, auth_header_name = $4,
     auth_value_cipher = $5, auth_value_hint = $6,
     timeout_seconds = $7, enabled = $8, auth_provider_id = $9, auth_scopes = $10,
-    auth_mode = $11, send_identity = $12, requires_present_person = $13,
+    auth_mode = $11, send_identity = $12,
     oauth_setup_user_id = CASE WHEN $11::text = 'oauth' THEN oauth_setup_user_id END,
     oauth_setup_at = CASE WHEN $11::text = 'oauth' THEN oauth_setup_at END,
-    revision = revision + 1, updated_by = $14, updated_at = now()
-WHERE id = $15
+    revision = revision + 1, updated_by = $13, updated_at = now()
+WHERE id = $14
 RETURNING id, team_id, slug, name, description, url, transport, auth_header_name, auth_value_cipher, auth_value_hint, timeout_seconds, enabled, publish_state, publish_requested_at, publish_requested_by, publish_request_note, publish_reviewed_at, publish_reviewed_by, publish_review_note, published_at, refreshed_at, last_refresh_error, revision, created_by, created_at, updated_by, updated_at, auth_provider_id, auth_scopes, capture_payloads, auth_mode, oauth_setup_user_id, oauth_setup_at, send_identity, protocol_era, protocol_version, protocol_negotiated_at, requires_present_person, secret_placement, secret_name, secret_prefix, secret_label, secret_help, secret_setup_user_id, secret_setup_at
 `
 
 type UpdateMCPServerParams struct {
-	Name                  string
-	Description           string
-	URL                   string
-	AuthHeaderName        *string
-	AuthValueCipher       []byte
-	AuthValueHint         string
-	TimeoutSeconds        int32
-	Enabled               bool
-	AuthProviderID        uuid.NullUUID
-	AuthScopes            []string
-	AuthMode              string
-	SendIdentity          bool
-	RequiresPresentPerson bool
-	UpdatedBy             uuid.NullUUID
-	ID                    uuid.UUID
+	Name            string
+	Description     string
+	URL             string
+	AuthHeaderName  *string
+	AuthValueCipher []byte
+	AuthValueHint   string
+	TimeoutSeconds  int32
+	Enabled         bool
+	AuthProviderID  uuid.NullUUID
+	AuthScopes      []string
+	AuthMode        string
+	SendIdentity    bool
+	UpdatedBy       uuid.NullUUID
+	ID              uuid.UUID
 }
 
 func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams) (McpServer, error) {
@@ -1827,7 +1823,6 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		arg.AuthScopes,
 		arg.AuthMode,
 		arg.SendIdentity,
-		arg.RequiresPresentPerson,
 		arg.UpdatedBy,
 		arg.ID,
 	)

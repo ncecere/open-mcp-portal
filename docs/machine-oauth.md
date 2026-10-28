@@ -5,7 +5,7 @@ not the person: an internal API behind an IdP, a vendor server with a machine cl
 the server's authorization server. It asks for a token with the **client credentials grant** (RFC 6749 section 4.4),
 keeps it in memory, and sends it as `Authorization: Bearer` to the server's stored URL on **every** request to it:
 discovery, Refresh, Test, scheduled health checks and forwarded calls, from every caller alike (a person, a service
-account, an agent platform's relay). Before this, the answer was a long-lived static header rotated by hand.
+account). Before this, the answer was a long-lived static header rotated by hand.
 
 It is the portal's credential, not a person's. Everyone who can call the server shares one token; the call log and the
 identity token ([upstream-identity.md](upstream-identity.md)) are the only record of who called. Use
@@ -50,7 +50,7 @@ question; the review gate covers other teams). A platform automation token may *
   many calls were refused together; a call that finds a newer token already cached uses it) and retries **once**. A
   second 401 is class `auth`. Discovery, Test and health checks do the same.
 - **Identity.** The bearer occupies `Authorization`, so the identity token travels as `MCP-Gateway-Identity` (as in oauth
-  mode and when a static part sets `Authorization`), on calls, on a manual Test, and on calls an agent platform relays.
+  mode and when a static part sets `Authorization`), on calls, on a manual Test.
   Scheduled health checks and Refresh send no identity token, as before.
 - **Service accounts and agents.** The credential belongs to the server, so a service account (and a relayed agent call)
   can call a tool on such a server like any caller; the identity token's `principal_type` stays what it was.

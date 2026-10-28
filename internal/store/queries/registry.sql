@@ -52,7 +52,7 @@ UPDATE mcp_servers
 SET name = @name, description = @description, url = @url, auth_header_name = @auth_header_name,
     auth_value_cipher = @auth_value_cipher, auth_value_hint = @auth_value_hint,
     timeout_seconds = @timeout_seconds, enabled = @enabled, auth_provider_id = @auth_provider_id, auth_scopes = @auth_scopes,
-    auth_mode = @auth_mode, send_identity = @send_identity, requires_present_person = @requires_present_person,
+    auth_mode = @auth_mode, send_identity = @send_identity,
     oauth_setup_user_id = CASE WHEN @auth_mode::text = 'oauth' THEN oauth_setup_user_id END,
     oauth_setup_at = CASE WHEN @auth_mode::text = 'oauth' THEN oauth_setup_at END,
     revision = revision + 1, updated_by = @updated_by, updated_at = now()
@@ -171,9 +171,8 @@ GROUP BY c.server_id, c.kind;
 
 -- name: ListMCPCapabilityFingerprints :many
 -- What a reviewer's digest covers: the listed (not gone) capabilities of
--- servers, as (kind, name, fingerprint) and the capability's own present-person
--- override (NULL: the server's switch decides).
-SELECT c.server_id, c.kind, c.name, c.fingerprint, c.requires_present_person, c.tool_class
+-- servers, as (kind, name, fingerprint) and owner-set tool class (NULL: the server's switch decides).
+SELECT c.server_id, c.kind, c.name, c.fingerprint, c.tool_class
 FROM mcp_capabilities c
 WHERE c.server_id = ANY(@server_ids::uuid[]) AND c.gone_at IS NULL
 ORDER BY c.server_id, c.kind, c.name;

@@ -21,7 +21,7 @@ Success means:
 - Later, tools that need the user's GitHub/Google/internal-API token get it from the portal's token vault.
 - Admins can see health, usage and an audit trail; call payloads are only kept where a team opted in.
 
-Out of scope: hosting or running agents, building MCP servers, an LLM gateway.
+Out of scope: hosting or running agents, building MCP servers, an LLM gateway, and trusting external agent platforms to impersonate people. See [platform retirement](docs/platform-retirement.md). Ordinary MCP clients, including the pi coding client, remain supported.
 
 ## 2. Architecture
 
@@ -132,8 +132,7 @@ team, under `self_publish`) approves the change.
 optional minimum team role), access grants (team | user | SSO group), payload capture setting.
 
 **Identity JWT** (sent upstream as `Authorization: Bearer` or a configurable header): `iss` = gateway URL,
-`aud` = server URL, `sub` = user ID, `email`, `name`, `teams`, `gateway`, `tool`, `act` (service account
-when headless), `exp` ≤ 5 minutes, `jti`. Signed ES256; keys rotate; published at `/.well-known/jwks.json`.
+`aud` = server URL, `sub` = user ID, `email`, `name`, `teams`, `gateway`, `tool`, `exp` ≤ 5 minutes, `jti`. Signed ES256; keys rotate; published at `/.well-known/jwks.json`.
 
 **Call record**: time, caller (user / service account / key), client, gateway, server, capability, outcome,
 error class, latency, request/response bytes; optional captured payload (truncated, redacted) with retention.

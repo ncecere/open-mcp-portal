@@ -52,6 +52,7 @@ func TestProviderAccessMigrationKeepsProvidersOpen(t *testing.T) {
 	}
 
 	// The schema of the previous release, with a provider as it would have it.
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, access-1); err != nil {
 		t.Fatalf("down: %v", err)
 	}

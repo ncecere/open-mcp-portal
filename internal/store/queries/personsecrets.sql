@@ -28,20 +28,16 @@ SELECT * FROM person_secrets WHERE user_id = @user_id AND server_id = @server_id
 SELECT * FROM person_secrets WHERE user_id = @user_id AND server_id = @server_id FOR UPDATE;
 
 -- name: InsertPersonSecret :one
-INSERT INTO person_secrets (id, user_id, server_id, origin, secret_cipher, hint, allow_agents)
-VALUES (@id, @user_id, @server_id, @origin, @secret_cipher, @hint, @allow_agents)
+INSERT INTO person_secrets (id, user_id, server_id, origin, secret_cipher, hint)
+VALUES (@id, @user_id, @server_id, @origin, @secret_cipher, @hint)
 RETURNING *;
 
 -- name: ReplacePersonSecret :one
 -- A new value for the same row (its ID, and so the AAD, stays): active again.
 UPDATE person_secrets
-SET origin = @origin, secret_cipher = @secret_cipher, hint = @hint, status = 'active', rotated_at = now(), rejected_at = NULL,
-    allow_agents = @allow_agents
+SET origin = @origin, secret_cipher = @secret_cipher, hint = @hint, status = 'active', rotated_at = now(), rejected_at = NULL
 WHERE id = @id
 RETURNING *;
-
--- name: SetPersonSecretAllowAgents :one
-UPDATE person_secrets SET allow_agents = @allow_agents WHERE id = @id RETURNING *;
 
 -- name: RejectPersonSecret :execrows
 -- The server refused the secret with 401 or 403. Only the value that was

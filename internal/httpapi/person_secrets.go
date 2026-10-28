@@ -67,7 +67,7 @@ func toAPIPersonSecretSettings(v *registry.PersonSecretView) *apitypes.PersonSec
 func toAPIServerSecret(m personsecrets.Mine) apitypes.ServerSecret {
 	out := apitypes.ServerSecret{
 		Server: apitypes.ConnectServer{Id: m.Server.ID, Slug: m.Server.Slug, Name: m.Server.Name, TeamSlug: m.Server.TeamSlug, TeamName: m.Server.TeamName},
-		Config: toAPIPersonSecretInput(m.Config), Origin: m.Origin, HasSecret: m.Has, AllowAgents: m.AllowAgents,
+		Config: toAPIPersonSecretInput(m.Config), Origin: m.Origin, HasSecret: m.Has,
 		Reachable: m.Reachable, CanSetup: m.CanSetup, IsSetup: m.IsSetup,
 	}
 	if m.Has {
@@ -97,7 +97,7 @@ func (a *api) setMyServerSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m, err := a.PersonSecrets.Set(r.Context(), a.actor(r), serverID, personsecrets.SetInput{Value: in.Value, Origin: in.Origin,
-		AllowAgents: in.AllowAgents, UseForSetup: in.UseForSetup != nil && *in.UseForSetup})
+		UseForSetup: in.UseForSetup != nil && *in.UseForSetup})
 	if failed(w, r, err) {
 		return
 	}

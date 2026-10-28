@@ -659,71 +659,6 @@ func TestPersonSecretSuspensionBlocksAndKeepsTheKey(t *testing.T) {
 	}
 }
 
-func TestPersonSecretRelayedCalls(t *testing.T) {
-	e := newSecEnv(t)
-	fx := setupRelay(t, e.gwEnv)
-	before := e.kf.Requests()
-	agent := agentSpec{Email: "blair@localhost"}
-
-	// No key: a tool error naming where to enter it, no link, nothing stored, nothing sent.
-	_, out := fx.callTool(agent, secretsRPC, nil)
-	text, isErr := toolText(t, out)
-	if !isErr || !strings.Contains(text, "My connections") || strings.Contains(text, "http") || out["error"] != nil {
-		t.Fatalf("relayed, no key = %v", out)
-	}
-	if n := e.scalar(`SELECT count(*)::text FROM secret_requests`); n != "0" {
-		t.Fatalf("an agent's call stored %s links", n)
-	}
-	rec := fx.recordAfter(0)
-	if rec.Outcome != "needs_authorization" || rec.Class != "secret_missing" || rec.User == "" || rec.Agent == "" {
-		t.Fatalf("record = %+v", rec)
-	}
-	// A key entered but agents not allowed: a different error, still no link.
-	e.putKey(e.member, blairKey, nil, 200)
-	_, out = fx.callTool(agent, secretsRPC, nil)
-	text, isErr = toolText(t, out)
-	if !isErr || !strings.Contains(text, "allowed agents") && !strings.Contains(text, "haven't allowed agents") || strings.Contains(text, "http") {
-		t.Fatalf("relayed, agents not allowed = %v", out)
-	}
-	if e.kf.Requests() != before {
-		t.Fatal("an agent's call used a key its person hadn't allowed agents to use")
-	}
-	// Allowed: the call carries Blair's key (and never the owner's, who has one too).
-	body := string(e.putKey(e.member, "", map[string]any{"allowAgents": true}, 200))
-	if !strings.Contains(body, `"allowAgents":true`) {
-		t.Fatalf("entry = %s", body)
-	}
-	_, out = fx.callTool(agent, secretsRPC, nil)
-	e.sentOK(out, blairKey)
-	// The relay account without a person is a service account's call: refused.
-	_, out = fx.callTool("", secretsRPC, nil)
-	if c, _, data := rpcErr(out); c != -32010 || data["reason"] != "service_account" {
-		t.Fatalf("relay account alone = %v", out)
-	}
-	// Another person's agent has their own switch: the owner has a key but hasn't
-	// allowed agents, and never gets Blair's.
-	before = e.kf.Requests()
-	_, out = fx.callTool(agentSpec{Email: "user@localhost"}, secretsRPC, nil)
-	if text, isErr := toolText(t, out); !isErr || !strings.Contains(text, "allowed agents") || e.kf.Requests() != before {
-		t.Fatalf("the owner's agent call = %v", out)
-	}
-	e.putKey(e.owner, "", map[string]any{"allowAgents": true}, 200)
-	_, out = fx.callTool(agentSpec{Email: "user@localhost"}, secretsRPC, nil)
-	e.sentOK(out, ownerKey)
-	// Turning it off stops it at once, and the person's own calls are unaffected.
-	e.putKey(e.member, "", map[string]any{"allowAgents": false}, 200)
-	before = e.kf.Requests()
-	if _, out = fx.callTool(agent, secretsRPC, nil); e.kf.Requests() != before {
-		t.Fatalf("an agent used a key after the person turned it off: %v", out)
-	}
-	if c, out := e.call(e.blairMCP, secretsRPC); c != 200 {
-		t.Fatalf("the person's own call = %v", out)
-	} else {
-		e.sentOK(out, blairKey)
-	}
-	fx.noSecrets(e.logs, blairKey, ownerKey)
-}
-
 func TestPersonSecretNeverLeaks(t *testing.T) {
 	e := newSecEnv(t)
 	// Query placement with a key full of characters that encode, the server's
@@ -734,7 +669,7 @@ func TestPersonSecretNeverLeaks(t *testing.T) {
 		t.Fatalf("capture: %d %s", code, ec)
 	}
 	e.putKey(e.owner, ownerKey, map[string]any{"useForSetup": true}, 200)
-	e.putKey(e.member, querySecret, map[string]any{"allowAgents": true}, 200)
+	e.putKey(e.member, querySecret, nil, 200)
 	sentinels := []string{ownerKey, querySecret, url.QueryEscape(querySecret), url.PathEscape(querySecret), "sentinel&0003", "sentinel%260003"}
 
 	// A good call whose server echoes what it got, with the key in the arguments too.

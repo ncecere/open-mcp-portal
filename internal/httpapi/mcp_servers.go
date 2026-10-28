@@ -266,7 +266,7 @@ func (a *api) updateTeamMcpServer(w http.ResponseWriter, r *http.Request) {
 		Credentials:    fromAPICredentialsPtr(in.Credentials),
 		TimeoutSeconds: in.TimeoutSeconds, Enabled: in.Enabled, SetRequirement: setRequirement, Requirement: fromAPIRequirement(in.Requirement),
 		CapturePayloads: in.CapturePayloads, AuthMode: strPtr(in.AuthMode), OAuth: fromAPIOAuthInput(in.Oauth), SendIdentity: in.SendIdentity,
-		RequiresPresentPerson: in.RequiresPresentPerson, PersonSecret: fromAPIPersonSecretInput(in.PersonSecret),
+		PersonSecret: fromAPIPersonSecretInput(in.PersonSecret),
 		MachineOAuth: fromAPIMachineInput(in.MachineOAuth), TLS: fromAPITLS(in.Tls),
 	}, rev)
 	if failed(w, r, err) {

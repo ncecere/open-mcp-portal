@@ -51,6 +51,7 @@ func TestUpstreamTLSMigration(t *testing.T) {
 		t.Fatal("the newest schema has no mcp_server_tls")
 	}
 	// The previous release's schema, with a server and a failed health check.
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, callTraceID); err != nil {
 		t.Fatalf("down: %v", err)
 	}
@@ -124,6 +125,7 @@ func TestUpstreamTLSMigration(t *testing.T) {
 	if err := insertCheck("tls"); err != nil {
 		t.Fatal(err)
 	}
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, callTraceID); err != nil {
 		t.Fatalf("down again: %v", err)
 	}

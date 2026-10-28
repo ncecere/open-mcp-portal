@@ -49,6 +49,7 @@ func TestCallTraceIDMigration(t *testing.T) {
 	}
 	// Back to the previous release's schema (this runs the Down of 23 and of
 	// every later migration), with a call recorded the way it does.
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, callTraceID-1); err != nil {
 		t.Fatalf("down: %v", err)
 	}

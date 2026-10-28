@@ -74,6 +74,8 @@ func (a *api) mcpRoutes() []route {
 		{"POST", "/mcp/{slug}", http.HandlerFunc(a.serveMCP)},
 		{"GET", "/mcp/{slug}", http.HandlerFunc(a.serveMCP)},
 		{"DELETE", "/mcp/{slug}", http.HandlerFunc(a.serveMCP)},
+		// All other methods must reach the fail-closed inbound-header guard too.
+		{"", "/mcp/{slug}", http.HandlerFunc(a.serveMCP)},
 		{"GET", "/.well-known/jwks.json", http.HandlerFunc(a.jwks)},
 	}
 }

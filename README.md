@@ -31,10 +31,7 @@ checked and what hasn't.
 - **Delegated credentials.** Tools that act as the caller on GitHub, Google, Microsoft, Atlassian, Slack or GitLab get
   that person's own token, which the portal obtains with their consent, stores encrypted and refreshes
   ([delegated credentials](docs/phase5-delegated-credentials.md)).
-- **Agent platforms.** An agent platform the portal trusts (Pi Durable Platform) can relay its agents' calls through a
-  team service account and name the person each agent acts for: the call runs as the person, limited to what the
-  relay could reach, with their own connections and an `act` claim naming the agent
-  ([agent platforms](docs/agent-platforms.md)).
+- **Ordinary MCP clients.** Connect through MCP OAuth, personal keys or ordinary service accounts, including the pi coding client. External-platform impersonation is [retired](docs/platform-retirement.md).
 - **Per-person OAuth to upstream servers.** MCP servers that are OAuth resource servers themselves (such as GitHub's
   hosted MCP server) get each caller's own sign-in ([upstream OAuth](docs/phase7-upstream-oauth.md)).
 - **Audit, limits and operations.** An append-only audit log and call log, rate limits shared by every replica,
@@ -101,7 +98,7 @@ generate your own `ENCRYPTION_KEY` and `API_KEY_PEPPER` (`openssl rand -base64 3
 - Phase designs: [registry](docs/registry.md), [gateways](docs/phase3-gateways.md),
   [client sign-in](docs/phase4-client-auth.md), [delegated credentials](docs/phase5-delegated-credentials.md),
   [operations](docs/phase6-operations.md), [upstream OAuth](docs/phase7-upstream-oauth.md)
-- Administrators: [agent platforms](docs/agent-platforms.md): trusting an agent platform and calls from agents as the person's calls.
+- Administrators: [external-platform retirement](docs/platform-retirement.md): upgrade legacy relay accounts safely.
 - For MCP server authors: [verifying the identity token](docs/upstream-identity.md) and the Gmail example in
   [`examples/mail-mcp`](examples/mail-mcp)
 - Management API: [`api/openapi.yaml`](api/openapi.yaml)

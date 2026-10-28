@@ -24,6 +24,7 @@ func TestCredentialScopesMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, 28); err != nil {
 		t.Fatal(err)
 	}
@@ -72,6 +73,7 @@ func TestCredentialScopesMigration(t *testing.T) {
 	// The widened reason check is additive; reversal keeps revocation rather
 	// than resurrecting grants while forgetting their new reason.
 	exec(`UPDATE oauth_grants SET revoked_at=now(),revoked_reason='scope_changed'`)
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, 28); err != nil {
 		t.Fatal(err)
 	}

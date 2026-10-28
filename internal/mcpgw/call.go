@@ -116,9 +116,6 @@ func (rc *request) call(kind string) {
 func (rc *request) forward(kind string, o gateways.Offer, args json.RawMessage, again retry) {
 	ctx := rc.r.Context()
 	rec := calls.Call{ExposedName: o.ExposedName, Server: &o.Server, CapabilityID: o.Capability.ID, ToolClass: o.Capability.ToolClass}
-	if !rc.presenceOK(o, &rec) {
-		return
-	}
 	cred, ok := rc.delegated(o, &rec)
 	if !ok {
 		return
@@ -366,10 +363,10 @@ func (rc *request) identityToken(what identityFor, o gateways.Offer, cred *provi
 		// provider (an oauth server's own token is its bearer).
 		c.Provider = cred.Provider.Slug
 	}
-	if sa := p.account; sa != nil && !p.relayedPerson() {
+	if sa := p.account; sa != nil {
 		c.PrincipalType, c.Subject, c.Name, c.Teams = identity.PrincipalServiceAccount, sa.Account.ID.String(), sa.Account.Name, []string{sa.Team.Slug}
 	} else {
-		u := p.actingUser()
+		u := p.user
 		teamRows, err := dbgen.New(rc.h.Pool).ListTeamsForUser(rc.r.Context(), u.ID)
 		if err != nil {
 			return "", err
@@ -381,10 +378,6 @@ func (rc *request) identityToken(what identityFor, o gateways.Offer, cred *provi
 		c.PrincipalType, c.Subject, c.Email, c.Name, c.Teams = identity.PrincipalUser, u.ID.String(), u.Email, u.DisplayName, slugs
 	}
 	switch {
-	case p.relayedPerson():
-		// An agent's call for the person: the person is the principal, the
-		// agent is the actor, and the client is the relay account.
-		c.Client, c.Act = p.account.Account.Name, p.actClaim()
 	case p.grant != nil:
 		// Only a metadata-document client's name is vouched for by its host;
 		// a client that registered itself chose its own name.

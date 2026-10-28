@@ -64,9 +64,6 @@ const (
 const (
 	ReasonMissing  = "secret_missing"
 	ReasonRejected = "secret_rejected"
-	// ReasonAgentsNotAllowed: the person has a usable secret but hasn't
-	// allowed agents to use it (a relayed call only; never a link).
-	ReasonAgentsNotAllowed = "agents_not_allowed"
 )
 
 // Secret statuses.
@@ -178,10 +175,6 @@ type CallContext struct {
 	// CapabilityID, Kind, ExposedName and Title describe the capability.
 	CapabilityID             uuid.UUID
 	Kind, ExposedName, Title string
-	// NoConsent: the call is an agent's, with no browser to open a link in
-	// (decision 66). A missing or rejected secret still answers
-	// *NeedsSecret, but no link is made: nothing is stored.
-	NoConsent bool
 }
 
 // Secret is a person's secret as one call uses it. Value is the bare secret;
@@ -237,9 +230,6 @@ func (s *Service) Resolve(ctx context.Context, cc CallContext) (Secret, error) {
 		s.log.WarnContext(ctx, "a person secret can't be decrypted with the current ENCRYPTION_KEY", "secret_id", ps.ID)
 		return Secret{}, s.need(ctx, cc, cfg, origin, ReasonRejected)
 	}
-	if cc.NoConsent && !ps.AllowAgents {
-		return Secret{}, s.need(ctx, cc, cfg, origin, ReasonAgentsNotAllowed)
-	}
 	if err := s.q.TouchPersonSecret(ctx, ps.ID); err != nil {
 		s.log.WarnContext(ctx, "could not record a person secret's use", "secret_id", ps.ID, "err", err)
 	}
@@ -270,9 +260,6 @@ func (s *Service) need(ctx context.Context, cc CallContext, cfg registry.PersonS
 		return err
 	}
 	n := &NeedsSecret{Reason: reason, Server: ref, Label: label(cfg)}
-	if cc.NoConsent || reason == ReasonAgentsNotAllowed {
-		return n
-	}
 	id, err := s.request(ctx, cc, origin, reason)
 	if err != nil {
 		return err
@@ -354,7 +341,6 @@ type Mine struct {
 	// Has: a secret is entered; the fields below describe it.
 	Has                               bool
 	Hint, Status                      string
-	AllowAgents                       bool
 	CreatedAt                         time.Time
 	RotatedAt, RejectedAt, LastUsedAt *time.Time
 	// Reachable: the person may use the server through a gateway now (they
@@ -466,7 +452,7 @@ func (s *Service) mine(ctx context.Context, u dbgen.User, sv dbgen.McpServer, re
 	ps, err := s.q.GetPersonSecret(ctx, dbgen.GetPersonSecretParams{UserID: u.ID, ServerID: sv.ID})
 	switch {
 	case err == nil:
-		m.Has, m.Hint, m.Status, m.AllowAgents = true, ps.Hint, ps.Status, ps.AllowAgents
+		m.Has, m.Hint, m.Status = true, ps.Hint, ps.Status
 		m.CreatedAt, m.RotatedAt, m.RejectedAt, m.LastUsedAt = ps.CreatedAt, ps.RotatedAt, ps.RejectedAt, ps.LastUsedAt
 	case !errors.Is(store.NotFound(err), store.ErrNotFound):
 		return m, err
@@ -522,7 +508,6 @@ func (s *Service) reachableServer(ctx context.Context, u dbgen.User, id uuid.UUI
 type SetInput struct {
 	Value       *string
 	Origin      string
-	AllowAgents *bool
 	UseForSetup bool
 }
 
@@ -592,11 +577,7 @@ func (s *Service) Set(ctx context.Context, a authz.Actor, serverID uuid.UUID, in
 		if in.Value == nil && !exists {
 			return errValueNeeded
 		}
-		allow := exists && cur.AllowAgents
-		if in.AllowAgents != nil {
-			allow = *in.AllowAgents
-		}
-		action := "person_secret.agents_update"
+		action := ""
 		var row dbgen.PersonSecret
 		switch {
 		case in.Value != nil && exists:
@@ -605,7 +586,7 @@ func (s *Service) Set(ctx context.Context, a authz.Actor, serverID uuid.UUID, in
 				return err
 			}
 			row, err = q.ReplacePersonSecret(ctx, dbgen.ReplacePersonSecretParams{ID: cur.ID, Origin: origin, SecretCipher: ct,
-				Hint: hintOf(value), AllowAgents: allow})
+				Hint: hintOf(value)})
 			if err != nil {
 				return err
 			}
@@ -617,15 +598,11 @@ func (s *Service) Set(ctx context.Context, a authz.Actor, serverID uuid.UUID, in
 				return err
 			}
 			row, err = q.InsertPersonSecret(ctx, dbgen.InsertPersonSecretParams{ID: id, UserID: u.ID, ServerID: serverID, Origin: origin,
-				SecretCipher: ct, Hint: hintOf(value), AllowAgents: allow})
+				SecretCipher: ct, Hint: hintOf(value)})
 			if err != nil {
 				return err
 			}
 			action = "person_secret.create"
-		case allow != cur.AllowAgents:
-			if row, err = q.SetPersonSecretAllowAgents(ctx, dbgen.SetPersonSecretAllowAgentsParams{ID: cur.ID, AllowAgents: allow}); err != nil {
-				return err
-			}
 		default:
 			row = cur
 			action = ""
@@ -640,7 +617,7 @@ func (s *Service) Set(ctx context.Context, a authz.Actor, serverID uuid.UUID, in
 			e := a.Audit(action, "person_secret", row.ID.String())
 			e.TeamID = sv.TeamID
 			e.Metadata = map[string]any{"name": displayName(u) + " · " + sv.Name, "userId": u.ID.String(), "serverId": sv.ID.String(),
-				"server": sv.Name, "origin": origin, "allowAgents": row.AllowAgents}
+				"server": sv.Name, "origin": origin}
 			if err := audit.Record(ctx, q, e); err != nil {
 				return err
 			}

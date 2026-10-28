@@ -3,7 +3,6 @@ package httpapi_test
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"io"
@@ -94,7 +93,6 @@ func newTestAppDeps(t *testing.T, mutate func(*config.Config), log *slog.Logger,
 	// Trusted agent platforms' keys are fetched over https only: the test
 	// issuers are httptest TLS servers, whose certificate the app trusts here
 	// (a test seam; the production rule is unchanged).
-	deps.AgentPlatforms.TLS = &tls.Config{RootCAs: testTLSRoots()}
 	deps.Health = httpapi.NewHealth(map[string]func(context.Context) error{"postgres": pool.Ping})
 	deps.Web, deps.WebBuilt = testWeb, true
 	if hook != nil {

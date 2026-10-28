@@ -548,48 +548,6 @@ func (e CapabilityKind) Valid() bool {
 	}
 }
 
-// Defines values for CapabilityPresentPersonMode.
-const (
-	CapabilityPresentPersonModeInherit     CapabilityPresentPersonMode = "inherit"
-	CapabilityPresentPersonModeNotRequired CapabilityPresentPersonMode = "not_required"
-	CapabilityPresentPersonModeRequired    CapabilityPresentPersonMode = "required"
-)
-
-// Valid indicates whether the value is a known member of the CapabilityPresentPersonMode enum.
-func (e CapabilityPresentPersonMode) Valid() bool {
-	switch e {
-	case CapabilityPresentPersonModeInherit:
-		return true
-	case CapabilityPresentPersonModeNotRequired:
-		return true
-	case CapabilityPresentPersonModeRequired:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CapabilityPresentPersonOverrideMode.
-const (
-	CapabilityPresentPersonOverrideModeInherit     CapabilityPresentPersonOverrideMode = "inherit"
-	CapabilityPresentPersonOverrideModeNotRequired CapabilityPresentPersonOverrideMode = "not_required"
-	CapabilityPresentPersonOverrideModeRequired    CapabilityPresentPersonOverrideMode = "required"
-)
-
-// Valid indicates whether the value is a known member of the CapabilityPresentPersonOverrideMode enum.
-func (e CapabilityPresentPersonOverrideMode) Valid() bool {
-	switch e {
-	case CapabilityPresentPersonOverrideModeInherit:
-		return true
-	case CapabilityPresentPersonOverrideModeNotRequired:
-		return true
-	case CapabilityPresentPersonOverrideModeRequired:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for CapabilityRequirementOverrideMode.
 const (
 	CapabilityRequirementOverrideModeInherit CapabilityRequirementOverrideMode = "inherit"
@@ -2519,7 +2477,7 @@ type AdminOverview struct {
 	Truncated bool             `json:"truncated"`
 }
 
-// AgentCall The agent behind a call relayed by a trusted agent platform. The principal of such a call is the relay service account; person (when the token named one) is who the agent acted for.
+// AgentCall Read-only historical attribution from the retired external-platform integration. The agent behind an old call. The principal of such a call is the relay service account; person (when the token named one) is who the agent acted for.
 type AgentCall struct {
 	AgentId   string           `json:"agentId"`
 	AgentName *string          `json:"agentName,omitempty"`
@@ -2536,98 +2494,6 @@ type AgentCallPerson struct {
 	DisplayName string              `json:"displayName"`
 	Email       *string             `json:"email,omitempty"`
 	UserId      *openapi_types.UUID `json:"userId,omitempty"`
-}
-
-// AgentPlatform An external agent platform the portal trusts to name the person behind a relayed agent call (decisions 65 and 66). It holds no secrets, because the keys are public.
-type AgentPlatform struct {
-	// Audience The aud a token must contain (this portal's APP_URL by default; the platform sets it as the server's identityAudience)
-	Audience  string             `json:"audience"`
-	CreatedAt time.Time          `json:"createdAt"`
-	Enabled   bool               `json:"enabled"`
-	Id        openapi_types.UUID `json:"id"`
-
-	// Issuer The iss of the platform's tokens, exactly as it writes it (its APP_URL)
-	Issuer  string `json:"issuer"`
-	JwksUrl string `json:"jwksUrl"`
-
-	// KeyIds The key IDs the last successful fetch published (empty after a failed one)
-	KeyIds []string `json:"keyIds"`
-
-	// LastFetch The latest JWKS fetch by any replica (a verification or a Test); null before the first
-	LastFetch *AgentPlatformFetch `json:"lastFetch,omitempty"`
-	Name      string              `json:"name"`
-
-	// RelayCount Service accounts marked as relays for the platform
-	RelayCount int64 `json:"relayCount"`
-
-	// Revision Increases on every change. Send it back in If-Match.
-	Revision  Revision  `json:"revision"`
-	UpdatedAt time.Time `json:"updatedAt"`
-}
-
-// AgentPlatformCreate defines model for AgentPlatformCreate.
-type AgentPlatformCreate struct {
-	// Audience Default this portal's APP_URL
-	Audience *string `json:"audience,omitempty"`
-	Enabled  *bool   `json:"enabled,omitempty"`
-
-	// Issuer An absolute https URL without query or fragment, compared exactly with the token's iss
-	Issuer string `json:"issuer"`
-
-	// JwksUrl Default <issuer>/.well-known/mcp-identity-jwks.json
-	JwksUrl *string `json:"jwksUrl,omitempty"`
-	Name    string  `json:"name"`
-}
-
-// AgentPlatformFetch defines model for AgentPlatformFetch.
-type AgentPlatformFetch struct {
-	At time.Time `json:"at"`
-
-	// Error not_allowed, redirect, timeout, unreachable, http_status, content_type, too_large, invalid_json or no_usable_keys
-	Error *string `json:"error,omitempty"`
-	Ok    bool    `json:"ok"`
-}
-
-// AgentPlatformRelay defines model for AgentPlatformRelay.
-type AgentPlatformRelay struct {
-	Enabled  bool       `json:"enabled"`
-	MarkedAt *time.Time `json:"markedAt,omitempty"`
-	Name     string     `json:"name"`
-
-	// Role The team role used for capabilities' minimum roles (decision 22)
-	Role             ServiceAccountRole `json:"role"`
-	ServiceAccountId openapi_types.UUID `json:"serviceAccountId"`
-	TeamId           openapi_types.UUID `json:"teamId"`
-	TeamName         string             `json:"teamName"`
-	TeamSlug         string             `json:"teamSlug"`
-}
-
-// AgentPlatformTestResult defines model for AgentPlatformTestResult.
-type AgentPlatformTestResult struct {
-	// CacheSeconds How long a replica caches a good answer (Cache-Control max-age within 10 seconds to 5 minutes)
-	CacheSeconds *int64    `json:"cacheSeconds,omitempty"`
-	CheckedAt    time.Time `json:"checkedAt"`
-
-	// Error AgentPlatformFetch.error
-	Error *string `json:"error,omitempty"`
-
-	// HttpStatus The platform's answer when error is http_status
-	HttpStatus *int     `json:"httpStatus,omitempty"`
-	KeyIds     []string `json:"keyIds"`
-	LatencyMs  int64    `json:"latencyMs"`
-	Ok         bool     `json:"ok"`
-}
-
-// AgentPlatformUpdate defines model for AgentPlatformUpdate.
-type AgentPlatformUpdate struct {
-	// Audience An empty string goes back to this portal's APP_URL
-	Audience *string `json:"audience,omitempty"`
-	Enabled  *bool   `json:"enabled,omitempty"`
-	Issuer   *string `json:"issuer,omitempty"`
-
-	// JwksUrl An empty string goes back to the default for the issuer
-	JwksUrl *string `json:"jwksUrl,omitempty"`
-	Name    *string `json:"name,omitempty"`
 }
 
 // AllowServerRequest The server to allow, with the address and scopes the person was shown
@@ -3353,24 +3219,6 @@ type CapabilityCounts struct {
 
 // CapabilityKind defines model for CapabilityKind.
 type CapabilityKind string
-
-// CapabilityPresentPerson defines model for CapabilityPresentPerson.
-type CapabilityPresentPerson struct {
-	// Effective Relayed calls of this capability need the person present (the override, else the server's switch)
-	Effective bool                        `json:"effective"`
-	Mode      CapabilityPresentPersonMode `json:"mode"`
-}
-
-// CapabilityPresentPersonMode defines model for CapabilityPresentPerson.Mode.
-type CapabilityPresentPersonMode string
-
-// CapabilityPresentPersonOverride defines model for CapabilityPresentPersonOverride.
-type CapabilityPresentPersonOverride struct {
-	Mode CapabilityPresentPersonOverrideMode `json:"mode"`
-}
-
-// CapabilityPresentPersonOverrideMode defines model for CapabilityPresentPersonOverride.Mode.
-type CapabilityPresentPersonOverrideMode string
 
 // CapabilityRequirement The account a capability needs, with its effective scopes
 type CapabilityRequirement struct {
@@ -4133,7 +3981,7 @@ type LinkTargetType string
 
 // McpCall defines model for McpCall.
 type McpCall struct {
-	// Agent Set when a trusted agent platform relayed the call (docs/agent-platforms.md); the principal is then the relay service account. Absent from servers before v0.3
+	// Agent Read-only historical attribution from a retired external-platform integration; the principal is then the relay service account. Absent from servers before v0.3
 	Agent *AgentCall `json:"agent,omitempty"`
 
 	// Captured A captured payload is stored that the caller may open (team views; captured under this team's gateway or server switch; admin views; any). Absent from servers before Phase 6.
@@ -4142,7 +3990,7 @@ type McpCall struct {
 	// ClientName clientInfo.name from initialize, when sent
 	ClientName *string `json:"clientName,omitempty"`
 
-	// ErrorClass Why a call was denied or failed, for example no_access, role, unknown, key_scope (the API key is limited to other gateways), tool_scope (a credential, account or matching gateway-grant ceiling excludes the tool), gateway_disabled or an unavailability reason. For capabilities that require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or server_not_allowed (connected, but the person hasn't allowed this server, at its current address, to use the account); denied with service_account, provider_disabled, provider_not_allowed (the provider is restricted and its access list excludes the server), person_not_present (an agent's call whose server or capability requires a present person) or, for an agent's call for a person, person_no_account or person_suspended; needs_authorization with needs_connection for an agent's call (the person must connect an account; the answer was a tool error with no link); upstream_error with provider_unavailable. For a server where each person enters their own key (decision 72): needs_authorization with secret_missing or secret_rejected (the answer carried the link, or for an agent's call a tool error with none) or agents_not_allowed (an agent's call, the person has a key but hasn't allowed agents); denied with service_account or person_suspended.
+	// ErrorClass Why a call was denied or failed, for example no_access, role, unknown, key_scope (the API key is limited to other gateways), tool_scope (a credential, account or matching gateway-grant ceiling excludes the tool), gateway_disabled or an unavailability reason. For capabilities that require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or server_not_allowed (connected, but the person hasn't allowed this server, at its current address, to use the account); denied with service_account, provider_disabled, provider_not_allowed (the provider is restricted and its access list excludes the server); upstream_error with provider_unavailable. For person-secret mode, needs_authorization with secret_missing or secret_rejected; denied with service_account or person_suspended. Historical rows may retain retired external-platform error classes such as person_not_present, person_no_account, needs_connection and agents_not_allowed.
 	ErrorClass *string `json:"errorClass,omitempty"`
 
 	// ExposedName The tool or prompt name, or the exposed resource URI, the client used (absent for list calls)
@@ -4217,7 +4065,6 @@ type McpCapability struct {
 
 	// Name Tool or prompt name, resource URI, or resource template URI template
 	Name                string                        `json:"name"`
-	PresentPerson       *CapabilityPresentPerson      `json:"presentPerson,omitempty"`
 	RequirementOverride CapabilityRequirementOverride `json:"requirementOverride"`
 
 	// Requires The effective requirement (the server's, or the override); null when calls get no provider token
@@ -4355,9 +4202,6 @@ type McpServer struct {
 
 	// Requirement The auth provider and scopes whose user token the portal sends with calls to this server's capabilities (null; none). Capabilities can override it (McpCapability.requirementOverride).
 	Requirement *McpServerRequirement `json:"requirement,omitempty"`
-
-	// RequiresPresentPerson Refuse calls on a relay service account unless they are for a person the platform says is present (person_present true), for every capability without its own override (McpCapability.presentPerson): scheduled or background work, a token that names nobody and a relay key with no token are refused too. Default false. Calls that don't arrive on a relay service account are never affected. Absent from servers before v0.3 (false)
-	RequiresPresentPerson *bool `json:"requiresPresentPerson,omitempty"`
 
 	// ReviewDigest SHA-256 (hex) over the server's URL, auth mode and requirement (for machine_oauth also its token endpoint, client ID, token authentication method, scopes, audience and resource, never the secret) and over every listed capability's kind, name and fingerprint, sorted. It changes when any of them does (a refresh, a new URL ...). Send it back as expectedDigest when reviewing (adminReviewMcpServer) or publishing, so what is approved is what was read
 	ReviewDigest *string `json:"reviewDigest,omitempty"`
@@ -4789,9 +4633,6 @@ type McpServerUpdate struct {
 
 	// Requirement Omit to keep; null removes it. A widening change sends a published server back to review under approval_required
 	Requirement *McpServerRequirementInput `json:"requirement,omitempty"`
-
-	// RequiresPresentPerson Omit to keep. Turning it on never needs review; turning it off, when it made some capability require a present person, sends a published server back to pending under approval_required (reason requirement_changed), like widening a requirement. Audited in mcp_server.update
-	RequiresPresentPerson *bool `json:"requiresPresentPerson,omitempty"`
 
 	// SendIdentity Omit to keep. Not a review trigger (turning it off sends less). Audited in mcp_server.update
 	SendIdentity   *bool  `json:"sendIdentity,omitempty"`
@@ -5789,9 +5630,6 @@ type ServerRecoveredData struct {
 
 // ServerSecret A server in person_secret mode with the caller's own key for it, if any. The key itself is never returned, only its last four characters when it has at least eight
 type ServerSecret struct {
-	// AllowAgents An agent that relays a call for the person may use the key (decisions 66 and 68). Off by default
-	AllowAgents bool `json:"allowAgents"`
-
 	// CanSetup The caller is an active editor of the server's team, so their key can read its capabilities
 	CanSetup bool `json:"canSetup"`
 
@@ -5868,8 +5706,8 @@ type ServiceAccount struct {
 	// Name Example: ci-release-bot
 	Name string `json:"name"`
 
-	// RelayPlatform The trusted agent platform this account relays for (set by a platform admin only; null for an ordinary service account). Absent from servers before v0.3
-	RelayPlatform *ServiceAccountRelayPlatform `json:"relayPlatform,omitempty"`
+	// Retired Legacy external-platform relay; permanently retired. Create a new ordinary account and key instead.
+	Retired *bool `json:"retired,omitempty"`
 
 	// Revision Increases on every change. Send it back in If-Match.
 	Revision Revision `json:"revision"`
@@ -5945,12 +5783,6 @@ type ServiceAccountPage struct {
 	NextCursor *string          `json:"nextCursor,omitempty"`
 }
 
-// ServiceAccountRelayPlatform defines model for ServiceAccountRelayPlatform.
-type ServiceAccountRelayPlatform struct {
-	Id   openapi_types.UUID `json:"id"`
-	Name string             `json:"name"`
-}
-
 // ServiceAccountRole The team role used for capabilities' minimum roles (decision 22)
 type ServiceAccountRole string
 
@@ -6019,16 +5851,13 @@ type ServiceConnectionUpdate struct {
 
 // SetServerSecret A key, or a change to the caller's entry for one server
 type SetServerSecret struct {
-	// AllowAgents Omit to keep (false for a new entry)
-	AllowAgents *bool `json:"allowAgents,omitempty"`
-
 	// Origin The origin the page showed (ServerSecret.origin); refused (409 server_changed) when the server has another now
 	Origin string `json:"origin"`
 
 	// UseForSetup Read the server's capabilities with this key from now on (editors of the server's team only, else 403). The capabilities are read once it is saved; a failure is stored as the server's refresh error
 	UseForSetup *bool `json:"useForSetup,omitempty"`
 
-	// Value The key, on one line (surrounding space is trimmed). Omit to keep the stored key while changing allowAgents or useForSetup. Sealed, never returned, logged or audited
+	// Value The key, on one line (surrounding space is trimmed). Omit to keep the stored key while changing useForSetup. Sealed, never returned, logged or audited
 	Value *string `json:"value,omitempty"`
 }
 
@@ -6403,9 +6232,6 @@ type UserUpdate struct {
 	Status       *UserStatus   `json:"status,omitempty"`
 }
 
-// AgentPlatformIdParam defines model for AgentPlatformIdParam.
-type AgentPlatformIdParam = openapi_types.UUID
-
 // AuditActionParam Example: team.
 type AuditActionParam = string
 
@@ -6610,12 +6436,6 @@ type UsageReportReply struct {
 type StartLoginParams struct {
 	// Next Same-origin path to return to after sign-in.
 	Next *string `form:"next,omitempty" json:"next,omitempty"`
-}
-
-// AdminUpdateAgentPlatformParams defines parameters for AdminUpdateAgentPlatform.
-type AdminUpdateAgentPlatformParams struct {
-	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
-	IfMatch IfMatchHeader `json:"If-Match"`
 }
 
 // AdminListAuditParams defines parameters for AdminListAudit.
@@ -7083,12 +6903,6 @@ type SetTeamMcpCapabilityClassParams struct {
 	IfMatch IfMatchHeader `json:"If-Match"`
 }
 
-// SetTeamMcpCapabilityPresentPersonParams defines parameters for SetTeamMcpCapabilityPresentPerson.
-type SetTeamMcpCapabilityPresentPersonParams struct {
-	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
-	IfMatch IfMatchHeader `json:"If-Match"`
-}
-
 // SetTeamMcpCapabilityRequirementParams defines parameters for SetTeamMcpCapabilityRequirement.
 type SetTeamMcpCapabilityRequirementParams struct {
 	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
@@ -7157,12 +6971,6 @@ type GetTeamUsageParamsMethod string
 
 // DevLoginJSONRequestBody defines body for DevLogin for application/json ContentType.
 type DevLoginJSONRequestBody = DevLoginRequest
-
-// AdminCreateAgentPlatformJSONRequestBody defines body for AdminCreateAgentPlatform for application/json ContentType.
-type AdminCreateAgentPlatformJSONRequestBody = AgentPlatformCreate
-
-// AdminUpdateAgentPlatformJSONRequestBody defines body for AdminUpdateAgentPlatform for application/json ContentType.
-type AdminUpdateAgentPlatformJSONRequestBody = AgentPlatformUpdate
 
 // AdminCreateAuthProviderJSONRequestBody defines body for AdminCreateAuthProvider for application/json ContentType.
 type AdminCreateAuthProviderJSONRequestBody = AuthProviderCreate
@@ -7301,9 +7109,6 @@ type ApproveTeamMcpCapabilityJSONRequestBody = McpCapabilityApproval
 
 // SetTeamMcpCapabilityClassJSONRequestBody defines body for SetTeamMcpCapabilityClass for application/json ContentType.
 type SetTeamMcpCapabilityClassJSONRequestBody = CapabilityClassInput
-
-// SetTeamMcpCapabilityPresentPersonJSONRequestBody defines body for SetTeamMcpCapabilityPresentPerson for application/json ContentType.
-type SetTeamMcpCapabilityPresentPersonJSONRequestBody = CapabilityPresentPersonOverride
 
 // SetTeamMcpCapabilityRequirementJSONRequestBody defines body for SetTeamMcpCapabilityRequirement for application/json ContentType.
 type SetTeamMcpCapabilityRequirementJSONRequestBody = CapabilityRequirementOverride

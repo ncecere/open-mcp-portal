@@ -70,6 +70,7 @@ var (
 	errNameTaken    = apperr.Conflict("name_taken", "The team already has a service account with that name")
 	errTooMany      = apperr.Conflict("too_many_service_accounts", "A team can have at most 100 service accounts")
 	errTooManyKeys  = apperr.Conflict("too_many_keys", "This service account has 2 active keys. Revoke one first.")
+	errRetired      = apperr.Conflict("service_account_retired", "This legacy relay account is permanently retired. Create a new ordinary service account and key.")
 	errDisabled     = apperr.Conflict("disabled", "This service account is turned off. Turn it on first.")
 	errBadName      = apperr.Invalid("invalid_name", "Name must be 1-64 lower-case letters, digits or dashes, not starting or ending with a dash")
 	errBadDesc      = apperr.Invalid("invalid_description", "Description must be at most 2000 characters")
@@ -131,9 +132,6 @@ type View struct {
 	TeamSlug      string
 	ActiveKeys    int64
 	CreatedByName *string
-	// RelayPlatformName is the agent platform the account relays for ("":
-	// not a relay; decision 66).
-	RelayPlatformName string
 }
 
 // teamAccess is a team as seen by an actor.
@@ -194,7 +192,7 @@ func (s *Service) view(ctx context.Context, q *dbgen.Queries, t dbgen.Team, id u
 	} else if err != nil {
 		return View{}, err
 	}
-	return View{Account: row.ServiceAccount, TeamSlug: t.Slug, ActiveKeys: row.ActiveKeys, CreatedByName: row.CreatedByName, RelayPlatformName: row.RelayPlatformName}, nil
+	return View{Account: row.ServiceAccount, TeamSlug: t.Slug, ActiveKeys: row.ActiveKeys, CreatedByName: row.CreatedByName}, nil
 }
 
 // List lists the team's service accounts by name (members; platform admins
@@ -210,7 +208,7 @@ func (s *Service) List(ctx context.Context, a authz.Actor, ref string) ([]View, 
 	}
 	out := make([]View, len(rows))
 	for i, r := range rows {
-		out[i] = View{Account: r.ServiceAccount, TeamSlug: ta.team.Slug, ActiveKeys: r.ActiveKeys, CreatedByName: r.CreatedByName, RelayPlatformName: r.RelayPlatformName}
+		out[i] = View{Account: r.ServiceAccount, TeamSlug: ta.team.Slug, ActiveKeys: r.ActiveKeys, CreatedByName: r.CreatedByName}
 	}
 	return out, nil
 }
@@ -278,7 +276,7 @@ func (s *Service) AdminList(ctx context.Context, a authz.Actor, p AdminListParam
 	}
 	out := make([]View, len(rows))
 	for i, r := range rows {
-		out[i] = View{Account: r.ServiceAccount, TeamSlug: r.TeamSlug, ActiveKeys: r.ActiveKeys, CreatedByName: r.CreatedByName, RelayPlatformName: r.RelayPlatformName}
+		out[i] = View{Account: r.ServiceAccount, TeamSlug: r.TeamSlug, ActiveKeys: r.ActiveKeys, CreatedByName: r.CreatedByName}
 	}
 	return out, nil
 }
@@ -380,6 +378,9 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 		}
 		if err := ta.writable(); err != nil {
 			return err
+		}
+		if cur.RelayPlatformID.Valid {
+			return errRetired
 		}
 		if cur.Revision != expectedRevision {
 			return apperr.Stale()
@@ -612,6 +613,9 @@ func (s *Service) CreateKey(ctx context.Context, a authz.Actor, ref string, id u
 		if err := ta.writable(); err != nil {
 			return err
 		}
+		if sa.RelayPlatformID.Valid {
+			return errRetired
+		}
 		if !sa.Enabled {
 			return errDisabled
 		}
@@ -746,7 +750,7 @@ func (s *Service) Authenticate(ctx context.Context, secret string) (Principal, e
 	}
 	if !hmac.Equal([]byte(row.ServiceAccountKey.Digest), []byte(d)) ||
 		KeyStatus(row.ServiceAccountKey, time.Now()) != apikeys.StatusActive ||
-		!row.ServiceAccount.Enabled || row.Team.Status != teams.StatusActive {
+		row.ServiceAccount.RelayPlatformID.Valid || !row.ServiceAccount.Enabled || row.Team.Status != teams.StatusActive {
 		return Principal{}, ErrInvalid
 	}
 	if previous {

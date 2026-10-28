@@ -419,9 +419,6 @@ type CapabilityView struct {
 	// Requires is the effective user-authorization requirement (nil: calls
 	// get no provider token).
 	Requires *Requirement
-	// EffectivePresentPerson: relayed calls of the capability need the
-	// person present (the capability's override, else the server's switch).
-	EffectivePresentPerson bool
 }
 
 // Approved reports whether the current definition is approved.
@@ -455,7 +452,7 @@ func capabilities(ctx context.Context, q *dbgen.Queries, sv dbgen.McpServer, kin
 	out := make([]CapabilityView, len(rows))
 	for i, r := range rows {
 		out[i] = CapabilityView{Capability: r.McpCapability, ApprovedByName: r.ApprovedByName, Published: sv.PublishState == StatePublished,
-			Requires: EffectiveFor(sv, r.McpCapability, ps), EffectivePresentPerson: PresentPersonRequired(sv, r.McpCapability)}
+			Requires: EffectiveFor(sv, r.McpCapability, ps)}
 	}
 	return out, nil
 }

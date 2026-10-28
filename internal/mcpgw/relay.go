@@ -392,12 +392,6 @@ func objectEntries(b []byte) ([]entry, error) {
 func (rc *request) relayInput(o gateways.Offer, rec calls.Call, in *upstream.InputRequired) {
 	rec.ErrorClass = ClassInputRequired
 	modes := rc.clientElicitation()
-	if rc.relayedPerson() {
-		// An agent has nobody to ask (and no browser for a link).
-		rc.inputRefused(o, rec, &relayRefusal{toolError: true,
-			message: "this server asked for input, which an agent can't give"})
-		return
-	}
 	if !rc.modern || !modes.any() {
 		// The server was told this client can't answer, and asked anyway.
 		rc.inputRefused(o, rec, &relayRefusal{toolError: true,

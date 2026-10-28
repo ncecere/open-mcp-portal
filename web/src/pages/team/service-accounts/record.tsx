@@ -44,6 +44,7 @@ export function ServiceAccountPage() {
  * doesn't stack warnings above the tabs.
  */
 function StateNotice({ account, abilities, archived }: { account: ServiceAccount; abilities: ServiceAccountAbilities; archived: boolean }) {
+  if (account.retired) return <Alert tone="warning" title="Permanently retired">This legacy external-platform relay cannot run calls or be enabled. Create a new ordinary service account and key explicitly.</Alert>;
   if (archived) {
     return (
       <Alert tone="warning" title={account.enabled ? "This team is archived" : "Turned off, and the team is archived"}>
@@ -68,10 +69,10 @@ function Record({ account, abilities, staff }: { account: ServiceAccount; abilit
     <DetailPage
       title={account.name}
       meta={
-        !account.enabled || account.relayPlatform ? (
+        !account.enabled || account.retired ? (
           <span className={s.badges}>
             {!account.enabled && <EnabledBadge enabled={false} />}
-            {account.relayPlatform && <Badge tone="info">Relay for {account.relayPlatform.name}</Badge>}
+            {account.retired && <Badge tone="warning">Retired</Badge>}
           </span>
         ) : undefined
       }

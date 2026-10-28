@@ -115,33 +115,12 @@ type Claims struct {
 	// Provider is the auth provider's slug when the call carries the
 	// person's provider token (MCP-Gateway-Provider-Token); empty otherwise.
 	Provider string
-	// Act names the agent that is calling for the person (RFC 8693 actor,
-	// decision 66): set only on calls relayed by a trusted agent platform
-	// that named the person, never otherwise.
-	Act *Actor
-}
-
-// Actor is the agent behind a call made for a person: the "act" claim
-// (docs/upstream-identity.md "Calls from agents").
-type Actor struct {
-	// Subject is the agent's ID at the platform, Name its name there.
-	Subject string `json:"sub"`
-	Name    string `json:"name,omitempty"`
-	// Issuer is the agent platform's issuer (its iss).
-	Issuer string `json:"iss"`
-	// PrincipalType is always PrincipalAgent.
-	PrincipalType string `json:"principal_type"`
-	// PersonPresent is the platform's statement that the person is in the
-	// conversation the call belongs to (false: scheduled or background work).
-	PersonPresent bool `json:"person_present"`
 }
 
 // Principal types (claim principal_type).
 const (
 	PrincipalUser           = "user"
 	PrincipalServiceAccount = "service_account"
-	// PrincipalAgent is the actor's type in the act claim.
-	PrincipalAgent = "agent"
 )
 
 // tokenClaims are the private claims of a token.
@@ -160,8 +139,6 @@ type tokenClaims struct {
 	ClientVerified *bool `json:"client_verified,omitempty"`
 	// Provider: only when the call carries a provider token.
 	Provider string `json:"provider,omitempty"`
-	// Act: only on calls an agent platform relayed for a person.
-	Act *Actor `json:"act,omitempty"`
 }
 
 // Key states.
@@ -232,7 +209,7 @@ func (s *Service) Sign(ctx context.Context, c Claims) (string, error) {
 	if pt == "" {
 		pt = PrincipalUser
 	}
-	priv := tokenClaims{PrincipalType: pt, Email: c.Email, Name: c.Name, Teams: teams, Gateway: c.Gateway, ToolClass: c.ToolClass, Tool: c.Tool, Prompt: c.Prompt, Resource: c.Resource, Client: c.Client, ClientVerified: c.ClientVerified, Provider: c.Provider, Act: c.Act}
+	priv := tokenClaims{PrincipalType: pt, Email: c.Email, Name: c.Name, Teams: teams, Gateway: c.Gateway, ToolClass: c.ToolClass, Tool: c.Tool, Prompt: c.Prompt, Resource: c.Resource, Client: c.Client, ClientVerified: c.ClientVerified, Provider: c.Provider}
 	return jwt.Signed(k.signer).Claims(reg).Claims(priv).Serialize()
 }
 

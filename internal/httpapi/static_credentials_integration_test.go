@@ -557,7 +557,14 @@ func TestStaticCredentialAuthorizationRules(t *testing.T) {
 // (decisions 65 to 68); a server with no Authorization part gets it as
 // Authorization: Bearer, next to a header and a query part.
 func TestStaticCredentialPartsAndTheIdentityToken(t *testing.T) {
-	e, fx := newAgentEnv(t)
+	e := newProvEnv(t)
+	for _, tool := range []string{"whoami", "echo"} {
+		if code, msg := e.override(tool, map[string]any{"mode": "none"}); code != 200 {
+			t.Fatalf("override: %d %s", code, msg)
+		}
+	}
+	sa := createSA(t, e.owner, map[string]any{"name": "ordinary", "role": "editor"})
+	saKey := createSAKey(t, e.owner, sa.Id.String(), map[string]any{"name": "key"}).Secret
 	basic := "Basic " + base64.StdEncoding.EncodeToString([]byte("alice:pw-1234567890"))
 	for name, c := range map[string]struct {
 		parts  []any
@@ -571,38 +578,32 @@ func TestStaticCredentialPartsAndTheIdentityToken(t *testing.T) {
 			map[string]any{"kind": "query", "name": "sig", "value": "s-1234567890"}}, "Authorization", ""},
 	} {
 		e.patchServer(e.owner, e.server, map[string]any{"credentials": c.parts})
-		for _, relayed := range []bool{false, true} {
+		for credential, key := range map[string]string{"personal": e.key, "service account": saKey} {
 			var out map[string]any
-			if relayed {
-				var code int
-				if code, out = fx.callTool(agentSpec{Email: "blair@localhost"}, "status__whoami", nil); code != 200 {
-					t.Fatalf("%s relayed = %d %v", name, code, out)
-				}
+			if code, _, result := rawMCP(t, e.app, "POST", "support", key, rpc(1, "tools/call", map[string]any{"name": "status__whoami", "arguments": map[string]any{}}), nil); code != 200 {
+				t.Fatalf("%s: %d %v", credential, code, result)
 			} else {
-				var code int
-				if code, _, out = rawMCP(t, e.app, "POST", "support", e.key, rpc(1, "tools/call",
-					map[string]any{"name": "status__whoami", "arguments": map[string]any{}}), nil); code != 200 {
-					t.Fatalf("%s own call = %d %v", name, code, out)
-				}
+				out = result
 			}
-			who := whoamiClaims(t, out)
+
+			who := whoamiOf(t, out)
 			if !who.Verified || who.Header != c.header {
-				t.Errorf("%s (relayed %v): the identity arrived in %q (verified %v), want %s", name, relayed, who.Header, who.Verified, c.header)
+				t.Errorf("%s (credential %s): the identity arrived in %q (verified %v), want %s", name, credential, who.Header, who.Verified, c.header)
 			}
-			if relayed && (who.Act == nil || who.Claims["act"] == nil) {
-				t.Errorf("%s: a relayed call has no act claim: %+v", name, who)
+			if who.Claims["act"] != nil {
+				t.Fatal("new outbound token has an actor claim")
 			}
 			calls := e.fake.ToolCalls()
 			last := calls[len(calls)-1]
 			if c.auth != "" {
 				if last.Authorization != c.auth || last.Identity == "" {
-					t.Errorf("%s (relayed %v): Authorization = %q, MCP-Gateway-Identity set = %v", name, relayed, last.Authorization, last.Identity != "")
+					t.Errorf("%s (credential %s): Authorization = %q, MCP-Gateway-Identity set = %v", name, credential, last.Authorization, last.Identity != "")
 				}
 				continue
 			}
 			if !strings.HasPrefix(last.Authorization, "Bearer ") || last.Identity != "" || last.Header.Get("X-Tenant") != "acme-1234567890" ||
 				!strings.Contains(last.Header.Get(testutil.QueryHeader), "sig=s-1234567890") {
-				t.Errorf("%s (relayed %v): the call arrived as %+v", name, relayed, last)
+				t.Errorf("%s (credential %s): the call arrived as %+v", name, credential, last)
 			}
 		}
 	}

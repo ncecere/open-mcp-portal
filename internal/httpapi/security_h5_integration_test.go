@@ -327,40 +327,6 @@ func TestProviderAccessListGatesAllowingAServer(t *testing.T) {
 // An agent's relayed call honours the list as a person's own does (decisions
 // 66 and 68): the server's tool is refused, no link is made, and listing the
 // team restores it.
-func TestProviderAccessListGatesRelayedCalls(t *testing.T) {
-	e, fx := newAgentEnv(t)
-	const tool = "status__provider_token"
-	blair := agentSpec{Email: "blair@localhost"}
-	link := e.consentURL(e.callTool(e.key, tool), "not_connected")
-	if to := e.connect(e.member, map[string]any{"providerId": e.provider.Id, "requestId": requestID(link)}); !strings.Contains(to, "connected") {
-		t.Fatalf("connect = %s", to)
-	}
-	if _, out := fx.callTool(blair, tool, nil); !e.providerReport(out).Received {
-		t.Fatalf("relayed call before = %v", out)
-	}
-	delivered := e.toolCalls("provider_token")
-
-	e.provider = e.setAccess(e.provider, "restricted", nil, nil)
-	id := fx.lastCallID()
-	code, out := fx.callTool(blair, tool, nil)
-	if c, _, data := rpcErr(out); code != 200 || c != -32010 || data["reason"] != "provider_not_allowed" {
-		t.Fatalf("relayed call under a restricted provider = %d %v", code, out)
-	}
-	noLink(t, out, "relayed, restricted")
-	if r := fx.recordAfter(id); r.Outcome != "denied" || r.Class != "provider_not_allowed" || r.Provider != "github" || r.Agent == "" {
-		t.Fatalf("record = %+v", r)
-	}
-	if e.toolCalls("provider_token") != delivered || e.connectRequests() != "1" {
-		t.Fatalf("the server was called, or a consent request was stored, for a relayed call")
-	}
-
-	e.provider = e.setAccess(e.provider, "restricted", []string{e.teamID("tools")}, nil)
-	if _, out := fx.callTool(blair, tool, nil); !e.providerReport(out).Received {
-		t.Fatalf("relayed call with the team listed = %v", out)
-	}
-	fx.noSecrets(e.logs)
-	e.noSecretsAnywhere()
-}
 
 // With narrowing on, a call carries a token refreshed with only the scopes it
 // needs (verified at the fake provider: introspection); the stored token and

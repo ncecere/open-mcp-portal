@@ -10,7 +10,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { api, type Schemas, unwrap } from "../../api/client";
+import { api, unwrap } from "../../api/client";
 import { FormDialog } from "../form-dialog";
 import { ConfirmMutationDialog } from "../confirm-dialog";
 import { keyLabel, hintText, placementText, type ServerSecret } from "../servers/person-secret";
@@ -60,7 +60,6 @@ function columns(self: boolean): DataTableColumn<ServerSecret>[] {
       sortable: true,
       cell: (e) => <StatusBadge tone={statusOf(e).tone}>{statusOf(e).text}</StatusBadge>,
     },
-    { id: "agents", header: "Agents may use it", accessor: (e) => (e.hasSecret ? (e.allowAgents ? "Yes" : "No") : ""), defaultHiddenNarrow: true, cell: (e) => (e.hasSecret ? (e.allowAgents ? "Yes" : "No") : <span className={s.muted}>—</span>) },
     {
       ...timeColumn<ServerSecret>("lastUsedAt", "Last used", (e) => e.lastUsedAt),
       defaultHiddenNarrow: true,
@@ -89,13 +88,6 @@ export function ServerSecrets({ owner, canRevoke }: Props) {
     },
     onSettled: refresh,
   });
-  const allow = useMutation({
-    mutationFn: async ({ e, on }: { e: ServerSecret; on: boolean }) =>
-      unwrap(await api.PUT("/v1/me/server-secrets/{serverId}", { params: { path: { serverId: e.server.id } }, body: { origin: e.origin, allowAgents: on } as Schemas["SetServerSecret"] })),
-    onSuccess: (e) => toast.success(e.allowAgents ? `Your agents may use your key for ${e.server.name}` : `Your agents may no longer use your key for ${e.server.name}`),
-    onError: (err) => toast.error("Couldn't change it", describeKeyError(err)?.message ?? (err instanceof Error ? err.message : undefined)),
-    onSettled: refresh,
-  });
   const who = owner.self ? "you" : owner.name;
   return (
     <>
@@ -111,12 +103,6 @@ export function ServerSecrets({ owner, canRevoke }: Props) {
         onRetry={() => void list.refetch()}
         rowActions={(e) => [
           { label: e.hasSecret ? "Replace key…" : "Enter key…", icon: <KeyRound aria-hidden />, hidden: !owner.self || !e.reachable, onSelect: () => setEntering(e.server.id) },
-          {
-            label: e.allowAgents ? "Stop my agents using it" : "Let my agents use it",
-            hidden: !owner.self || !e.hasSecret || !e.reachable,
-            disabled: allow.isPending,
-            onSelect: () => allow.mutate({ e, on: !e.allowAgents }),
-          },
           { label: "Remove key…", icon: <Trash2 aria-hidden />, danger: true, hidden: !canRevoke || !e.hasSecret, onSelect: () => setRemoving(e) },
         ]}
         empty={{

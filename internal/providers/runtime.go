@@ -49,12 +49,6 @@ type CallContext struct {
 	ServerOrigin string
 	// Kind, ExposedName and Title describe the capability to the person.
 	Kind, ExposedName, Title string
-	// NoConsent: the call is an agent's, with no browser to open a link in
-	// (decision 66, #57). A missing, lapsed or too narrow connection, or a
-	// server the person hasn't allowed, still answers *ConsentNeeded, but no
-	// consent link is made: nothing is stored, and RequestID and URL stay
-	// empty.
-	NoConsent bool
 }
 
 // Credential is what a call carries: the provider and the bare access
@@ -521,9 +515,6 @@ func (s *Service) markReconsent(ctx context.Context, q *dbgen.Queries, p dbgen.A
 // needConsent makes (or reuses, for the same person, capability and
 // scopes) a consent link and returns it as a *ConsentNeeded.
 func (s *Service) needConsent(ctx context.Context, p registry.Provider, scopes []string, cc CallContext, reason string) error {
-	if cc.NoConsent {
-		return &ConsentNeeded{Reason: reason, Provider: p, Scopes: slices.Clone(scopes)}
-	}
 	id, err := s.request(ctx, p, scopes, cc, reason)
 	if err != nil {
 		return err

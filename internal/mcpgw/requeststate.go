@@ -218,9 +218,6 @@ func paramsDigest(method string, params json.RawMessage) string {
 // principalID is who a requestState is bound to: the person (consent is
 // theirs, whichever credential they use).
 func (rc *request) principalID() string {
-	if rc.relayedPerson() {
-		return "agent:" + rc.principal.account.Account.ID.String() + ":" + rc.principal.relay.person.ID.String()
-	}
 	if sa := rc.principal.account; sa != nil {
 		return "service_account:" + sa.Account.ID.String()
 	}

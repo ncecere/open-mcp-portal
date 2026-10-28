@@ -29,7 +29,6 @@ const entry = (extra: Record<string, unknown> = {}) => ({
   config,
   origin: "https://mcp.acme.example",
   hasSecret: false,
-  allowAgents: false,
   reachable: true,
   canSetup: false,
   isSetup: false,
@@ -76,11 +75,11 @@ describe("The page a call's link opens", () => {
     expect(await axe(container)).toHaveNoViolations();
 
     await u.type(input, ` ${secretKey} `);
-    await u.click(screen.getByRole("switch", { name: /Let my agents use this key/ }));
+    expect(screen.queryByRole("switch", { name: /Let my agents use this key/ })).toBeNull();
     await u.click(screen.getByRole("button", { name: "Save key" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Your Acme API key is saved" })).toBeInTheDocument();
     const put = calls.find((c) => c.method === "PUT")!;
-    expect(put.body).toEqual({ origin: "https://mcp.acme.example", value: secretKey, allowAgents: true });
+    expect(put.body).toEqual({ origin: "https://mcp.acme.example", value: secretKey });
     expect(put.headers.get("X-CSRF-Token")).toBe("csrf-123");
     // Never echoed: not in the page, not in a field, not in the title.
     expect(document.body.textContent).not.toContain(secretKey);
@@ -143,7 +142,7 @@ describe("Account › My connections: keys for servers", () => {
   it("lists the entries without a key, and enters one with the origin shown", async () => {
     const u = userEvent.setup();
     const calls = mockApi(
-      routes([entry(), entry({ server: { ...server, id: "6b1d5b8e-6f0a-4a47-9a1b-0c0f5a8d3333", name: "Beta" }, hasSecret: true, hint: "4321", status: "rejected", allowAgents: true })], {
+      routes([entry(), entry({ server: { ...server, id: "6b1d5b8e-6f0a-4a47-9a1b-0c0f5a8d3333", name: "Beta" }, hasSecret: true, hint: "4321", status: "rejected" })], {
         [`PUT /v1/me/server-secrets/${serverId}`]: () => entry({ hasSecret: true, hint: "6789", status: "active" }),
       }),
     );
@@ -160,7 +159,7 @@ describe("Account › My connections: keys for servers", () => {
     const dialog = await screen.findByRole("dialog", { name: "Enter your key for Acme" });
     await u.type(within(dialog).getByLabelText("Your Acme API key"), secretKey);
     await u.click(within(dialog).getByRole("button", { name: "Save key" }));
-    await waitFor(() => expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ origin: "https://mcp.acme.example", value: secretKey, allowAgents: false }));
+    await waitFor(() => expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ origin: "https://mcp.acme.example", value: secretKey }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Enter your key for Acme" })).toBeNull());
     expect(document.body.textContent).not.toContain(secretKey);
   });

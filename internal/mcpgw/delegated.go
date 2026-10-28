@@ -91,7 +91,7 @@ func (rc *request) delegated(o gateways.Offer, rec *calls.Call) (cred *providers
 	sp := rc.span("mcp.provider_credential", trace.SpanKindInternal, observability.AttrProvider.String(req.Provider.Slug))
 	var c providers.Credential
 	var err error
-	if rc.principal.isServiceAccount() {
+	if rc.principal.account != nil {
 		c, err = rc.h.Providers.ServiceCredential(rc.r.Context(), req, rc.serviceCallContext(o))
 	} else {
 		c, err = rc.h.Providers.Credential(rc.r.Context(), req, rc.callContext(o))
@@ -165,11 +165,6 @@ func (rc *request) providerDisabled(req *registry.Requirement, rec *calls.Call) 
 // (isError) and a prompt or resource read a -32010 error, both with the
 // link in the message.
 func (rc *request) needsAuthorization(o gateways.Offer, c *providers.ConsentNeeded, rec *calls.Call, class string) {
-	if rc.relayedPerson() {
-		// An agent has no browser: no link, no -32042, no input request.
-		rc.needsConnection(o, c, rec)
-		return
-	}
 	if rc.consentInputRequired(o, c, rec, class) {
 		return
 	}

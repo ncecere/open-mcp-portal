@@ -578,9 +578,6 @@ func (a *api) tokenMayUpdateServer(w http.ResponseWriter, r *http.Request, actor
 	if in.CapturePayloads != nil && *in.CapturePayloads != sv.CapturePayloads {
 		return refuse("capturePayloads")
 	}
-	if in.RequiresPresentPerson != nil && *in.RequiresPresentPerson != sv.RequiresPresentPerson {
-		return refuse("requiresPresentPerson")
-	}
 	if in.AuthMode != nil && string(*in.AuthMode) == registry.AuthPersonSecret && registry.AuthModeOf(sv) != registry.AuthPersonSecret {
 		// A token never switches a server to asking people for their own keys,
 		// even one with nothing to steal yet: that sends their keys to its URL.

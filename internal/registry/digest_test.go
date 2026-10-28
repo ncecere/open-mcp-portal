@@ -1,7 +1,6 @@
 package registry
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -55,42 +54,11 @@ func TestReviewDigest(t *testing.T) {
 	if ReviewDigest(withRequirement("a", "b"), caps) != ReviewDigest(withRequirement("b", "a"), caps) {
 		t.Error("the order of scopes changes the digest")
 	}
-	// A present-person requirement is covered (L-4): the server's switch, and
-	// each capability's effective value, only when on.
+	// Retired presence columns are deliberately not part of the active digest.
 	on := base
 	on.RequiresPresentPerson = true
-	if ReviewDigest(on, caps) == want {
-		t.Error("the server's switch doesn't change the digest")
-	}
-	required := slices.Clone(caps)
-	required[1].PresentPerson = true
-	if ReviewDigest(base, required) == want {
-		t.Error("a capability's requirement doesn't change the digest")
-	}
-	otherOne := slices.Clone(caps)
-	otherOne[2].PresentPerson = true
-	if ReviewDigest(base, otherOne) == ReviewDigest(base, required) {
-		t.Error("which capability requires it doesn't change the digest")
-	}
-	if ReviewDigest(base, []CapabilityRef{{Kind: "tool", Name: "a", Fingerprint: "f1", PresentPerson: false}, caps[1], caps[2], caps[3]}) != want {
-		t.Error("a capability without the requirement changes the digest")
-	}
-	// The effective value: the override, else the server's switch.
-	yes, no := true, false
-	for name, c := range map[string]struct {
-		sv       dbgen.McpServer
-		override *bool
-		want     bool
-	}{
-		"off, follows":     {base, nil, false},
-		"on, follows":      {on, nil, true},
-		"off, required":    {base, &yes, true},
-		"on, not required": {on, &no, false},
-		"on, required":     {on, &yes, true},
-	} {
-		if got := CapabilityRefOf(c.sv, "tool", "a", "f1", c.override, nil).PresentPerson; got != c.want {
-			t.Errorf("%s: effective = %v, want %v", name, got, c.want)
-		}
+	if ReviewDigest(on, caps) != want {
+		t.Error("retired presence settings affect the digest")
 	}
 	// Fields can't run into each other.
 	if ReviewDigest(base, []CapabilityRef{{Kind: "tool", Name: "ab", Fingerprint: "c"}}) == ReviewDigest(base, []CapabilityRef{{Kind: "tool", Name: "a", Fingerprint: "bc"}}) {

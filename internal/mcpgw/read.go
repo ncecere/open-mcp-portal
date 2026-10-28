@@ -114,9 +114,6 @@ func (rc *request) forwardRead(exposed string, t readTarget, again retry) {
 	ctx := rc.r.Context()
 	o := t.offer
 	rec := calls.Call{ExposedName: exposed, Server: &o.Server, CapabilityID: o.Capability.ID}
-	if !rc.presenceOK(o, &rec) {
-		return
-	}
 	cred, ok := rc.delegated(o, &rec)
 	if !ok {
 		return

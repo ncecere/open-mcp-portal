@@ -56,7 +56,7 @@ export function SettingsTab({ account, abilities }: Props) {
       toast.success("Service account saved", updated.enabled === account.enabled ? undefined : updated.enabled ? "Its keys work again." : "Its keys are refused from now on.");
     },
   });
-  const canEdit = abilities.canManage;
+  const canEdit = abilities.canManage && !account.retired;
   const taken = save.error instanceof ApiError && save.error.code === "name_taken";
   const nameError = (submitted ? nameProblem(form.name) : undefined) ?? (taken ? "Another service account in this team has this name. Choose another." : undefined);
   const dirty = !!scopeDraftProblem || JSON.stringify({ ...form, description: form.description.trim() }) !== JSON.stringify({ ...saved, description: saved.description.trim() });

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/google/uuid"
-	"slices"
 	"strings"
 	"testing"
 
@@ -13,84 +12,6 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/httpapi/apitypes"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 )
-
-func TestCredentialToolScopesRelayedGrantIntersections(t *testing.T) {
-	e := scopedRuntime(t)
-	fx := setupRelay(t, e.gwEnv)
-	code, ec := e.owner.call("DELETE", toolsTeam+"/members/"+e.userID("blair@localhost"), nil, nil, nil)
-	mustCode(t, "remove person's team access", code, ec, 200, "")
-	code, ec = e.admin.call("DELETE", e.shared+"/grants/"+e.grant, nil, nil, nil)
-	mustCode(t, "remove initial", code, ec, 200, "")
-	for _, body := range []map[string]any{
-		{"subjectKind": "team", "team": "tools", "toolScope": classScope("read")},
-		{"subjectKind": "user", "userEmail": "blair@localhost", "toolScope": nameScope("status__whoami", "status__check_outage")},
-		{"subjectKind": "group", "group": "scope-person", "toolScope": classScope("write")},
-	} {
-		code, ec = e.admin.call("POST", e.shared+"/grants", body, nil, nil)
-		mustCode(t, "scoped grant", code, ec, 201, "")
-	}
-	if _, err := e.app.Pool.Exec(context.Background(), `UPDATE users SET groups=ARRAY['scope-person'] WHERE email='blair@localhost'`); err != nil {
-		t.Fatal(err)
-	}
-	patchSA(t, e.owner, fx.account.Id.String(), map[string]any{"toolScope": nameScope("status__whoami", "status__echo")})
-	if _, err := e.app.Pool.Exec(context.Background(), `UPDATE service_account_keys SET tool_scope='{"tools":["status__whoami","status__echo"]}' WHERE service_account_id=$1`, fx.account.Id); err != nil {
-		t.Fatal(err)
-	}
-	// A real personal credential is not part of an agent's request. Even an
-	// existing deny-all personal key must not be grafted onto the relay.
-	scopedKey(t, e.member, map[string]any{})
-	person := agentSpec{Email: "blair@localhost", Mutate: func(c map[string]any) {
-		c["tool_scope"] = map[string]any{"classes": []string{"read", "write", "destructive"}}
-	}}
-	list := func(want ...string) {
-		t.Helper()
-		status, out := fx.post(fx.key, fx.token(person), "shared", rpc(1, "tools/list", nil))
-		if status != 200 {
-			t.Fatal(out)
-		}
-		names := []string{}
-		for _, v := range resultOf(t, out)["tools"].([]any) {
-			names = append(names, v.(map[string]any)["name"].(string))
-		}
-		slices.Sort(want)
-		if !slices.Equal(names, want) {
-			t.Fatalf("relay scope list=%v want %v", names, want)
-		}
-	}
-	deny := func(name string) {
-		t.Helper()
-		n := e.fake.Requests()
-		status, out := fx.post(fx.key, fx.toolToken(person, name), "shared", rpc(2, "tools/call", toolCall(name, nil)))
-		if status != 200 || rpcErrorCode(out) != -32602 || e.fake.Requests() != n {
-			t.Fatalf("relay scope refusal=%d %v", status, out)
-		}
-		if got := e.scalar(`SELECT outcome||':'||coalesce(error_class,'') FROM mcp_calls WHERE method='tools/call' ORDER BY id DESC LIMIT 1`); got != "denied:tool_scope" {
-			t.Fatal(got)
-		}
-	}
-	list("status__whoami")
-	deny("status__echo")
-	deny("status__check_outage")
-	// Widening just the relay's team grant cannot bypass its account/key layers.
-	if _, err := e.app.Pool.Exec(context.Background(), `UPDATE gateway_grants SET tool_scope='{"classes":["write"]}' WHERE gateway_id=(SELECT id FROM gateways WHERE slug='shared') AND subject_kind='team'`); err != nil {
-		t.Fatal(err)
-	}
-	list("status__echo")
-	deny("status__whoami")
-	patchSA(t, e.owner, fx.account.Id.String(), map[string]any{"toolScope": classScope("read")})
-	list()
-	deny("status__echo")
-	patchSA(t, e.owner, fx.account.Id.String(), map[string]any{"toolScope": nil})
-	if _, err := e.app.Pool.Exec(context.Background(), `UPDATE service_account_keys SET tool_scope='{}' WHERE service_account_id=$1`, fx.account.Id); err != nil {
-		t.Fatal(err)
-	}
-	list()
-	deny("status__echo")
-	if _, err := e.app.Pool.Exec(context.Background(), `UPDATE service_account_keys SET tool_scope=NULL WHERE service_account_id=$1`, fx.account.Id); err != nil {
-		t.Fatal(err)
-	}
-	list("status__echo")
-}
 
 func TestCredentialToolScopesRefuseBeforeConsentAndRetry(t *testing.T) {
 	e := newProvEnv(t)

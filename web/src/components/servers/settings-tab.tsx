@@ -35,7 +35,6 @@ import { Field } from "@/components/ui/field/field";
 import { Input, Textarea } from "@/components/ui/input/input";
 import { toast } from "@/components/ui/toast/toast";
 import { describeAuthError } from "./auth-errors";
-import { PresentPersonSwitch, relaxesServerSwitch } from "./presence";
 import { AuthModeFields } from "./auth-mode-fields";
 import type { McpServer } from "./labels";
 import { type RequirementForm, requirementBody, requirementFormOf, reviewedAgain, serverChangeWidens } from "./requirement";
@@ -53,7 +52,7 @@ import { changesCa, emptyTlsForm, tlsBody, tlsDirty, tlsProblems, tlsRefusal, ty
 import { AuthChangeNotes, settingsAuthBody } from "./settings-auth";
 import { applyDetection, authChange, authModeOf, countedUpstream, type DetectResult, oauthProblems, upstreamFormOf, type UpstreamForm } from "./upstream-auth";
 
-type SettingsForm = ServerForm & { requirement: RequirementForm; capturePayloads: boolean; upstream: UpstreamForm; requiresPresentPerson: boolean };
+type SettingsForm = ServerForm & { requirement: RequirementForm; capturePayloads: boolean; upstream: UpstreamForm };
 
 const formOf = (x: McpServer): SettingsForm => ({
   name: x.name,
@@ -64,7 +63,6 @@ const formOf = (x: McpServer): SettingsForm => ({
   requirement: requirementFormOf(x),
   capturePayloads: x.capturePayloads ?? false,
   upstream: upstreamFormOf(x),
-  requiresPresentPerson: x.requiresPresentPerson ?? false,
 });
 const labels = {
   name: "Name",
@@ -75,7 +73,6 @@ const labels = {
   requirement: "User authorization",
   capturePayloads: "Record call contents",
   upstream: "Authentication",
-  requiresPresentPerson: "Require a present person",
 };
 
 /** Why the User authorization section is closed in the modes that already send one credential per call. */
@@ -150,7 +147,6 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
             ...(requirement === undefined ? {} : { requirement }),
             ...(tlsBody(tlsForm) ? { tls: tlsBody(tlsForm) } : {}),
             ...(form.capturePayloads !== saved.capturePayloads ? { capturePayloads: form.capturePayloads } : {}),
-            ...(form.requiresPresentPerson !== saved.requiresPresentPerson ? { requiresPresentPerson: form.requiresPresentPerson } : {}),
           },
         }),
       );
@@ -216,9 +212,8 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
     return d ? new Error(d.title ? `${d.title}. ${d.message}` : d.message) : undefined;
   }, [save.error]);
   const change = authChange(server, form.upstream, { urlChanged, detected });
-  const relaxesPresence = relaxesServerSwitch(saved.requiresPresentPerson, form.requiresPresentPerson, caps.data);
   const caChanged = changesCa(tlsForm, server);
-  const leavesCatalog = canEdit && reviewedAgain(server) && (urlChanged || (!noRequirement && requirementWidens) || Boolean(change.review) || relaxesPresence || caChanged);
+  const leavesCatalog = canEdit && reviewedAgain(server) && (urlChanged || (!noRequirement && requirementWidens) || Boolean(change.review) || caChanged);
   const providerChanges = Boolean(server.requirement) && (!form.requirement.on || form.requirement.providerId !== server.requirement?.providerId);
   const resetsOverrides = providerChanges ? (caps.data ?? []).filter((c) => !c.goneAt && c.requirementOverride.mode === "scopes").length : 0;
 
@@ -335,15 +330,6 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
             review.
           </Alert>
         )}
-      </SettingsSection>
-      <SettingsSection title="Calls from agents" description="Agent platforms the portal trusts can call this server's tools for a person. The call is the person's, and the platform says whether they are present.">
-        <PresentPersonSwitch
-          checked={form.requiresPresentPerson}
-          onChange={(requiresPresentPerson) => set({ requiresPresentPerson })}
-          disabled={!canEdit}
-          leaves={relaxesPresence}
-          server={server}
-        />
       </SettingsSection>
       <SettingsSection
         title="Record call contents"

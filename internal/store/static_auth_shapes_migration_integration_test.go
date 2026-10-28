@@ -54,6 +54,7 @@ func TestStaticAuthShapesMigration00022(t *testing.T) {
 	}
 
 	// The previous release's schema, with a server that has a static header.
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, staticAuth-1); err != nil {
 		t.Fatalf("down: %v", err)
 	}
@@ -138,6 +139,7 @@ func TestStaticAuthShapesMigration00022(t *testing.T) {
 	}
 
 	// Down removes the table and nothing else; the servers and their headers stay.
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, staticAuth-1); err != nil {
 		t.Fatalf("down again: %v", err)
 	}
@@ -157,6 +159,7 @@ func TestStaticAuthShapesMigration00022(t *testing.T) {
 	// It needs nothing from a neighbouring migration: its statements alone, on
 	// the schema of 00020, create the table (what another migration of the same
 	// release adds, or doesn't, makes no difference).
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, 20); err != nil {
 		t.Fatalf("down to 20: %v", err)
 	}

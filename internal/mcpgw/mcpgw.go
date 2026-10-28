@@ -64,7 +64,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/ncecere/open-mcp-portal/internal/agentidentity"
 	"github.com/ncecere/open-mcp-portal/internal/apikeys"
 	"github.com/ncecere/open-mcp-portal/internal/apperr"
 	"github.com/ncecere/open-mcp-portal/internal/buildinfo"
@@ -167,12 +166,8 @@ type Handler struct {
 	OAuth *oauth.Service
 	// ServiceAccounts checks service account keys (nil: none accepted).
 	ServiceAccounts *serviceaccounts.Service
-	// Agents verifies the identity tokens of trusted agent platforms, which
-	// relay service accounts may present (agent.go; nil: a relay account's
-	// token is refused).
-	Agents   *agentidentity.Service
-	Identity *identity.Service
-	Registry *registry.Service
+	Identity        *identity.Service
+	Registry        *registry.Service
 	// Providers supplies people's delegated credentials for capabilities
 	// that require an auth provider (nil: such calls are refused).
 	Providers *providers.Service
@@ -264,6 +259,14 @@ func refuse(w http.ResponseWriter, status int, msg string) {
 
 // ServeHTTP handles every method on /mcp/{slug}.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// This header was an external impersonation input. Never silently execute
+	// such a request as the credential owner, including non-POST requests.
+	for name := range r.Header {
+		if strings.EqualFold(name, identity.HeaderIdentity) {
+			refuse(w, http.StatusForbidden, "Inbound external identity is retired. Remove the identity header and use an ordinary MCP credential.")
+			return
+		}
+	}
 	start := time.Now()
 	// Tracing (trace.go): nil, and w unchanged, when it is off. finish gets
 	// the request as it is when the handler returns (it carries the span).
@@ -332,10 +335,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.toolBound(w, r, principal, msg) {
-		return
-	}
-
 	rc := &request{h: h, w: w, r: r, start: start, msg: msg, principal: principal, requestBytes: int64(len(body)),
 		modern: era.modern, clientCaps: era.caps}
 	if tr != nil {
@@ -349,9 +348,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rc.observe()
 	if !rc.rateLimit() {
-		return
-	}
-	if rc.refusePerson() {
 		return
 	}
 	if msg.Method == "" || len(msg.ID) == 0 {
@@ -397,9 +393,6 @@ type principal struct {
 	grant *dbgen.OauthGrant
 	// account is the service account and its team.
 	account *serviceaccounts.Principal
-	// relay is set when a relay service account presented a valid agent
-	// identity token (agent.go).
-	relay *relayContext
 }
 
 func (p principal) inScope(gatewayID uuid.UUID) bool {
@@ -411,11 +404,7 @@ func (p principal) inScope(gatewayID uuid.UUID) bool {
 // with a WWW-Authenticate challenge pointing at the gateway's protected
 // resource metadata, where OAuth clients learn how to sign in.
 func (h *Handler) authenticate(w http.ResponseWriter, r *http.Request, slug string) (principal, bool) {
-	p, ok := h.credential(w, r, slug)
-	if !ok || !h.agentToken(w, r, &p) {
-		return principal{}, false
-	}
-	return p, true
+	return h.credential(w, r, slug)
 }
 
 // credential authenticates the Authorization header (see authenticate).
@@ -547,10 +536,6 @@ func (rc *request) rateLimit() bool {
 	case p.account != nil:
 		t := p.account.Team
 		sub.ServiceAccountID, sub.ServiceAccountTeam = p.account.Account.ID, &t
-		if p.relayedPerson() {
-			// The person's own limit counts their agents' calls too.
-			sub.UserID = p.relay.person.ID
-		}
 	case p.grant != nil:
 		sub.UserID, sub.CredentialID = p.user.ID, p.grant.ID
 	default:
@@ -649,13 +634,6 @@ func (rc *request) resolveGatewayAttempt(slug string, prior *calls.Call) bool {
 		var c gateways.Caller
 		if sa := rc.principal.account; sa != nil {
 			c, err = rc.h.Gateways.ServiceAccountCaller(ctx, g, sa.Team.ID, sa.Account.Role)
-			if err == nil && rc.relayedPerson() {
-				// The person's access, limited to the relay account's.
-				var pc gateways.Caller
-				if pc, err = rc.h.Gateways.CallerOf(ctx, g, *rc.principal.relay.person); err == nil {
-					c = gateways.Intersect(pc, c)
-				}
-			}
 		} else {
 			c, err = rc.h.Gateways.CallerOf(ctx, g, rc.principal.user)
 		}
@@ -757,16 +735,6 @@ func (rc *request) record(c calls.Call, responseBytes int64) {
 	switch {
 	case p.account != nil:
 		c.ServiceAccountID, c.ServiceAccountName, c.ServiceAccountTeamID = p.account.Account.ID, p.account.Account.Name, p.account.Team.ID
-		if rl := p.relay; rl != nil {
-			c.AgentID, c.AgentName, c.ViaPlatformID, c.ViaPlatformName = rl.agent.AgentID, rl.agent.AgentName, rl.platform.ID, rl.platform.Name
-			if rl.agent.Person != nil {
-				present := rl.agent.PersonPresent
-				c.PersonPresent = &present
-			}
-			if rl.user != nil {
-				c.UserID = rl.user.ID // the person; the principal stays the account
-			}
-		}
 	case p.grant != nil:
 		c.UserID, c.OAuthGrantID, c.OAuthClientName, c.OAuthClientKind = p.user.ID, p.grant.ID, p.grant.ClientName, p.grant.ClientKind
 	default:

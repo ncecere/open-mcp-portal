@@ -100,14 +100,6 @@ provider where possible.
 
 ## Runtime (decisions 27–29)
 
-*Calls an agent platform relays for a person (decision 66, [agent-platforms.md](agent-platforms.md)) use the person's
-connection as below, but an agent has no browser: where step 3 gives a consent link, such a call answers a tool error
-(a prompt or resource read: `-32010`) naming the provider and saying to connect under Account › My connections, makes no
-consent request, and is recorded `needs_authorization` with class `needs_connection`. For `server_not_allowed` the
-message names the server and says to allow it under Account › My connections ("Allow servers…", see "Allowing a server
-from My connections" below); it never holds a link. A service account that is the relay itself, with no person named,
-is a service account here too (step 1).*
-
 The existing checks (credential, person active, gateway, grant, selection, role, availability) run first, so anything
 not allowed still looks like "not found". Then, for `tools/call`, `prompts/get` and `resources/read` of a capability
 with an effective requirement:

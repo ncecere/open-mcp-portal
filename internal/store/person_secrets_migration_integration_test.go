@@ -52,6 +52,7 @@ func TestPersonSecretsMigration(t *testing.T) {
 		t.Fatal("the newest schema has no person_secrets")
 	}
 	// Back to the previous release's schema, with a server in each older mode.
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, personSecrets-1); err != nil {
 		t.Fatalf("down: %v", err)
 	}
@@ -119,6 +120,7 @@ func TestPersonSecretsMigration(t *testing.T) {
 
 	// Down puts such a server back to none and restores the older check.
 	must(`INSERT INTO mcp_servers (team_id, slug, name, url, auth_mode, secret_placement) SELECT id, 'again', 'again', 'https://z.example/mcp', 'person_secret', 'bearer' FROM teams`)
+	testutil.RemoveRetirementFencesForOldSchema(t, pool)
 	if _, err := provider.DownTo(ctx, personSecrets-1); err != nil {
 		t.Fatalf("down again: %v", err)
 	}

@@ -1,8 +1,0 @@
-{
-  "status": 200,
-  "headers": {
-    "Cache-Control": "public, max-age=300",
-    "Content-Type": "application/jwk-set+json"
-  },
-  "generatedAtPdpClock": "2026-10-20T12:00:00Z"
-}

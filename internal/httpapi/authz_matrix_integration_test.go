@@ -231,7 +231,7 @@ func (e *matrixEnv) digest(serverID string) string {
 	}
 	refs := make([]registry.CapabilityRef, len(rows))
 	for i, r := range rows {
-		refs[i] = registry.CapabilityRefOf(sv, r.Kind, r.Name, r.Fingerprint, r.RequiresPresentPerson, r.ToolClass)
+		refs[i] = registry.CapabilityRefOf(r.Kind, r.Name, r.Fingerprint, r.ToolClass)
 	}
 	return registry.ReviewDigest(sv, refs)
 }
