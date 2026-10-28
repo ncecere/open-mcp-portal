@@ -25,6 +25,7 @@ export const outcomeChartTone: Record<CallOutcome, ChartTone> = {
   too_large: "warning",
   bad_request: "warning",
   needs_authorization: "info",
+  needs_approval: "warning",
   rate_limited: "accent",
 };
 

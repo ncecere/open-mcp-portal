@@ -65,4 +65,10 @@ export const platformDestinationEvents: NotificationEvent[] = ["publish.requeste
 export const destinationEvents = (scope: "team" | "platform", teamEvents: boolean): NotificationEvent[] =>
   scope === "team" ? teamDestinationEvents : teamEvents ? platformDestinationEvents : platformOwnEvents;
 
-export const eventLabel = (event: string) => eventLabels[event as NotificationEvent] ?? event;
+// Approval event labels are forward-compatible inbox text only. The current generated
+// preference/webhook enum does not expose these events; do not invent writable options.
+const approvalEventLabels: Record<string, string> = {
+  "approval.requested": "A tool call is waiting for approval",
+  "approval.decided": "A tool-call approval was decided",
+};
+export const eventLabel = (event: string) => eventLabels[event as NotificationEvent] ?? approvalEventLabels[event] ?? event;

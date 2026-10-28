@@ -20,7 +20,7 @@ import { TeamContext, teamCtx, useTeam } from "./common";
  * gateways, the service accounts and call records (which platform staff read, as the API allows). Later team
  * pages are members only.
  */
-const staffPage = (path: string) => /^\/teams\/[^/]+(\/settings|\/usage|\/(servers|gateways|service-accounts|calls)(\/[^/]+)?)?\/?$/.test(path);
+const staffPage = (path: string) => /^\/teams\/[^/]+(\/settings|\/usage|\/approval-rules|\/(servers|gateways|service-accounts|calls)(\/[^/]+)?)?\/?$/.test(path);
 
 /** The team area: loads the team and provides it to the current team page. */
 export function TeamLayout() {

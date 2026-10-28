@@ -95,6 +95,8 @@ function useTrail({ routeId, params }: Location, canAdmin: boolean): BreadcrumbI
   if (routeId === "/app/settings/connections") return [{ label: terms.myConnections, icon: icon(Link2) }];
   if (routeId === "/app/settings/notifications") return [{ label: terms.notifications, icon: icon(Bell) }];
   if (routeId === "/app/notifications") return [{ label: terms.inbox, icon: icon(Inbox) }];
+  if (routeId === "/app/approvals") return [{ label: "Approvals", icon: icon(Shield) }];
+  if (routeId === "/app/approvals/$approvalId") return [{ label: "Approvals", render: <Link to="/approvals" /> }, { label: `Approval ${params.approvalId ?? ""}` }];
   if (routeId === "/app/gateways") return [{ label: terms.myGateways, icon: icon(Network) }];
   if (routeId === "/app/gateways/$gatewayId") {
     return [

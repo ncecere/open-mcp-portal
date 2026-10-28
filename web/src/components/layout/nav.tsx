@@ -23,13 +23,14 @@ export const icon = (C: typeof Home) => <C aria-hidden />;
 
 /* ---------------- workspace ---------------- */
 
-export type WorkspacePath = "/" | "/catalog" | "/gateways";
+export type WorkspacePath = "/" | "/catalog" | "/gateways" | "/approvals";
 
 export type WorkspaceNavItem = { to: WorkspacePath; label: string; icon: ReactNode; exact?: boolean; keywords?: string[] };
 
 /** Pages for everyone signed in, at the top of the workspace sidebar. */
 export const workspaceNav: WorkspaceNavItem[] = [
   { to: "/", label: terms.home, icon: icon(Home), exact: true, keywords: ["start", "welcome", "teams"] },
+  { to: "/approvals", label: "Approvals", icon: icon(ShieldCheck), keywords: ["review", "approval", "tool", "request"] },
   { to: "/catalog", label: terms.catalog, icon: icon(Library), keywords: ["mcp", "servers", "published", "tools", "resources", "prompts", "browse"] },
   { to: "/gateways", label: terms.myGateways, icon: icon(Network), keywords: ["gateway", "connect", "mcp", "url", "claude", "vs code", "cursor", "tools", "access"] },
 ];
@@ -65,7 +66,7 @@ export function teamAccess(me: Me, mine: Membership | undefined): TeamAccess {
   };
 }
 
-export type TeamPath = "/teams/$team" | "/teams/$team/servers" | "/teams/$team/gateways" | "/teams/$team/service-accounts" | "/teams/$team/usage" | "/teams/$team/settings";
+export type TeamPath = "/teams/$team" | "/teams/$team/servers" | "/teams/$team/gateways" | "/teams/$team/service-accounts" | "/teams/$team/usage" | "/teams/$team/settings" | "/teams/$team/approval-rules";
 
 export type TeamNavItem = {
   to: TeamPath;
@@ -102,6 +103,7 @@ const teamNav: TeamNavItem[] = [
     access: (a) => a.member || a.staff,
     keywords: ["service account", "bot", "robot", "automation", "ci", "headless", "agent", "script", "key", "keys", "rotate", "omp_sa"],
   },
+  { to: "/teams/$team/approval-rules", label: "Approval rules", icon: icon(ShieldCheck), access: (a) => a.isManager || a.staff, keywords: ["approval", "rule", "policy", "review"] },
   // Owners, admins and editors (as the API allows; an archived team's editors still read it), and platform staff.
   {
     to: "/teams/$team/usage",
@@ -138,6 +140,7 @@ export type AdminPath =
   | "/admin/publishing"
   | "/admin/networks"
   | "/admin/gateways"
+  | "/admin/approval-rules"
   | "/admin/trusted-clients"
   | "/admin/auth-providers"
   | "/admin/automation-tokens"
@@ -178,6 +181,7 @@ export const adminSections: { label?: string; defaultOpen?: boolean; items: Admi
     label: "Access",
     defaultOpen: true,
     items: [
+      { to: "/admin/approval-rules", label: "Approval rules", icon: icon(ShieldCheck) },
       { to: "/admin/gateways", label: terms.gateways, icon: icon(Network) },
       { to: "/admin/trusted-clients", label: terms.trustedClients, icon: icon(ShieldCheck) },
       { to: "/admin/auth-providers", label: terms.authProviders, icon: icon(KeySquare) },

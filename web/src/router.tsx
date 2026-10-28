@@ -51,6 +51,7 @@ const pages = {
   adminNotifications: () => import("./pages/admin/notifications/routes"),
   adminTokens: () => import("./pages/admin/automation-tokens/routes"),
   inbox: () => import("./pages/notifications/routes"),
+  approvals: () => import("./pages/approvals/routes"),
 };
 const lazy = lazyRouteComponent;
 type Page = ReturnType<typeof lazyRouteComponent>;
@@ -112,6 +113,8 @@ const appRoute = createRoute({
   ),
 });
 
+const approvalsRoute = createRoute({ getParentRoute: () => appRoute, path: "approvals", component: lazy(pages.approvals, "ApprovalsPage") });
+const approvalRoute = createRoute({ getParentRoute: () => appRoute, path: "approvals/$approvalId", component: lazy(pages.approvals, "ApprovalPage") });
 const homeRoute = createRoute({ getParentRoute: () => appRoute, path: "/", component: lazy(pages.home, "HomePage") });
 const sessionsRoute = createRoute({ getParentRoute: () => appRoute, path: "settings/sessions", component: lazy(pages.account, "SessionsPage") });
 const profileRoute = createRoute({ getParentRoute: () => appRoute, path: "settings/profile", component: lazy(pages.account, "ProfilePage") });
@@ -167,6 +170,7 @@ const catalogServerRoute = createRoute({ getParentRoute: () => appRoute, path: "
 /* ---------------- a team (workspace) ---------------- */
 
 const teamRoute = createRoute({ getParentRoute: () => appRoute, path: "teams/$team", component: lazy(pages.teamLayout, "TeamLayout") });
+const teamApprovalRulesRoute = createRoute({ getParentRoute: () => teamRoute, path: "approval-rules", component: lazy(pages.approvals, "TeamApprovalRulesPage") });
 const teamIndexRoute = createRoute({ getParentRoute: () => teamRoute, path: "/", component: lazy(pages.teamLayout, "TeamOverviewPage") });
 /** Members · Audit log · General; ?record= (an audit entry) and the log's filters pass through. */
 const teamSettingsRoute = createRoute({
@@ -244,6 +248,8 @@ const adminTabs = <P extends string, T extends string>(path: P, tabs: readonly T
 
 const appTree = appRoute.addChildren([
   homeRoute,
+  approvalsRoute,
+  approvalRoute,
   profileRoute,
   sessionsRoute,
   apiKeysRoute,
@@ -257,6 +263,7 @@ const appTree = appRoute.addChildren([
   myGatewayRoute,
   teamRoute.addChildren([
     teamIndexRoute,
+    teamApprovalRulesRoute,
     teamSettingsRoute,
     teamServersRoute,
     teamServerRoute,
@@ -269,6 +276,7 @@ const appTree = appRoute.addChildren([
   ]),
   adminRoute.addChildren([
     adminIndexRoute,
+    adminList("approval-rules", lazy(pages.approvals, "AdminApprovalRulesPage")),
     adminList("users", lazy(pages.people, "AdminUsersPage")),
     adminList("users/$userId", lazy(pages.people, "AdminUserPage")),
     adminList("teams", lazy(pages.people, "AdminTeamsPage")),

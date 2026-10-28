@@ -88,6 +88,7 @@ export const outcomeLabels: Record<CallOutcome, string> = {
   too_large: "Too large",
   bad_request: "Bad request",
   needs_authorization: "Needed a connection",
+  needs_approval: "Needs approval",
   rate_limited: "Rate limited",
 };
 
@@ -100,6 +101,7 @@ export const outcomeHelp: Record<CallOutcome, string> = {
   too_large: "The request or response was over 1 MiB.",
   bad_request: "The client's request was invalid.",
   needs_authorization: "Not sent to the server: the person had to connect or reconnect an account first, and their client got a link to do it (an agent got an error saying where to connect instead).",
+  needs_approval: "Not sent to the server: this exact tool call requires human approval. Open Approvals to review the request. A spent authorization does not confirm execution.",
   rate_limited: "Not sent to the server: a rate limit was exceeded, so the client was told to try again later (HTTP 429).",
 };
 
@@ -112,13 +114,14 @@ export const outcomeTone: Record<CallOutcome, "success" | "warning" | "danger" |
   too_large: "warning",
   bad_request: "warning",
   needs_authorization: "warning",
+  needs_approval: "warning",
   rate_limited: "warning",
 };
 
 export const callOutcomes = Object.keys(outcomeLabels) as CallOutcome[];
 
 /** Outcomes of a call that never reached its server. */
-const notForwarded: CallOutcome[] = ["denied", "needs_authorization", "rate_limited", "bad_request"];
+const notForwarded: CallOutcome[] = ["denied", "needs_authorization", "needs_approval", "rate_limited", "bad_request"];
 
 /**
  * Whether the identity token went to the server (McpCall.identitySent, decision 64): "Sent", "Not sent" (the
