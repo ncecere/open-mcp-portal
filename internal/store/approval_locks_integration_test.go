@@ -36,9 +36,8 @@ func approvalWaitBlocked(t *testing.T, db *pgxpool.Pool, pid uint32) {
 	}
 }
 
-// Administrative writers really hold an authority row before their AFTER
-// trigger waits for epoch. The consumer's live reads must remain NONLOCKING,
-// including when a suspension, credential revocation or server edit races it.
+// Administrative writers wait at the authority table fence, before taking
+// rows. The consumer's live reads remain NONLOCKING while it spends and audits.
 func TestApprovalFenceAdministrativeWriters(t *testing.T) {
 	approvalModes(t, func(t *testing.T, db *pgxpool.Pool) {
 		seedApprovalAuthority(t, db)
@@ -97,8 +96,8 @@ func TestApprovalFenceAdministrativeWriters(t *testing.T) {
 	})
 }
 
-// Lock helper is transaction-scoped (not merely function-scoped); multiple
-// readers coexist, while rule administration takes the exclusive fence.
+// Lock helper is transaction-scoped. Both modes conservatively take the same
+// exclusive table fence; contending approvals fail fast and must retry.
 func TestApprovalFenceRuleAndActorOrder(t *testing.T) {
 	approvalModes(t, func(t *testing.T, db *pgxpool.Pool) {
 		seedApprovalAuthority(t, db)
@@ -123,8 +122,8 @@ func TestApprovalFenceRuleAndActorOrder(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer other.Rollback(ctx)
-		if _, err := dbgen.New(other).LockApprovalContext(ctx); err != nil {
-			t.Fatal("shared fences did not coexist:", err)
+		if _, err := dbgen.New(other).LockApprovalContext(ctx); !approvalIsSQLState(err, "55P03") {
+			t.Fatal("contending fence did not fail fast:", err)
 		}
 		_ = other.Rollback(ctx)
 		writer, err := db.Acquire(ctx)
@@ -132,28 +131,26 @@ func TestApprovalFenceRuleAndActorOrder(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer writer.Release()
-		done := make(chan error, 1)
-		go func() {
-			done <- pgx.BeginFunc(ctx, writer, func(tx pgx.Tx) error {
+		attempt := func() error {
+			return pgx.BeginFunc(ctx, writer, func(tx pgx.Tx) error {
 				q := dbgen.New(tx)
-				// Browser actor first, then exclusive epoch, then new rule/selector FKs.
-				if _, err := q.LockApprovalActor(ctx, actor); err != nil {
-					return err
-				}
+				// Direct helper contention fails fast, without waiting on actor rows.
 				if _, err := q.LockApprovalContextExclusive(ctx); err != nil {
 					return err
 				}
 				_, err := tx.Exec(ctx, `UPDATE approval_rules SET revision=revision+1,enabled=false`)
 				return err
 			})
-		}()
-		approvalWaitBlocked(t, testutil.OwnerPool(t, db), writer.Conn().PgConn().PID())
+		}
+		if err := attempt(); !approvalIsSQLState(err, "55P03") {
+			t.Fatal("rule administration did not fail fast:", err)
+		}
 		// This FK is protected by the actor lock acquired BEFORE the fence.
 		roleExec(t, reader, `INSERT INTO audit_log(actor_kind,actor_user_id,action,target_type) VALUES ('user',$1,'approval.test','approval_request')`, actor)
 		if err := reader.Commit(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := <-done; err != nil {
+		if err := attempt(); err != nil {
 			t.Fatal(err)
 		}
 		if approvalEpoch(t, db) <= epoch {
@@ -185,9 +182,8 @@ func TestApprovalAdvisoryQuotaAndLiveDedup(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer conn.Release()
-		done := make(chan error, 1)
-		go func() {
-			done <- pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
+		attempt := func() error {
+			return pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
 				q := dbgen.New(tx)
 				if _, err := q.LockApprovalContext(ctx); err != nil {
 					return err
@@ -201,12 +197,14 @@ func TestApprovalAdvisoryQuotaAndLiveDedup(t *testing.T) {
 				}
 				return err
 			})
-		}()
-		approvalWaitBlocked(t, testutil.OwnerPool(t, db), conn.Conn().PgConn().PID())
+		}
+		if err := attempt(); !approvalIsSQLState(err, "55P03") {
+			t.Fatal("contending quota transaction did not fail fast:", err)
+		}
 		if err := first.Commit(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := <-done; err != nil {
+		if err := attempt(); err != nil {
 			t.Fatal(err)
 		}
 		// The partial unique index is a second dedup boundary even if a caller

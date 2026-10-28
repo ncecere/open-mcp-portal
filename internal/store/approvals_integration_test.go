@@ -109,6 +109,7 @@ func TestApprovalEpochAuthority(t *testing.T) {
 			`UPDATE capture_settings SET patterns='["private-pattern"]'`,
 			`UPDATE oauth_tokens SET resource=resource||'/new'`,
 			`UPDATE provider_connections SET scopes='{read}'`,
+			`UPDATE provider_connections SET connected_at=clock_timestamp()`,
 			`UPDATE provider_connections SET status='needs_reconsent',access_token_cipher=NULL,refresh_token_cipher=NULL`,
 			`UPDATE provider_server_grants SET scopes='{read}'`, `UPDATE person_secrets SET status='rejected'`,
 			`UPDATE person_secrets SET secret_cipher='new'::bytea`, `UPDATE person_secrets SET origin='https://other.test'`,
@@ -138,7 +139,7 @@ func TestApprovalEpochAuthority(t *testing.T) {
 			}
 			roleExec(t, tx, "DELETE FROM "+table)
 			var after int64
-			if err := tx.QueryRow(context.Background(), `SELECT epoch FROM approval_context`).Scan(&after); err != nil {
+			if err := tx.QueryRow(context.Background(), `SELECT public.omp_current_approval_context()`).Scan(&after); err != nil {
 				t.Fatal(err)
 			}
 			if after <= before {
@@ -306,7 +307,7 @@ func TestApprovalConditionalUseAndAuditRollback(t *testing.T) {
 				})
 				if err == nil {
 					wins.Add(1)
-				} else if !errors.Is(err, pgx.ErrNoRows) {
+				} else if !errors.Is(err, pgx.ErrNoRows) && !approvalIsSQLState(err, "55P03") {
 					errs <- err
 				}
 			})

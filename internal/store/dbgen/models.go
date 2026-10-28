@@ -62,6 +62,10 @@ type ApprovalContext struct {
 	Epoch int64
 }
 
+type ApprovalContextEvent struct {
+	EventID int64
+}
+
 type ApprovalRequest struct {
 	ID                    uuid.UUID
 	RuleID                uuid.UUID
