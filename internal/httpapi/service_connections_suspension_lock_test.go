@@ -10,6 +10,43 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/testutil"
 )
 
+func TestServiceConnectionConsentMutationsLockUserBeforeSession(t *testing.T) {
+	for _, action := range []string{"start", "reconnect"} {
+		t.Run(action, func(t *testing.T) {
+			e := newProvEnv(t)
+			c := sharedByNameAfterStart(t, e)
+			path := "/v1/admin/users/" + e.owner.me.User.Id.String()
+			var detail apitypes.UserDetail
+			if code := e.admin.get(path, &detail); code != 200 {
+				t.Fatalf("user detail = %d", code)
+			}
+			g := pauseServiceMutation(t, e, `SELECT 1 FROM sessions WHERE user_id=$1 FOR UPDATE`, e.owner.me.User.Id)
+			suspension := g.launchAs(e.admin, "PATCH", path, map[string]any{"status": "suspended"}, detail.User.Revision)
+			adminPID := g.blockedBy(g.pid, "-- name: DeleteUserSessions")
+			method, mutationPath, body := "POST", sharedBase, any(map[string]any{"providerId": e.provider.Id, "name": "suspended-start"})
+			if action == "reconnect" {
+				mutationPath, body = sharedBase+"/"+c.Id.String()+"/reconnect", nil
+			}
+			mutation := g.launch(method, mutationPath, body, c.Revision)
+			g.blockedBy(adminPID, "-- name: LockServiceConsentUser")
+			if err := g.tx.Commit(g.ctx); err != nil {
+				t.Fatal(err)
+			}
+			g.finish(suspension, 200, "")
+			g.finish(mutation, 403, "forbidden")
+			if n := e.scalar(`SELECT count(*)::text FROM service_connections`); n != "1" {
+				t.Fatal("suspended consent mutation created a connection")
+			}
+			if got := sharedByName(t, e.editor, "queued-target"); got.Revision != c.Revision {
+				t.Fatal("suspended consent mutation advanced the connection")
+			}
+			if n := e.scalar(`SELECT count(*)::text FROM audit_log WHERE action IN ('service_connection.create','service_connection.reconnect')`); n != "1" {
+				t.Fatal("refused consent mutation wrote an audit")
+			}
+		})
+	}
+}
+
 // Exercise the actual administrative HTTP suspension, not a direct users UPDATE:
 // it locks USER FOR UPDATE and then deletes SESSION. Observe each scheduling
 // edge in pg_blocking_pids; no elapsed-time ordering or sleeps are used.
