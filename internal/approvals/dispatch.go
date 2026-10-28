@@ -218,7 +218,17 @@ func (s *Service) Begin(ctx context.Context, in BeginInput) (Plan, error) {
 	return plan, nil
 }
 func (s *Service) insertRequest(ctx context.Context, q *dbgen.Queries, a *authz.Actor, b Binding, rule Rule, id uuid.UUID, args, digest string, cipher []byte, truncated, redacted bool) (dbgen.ApprovalRequest, error) {
-	at := s.clock()
+	at := s.clock().Truncate(time.Microsecond)
+	// PostgreSQL timestamps have microsecond precision. A new attempt must
+	// sort after the previous one even with a fixed test clock or fast renewal;
+	// UUID ordering must never resurrect a remembered denial.
+	previous, e := q.FindApprovalRequestBinding(ctx, digest)
+	if e != nil && !noRows(e) {
+		return dbgen.ApprovalRequest{}, e
+	}
+	if e == nil && !at.After(previous.CreatedAt) {
+		at = previous.CreatedAt.Add(time.Microsecond)
+	}
 	n, err := q.CountPendingApprovalRequests(ctx, dbgen.CountPendingApprovalRequestsParams{RequesterKind: b.RequesterKind, RequesterID: b.RequesterID, AtTime: at})
 	if err != nil {
 		return dbgen.ApprovalRequest{}, err
@@ -289,6 +299,11 @@ func (s *Service) Consume(ctx context.Context, plan Plan) error {
 			return e
 		}
 		if !r.DecidedBy.Valid || !slices.Contains(eligible, r.DecidedBy.UUID) {
+			return ErrUnavailable
+		}
+		// Waiting for the requester/request lock must not freeze the time guard.
+		at = s.clock()
+		if !credentialLive(at, plan.CredentialExpiresAt) || !liveDeadline(r, at) {
 			return ErrUnavailable
 		}
 		r, e = q.UseApprovalRequest(ctx, dbgen.UseApprovalRequestParams{ID: r.ID, AtTime: &at, BindingDigest: r.BindingDigest, ArgsDigest: r.ArgsDigest, RuleRevision: r.RuleRevision, ExpectedReviewRevision: plan.Receipt.ReviewRevision, ContextEpoch: epoch})

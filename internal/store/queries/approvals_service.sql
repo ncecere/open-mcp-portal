@@ -40,6 +40,15 @@ SELECT (EXISTS (
    WHERE sa.id = @requester_id AND sa.enabled AND t.status = 'active' AND sa.team_id = sqlc.narg(requester_team_id)::uuid))
 ))::boolean AS live;
 
+-- name: ApprovalSelectionRole :one
+SELECT gc.min_team_role FROM gateway_capabilities gc
+JOIN mcp_capabilities c ON c.id=gc.capability_id
+JOIN mcp_servers s ON s.id=c.server_id
+WHERE gc.gateway_id = sqlc.arg(gateway_id) AND gc.capability_id = sqlc.arg(capability_id)
+ AND c.tool_class IS NOT DISTINCT FROM sqlc.narg(tool_class)::text
+ AND COALESCE(CASE WHEN gc.base_fingerprint IS NOT NULL THEN gc.name_override END,s.slug||'__'||c.name) = sqlc.arg(exposed_name)
+ AND (gc.base_fingerprint IS NULL OR gc.base_fingerprint=c.fingerprint);
+
 -- name: ApprovalRequesterAgent :one
 SELECT EXISTS (SELECT 1 FROM service_accounts sa JOIN teams t ON t.id = sa.team_id
  JOIN team_members m ON m.team_id = sa.team_id JOIN users u ON u.id = m.user_id
@@ -67,8 +76,9 @@ ORDER BY created_at DESC, id DESC LIMIT @page_limit::integer OFFSET @page_offset
 -- name: ApprovalRequestMetadataBatch :many
 SELECT id,rule_id,rule_revision,context_epoch,requester_kind,requester_id,requester_team_id,
  gateway_id,server_id,capability_id,exposed_name,tool_class,args_digest,binding_digest,
- capability_fingerprint,server_origin,NULL::bytea AS preview_cipher,preview_truncated,preview_redacted,
- status,review_revision,decided_by,created_at,expires_at,valid_until,decided_at,used_at,terminal_at
+ capability_fingerprint,server_origin,preview_truncated,preview_redacted,
+ status,review_revision,decided_by,created_at,expires_at,valid_until,decided_at,used_at,terminal_at,
+ (preview_cipher IS NOT NULL)::boolean AS has_preview
 FROM approval_requests
 WHERE (sqlc.narg(before_time)::timestamptz IS NULL OR (created_at,id) < (sqlc.narg(before_time)::timestamptz,sqlc.narg(before_id)::uuid))
 ORDER BY created_at DESC,id DESC LIMIT @page_limit::integer;

@@ -125,8 +125,9 @@ func (q *Queries) ApprovalEligibleReviewers(ctx context.Context, arg ApprovalEli
 const approvalRequestMetadataBatch = `-- name: ApprovalRequestMetadataBatch :many
 SELECT id,rule_id,rule_revision,context_epoch,requester_kind,requester_id,requester_team_id,
  gateway_id,server_id,capability_id,exposed_name,tool_class,args_digest,binding_digest,
- capability_fingerprint,server_origin,NULL::bytea AS preview_cipher,preview_truncated,preview_redacted,
- status,review_revision,decided_by,created_at,expires_at,valid_until,decided_at,used_at,terminal_at
+ capability_fingerprint,server_origin,preview_truncated,preview_redacted,
+ status,review_revision,decided_by,created_at,expires_at,valid_until,decided_at,used_at,terminal_at,
+ (preview_cipher IS NOT NULL)::boolean AS has_preview
 FROM approval_requests
 WHERE ($1::timestamptz IS NULL OR (created_at,id) < ($1::timestamptz,$2::uuid))
 ORDER BY created_at DESC,id DESC LIMIT $3::integer
@@ -155,7 +156,6 @@ type ApprovalRequestMetadataBatchRow struct {
 	BindingDigest         string
 	CapabilityFingerprint string
 	ServerOrigin          string
-	PreviewCipher         []byte
 	PreviewTruncated      bool
 	PreviewRedacted       bool
 	Status                string
@@ -167,6 +167,7 @@ type ApprovalRequestMetadataBatchRow struct {
 	DecidedAt             *time.Time
 	UsedAt                *time.Time
 	TerminalAt            *time.Time
+	HasPreview            bool
 }
 
 // Metadata-only bounded keyset scan. Services apply visibility BEFORE offset/limit.
@@ -196,7 +197,6 @@ func (q *Queries) ApprovalRequestMetadataBatch(ctx context.Context, arg Approval
 			&i.BindingDigest,
 			&i.CapabilityFingerprint,
 			&i.ServerOrigin,
-			&i.PreviewCipher,
 			&i.PreviewTruncated,
 			&i.PreviewRedacted,
 			&i.Status,
@@ -208,6 +208,7 @@ func (q *Queries) ApprovalRequestMetadataBatch(ctx context.Context, arg Approval
 			&i.DecidedAt,
 			&i.UsedAt,
 			&i.TerminalAt,
+			&i.HasPreview,
 		); err != nil {
 			return nil, err
 		}
@@ -373,6 +374,35 @@ func (q *Queries) ApprovalRulesForTarget(ctx context.Context, arg ApprovalRulesF
 		return nil, err
 	}
 	return items, nil
+}
+
+const approvalSelectionRole = `-- name: ApprovalSelectionRole :one
+SELECT gc.min_team_role FROM gateway_capabilities gc
+JOIN mcp_capabilities c ON c.id=gc.capability_id
+JOIN mcp_servers s ON s.id=c.server_id
+WHERE gc.gateway_id = $1 AND gc.capability_id = $2
+ AND c.tool_class IS NOT DISTINCT FROM $3::text
+ AND COALESCE(CASE WHEN gc.base_fingerprint IS NOT NULL THEN gc.name_override END,s.slug||'__'||c.name) = $4
+ AND (gc.base_fingerprint IS NULL OR gc.base_fingerprint=c.fingerprint)
+`
+
+type ApprovalSelectionRoleParams struct {
+	GatewayID    uuid.UUID
+	CapabilityID uuid.UUID
+	ToolClass    *string
+	ExposedName  *string
+}
+
+func (q *Queries) ApprovalSelectionRole(ctx context.Context, arg ApprovalSelectionRoleParams) (*string, error) {
+	row := q.db.QueryRow(ctx, approvalSelectionRole,
+		arg.GatewayID,
+		arg.CapabilityID,
+		arg.ToolClass,
+		arg.ExposedName,
+	)
+	var min_team_role *string
+	err := row.Scan(&min_team_role)
+	return min_team_role, err
 }
 
 const approvalTarget = `-- name: ApprovalTarget :one

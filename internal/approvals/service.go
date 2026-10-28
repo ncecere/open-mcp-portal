@@ -217,7 +217,11 @@ func (s *Service) auditRequest(ctx context.Context, q *dbgen.Queries, a *authz.A
 	return audit.Record(ctx, q, e)
 }
 func (s *Service) requesterLive(ctx context.Context, q *dbgen.Queries, b Binding) (bool, error) {
-	return q.ApprovalRequesterLive(ctx, dbgen.ApprovalRequesterLiveParams{GatewayID: b.GatewayID, CapabilityID: b.CapabilityID, ServerID: b.ServerID, Fingerprint: b.CapabilityFingerprint, RequesterKind: b.RequesterKind, RequesterID: b.RequesterID, RequesterTeamID: optional(b.RequesterTeamID)})
+	live, err := q.ApprovalRequesterLive(ctx, dbgen.ApprovalRequesterLiveParams{GatewayID: b.GatewayID, CapabilityID: b.CapabilityID, ServerID: b.ServerID, Fingerprint: b.CapabilityFingerprint, RequesterKind: b.RequesterKind, RequesterID: b.RequesterID, RequesterTeamID: optional(b.RequesterTeamID)})
+	if err != nil || !live {
+		return false, err
+	}
+	return requesterGatewayAccess(ctx, q, b)
 }
 func reviewers(ctx context.Context, q *dbgen.Queries, r Rule, b Binding) ([]uuid.UUID, error) {
 	return q.ApprovalEligibleReviewers(ctx, dbgen.ApprovalEligibleReviewersParams{RuleID: r.ID, ServerID: b.ServerID, RequesterKind: b.RequesterKind, RequesterID: b.RequesterID, AllowServiceAccountAdmins: r.AllowServiceAccountAdmins})

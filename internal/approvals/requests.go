@@ -22,8 +22,12 @@ func requesterAgent(ctx context.Context, q *dbgen.Queries, a authz.Actor, r dbge
 }
 
 // Metadata visibility is deliberately independent of preview eligibility.
-func (s *Service) permissions(ctx context.Context, q *dbgen.Queries, a authz.Actor, r dbgen.ApprovalRequest, epoch int64) (Receipt, bool, bool, error) {
+func (s *Service) permissions(ctx context.Context, q *dbgen.Queries, a authz.Actor, r dbgen.ApprovalRequest, epoch int64, previewPresent ...bool) (Receipt, bool, bool, error) {
 	out := receipt(r)
+	hasPreview := len(r.PreviewCipher) > 0
+	if len(previewPresent) > 0 {
+		hasPreview = previewPresent[0]
+	}
 	agent, err := requesterAgent(ctx, q, a, r)
 	if err != nil {
 		return out, false, false, err
@@ -33,6 +37,11 @@ func (s *Service) permissions(ctx context.Context, q *dbgen.Queries, a authz.Act
 	if err == nil {
 		rule, e := loadRule(ctx, q, row)
 		if e != nil {
+			// Corrupt policy grants no reviewer visibility. A private receipt must
+			// still be indistinguishable from a missing one, even in this case.
+			if !agent && !a.CanReadPlatform() {
+				return out, false, false, nil
+			}
 			return out, false, false, e
 		}
 		ids, e := reviewers(ctx, q, rule, requestBinding(r))
@@ -43,15 +52,18 @@ func (s *Service) permissions(ctx context.Context, q *dbgen.Queries, a authz.Act
 	} else if !noRows(err) {
 		return out, false, false, err
 	}
+	if !agent && !reviewer && !a.CanReadPlatform() {
+		return out, false, false, nil
+	}
 	current, e := s.currentRequestRule(ctx, q, r, epoch)
 	if e != nil && e != ErrContextChanged && e != ErrUnavailable {
 		return out, false, false, e
 	}
 	live := e == nil && current != nil
-	out.Stale = !live || !liveDeadline(r, s.clock())
+	out.Stale = !live
 	out.CanDecide = reviewer && live && r.Status == Pending && liveDeadline(r, s.clock())
 	out.CanCancel = agent && !terminal(r.Status) && liveDeadline(r, s.clock())
-	out.CanRenew = agent && terminal(r.Status) && live && len(r.PreviewCipher) > 0
+	out.CanRenew = agent && terminal(r.Status) && live && hasPreview
 	if out.CanRenew {
 		latest, e := q.FindApprovalRequestBinding(ctx, r.BindingDigest)
 		if e != nil {
@@ -144,8 +156,8 @@ func (s *Service) ListRequests(ctx context.Context, a authz.Actor, view string, 
 				return e
 			}
 			for _, row := range rows {
-				r := dbgen.ApprovalRequest(row)
-				p, _, _, e := s.permissions(ctx, q, a, r, epoch)
+				r := metadataRequest(row)
+				p, _, _, e := s.permissions(ctx, q, a, r, epoch, row.HasPreview)
 				if e != nil {
 					return e
 				}
