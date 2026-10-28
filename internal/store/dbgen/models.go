@@ -57,6 +57,67 @@ type ApiKeyGateway struct {
 	AddedAt     time.Time
 }
 
+type ApprovalContext struct {
+	ID    int16
+	Epoch int64
+}
+
+type ApprovalRequest struct {
+	ID                    uuid.UUID
+	RuleID                uuid.UUID
+	RuleRevision          int64
+	ContextEpoch          int64
+	RequesterKind         string
+	RequesterID           uuid.UUID
+	RequesterTeamID       uuid.NullUUID
+	GatewayID             uuid.UUID
+	ServerID              uuid.UUID
+	CapabilityID          uuid.UUID
+	ExposedName           string
+	ToolClass             *string
+	ArgsDigest            string
+	BindingDigest         string
+	CapabilityFingerprint string
+	ServerOrigin          string
+	PreviewCipher         []byte
+	PreviewTruncated      bool
+	PreviewRedacted       bool
+	Status                string
+	ReviewRevision        int64
+	DecidedBy             uuid.NullUUID
+	CreatedAt             time.Time
+	ExpiresAt             time.Time
+	ValidUntil            *time.Time
+	DecidedAt             *time.Time
+	UsedAt                *time.Time
+	TerminalAt            *time.Time
+}
+
+type ApprovalRule struct {
+	ID                        uuid.UUID
+	Name                      string
+	TeamID                    uuid.NullUUID
+	TargetKind                string
+	TargetID                  uuid.UUID
+	CapabilityID              uuid.NullUUID
+	Classes                   []string
+	Enabled                   bool
+	PendingMinutes            int32
+	ValidMinutes              int32
+	AllowServiceAccountAdmins bool
+	Revision                  int64
+	CreatedBy                 uuid.UUID
+	CreatedAt                 time.Time
+	UpdatedAt                 time.Time
+}
+
+type ApprovalRuleApprover struct {
+	RuleID    uuid.UUID
+	Kind      string
+	UserID    uuid.NullUUID
+	GroupName *string
+}
+
 type AuditLog struct {
 	ID             int64
 	OccurredAt     time.Time

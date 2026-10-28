@@ -15,9 +15,10 @@ type RoleDB interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-var purgeFunctions = []string{
+var protectedFunctions = []string{
 	"public.omp_purge_audit_log(integer,integer)",
 	"public.omp_purge_mcp_calls(timestamp with time zone,integer,integer)",
+	"public.omp_lock_approval_context(boolean)",
 }
 
 // ValidateRoleName rejects names PostgreSQL would truncate, and embedded NULs.
@@ -143,6 +144,16 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
 				out.Problems = append(out.Problems, "forbidden write privilege on "+table+": "+r.name)
 			}
 		}
+		// The context is read-only; a narrow definer helper supplies row fences.
+		var contextWrite bool
+		if err := db.QueryRow(ctx, `SELECT has_any_column_privilege($1::oid,'public.approval_context','UPDATE')
+ OR has_any_column_privilege($1::oid,'public.approval_context','INSERT')
+ OR has_table_privilege($1::oid,'public.approval_context','DELETE,TRUNCATE,TRIGGER')`, r.oid).Scan(&contextWrite); err != nil {
+			return out, err
+		}
+		if contextWrite {
+			out.Problems = append(out.Problems, "forbidden write privilege on public.approval_context: "+r.name)
+		}
 		var options bool
 		err = db.QueryRow(ctx, `SELECT
  EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace,
@@ -188,8 +199,8 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
 		err := db.QueryRow(ctx, `SELECT NOT has_schema_privilege($1, 'public', 'USAGE') OR EXISTS (
  SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
  WHERE n.nspname = 'public' AND c.relkind IN ('r','p','v','m','f') AND
- (NOT has_table_privilege($1,c.oid,'SELECT') OR (c.relname <> 'goose_db_version' AND NOT has_table_privilege($1,c.oid,'INSERT'))
- OR (c.relname NOT IN ('audit_log','mcp_calls','goose_db_version') AND
+ (NOT has_table_privilege($1,c.oid,'SELECT') OR (c.relname NOT IN ('goose_db_version','approval_context') AND NOT has_table_privilege($1,c.oid,'INSERT'))
+ OR (c.relname NOT IN ('audit_log','mcp_calls','goose_db_version','approval_context') AND
  (NOT has_table_privilege($1,c.oid,'UPDATE') OR NOT has_table_privilege($1,c.oid,'DELETE')))))
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
  WHERE n.nspname='public' AND CASE WHEN c.relkind='S' THEN NOT has_sequence_privilege($1,c.oid,'USAGE') ELSE false END)`, name).Scan(&missing)
@@ -199,7 +210,7 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
 		if missing {
 			out.Problems = append(out.Problems, "missing operational table/schema/sequence privileges: "+name)
 		}
-		for _, fn := range purgeFunctions {
+		for _, fn := range protectedFunctions {
 			var exec, consistent, publicExec bool
 			err := db.QueryRow(ctx, `SELECT has_function_privilege($1,$2,'EXECUTE'),
     (SELECT proowner FROM pg_catalog.pg_proc WHERE oid=$2::regprocedure) = ALL(
@@ -210,7 +221,7 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
 				return out, err
 			}
 			if !exec || !consistent || publicExec {
-				out.Problems = append(out.Problems, "unsafe or unavailable purge function: "+fn)
+				out.Problems = append(out.Problems, "unsafe or unavailable protected function: "+fn)
 			}
 		}
 	}
@@ -251,7 +262,7 @@ func ReconcileRuntimeGrants(ctx context.Context, conn *pgx.Conn, role string) er
 				object, grants = "SEQUENCE", "USAGE"
 			} else if t.name == "audit_log" || t.name == "mcp_calls" {
 				grants = "SELECT, INSERT"
-			} else if t.name == "goose_db_version" {
+			} else if t.name == "goose_db_version" || t.name == "approval_context" {
 				grants = "SELECT"
 			}
 			if _, err := tx.Exec(ctx, "REVOKE ALL PRIVILEGES ON "+object+" "+ident+" FROM "+quoted+" CASCADE"); err != nil {
@@ -302,7 +313,7 @@ func ReconcileRuntimeGrants(ctx context.Context, conn *pgx.Conn, role string) er
 				return err
 			}
 		}
-		for _, fn := range purgeFunctions {
+		for _, fn := range protectedFunctions {
 			if _, err := tx.Exec(ctx, "REVOKE ALL PRIVILEGES ON FUNCTION "+fn+" FROM "+quoted+" CASCADE"); err != nil {
 				return err
 			}
