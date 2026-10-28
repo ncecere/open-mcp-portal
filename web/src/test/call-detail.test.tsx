@@ -45,6 +45,13 @@ describe("Call lists", () => {
 });
 
 describe("A call's page", () => {
+  it("shows the class recorded at call time, not a live server classification", async () => {
+    mockApi(teamRoutes("owner", "none", { [`GET ${teamApi}/calls/501`]: () => mcpCall({ toolClass: "write" }) }));
+    renderApp(`/teams/${team.slug}/calls/501`);
+    expect(await screen.findByText("Tool class at call time")).toBeInTheDocument();
+    expect(screen.getByText("write")).toBeInTheDocument();
+  });
+
   it("loads the contents only when asked, after saying viewing is recorded, and shows them as text", async () => {
     const u = userEvent.setup();
     const live = mockApi(teamRoutes("owner"));

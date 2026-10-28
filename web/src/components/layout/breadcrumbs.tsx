@@ -88,6 +88,7 @@ function useTrail({ routeId, params }: Location, canAdmin: boolean): BreadcrumbI
 
   if (routeId === "/app/") return [{ label: terms.home, icon: icon(Home) }];
   // From the account menu: the page itself, not "Home".
+  if (routeId === "/app/settings/sessions") return [{ label: "Sessions", icon: icon(User) }];
   if (routeId === "/app/settings/profile") return [{ label: "Profile", icon: icon(User) }];
   if (routeId === "/app/settings/api-keys") return [{ label: terms.apiKeys, icon: icon(KeyRound) }];
   if (routeId === "/app/settings/connected-apps") return [{ label: terms.connectedApps, icon: icon(Plug) }];

@@ -250,6 +250,7 @@ type McpCall struct {
 	ViaPlatformName      *string
 	PersonPresent        *bool
 	TraceID              *string
+	ToolClass            *string
 }
 
 type McpCallPayload struct {
@@ -288,6 +289,9 @@ type McpCapability struct {
 	RequirementMode       string
 	RequirementScopes     []string
 	RequiresPresentPerson *bool
+	ToolClass             *string
+	ClassSetBy            uuid.NullUUID
+	ClassSetAt            *time.Time
 }
 
 type McpHealthCheck struct {
@@ -725,6 +729,7 @@ type Session struct {
 	ClientIP    string
 	CreatedAt   time.Time
 	ExpiresAt   time.Time
+	LastSeenAt  time.Time
 }
 
 type SigningKey struct {

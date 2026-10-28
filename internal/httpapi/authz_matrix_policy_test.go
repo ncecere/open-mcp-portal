@@ -316,8 +316,20 @@ var matrixPolicies = map[string]policy{
 	"decideOAuthConsent": {own: signedIn, build: func(c *mctx) request {
 		return post("/v1/oauth/consent", map[string]any{"query": c.e.consentQuery(), "decision": "allow"})
 	}},
-	"listMyOAuthGrants":  {own: signedIn, build: func(*mctx) request { return get("/v1/me/oauth-grants") }},
-	"revokeMyOAuthGrant": {own: signedIn, build: func(c *mctx) request { return del("/v1/me/oauth-grants/" + c.oauthGrant(true)) }},
+	"listMySessions": {own: signedIn, build: func(*mctx) request { return get("/v1/me/sessions") }},
+	"revokeMySession": {own: signedIn, build: func(c *mctx) request {
+		user := c.e.userIDs[c.who]
+		if user == "" {
+			user = c.e.spareUser
+		}
+		id := c.e.exec(`INSERT INTO sessions (user_id, token_digest, csrf_token, expires_at) VALUES ($1, $2, 'csrf', now() + interval '1 hour') RETURNING id::text`, user, fmt.Sprintf("matrix-session-%d", c.e.next()))
+		return del("/v1/me/sessions/" + id)
+	}},
+	"signOutEverywhere":       {own: signedIn, build: func(*mctx) request { return post("/v1/me/sessions/revoke-all", map[string]any{"keepCurrent": true}) }},
+	"adminListUserSessions":   {own: padmin, build: func(c *mctx) request { return get("/v1/admin/users/" + c.e.spareUser + "/sessions") }},
+	"adminRevokeUserSessions": {own: padmin, build: func(c *mctx) request { return del("/v1/admin/users/" + c.e.spareUser + "/sessions") }},
+	"listMyOAuthGrants":       {own: signedIn, build: func(*mctx) request { return get("/v1/me/oauth-grants") }},
+	"revokeMyOAuthGrant":      {own: signedIn, build: func(c *mctx) request { return del("/v1/me/oauth-grants/" + c.oauthGrant(true)) }},
 	"adminListUserOAuthGrants": {own: platform, build: func(c *mctx) request {
 		return get("/v1/admin/users/" + c.e.spareUser + "/oauth-grants")
 	}},

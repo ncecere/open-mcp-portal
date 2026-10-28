@@ -337,7 +337,7 @@ func (rc *request) checkRetry(rec calls.Call) (retry, bool) {
 // a refusal for a prompt or a read, which have no tool error. Nothing is
 // forwarded.
 func (rc *request) declined(o gateways.Offer) {
-	rec := calls.Call{ExposedName: rc.requestedName(), Server: &o.Server, CapabilityID: o.Capability.ID, ErrorClass: ClassDeclined}
+	rec := calls.Call{ExposedName: rc.requestedName(), Server: &o.Server, CapabilityID: o.Capability.ID, ErrorClass: ClassDeclined, ToolClass: o.Capability.ToolClass}
 	if o.Requires != nil {
 		rec.ProviderSlug = o.Requires.Provider.Slug
 	}

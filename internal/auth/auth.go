@@ -81,6 +81,7 @@ type Service struct {
 	// person (in memory until SetRateStore installs the shared store).
 	limiter ratelimit.Store
 	log     *slog.Logger
+	now     func() time.Time
 
 	oidcMu sync.Mutex
 	oidc   *oidcClient // discovered lazily so an IdP outage cannot stop the API from starting
@@ -93,6 +94,7 @@ func NewService(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) *Servic
 		q:       dbgen.New(pool),
 		limiter: ratelimit.New(),
 		log:     log,
+		now:     time.Now,
 	}
 }
 
@@ -161,13 +163,15 @@ func (s *Service) createSession(ctx context.Context, r *http.Request, q *dbgen.Q
 	if len(ua) > 512 {
 		ua = ua[:512]
 	}
+	now := s.now()
 	_, err := q.CreateSession(ctx, dbgen.CreateSessionParams{
+		AsOf:        now,
 		UserID:      user.ID,
 		TokenDigest: Digest(secret),
 		CSRFToken:   csrf,
 		UserAgent:   ua,
 		ClientIP:    s.clientIP(r),
-		ExpiresAt:   time.Now().Add(s.cfg.SessionTTL),
+		ExpiresAt:   now.Add(s.cfg.SessionTTL),
 	})
 	return secret, err
 }
@@ -189,7 +193,7 @@ func (s *Service) RequireSession(next http.Handler) http.Handler {
 			httpx.Error(w, http.StatusUnauthorized, "unauthorized", "Sign in to continue")
 			return
 		}
-		row, err := s.q.GetSessionUser(r.Context(), Digest(cookie.Value))
+		row, err := s.session(r.Context(), Digest(cookie.Value))
 		if err != nil {
 			if errors.Is(store.NotFound(err), store.ErrNotFound) {
 				s.setCookie(w, s.sessionCookieName(), "", -1)
@@ -227,7 +231,7 @@ func (s *Service) SessionUser(r *http.Request) (dbgen.User, bool, error) {
 	if err != nil || cookie.Value == "" || len(cookie.Value) > 256 {
 		return dbgen.User{}, false, nil
 	}
-	row, err := s.q.GetSessionUser(r.Context(), Digest(cookie.Value))
+	row, err := s.session(r.Context(), Digest(cookie.Value))
 	if errors.Is(store.NotFound(err), store.ErrNotFound) {
 		return dbgen.User{}, false, nil
 	} else if err != nil {
@@ -244,7 +248,7 @@ func (s *Service) SessionIdentity(r *http.Request) (Identity, bool, error) {
 	if err != nil || cookie.Value == "" || len(cookie.Value) > 256 {
 		return Identity{}, false, nil
 	}
-	row, err := s.q.GetSessionUser(r.Context(), Digest(cookie.Value))
+	row, err := s.session(r.Context(), Digest(cookie.Value))
 	if errors.Is(store.NotFound(err), store.ErrNotFound) {
 		return Identity{}, false, nil
 	} else if err != nil {
@@ -300,7 +304,8 @@ func isSafeMethod(m string) bool {
 // Cleanup deletes expired sessions and abandoned sign-ins. It is safe to
 // run on several replicas at once.
 func (s *Service) Cleanup(ctx context.Context) (sessions, logins int64, err error) {
-	if sessions, err = s.q.DeleteExpiredSessions(ctx); err != nil {
+	now := s.now()
+	if sessions, err = s.q.DeleteExpiredSessions(ctx, dbgen.DeleteExpiredSessionsParams{AsOf: now, IdleSince: s.idleSince(now)}); err != nil {
 		return 0, 0, err
 	}
 	logins, err = s.q.DeleteExpiredLoginStates(ctx)

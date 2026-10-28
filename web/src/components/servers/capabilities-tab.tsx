@@ -30,6 +30,7 @@ import { toast } from "@/components/ui/toast/toast";
 import s from "../../pages/shared.module.css";
 import { CapabilityStateBadge } from "./badges";
 import { CapabilityItem } from "./capability-item";
+import { ClassificationDialog } from "./classification";
 import { changedSinceReviewText } from "./publish-dialogs";
 import { kindOrder, kindTitle, type McpCapability, type McpServer, untrustedApproverText, untrustedText } from "./labels";
 import { capabilitiesQuery, invalidateServer, type ServerAbilities, type ServerScope } from "./scope";
@@ -60,6 +61,7 @@ type Props = { server: McpServer; scope: ServerScope; abilities: ServerAbilities
 
 export function CapabilitiesTab({ server, scope, abilities }: Props) {
   const caps = useQuery(capabilitiesQuery(scope, server.id));
+  const [classifying, setClassifying] = useState(false);
   const { values, setValues } = useListFilters(facets);
   const all = caps.data ?? [];
   const shown = filterRows(all, facets, values);
@@ -80,6 +82,10 @@ export function CapabilitiesTab({ server, scope, abilities }: Props) {
       )}
       <Card title="Capabilities" description={server.refreshedAt ? <>As listed at the last refresh, <Time value={server.refreshedAt} />.</> : "Not read yet."}>
         <div className={m.stack}>
+          {scope.kind === "team" && abilities.canManage && all.some((c) => c.kind === "tool" && !c.goneAt) && (
+            <Button variant="secondary" onClick={() => setClassifying(true)}>Classify tools…</Button>
+          )}
+          {classifying && scope.kind === "team" && <ClassificationDialog caps={all} server={server} scope={scope} onClose={() => setClassifying(false)} />}
           {all.length > 0 && <FilterBar facets={facets} value={values} onValueChange={setValues} counts={facetCounts(all, facets, values)} />}
           {caps.isLoading ? (
             <div role="status" aria-label="Loading capabilities…">
@@ -125,6 +131,7 @@ function CapabilityRow({ cap, server, scope, abilities, inCatalog }: { cap: McpC
   const [confirming, setConfirming] = useState<McpCapability | null>(null);
   const [overriding, setOverriding] = useState(false);
   const [presence, setPresence] = useState(false);
+  const [classifying, setClassifying] = useState(false);
   // The approval names the fingerprint of the definition the approver confirmed (the one in `confirming`), so a
   // refresh in between fails with 409 changed_since_review instead of approving text nobody read.
   const send = async (expectedFingerprint: string) =>
@@ -169,6 +176,7 @@ function CapabilityRow({ cap, server, scope, abilities, inCatalog }: { cap: McpC
   const canOverride = scope.kind === "team" && abilities.canEdit && Boolean(server.requirement) && !cap.goneAt;
   const mode = cap.requirementOverride.mode;
   const canPresence = scope.kind === "team" && abilities.canEdit && !cap.goneAt;
+  const canClassify = scope.kind === "team" && abilities.canManage && cap.kind === "tool" && !cap.goneAt;
   const present = presenceOf(cap);
   return (
     <CapabilityItem
@@ -211,8 +219,10 @@ function CapabilityRow({ cap, server, scope, abilities, inCatalog }: { cap: McpC
         </p>
       }
       action={
-        canApprove || canOverride || canPresence ? (
+        canApprove || canOverride || canPresence || canClassify ? (
           <div className={m.actions}>
+            {canClassify && <Button size="sm" variant="secondary" onClick={() => setClassifying(true)} aria-label={`Classify ${cap.name}`}>Classify…</Button>}
+            {classifying && scope.kind === "team" && <ClassificationDialog caps={[cap]} server={server} scope={scope} onClose={() => setClassifying(false)} />}
             {canOverride && (
               <Button size="sm" variant="secondary" onClick={() => setOverriding(true)} aria-label={`Change the account ${cap.name} needs`}>
                 <KeyRound aria-hidden /> Account…

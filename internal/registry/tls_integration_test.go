@@ -211,7 +211,7 @@ func TestReviewDigestCoversTLS(t *testing.T) {
 	if reviewDigest(sv, nil, nil, tlsDigest{CASHA: ca}, nil) != seen["a CA"] {
 		t.Error("the digest isn't stable")
 	}
-	if digestVersion != "omp-review-v3" {
+	if digestVersion != "omp-review-v4" {
 		t.Errorf("digest version %s", digestVersion)
 	}
 }

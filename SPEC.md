@@ -1,6 +1,8 @@
 # Open MCP Portal — specification
 
-Status: **approved direction, Phase 1 in progress**. Product decisions are recorded in
+Status: **approved direction; phases 1–7 shipped**. This is the original architecture and phase plan, not the
+current delivery checklist; see [docs/status.md](docs/status.md) and [docs/roadmap.md](docs/roadmap.md).
+Product decisions are recorded in
 [docs/decisions.md](docs/decisions.md); this document turns them into architecture, data model, API and
 build phases. Items marked *proposed default* were not interview answers and may be changed.
 
@@ -88,6 +90,13 @@ deploy/                   compose and Kubernetes (Kustomize)
 
 As Grounded: OIDC (code + PKCE + nonce), identity key `(issuer, subject)`, one-time bootstrap platform admin,
 server-side sessions (cookie secret, SHA-256 digest stored, CSRF token), loopback-only dev personas.
+Account › Sessions lists active browser sign-ins, revokes one or all (optionally keeping the current session);
+platform admins alone list and revoke another person's sessions. These five operations are browser-only, never
+available to automation tokens. Revocation and count-only audit are transactional and cancel pending connect
+states bound to the ended session; connected apps, keys and provider connections are unaffected. Sessions have
+an absolute `SESSION_TTL` and an optional `SESSION_IDLE_TIMEOUT` (default off; 5m through the absolute lifetime).
+Every session entry point checks both limits and records activity at most once a minute. See decision 76 and
+[the client-auth design](docs/phase4-client-auth.md#browser-sessions-37-decision-76).
 
 | Role | Can |
 |---|---|

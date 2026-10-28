@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Bell, KeyRound, LifeBuoy, Link2, LogOut, Plug, User } from "lucide-react";
+import { Bell, KeyRound, LifeBuoy, Link2, LogOut, Monitor, Plug, User } from "lucide-react";
 import { pendingReviewsQuery } from "../../api/queries";
 import { InstanceLogo, useInstance, useSignOut, type Me } from "../../session";
 import { Badge } from "@/components/ui/badge/badge";
@@ -53,6 +53,9 @@ export function AppSidebar({ me, mode, active }: { me: Me; mode: Mode; active: A
           </MenuLinkItem>
           <MenuLinkItem icon={<Link2 aria-hidden />} render={<Link to="/settings/connections" />}>
             My connections
+          </MenuLinkItem>
+          <MenuLinkItem icon={<Monitor aria-hidden />} render={<Link to="/settings/sessions" />}>
+            Sessions
           </MenuLinkItem>
           <MenuLinkItem icon={<Bell aria-hidden />} render={<Link to="/settings/notifications" />}>
             Notifications

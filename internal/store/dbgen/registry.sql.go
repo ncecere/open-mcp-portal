@@ -38,7 +38,7 @@ const approveMCPCapability = `-- name: ApproveMCPCapability :one
 UPDATE mcp_capabilities
 SET approved_fingerprint = fingerprint, approved_by = $1, approved_at = now()
 WHERE id = $2 AND gone_at IS NULL
-RETURNING id, server_id, kind, name, title, description, definition, fingerprint, approved_fingerprint, approved_by, approved_at, first_seen_at, last_seen_at, gone_at, requirement_mode, requirement_scopes, requires_present_person
+RETURNING id, server_id, kind, name, title, description, definition, fingerprint, approved_fingerprint, approved_by, approved_at, first_seen_at, last_seen_at, gone_at, requirement_mode, requirement_scopes, requires_present_person, tool_class, class_set_by, class_set_at
 `
 
 type ApproveMCPCapabilityParams struct {
@@ -67,6 +67,9 @@ func (q *Queries) ApproveMCPCapability(ctx context.Context, arg ApproveMCPCapabi
 		&i.RequirementMode,
 		&i.RequirementScopes,
 		&i.RequiresPresentPerson,
+		&i.ToolClass,
+		&i.ClassSetBy,
+		&i.ClassSetAt,
 	)
 	return i, err
 }
@@ -652,7 +655,7 @@ func (q *Queries) LatestMCPHealthChecks(ctx context.Context, serverIds []uuid.UU
 }
 
 const listApprovedMCPCapabilities = `-- name: ListApprovedMCPCapabilities :many
-SELECT id, server_id, kind, name, title, description, definition, fingerprint, approved_fingerprint, approved_by, approved_at, first_seen_at, last_seen_at, gone_at, requirement_mode, requirement_scopes, requires_present_person FROM mcp_capabilities c
+SELECT id, server_id, kind, name, title, description, definition, fingerprint, approved_fingerprint, approved_by, approved_at, first_seen_at, last_seen_at, gone_at, requirement_mode, requirement_scopes, requires_present_person, tool_class, class_set_by, class_set_at FROM mcp_capabilities c
 WHERE c.server_id = $1 AND c.gone_at IS NULL AND c.approved_fingerprint = c.fingerprint
 ORDER BY CASE c.kind WHEN 'tool' THEN 0 WHEN 'resource' THEN 1 WHEN 'resource_template' THEN 2 ELSE 3 END, c.name
 `
@@ -685,6 +688,9 @@ func (q *Queries) ListApprovedMCPCapabilities(ctx context.Context, serverID uuid
 			&i.RequirementMode,
 			&i.RequirementScopes,
 			&i.RequiresPresentPerson,
+			&i.ToolClass,
+			&i.ClassSetBy,
+			&i.ClassSetAt,
 		); err != nil {
 			return nil, err
 		}
@@ -697,7 +703,7 @@ func (q *Queries) ListApprovedMCPCapabilities(ctx context.Context, serverID uuid
 }
 
 const listMCPCapabilities = `-- name: ListMCPCapabilities :many
-SELECT c.id, c.server_id, c.kind, c.name, c.title, c.description, c.definition, c.fingerprint, c.approved_fingerprint, c.approved_by, c.approved_at, c.first_seen_at, c.last_seen_at, c.gone_at, c.requirement_mode, c.requirement_scopes, c.requires_present_person,
+SELECT c.id, c.server_id, c.kind, c.name, c.title, c.description, c.definition, c.fingerprint, c.approved_fingerprint, c.approved_by, c.approved_at, c.first_seen_at, c.last_seen_at, c.gone_at, c.requirement_mode, c.requirement_scopes, c.requires_present_person, c.tool_class, c.class_set_by, c.class_set_at,
        COALESCE((SELECT COALESCE(NULLIF(u.display_name, ''), u.email::text) FROM users u WHERE u.id = c.approved_by), '')::text
            AS approved_by_name
 FROM mcp_capabilities c
@@ -745,6 +751,9 @@ func (q *Queries) ListMCPCapabilities(ctx context.Context, arg ListMCPCapabiliti
 			&i.McpCapability.RequirementMode,
 			&i.McpCapability.RequirementScopes,
 			&i.McpCapability.RequiresPresentPerson,
+			&i.McpCapability.ToolClass,
+			&i.McpCapability.ClassSetBy,
+			&i.McpCapability.ClassSetAt,
 			&i.ApprovedByName,
 		); err != nil {
 			return nil, err
@@ -758,7 +767,7 @@ func (q *Queries) ListMCPCapabilities(ctx context.Context, arg ListMCPCapabiliti
 }
 
 const listMCPCapabilityFingerprints = `-- name: ListMCPCapabilityFingerprints :many
-SELECT c.server_id, c.kind, c.name, c.fingerprint, c.requires_present_person
+SELECT c.server_id, c.kind, c.name, c.fingerprint, c.requires_present_person, c.tool_class
 FROM mcp_capabilities c
 WHERE c.server_id = ANY($1::uuid[]) AND c.gone_at IS NULL
 ORDER BY c.server_id, c.kind, c.name
@@ -770,6 +779,7 @@ type ListMCPCapabilityFingerprintsRow struct {
 	Name                  string
 	Fingerprint           string
 	RequiresPresentPerson *bool
+	ToolClass             *string
 }
 
 // What a reviewer's digest covers: the listed (not gone) capabilities of
@@ -790,6 +800,7 @@ func (q *Queries) ListMCPCapabilityFingerprints(ctx context.Context, serverIds [
 			&i.Name,
 			&i.Fingerprint,
 			&i.RequiresPresentPerson,
+			&i.ToolClass,
 		); err != nil {
 			return nil, err
 		}
@@ -1198,7 +1209,7 @@ func (q *Queries) ListMachineOAuthFor(ctx context.Context, ids []uuid.UUID) ([]M
 }
 
 const lockMCPCapability = `-- name: LockMCPCapability :one
-SELECT id, server_id, kind, name, title, description, definition, fingerprint, approved_fingerprint, approved_by, approved_at, first_seen_at, last_seen_at, gone_at, requirement_mode, requirement_scopes, requires_present_person FROM mcp_capabilities WHERE id = $1 AND server_id = $2 FOR UPDATE
+SELECT id, server_id, kind, name, title, description, definition, fingerprint, approved_fingerprint, approved_by, approved_at, first_seen_at, last_seen_at, gone_at, requirement_mode, requirement_scopes, requires_present_person, tool_class, class_set_by, class_set_at FROM mcp_capabilities WHERE id = $1 AND server_id = $2 FOR UPDATE
 `
 
 type LockMCPCapabilityParams struct {
@@ -1227,6 +1238,9 @@ func (q *Queries) LockMCPCapability(ctx context.Context, arg LockMCPCapabilityPa
 		&i.RequirementMode,
 		&i.RequirementScopes,
 		&i.RequiresPresentPerson,
+		&i.ToolClass,
+		&i.ClassSetBy,
+		&i.ClassSetAt,
 	)
 	return i, err
 }
@@ -1370,7 +1384,8 @@ func (q *Queries) MCPCapabilityStats(ctx context.Context, serverIds []uuid.UUID)
 
 const markMCPCapabilitiesGone = `-- name: MarkMCPCapabilitiesGone :many
 UPDATE mcp_capabilities c
-SET gone_at = now(), approved_fingerprint = NULL, approved_by = NULL, approved_at = NULL
+SET gone_at = now(), approved_fingerprint = NULL, approved_by = NULL, approved_at = NULL,
+    tool_class = NULL, class_set_by = NULL, class_set_at = NULL
 WHERE c.server_id = $1 AND c.gone_at IS NULL
   -- listed holds "kind name" for every capability the refresh listed.
   AND NOT ((c.kind || ' ' || c.name) = ANY($2::text[]))
@@ -1445,10 +1460,59 @@ func (q *Queries) ResetMCPCapabilityScopeOverrides(ctx context.Context, serverID
 	return result.RowsAffected(), nil
 }
 
+const setMCPCapabilityClass = `-- name: SetMCPCapabilityClass :one
+UPDATE mcp_capabilities
+SET tool_class = $1,
+    class_set_by = CASE WHEN $1::text IS NULL THEN NULL ELSE $2::uuid END,
+    class_set_at = CASE WHEN $1::text IS NULL THEN NULL ELSE now() END
+WHERE id = $3 AND server_id = $4
+RETURNING id, server_id, kind, name, title, description, definition, fingerprint, approved_fingerprint, approved_by, approved_at, first_seen_at, last_seen_at, gone_at, requirement_mode, requirement_scopes, requires_present_person, tool_class, class_set_by, class_set_at
+`
+
+type SetMCPCapabilityClassParams struct {
+	ToolClass  *string
+	ClassSetBy uuid.UUID
+	ID         uuid.UUID
+	ServerID   uuid.UUID
+}
+
+func (q *Queries) SetMCPCapabilityClass(ctx context.Context, arg SetMCPCapabilityClassParams) (McpCapability, error) {
+	row := q.db.QueryRow(ctx, setMCPCapabilityClass,
+		arg.ToolClass,
+		arg.ClassSetBy,
+		arg.ID,
+		arg.ServerID,
+	)
+	var i McpCapability
+	err := row.Scan(
+		&i.ID,
+		&i.ServerID,
+		&i.Kind,
+		&i.Name,
+		&i.Title,
+		&i.Description,
+		&i.Definition,
+		&i.Fingerprint,
+		&i.ApprovedFingerprint,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.GoneAt,
+		&i.RequirementMode,
+		&i.RequirementScopes,
+		&i.RequiresPresentPerson,
+		&i.ToolClass,
+		&i.ClassSetBy,
+		&i.ClassSetAt,
+	)
+	return i, err
+}
+
 const setMCPCapabilityRequirement = `-- name: SetMCPCapabilityRequirement :one
 UPDATE mcp_capabilities SET requirement_mode = $1, requirement_scopes = $2
 WHERE id = $3 AND server_id = $4
-RETURNING id, server_id, kind, name, title, description, definition, fingerprint, approved_fingerprint, approved_by, approved_at, first_seen_at, last_seen_at, gone_at, requirement_mode, requirement_scopes, requires_present_person
+RETURNING id, server_id, kind, name, title, description, definition, fingerprint, approved_fingerprint, approved_by, approved_at, first_seen_at, last_seen_at, gone_at, requirement_mode, requirement_scopes, requires_present_person, tool_class, class_set_by, class_set_at
 `
 
 type SetMCPCapabilityRequirementParams struct {
@@ -1484,6 +1548,9 @@ func (q *Queries) SetMCPCapabilityRequirement(ctx context.Context, arg SetMCPCap
 		&i.RequirementMode,
 		&i.RequirementScopes,
 		&i.RequiresPresentPerson,
+		&i.ToolClass,
+		&i.ClassSetBy,
+		&i.ClassSetAt,
 	)
 	return i, err
 }

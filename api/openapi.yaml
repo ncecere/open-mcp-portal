@@ -1308,6 +1308,95 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '409':
           $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/mcp-servers/{serverId}/capabilities/{capabilityId}/class:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/ServerIdParam'
+    - $ref: '#/components/parameters/CapabilityIdParam'
+    put:
+      tags: [mcp-servers]
+      operationId: setTeamMcpCapabilityClass
+      summary: Classify a tool (team owners and admins, browser session only)
+      description: Server If-Match is required and its revision is bumped. Null clears classification. Lowering a class under approval_required resubmits a published server for review. viaSuggestion must match the current suggestion. Non-tools and gone tools cannot be classified.
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CapabilityClassInput'
+      responses:
+        '200':
+          description: Updated capability
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/McpCapability'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/mcp-servers/{serverId}/capabilities/classes:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/ServerIdParam'
+    put:
+      tags: [mcp-servers]
+      operationId: setTeamMcpCapabilityClasses
+      summary: Atomically classify tools (team owners and admins, browser session only)
+      description: At most 500 unique capability IDs. Server If-Match applies to the whole batch; one revision bump and no partial changes. viaSuggestion must match each current suggestion. Null clears classification.
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CapabilityClassesInput'
+      responses:
+        '200':
+          description: Updated capabilities in input order
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/McpCapability'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
   /v1/teams/{team}/mcp-servers/{serverId}/capabilities/{capabilityId}/requirement:
     parameters:
     - $ref: '#/components/parameters/TeamParam'
@@ -3163,6 +3252,95 @@ paths:
                         type: string
         '400':
           $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/me/sessions:
+    get:
+      tags: [me]
+      operationId: listMySessions
+      summary: Active browser sessions, newest first (session only)
+      responses:
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '200':
+          $ref: '#/components/responses/SessionListReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/me/sessions/{sessionId}:
+    parameters:
+    - name: sessionId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    delete:
+      tags: [me]
+      operationId: revokeMySession
+      summary: End one of the caller's browser sessions (session only)
+      description: Cancels connect flows bound to that session. Unknown and foreign sessions are both 404.
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/me/sessions/revoke-all:
+    post:
+      tags: [me]
+      operationId: signOutEverywhere
+      summary: End all browser sessions, optionally keeping this one (session only)
+      description: Does not disconnect OAuth connected apps or other credentials. Cancels connect flows bound to ended sessions.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokeSessionsInput'
+      responses:
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/users/{userId}/sessions:
+    parameters:
+    - $ref: '#/components/parameters/UserIdParam'
+    get:
+      tags: [admin]
+      operationId: adminListUserSessions
+      summary: Active browser sessions of a person (platform admins only, session only)
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '200':
+          $ref: '#/components/responses/SessionListReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+    delete:
+      tags: [admin]
+      operationId: adminRevokeUserSessions
+      summary: End all browser sessions of a person (platform admins only, session only)
+      description: Audited with a count, not session metadata. Cancels connect flows bound to ended sessions; other credentials remain.
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '200':
+          $ref: '#/components/responses/OkReply'
         '401':
           $ref: '#/components/responses/ErrorReply'
         '403':
@@ -6207,6 +6385,18 @@ components:
         type: string
         format: uuid
   responses:
+    SessionListReply:
+      description: Active browser sessions, newest first
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BrowserSession'
     AuditPageReply:
       description: A page of audit entries, newest first
       content:
@@ -6377,6 +6567,21 @@ components:
               data:
                 $ref: '#/components/schemas/UsageReport'
   schemas:
+    BrowserSession:
+      type: object
+      required: [id, createdAt, lastSeenAt, expiresAt, userAgent, clientIp, current]
+      properties:
+        id: {type: string, format: uuid}
+        createdAt: {type: string, format: date-time}
+        lastSeenAt: {type: string, format: date-time, description: Activity recorded at most once a minute}
+        expiresAt: {type: string, format: date-time, description: Absolute expiry; an idle limit may end it earlier}
+        userAgent: {type: string}
+        clientIp: {type: string}
+        current: {type: boolean}
+    RevokeSessionsInput:
+      type: object
+      properties:
+        keepCurrent: {type: boolean, default: false}
     AuditActor:
       type: object
       description: Who made the change, resolved when the log is read
@@ -7683,6 +7888,40 @@ components:
           type: boolean
           description: true for a server created in oauth mode; nobody has signed in yet, so capabilities weren't read.
             Call authorizeTeamMcpServerSetup next
+    ToolClass:
+      type: string
+      enum: [read, write, destructive]
+    CapabilityClassInput:
+      type: object
+      required: [toolClass]
+      properties:
+        toolClass:
+          allOf:
+          - $ref: '#/components/schemas/ToolClass'
+          nullable: true
+        viaSuggestion:
+          type: boolean
+    CapabilityClassesInput:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            type: object
+            required: [capabilityId, toolClass]
+            properties:
+              capabilityId:
+                type: string
+                format: uuid
+              toolClass:
+                allOf:
+                - $ref: '#/components/schemas/ToolClass'
+                nullable: true
+              viaSuggestion:
+                type: boolean
     McpCapability:
       type: object
       description: 'A tool, resource, resource template or prompt as the server listed it. Descriptions and schemas
@@ -7702,7 +7941,22 @@ components:
       - lastSeenAt
       - requirementOverride
       - requires
+      - toolClass
+      - suggestedClass
+      - classDrift
       properties:
+        toolClass:
+          allOf:
+          - $ref: '#/components/schemas/ToolClass'
+          nullable: true
+        suggestedClass:
+          allOf:
+          - $ref: '#/components/schemas/ToolClass'
+          nullable: true
+          description: Untrusted annotation suggestion; null for non-tools
+        classDrift:
+          type: boolean
+          description: A classified tool differs from its annotation suggestion
         id:
           type: string
           format: uuid
@@ -8383,6 +8637,10 @@ components:
           - $ref: '#/components/schemas/CapabilityRequirement'
           nullable: true
           description: The account a person must connect to use it (null; none)
+        toolClass:
+          allOf:
+          - $ref: '#/components/schemas/ToolClass'
+          nullable: true
         id:
           type: string
           format: uuid
@@ -8602,6 +8860,10 @@ components:
       - available
       - requires
       properties:
+        toolClass:
+          allOf:
+          - $ref: '#/components/schemas/ToolClass'
+          nullable: true
         requires:
           allOf:
           - $ref: '#/components/schemas/CapabilityRequirement'
@@ -8719,6 +8981,10 @@ components:
           type: string
         teamName:
           type: string
+        toolClass:
+          allOf:
+          - $ref: '#/components/schemas/ToolClass'
+          nullable: true
         source:
           type: string
           enum:
@@ -9066,6 +9332,8 @@ components:
         providerSlug:
           type: string
           description: The auth provider the capability required at the time of the call (absent when none)
+        toolClass:
+          $ref: '#/components/schemas/ToolClass'
         identitySent:
           type: boolean
           nullable: true
@@ -12958,6 +13226,7 @@ components:
           - upstream_auth_changed
           - upstream_tls_changed
           - requirement_changed
+          - classification_changed
         note:
           type: string
           maxLength: 300

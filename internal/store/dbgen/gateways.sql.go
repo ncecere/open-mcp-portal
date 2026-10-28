@@ -207,7 +207,7 @@ func (q *Queries) GatewayStats(ctx context.Context, ids []uuid.UUID) ([]GatewayS
 }
 
 const getCapability = `-- name: GetCapability :one
-SELECT id, server_id, kind, name, title, description, definition, fingerprint, approved_fingerprint, approved_by, approved_at, first_seen_at, last_seen_at, gone_at, requirement_mode, requirement_scopes, requires_present_person FROM mcp_capabilities WHERE id = $1
+SELECT id, server_id, kind, name, title, description, definition, fingerprint, approved_fingerprint, approved_by, approved_at, first_seen_at, last_seen_at, gone_at, requirement_mode, requirement_scopes, requires_present_person, tool_class, class_set_by, class_set_at FROM mcp_capabilities WHERE id = $1
 `
 
 func (q *Queries) GetCapability(ctx context.Context, id uuid.UUID) (McpCapability, error) {
@@ -231,6 +231,9 @@ func (q *Queries) GetCapability(ctx context.Context, id uuid.UUID) (McpCapabilit
 		&i.RequirementMode,
 		&i.RequirementScopes,
 		&i.RequiresPresentPerson,
+		&i.ToolClass,
+		&i.ClassSetBy,
+		&i.ClassSetAt,
 	)
 	return i, err
 }
@@ -478,7 +481,7 @@ func (q *Queries) ListGatewayGrants(ctx context.Context, gatewayID uuid.UUID) ([
 }
 
 const listGatewayOptions = `-- name: ListGatewayOptions :many
-SELECT c.id, c.kind, c.name, c.title, c.description, c.requirement_mode, c.requirement_scopes,
+SELECT c.id, c.kind, c.name, c.title, c.description, c.requirement_mode, c.requirement_scopes, c.tool_class,
        s.id AS server_id, s.slug AS server_slug, s.name AS server_name, s.team_id AS server_team_id,
        s.auth_provider_id AS server_auth_provider_id, s.auth_scopes AS server_auth_scopes, s.auth_mode AS server_auth_mode,
        s.capture_payloads AS server_capture_payloads,
@@ -527,6 +530,7 @@ type ListGatewayOptionsRow struct {
 	Description           string
 	RequirementMode       string
 	RequirementScopes     []string
+	ToolClass             *string
 	ServerID              uuid.UUID
 	ServerSlug            string
 	ServerName            string
@@ -576,6 +580,7 @@ func (q *Queries) ListGatewayOptions(ctx context.Context, arg ListGatewayOptions
 			&i.Description,
 			&i.RequirementMode,
 			&i.RequirementScopes,
+			&i.ToolClass,
 			&i.ServerID,
 			&i.ServerSlug,
 			&i.ServerName,
@@ -598,7 +603,7 @@ func (q *Queries) ListGatewayOptions(ctx context.Context, arg ListGatewayOptions
 }
 
 const listGatewaySelection = `-- name: ListGatewaySelection :many
-SELECT c.id, c.server_id, c.kind, c.name, c.title, c.description, c.definition, c.fingerprint, c.approved_fingerprint, c.approved_by, c.approved_at, c.first_seen_at, c.last_seen_at, c.gone_at, c.requirement_mode, c.requirement_scopes, c.requires_present_person, s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, gc.min_team_role, t.slug AS team_slug, t.name AS team_name, t.status AS team_status
+SELECT c.id, c.server_id, c.kind, c.name, c.title, c.description, c.definition, c.fingerprint, c.approved_fingerprint, c.approved_by, c.approved_at, c.first_seen_at, c.last_seen_at, c.gone_at, c.requirement_mode, c.requirement_scopes, c.requires_present_person, c.tool_class, c.class_set_by, c.class_set_at, s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, gc.min_team_role, t.slug AS team_slug, t.name AS team_name, t.status AS team_status
 FROM gateway_capabilities gc
 JOIN mcp_capabilities c ON c.id = gc.capability_id
 JOIN mcp_servers s ON s.id = c.server_id
@@ -646,6 +651,9 @@ func (q *Queries) ListGatewaySelection(ctx context.Context, gatewayID uuid.UUID)
 			&i.McpCapability.RequirementMode,
 			&i.McpCapability.RequirementScopes,
 			&i.McpCapability.RequiresPresentPerson,
+			&i.McpCapability.ToolClass,
+			&i.McpCapability.ClassSetBy,
+			&i.McpCapability.ClassSetAt,
 			&i.McpServer.ID,
 			&i.McpServer.TeamID,
 			&i.McpServer.Slug,

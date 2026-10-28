@@ -12,9 +12,14 @@ import { Disclosure } from "@/components/ui/disclosure/disclosure";
 import { VisuallyHidden } from "@/components/ui/visually-hidden/visually-hidden";
 import s from "../../pages/shared.module.css";
 import { kindLabels } from "./labels";
+import { ClassificationBadges, type ToolClass } from "./classification";
 import m from "./servers.module.css";
 
-type Capability = Pick<Schemas["CatalogCapability"], "id" | "kind" | "name" | "title" | "description" | "definition">;
+type Capability = Pick<Schemas["CatalogCapability"], "id" | "kind" | "name" | "title" | "description" | "definition"> & {
+  toolClass?: ToolClass | null;
+  suggestedClass?: ToolClass | null;
+  classDrift?: boolean;
+};
 
 /** The hints a tool declares in its annotations (MCP): shown as what the server says, never trusted. */
 export function declaredHints(definition: Record<string, unknown>): string[] {
@@ -58,7 +63,10 @@ export function CapabilityItem({ cap, badges, action, meta, muted }: Props) {
           <code className={m.capCode}>{cap.name}</code>
           {cap.title && cap.title !== cap.name && <span className={s.muted}>{cap.title}</span>}
         </span>
-        {badges && <span className={s.badges}>{badges}</span>}
+        <span className={s.badges}>
+          {badges}
+          <ClassificationBadges cap={cap} />
+        </span>
       </div>
       {/* Plain text in a pre-wrap paragraph: the server's words, line breaks kept, nothing interpreted. */}
       <p className={m.capDescription}>{cap.description || <span className={s.muted}>No description.</span>}</p>

@@ -53,6 +53,7 @@ type FakeMCP struct {
 	value        string
 	hidden       map[string]bool
 	descriptions map[string]string
+	annotations  map[string]*mcp.ToolAnnotations
 	extra        []string
 	pageSize     int
 	requests     int
@@ -561,6 +562,16 @@ func (f *FakeMCP) RequireHeader(name, value string) {
 	f.header, f.value = name, value
 }
 
+// SetAnnotations changes a built-in tool's untrusted hints on the next discovery.
+func (f *FakeMCP) SetAnnotations(tool string, annotations *mcp.ToolAnnotations) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.annotations == nil {
+		f.annotations = map[string]*mcp.ToolAnnotations{}
+	}
+	f.annotations[tool] = annotations
+}
+
 // SetDescription changes a tool's description in tools/list.
 func (f *FakeMCP) SetDescription(tool, description string) {
 	f.mu.Lock()
@@ -747,6 +758,9 @@ func (f *FakeMCP) server() *mcp.Server {
 		}
 		if d, ok := f.descriptions[t.Name]; ok {
 			t.Description = d
+		}
+		if annotations, ok := f.annotations[t.Name]; ok {
+			t.Annotations = annotations
 		}
 		name := t.Name
 		s.AddTool(t, func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {

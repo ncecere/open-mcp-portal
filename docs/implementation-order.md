@@ -1,0 +1,69 @@
+# Implementation order for open issues
+
+Reconciled against `gh issue list --state open --limit 200` and the local roadmap at the start of this batch.
+The checkout is v0.3.2; 36 issues were open. Issue proposals were drafted against older releases: their migration
+numbers and file paths are suggestions, not instructions to overwrite existing code.
+
+## Current batch
+
+1. **#28 — owner-set tool classification.** Implemented locally: backend, API, UI, review binding and
+   regression tests; migration `00027`. Design: [tool-classification.md](tool-classification.md).
+2. **#37 — browser session management and optional idle expiry.** Implemented in an isolated worktree,
+   then integrated locally; migration `00028`. Idle expiry defaults off. Design:
+   [browser sessions](phase4-client-auth.md#browser-sessions-37-decision-76).
+
+Validation and remaining limitations belong in [status.md](status.md). No release bump, deployment or issue
+closure is implied. The next tool-policy implementation is **#29**, followed by **#30** and **#31**.
+
+## Ordered backlog
+
+Items on a row may run independently unless the dependency column says otherwise. Finish and validate each
+security boundary before building on it; do not start every large issue at once.
+
+| Order | Issues | Reason / dependency |
+| --- | --- | --- |
+| 0, external coordination | **#62** gateway/relay token binding | Security priority. Agree the relay claim with Pi Durable Platform first; per-gateway audience can be designed independently. Do not invent a claim or silently break existing integrations. Validate the integrated fix with #63. |
+| 1, current | **#28**, **#37** | Classification unlocks policy; sessions are independent and prepare identity lifecycle work. |
+| 2 | **#29** credential scopes | Needs #28; intersect every credential layer and preserve existing unscoped behavior. |
+| 3 | **#30** per-gateway curation | Keep approved definitions immutable; validate merged arguments and stale fingerprints before approval digests depend on them. |
+| 4 | **#31** sensitive-call approvals | Needs #28 and #30; bind approval to the merged arguments, definition, origin and requester, atomically single-use. |
+| 2–4, independent lane | **#26** team service connections; then **#32** access requests | #27 provider access control already shipped, so #26 is unblocked. Validate token delivery, lapse, grant and refresh boundaries before lifecycle integration. #32 is independent, but keep gateway/API edits serialized with scopes and curation. |
+| 5 | **#33** upstream protection | Classification permits safe read retries. Ship quotas/concurrency/breaker before considering failover; credential-origin binding must remain intact for every current auth mode. |
+| 6 | **#35** tasks extension | Confirm the extension specification before design/code; carry approvals and access checks into every task operation. |
+| 2, operations lane | **#44** split database roles | Independent security foundation. Preserve append-only retention through narrowly privileged definer functions; test runtime-role denial and normal operations. |
+| 3, operations lane | **#43** upgrade/ingress/OIDC/restore/load gates; **#41** envelope encryption | #43 builds on #44. #41 also follows #44; select/test an actual KMS target without changing existing static-key installs by default. |
+| 4, operations lane | **#42** Helm packaging | Only after #43 proves upgrade/restore and #44/#41 establish credential handling. Test parity with Kustomize rather than duplicating unverified assumptions. |
+| 7 | **#40**, then **#36** lifecycle | #40 needs classification/approvals. Implement accountable ownership and safe transfer first; then SCIM uses that ownership model plus sessions and service connections to deprovision. Group-mapping refinements to #40 can follow #36. |
+| 7, audit lane | **#38**, then **#39** | Start #38's export/sink/cursor and retention-floor foundations after #44. Add #39 hold-aware retention after a durable audit tail exists; integrate #38's hold semantics before #39 erasure. Erasure also waits for #36. This staged split resolves the roadmap's apparent #38 ↔ #39 cycle. |
+| 8, evidence-gated | **#45** subscriptions/listen | Wait for a real client that uses it. Require live access revocation and replica fan-out tests. |
+| 9 | **#46**, then **#47** developer tooling | #46 follows #29 and needs a CLI sign-in decision. #47 reuses its public client; new delete scopes need explicit review, not a hidden expansion of publisher authority. |
+| 9, independent DX | **#49**, **#51** | Catalog governance follows #40. Chargeback follows #38 and needs unambiguous calling-team attribution recorded before claiming historic billing accuracy. |
+| 10 | **#48**, **#50** | Console follows classification and approvals; search-mode dispatch follows classification, curation and catalog search. Both must use the normal governed call path. |
+| Later, design only | **#52**, **#53** | Scanning design follows #28/#31; identity research follows #36/#37 and a concrete pilot need. No content scanning or extra IdP support is implied by this batch. |
+
+## Real-world verification lane (start coordination now)
+
+These issues cannot be closed by fake-server tests or by changing a documentation checkbox.
+
+- **#13:** choose and scope an independent review of the whole portal. The recorded v0.3.0 agent-platform
+  review is useful evidence, not proof that this broader engagement is complete.
+- **#14 / #15:** named VS Code / Cursor versions through the compatibility checklist.
+- **#16:** find a shipping URL-elicitation client and exercise approval/consent retry behavior.
+- **#17:** observe real Claude Code and pi refresh across access-token expiry.
+- **#18:** real Google and Entra connect/call/refresh/disconnect with throwaway accounts.
+- **#19:** real Slack, signed-JSON receiver and SMTP TLS delivery/rendering.
+- **#20:** a real 3–5-person pilot with written success criteria and a retrospective. Pilot findings can
+  reorder independent features, but do not bypass security dependencies.
+- **#63:** live Pi Durable Platform end to end. Run with #62 once both sides support the binding.
+
+Use existing authorized test environments only; do not modify the real development database, contact external
+recipients, commission paid work or claim a real-provider result without the necessary setup and evidence.
+
+## Batch gates
+
+- Targeted regression tests during implementation, including foreign-team and token denial paths.
+- Regenerate contracts and SQL; run `make generate`, `make lint`, `go build ./...`, and
+  `OMP_TEST_REQUIRE_DB=1 make test` against isolated test databases on the running PostgreSQL server.
+- In `web/`: typecheck, tests, build, styling and size checks.
+- Run Kubernetes/action lint gates when deployment/workflow files change.
+- Review actual merged diffs, not just subagent summaries; record any unrun browser or real-service checks.

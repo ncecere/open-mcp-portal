@@ -63,6 +63,14 @@ function pageGroup(navigate: Navigate, me: Me, slug: string | undefined, mine: M
       onSelect: () => void navigate({ to: "/settings/connections" }),
     },
     {
+      id: "sessions",
+      label: "Sessions",
+      icon: icon(User),
+      hint: "Page",
+      keywords: ["account", "browser", "devices", "sign out", "revoke", "lost laptop"],
+      onSelect: () => void navigate({ to: "/settings/sessions" }),
+    },
+    {
       id: "inbox",
       label: terms.inbox,
       icon: icon(Inbox),

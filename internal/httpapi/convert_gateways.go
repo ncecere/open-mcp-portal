@@ -38,6 +38,7 @@ func toAPIGatewayCapability(s gateways.Selected) apitypes.GatewayCapability {
 		TeamSlug: s.TeamSlug, Kind: apitypes.GatewayCapabilityKind(s.Capability.Kind), Name: s.Capability.Name,
 		ExposedName: s.ExposedName, Title: s.Capability.Title, Description: s.Capability.Description, Available: s.Available,
 		Requires: toAPIRequirement(s.Requires, nil), ServerCapturesPayloads: &s.Server.CapturePayloads,
+		ToolClass: (*apitypes.ToolClass)(s.Capability.ToolClass),
 	}
 	if s.MinRole != nil {
 		r := apitypes.TeamRole(*s.MinRole)
@@ -61,8 +62,8 @@ func toAPISelection(s gateways.Selection) apitypes.GatewayCapabilities {
 func toAPIGatewayOption(o gateways.Option) apitypes.GatewayOption {
 	capture := o.ServerCapturePayloads
 	return apitypes.GatewayOption{
-		ServerCapturesPayloads: &capture,
-		CapabilityId:           o.ID, ServerId: o.ServerID, ServerSlug: o.ServerSlug, ServerName: o.ServerName, TeamSlug: o.TeamSlug,
+		ServerCapturesPayloads: &capture, ToolClass: (*apitypes.ToolClass)(o.ToolClass),
+		CapabilityId: o.ID, ServerId: o.ServerID, ServerSlug: o.ServerSlug, ServerName: o.ServerName, TeamSlug: o.TeamSlug,
 		TeamName: o.TeamName, Source: apitypes.GatewayOptionSource(o.Source), Kind: apitypes.GatewayCapabilityKind(o.Kind),
 		Name: o.Name, ExposedName: o.ExposedName, Title: o.Title, Description: o.Description,
 		Requires: toAPIRequirement(o.Requires, nil),
@@ -136,8 +137,8 @@ func toAPICall(c calls.Row) apitypes.McpCall {
 	r := c.ListMCPCallsRow
 	captured := c.Captured
 	out := apitypes.McpCall{
-		Captured: &captured,
-		Id:       r.ID, OccurredAt: r.OccurredAt, Method: r.Method, ExposedName: r.ExposedName,
+		Captured: &captured, ToolClass: (*apitypes.ToolClass)(r.ToolClass),
+		Id: r.ID, OccurredAt: r.OccurredAt, Method: r.Method, ExposedName: r.ExposedName,
 		Gateway:    apitypes.CallRef{Id: r.GatewayID, Slug: r.GatewaySlug, Name: r.GatewayName, Exists: r.GatewayExists},
 		Principal:  toAPICallPrincipal(r),
 		ClientName: r.ClientName, Outcome: apitypes.McpCallOutcome(r.Outcome), ErrorClass: r.ErrorClass, LatencyMs: r.LatencyMs,

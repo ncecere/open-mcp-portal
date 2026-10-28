@@ -114,6 +114,28 @@ Each capability stores its **definition**: the listed object as canonical JSON (
 
 The result reports `listed`, `added` (a returning capability counts as added), `changed` and `gone`, and is audited with those counts.
 
+## Owner-set tool classification
+
+On a server's **Capabilities** tab, team owners and admins can classify tools individually or with **Classify
+tools…**: read, write, destructive, or unclassified. **Use suggestions** explicitly accepts the current server
+hints; a refresh never accepts them automatically. Editors and members read classes; platform admins review
+them but cannot change them without an owner/admin role in the server's team. Automation tokens cannot classify.
+
+Suggestions are untrusted: `readOnlyHint: true` suggests read; otherwise explicit `destructiveHint: false`
+suggests write; absent or malformed hints suggest destructive. A different suggestion from a saved class shows
+**Class differs from suggestion**. Check what the tool really does rather than accepting the badge as proof.
+
+A refresh keeps the saved class, even when a definition changes. A tool that disappears loses its class and
+must be classified again if it returns. Lowering a class (including unclassified → read/write) returns a published
+server to review under `approval_required`; raising or clearing does not. The review digest covers the class
+(`omp-review-v4`), so an approval opened before the upgrade needs one reload. Both classification endpoints
+require the server's `If-Match`; bulk updates are atomic, at most 500 unique tools.
+
+Gateway tool lists overlay read-only and destructive annotations from the owner class, without changing the
+stored upstream definition. Identity tokens and call records optionally carry the class. Existing credentials
+are not restricted by classification alone; scopes, approvals and retries are separate follow-up work.
+See [tool-classification.md](tool-classification.md) for the API and security boundary.
+
 ## Publishing
 
 States are `private`, `pending`, `published` and `rejected`. The **effective policy** is the team's override if one is set, otherwise the platform default (`approval_required` out of the box).

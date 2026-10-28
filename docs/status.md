@@ -1,7 +1,47 @@
 # Status and handoff
 
-Last updated: 2026-10-18. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.3.2, **cut on 2026-10-20**
+Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.3.2, **cut on 2026-10-20**
 (release notes: [releases/v0.3.2.md](releases/v0.3.2.md); earlier: [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+
+## Current implementation batch (unreleased)
+
+The [implementation order](implementation-order.md) reconciles all 36 open GitHub issues with the v0.3.2
+checkout. Implemented locally: **#28 owner-set tool classification** and independent **#37 browser sessions**.
+The classification [design](tool-classification.md) records the trust boundary and migration `00027`;
+[session management](phase4-client-auth.md#browser-sessions-37-decision-76) uses migration `00028`.
+The combined implementation is validated and being committed for the next additive release. No deployment
+has been performed. GitHub issue closure will follow the implementation commit landing on `main`.
+
+Subagent implementation and independent code reviews found and fixed three regressions before finishing:
+
+- A capability refresh did not advance the server revision. Added/changed/gone capabilities now invalidate an
+  old classification dialog; unchanged refreshes preserve its revision. Existing owner classes still
+  intentionally survive changed definitions.
+- Logout and session revocation deleted rows in opposite orders. Both now lock/delete the session before its
+  connect states. A coordinated PostgreSQL regression fails against the old order with a deadlock and passes
+  against the fix, including ten race-enabled repetitions.
+- Session UI success handling could use a changed keep-current checkbox value rather than the submitted
+  choice. The mutation now captures its inputs and sign-out effect; controls are disabled while pending.
+  Delayed-response and credential/cache-clearing regressions cover it.
+
+**Passed on the combined tree:** `make generate`, `make lint`, `go build ./...`, `OMP_TEST_REQUIRE_DB=1 make test`
+(all Go tests with PostgreSQL required), focused session/classification tests with `-race`, `git diff --check`;
+and web typecheck, **697 tests in 71 files**, production build, styling and source-size checks.
+
+**Browser-checked on a scratch database and separate loopback ports:** classification bulk suggestions,
+individual lowering and re-review, read-only admin classes; upgrade with an existing browser session intact;
+Account Sessions listing/current marker, another-session revocation, keep-current sign-out, default sign-out
+and admin self-revocation (the latter two returned to sign-in and `/v1/me` answered 401). Desktop screenshots
+were inspected. Browser axe checks reported zero violations on the checked classification/session screens;
+incomplete checks remain (the existing search-shortcut contrast and modal background focus checks), so this
+is not a complete accessibility audit. Existing dev services and database were left untouched.
+
+**Not run:** real-client/provider/pilot verification, a live Pi Durable Platform instance, a wall-clock idle
+expiry soak, a full mobile/all-page browser pass, Docker/conformance tests or deployment smoke tests.
+Kubernetes/action lint gates were not applicable: no `deploy/` or `.github/` files changed. Idle boundaries,
+cleanup and activity throttling are covered with an injected clock. Very large session inventories have not
+been load-tested; revoke-all currently deletes pending connect states per ended session.
+The external claim agreement for #62 remains outstanding. Next implementation: **#29 credential tool scopes**.
 
 ## v0.3.2 (2026-10-20)
 

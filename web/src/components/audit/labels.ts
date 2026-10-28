@@ -13,6 +13,9 @@ export const auditKey = (scope: AuditScope) => (scope.kind === "team" ? ["team",
 const actionLabels: Record<string, string> = {
   "auth.login": "Signed in",
   "auth.logout": "Signed out",
+  "session.revoke": "Revoked browser session",
+  "session.revoke_all": "Revoked browser sessions",
+  "session.admin_revoke": "Revoked a person's browser sessions",
   "auth.login_denied": "Sign-in denied",
   "platform.bootstrap_role": "Granted initial platform role",
   "platform.user_update": "Changed user",
@@ -43,6 +46,7 @@ const actionLabels: Record<string, string> = {
   "mcp_server.auth_update": "Changed MCP server sign-in",
   "mcp_capability.approve": "Approved capability",
   "mcp_capability.requirement_set": "Changed capability's account requirement",
+  "mcp_capability.class_set": "Changed a tool's class",
   "mcp_capability.presence_set": "Changed whether a capability needs a present person",
   "settings.publishing_update": "Changed default publishing policy",
   "settings.network_update": "Changed internal networks",
@@ -204,6 +208,7 @@ export const actionGroups: { prefix: string; label: string; platform?: boolean }
   { prefix: "retention.", label: "Retention", platform: true },
   { prefix: "platform.", label: "Platform and users", platform: true },
   { prefix: "auth.", label: "Sign-in", platform: true },
+  { prefix: "session.", label: "Sessions", platform: true },
 ];
 
 /** The area an action belongs to, by its code's group. */

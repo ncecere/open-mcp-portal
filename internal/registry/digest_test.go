@@ -88,7 +88,7 @@ func TestReviewDigest(t *testing.T) {
 		"on, not required": {on, &no, false},
 		"on, required":     {on, &yes, true},
 	} {
-		if got := CapabilityRefOf(c.sv, "tool", "a", "f1", c.override).PresentPerson; got != c.want {
+		if got := CapabilityRefOf(c.sv, "tool", "a", "f1", c.override, nil).PresentPerson; got != c.want {
 			t.Errorf("%s: effective = %v, want %v", name, got, c.want)
 		}
 	}

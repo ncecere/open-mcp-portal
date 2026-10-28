@@ -6,13 +6,13 @@ INSERT INTO mcp_calls (
     server_id, server_slug, server_name, server_team_id, capability_id, principal_kind, user_id, api_key_id,
     key_name, service_account_id, service_account_name, service_account_team_id, oauth_grant_id, oauth_client_name,
     oauth_client_kind, client_name, outcome, error_class, latency_ms, request_bytes, response_bytes, provider_slug, identity_sent,
-    agent_id, agent_name, via_platform_id, via_platform_name, person_present, trace_id
+    agent_id, agent_name, via_platform_id, via_platform_name, person_present, trace_id, tool_class
 ) VALUES (
     @request_id, @method, @exposed_name, @gateway_id, @gateway_slug, @gateway_name, @gateway_team_id,
     @server_id, @server_slug, @server_name, @server_team_id, @capability_id, @principal_kind, @user_id, @api_key_id,
     @key_name, @service_account_id, @service_account_name, @service_account_team_id, @oauth_grant_id, @oauth_client_name,
     @oauth_client_kind, @client_name, @outcome, @error_class, @latency_ms, @request_bytes, @response_bytes, @provider_slug, @identity_sent,
-    @agent_id, @agent_name, @via_platform_id, @via_platform_name, @person_present, @trace_id
+    @agent_id, @agent_name, @via_platform_id, @via_platform_name, @person_present, @trace_id, @tool_class
 )
 RETURNING id, occurred_at;
 
@@ -26,7 +26,7 @@ RETURNING id, occurred_at;
 SELECT c.id, c.occurred_at, c.request_id, c.method, c.exposed_name, c.gateway_id, c.server_id,
        c.principal_kind, c.user_id, c.client_name, c.outcome, c.error_class, c.latency_ms,
        c.request_bytes, c.response_bytes, c.service_account_id, c.oauth_client_name, c.provider_slug, c.identity_sent,
-       c.agent_id, c.agent_name, c.via_platform_id, c.via_platform_name, c.person_present, c.trace_id,
+       c.agent_id, c.agent_name, c.via_platform_id, c.via_platform_name, c.person_present, c.trace_id, c.tool_class,
        (g.id IS NOT NULL)::bool AS gateway_exists,
        COALESCE(g.slug, c.gateway_slug)::text AS gateway_slug, COALESCE(g.name, c.gateway_name)::text AS gateway_name,
        (s.id IS NOT NULL)::bool AS server_exists,

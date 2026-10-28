@@ -125,6 +125,7 @@ export function CallPage({ scope, callId, canViewPayload, elsewhere }: Props) {
               : []),
             { label: "Method", value: <code className={s.mono}>{c.method}</code> },
             ...(c.exposedName ? [{ label: "Called", value: <code className={s.mono}>{c.exposedName}</code> }] : []),
+            ...(c.toolClass ? [{ label: "Tool class at call time", value: c.toolClass }] : []),
             { label: "Gateway", value: <Ref refd={c.gateway} link={gatewayLink} /> },
             { label: "Server", value: <Ref refd={c.server} /> },
             {

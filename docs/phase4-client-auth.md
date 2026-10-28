@@ -315,3 +315,43 @@ absolute lifetime applies there too). Outside the grace the grant is revoked, as
 at once therefore holds one chain, not two. Tests also: `TestOAuthRefreshAbsoluteLifetime`,
 `TestOAuthRefreshAbsoluteLifetimeConfig` (`0` keeps today's behaviour), `TestOAuthMigration00018KeepsWhatWorks` (the
 migration's Down and Up on a database with a 400-day-old grant).
+
+## Browser sessions (#37, decision 76)
+
+Browser sign-ins are separate from OAuth connected apps, API keys and provider connections. Account › Sessions
+(`/settings/sessions`) lists active sign-ins, newest first: browser/device parsed from the self-reported user agent,
+stored address, sign-in time, last recorded activity and absolute expiry. The current session is marked. A person can
+sign out any one, or choose **Sign out everywhere**; **Keep this session signed in** is optional and off by default.
+The adjacent **Connected apps** link manages MCP clients independently. Admin › Users › person has a Sessions card
+for **platform admins only**; auditors cannot list or revoke browser sessions.
+
+API (all **browser-only**, no `x-omp-token-scopes`):
+
+- `GET /v1/me/sessions` (`listMySessions`), `DELETE /v1/me/sessions/{sessionId}` (`revokeMySession`);
+- `POST /v1/me/sessions/revoke-all` (`signOutEverywhere`), optional body `{keepCurrent: true}`; no body or false
+  ends the current session too;
+- `GET` / `DELETE /v1/admin/users/{userId}/sessions` (`adminListUserSessions`, `adminRevokeUserSessions`).
+
+IDs are session row UUIDs, never secrets or cookie digests. Unknown and foreign session IDs are both
+`404 session_not_found`; an unknown admin target is `404 user_not_found`. A revoked session's next request is
+`401`. Self-revocation clears its cookie. Every write checks CSRF and Origin. The mutation, cancellation of
+`provider_auth_states` bound to ended session IDs and audit (`session.revoke`, `session.revoke_all`,
+`session.admin_revoke`, target user, metadata `{count}` only) commit together. Logout cancels its bound states too.
+A callback still requires a valid session identity; signing in again cannot complete the old flow. Already-running
+requests are not cancelled. Other credentials are untouched and no notification is emitted.
+
+`SESSION_TTL` is still the absolute limit (default 12h). Optional `SESSION_IDLE_TIMEOUT` defaults to `0` (off),
+and when enabled accepts 5m through `SESSION_TTL`; 8h is suggested. `RequireSession`, `SessionUser` and
+`SessionIdentity` all check both limits before touching activity. A recent session needs only a read; a stale one
+uses a conditional write, at most once a minute across replicas. Idle expiry is measured from the recorded activity,
+so it may occur up to a minute earlier than the last request plus the timeout. At either boundary the browser gets
+the existing expired-session response and signs in again. Cleanup deletes idle and absolute-expired rows.
+Migration `00028_session_activity.sql` adds `last_seen_at NOT NULL DEFAULT now()` and an index; sessions present
+at upgrade receive one idle window from then, retaining their original absolute expiry. The old release still works
+with the expanded schema, but does not enforce idle expiry or update activity; finish a rolling upgrade before
+relying on the idle control.
+
+Tests: `TestBrowserSessions`, `TestSignOutEverywhere`, `TestSessionActivityAndIdleExpiry` (injected clock),
+`TestSessionRevocationAuditRollback`, `TestSessionRevocationCancelsConnect`, `TestSignOutOthersKeepsCurrentConnect`,
+the authorization and token matrices, config `TestSessionIdleTimeout`, and Vitest `sessions.test.tsx` (including axe).
+No new dependency. OAuth refresh absolute lifetime (H-8) was already implemented separately (decision 63).

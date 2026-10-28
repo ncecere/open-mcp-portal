@@ -14,8 +14,8 @@ import (
 )
 
 const createSession = `-- name: CreateSession :one
-INSERT INTO sessions (user_id, token_digest, csrf_token, user_agent, client_ip, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO sessions (user_id, token_digest, csrf_token, user_agent, client_ip, expires_at, created_at, last_seen_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
 RETURNING id
 `
 
@@ -26,6 +26,7 @@ type CreateSessionParams struct {
 	UserAgent   string
 	ClientIP    string
 	ExpiresAt   time.Time
+	AsOf        time.Time
 }
 
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (uuid.UUID, error) {
@@ -36,6 +37,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (u
 		arg.UserAgent,
 		arg.ClientIP,
 		arg.ExpiresAt,
+		arg.AsOf,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -55,15 +57,29 @@ func (q *Queries) DeleteExpiredLoginStates(ctx context.Context) (int64, error) {
 }
 
 const deleteExpiredSessions = `-- name: DeleteExpiredSessions :execrows
-DELETE FROM sessions WHERE expires_at <= now()
+DELETE FROM sessions WHERE expires_at <= $1::timestamptz OR last_seen_at <= $2::timestamptz
 `
 
-func (q *Queries) DeleteExpiredSessions(ctx context.Context) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteExpiredSessions)
+type DeleteExpiredSessionsParams struct {
+	AsOf      time.Time
+	IdleSince time.Time
+}
+
+func (q *Queries) DeleteExpiredSessions(ctx context.Context, arg DeleteExpiredSessionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredSessions, arg.AsOf, arg.IdleSince)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deleteSessionAuthStates = `-- name: DeleteSessionAuthStates :exec
+DELETE FROM provider_auth_states WHERE session_digest = $1
+`
+
+func (q *Queries) DeleteSessionAuthStates(ctx context.Context, sessionDigest string) error {
+	_, err := q.db.Exec(ctx, deleteSessionAuthStates, sessionDigest)
+	return err
 }
 
 const deleteSessionByDigest = `-- name: DeleteSessionByDigest :exec
@@ -85,20 +101,27 @@ func (q *Queries) DeleteUserSessions(ctx context.Context, userID uuid.UUID) erro
 }
 
 const getSessionUser = `-- name: GetSessionUser :one
-SELECT sessions.id, sessions.user_id, sessions.token_digest, sessions.csrf_token, sessions.user_agent, sessions.client_ip, sessions.created_at, sessions.expires_at, users.id, users.oidc_issuer, users.oidc_subject, users.email, users.display_name, users.platform_role, users.status, users.claims, users.revision, users.created_at, users.updated_at, users.last_login_at, users.groups, users.email_verified
+SELECT sessions.id, sessions.user_id, sessions.token_digest, sessions.csrf_token, sessions.user_agent, sessions.client_ip, sessions.created_at, sessions.expires_at, sessions.last_seen_at, users.id, users.oidc_issuer, users.oidc_subject, users.email, users.display_name, users.platform_role, users.status, users.claims, users.revision, users.created_at, users.updated_at, users.last_login_at, users.groups, users.email_verified
 FROM sessions
 JOIN users ON users.id = sessions.user_id
 WHERE sessions.token_digest = $1
-  AND sessions.expires_at > now()
+  AND sessions.expires_at > $2::timestamptz
+  AND sessions.last_seen_at > $3::timestamptz
 `
+
+type GetSessionUserParams struct {
+	TokenDigest string
+	AsOf        time.Time
+	IdleSince   time.Time
+}
 
 type GetSessionUserRow struct {
 	Session Session
 	User    User
 }
 
-func (q *Queries) GetSessionUser(ctx context.Context, tokenDigest string) (GetSessionUserRow, error) {
-	row := q.db.QueryRow(ctx, getSessionUser, tokenDigest)
+func (q *Queries) GetSessionUser(ctx context.Context, arg GetSessionUserParams) (GetSessionUserRow, error) {
+	row := q.db.QueryRow(ctx, getSessionUser, arg.TokenDigest, arg.AsOf, arg.IdleSince)
 	var i GetSessionUserRow
 	err := row.Scan(
 		&i.Session.ID,
@@ -109,6 +132,7 @@ func (q *Queries) GetSessionUser(ctx context.Context, tokenDigest string) (GetSe
 		&i.Session.ClientIP,
 		&i.Session.CreatedAt,
 		&i.Session.ExpiresAt,
+		&i.Session.LastSeenAt,
 		&i.User.ID,
 		&i.User.OIDCIssuer,
 		&i.User.OIDCSubject,
@@ -227,6 +251,88 @@ func (q *Queries) ListIssuerUsers(ctx context.Context, oidcIssuer string) ([]Lis
 	return items, nil
 }
 
+const listUserSessions = `-- name: ListUserSessions :many
+SELECT id, created_at, last_seen_at, expires_at, user_agent, client_ip
+FROM sessions WHERE user_id = $1
+  AND expires_at > $2::timestamptz AND last_seen_at > $3::timestamptz
+ORDER BY created_at DESC, id DESC
+`
+
+type ListUserSessionsParams struct {
+	UserID    uuid.UUID
+	AsOf      time.Time
+	IdleSince time.Time
+}
+
+type ListUserSessionsRow struct {
+	ID         uuid.UUID
+	CreatedAt  time.Time
+	LastSeenAt time.Time
+	ExpiresAt  time.Time
+	UserAgent  string
+	ClientIP   string
+}
+
+func (q *Queries) ListUserSessions(ctx context.Context, arg ListUserSessionsParams) ([]ListUserSessionsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessions, arg.UserID, arg.AsOf, arg.IdleSince)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUserSessionsRow{}
+	for rows.Next() {
+		var i ListUserSessionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.LastSeenAt,
+			&i.ExpiresAt,
+			&i.UserAgent,
+			&i.ClientIP,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeSessions = `-- name: RevokeSessions :many
+DELETE FROM sessions WHERE user_id = $1
+  AND ($2::uuid IS NULL OR id = $2::uuid)
+  AND ($3::uuid IS NULL OR id <> $3::uuid)
+RETURNING id
+`
+
+type RevokeSessionsParams struct {
+	UserID    uuid.UUID
+	SessionID uuid.NullUUID
+	KeepID    uuid.NullUUID
+}
+
+func (q *Queries) RevokeSessions(ctx context.Context, arg RevokeSessionsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, revokeSessions, arg.UserID, arg.SessionID, arg.KeepID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setPlatformRole = `-- name: SetPlatformRole :one
 UPDATE users
 SET platform_role = $1, revision = revision + 1, updated_at = now()
@@ -280,6 +386,29 @@ func (q *Queries) TakeLoginState(ctx context.Context, stateDigest string) (Login
 		&i.ExpiresAt,
 	)
 	return i, err
+}
+
+const touchSession = `-- name: TouchSession :exec
+UPDATE sessions SET last_seen_at = $1::timestamptz
+WHERE id = $2 AND last_seen_at <= $3::timestamptz
+  AND expires_at > $1::timestamptz AND last_seen_at > $4::timestamptz
+`
+
+type TouchSessionParams struct {
+	AsOf        time.Time
+	ID          uuid.UUID
+	TouchBefore time.Time
+	IdleSince   time.Time
+}
+
+func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) error {
+	_, err := q.db.Exec(ctx, touchSession,
+		arg.AsOf,
+		arg.ID,
+		arg.TouchBefore,
+		arg.IdleSince,
+	)
+	return err
 }
 
 const upsertLoginUser = `-- name: UpsertLoginUser :one

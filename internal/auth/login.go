@@ -120,7 +120,12 @@ func (s *Service) Logout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(s.sessionCookieName()); err == nil {
 		err := pgx.BeginFunc(r.Context(), s.pool, func(tx pgx.Tx) error {
 			q := dbgen.New(tx)
+			// Match RevokeSessions' lock order: session first, then its
+			// connect states, so concurrent logout and revoke cannot deadlock.
 			if err := q.DeleteSessionByDigest(r.Context(), Digest(c.Value)); err != nil {
+				return err
+			}
+			if err := q.DeleteSessionAuthStates(r.Context(), Digest(id.SessionID)); err != nil {
 				return err
 			}
 			return audit.Record(r.Context(), q, audit.Entry{

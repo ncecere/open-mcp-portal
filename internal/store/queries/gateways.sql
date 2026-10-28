@@ -107,7 +107,7 @@ ON CONFLICT (gateway_id, capability_id) DO UPDATE SET min_team_role = EXCLUDED.m
 -- use only RFC 6570 level 1-2 {var} and {+var} expressions (the same rule as
 -- gateways.TemplateSupported). by_ids narrows to ids; server_id to one
 -- server; search is LIKE-escaped by the caller.
-SELECT c.id, c.kind, c.name, c.title, c.description, c.requirement_mode, c.requirement_scopes,
+SELECT c.id, c.kind, c.name, c.title, c.description, c.requirement_mode, c.requirement_scopes, c.tool_class,
        s.id AS server_id, s.slug AS server_slug, s.name AS server_name, s.team_id AS server_team_id,
        s.auth_provider_id AS server_auth_provider_id, s.auth_scopes AS server_auth_scopes, s.auth_mode AS server_auth_mode,
        s.capture_payloads AS server_capture_payloads,

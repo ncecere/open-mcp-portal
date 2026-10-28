@@ -114,6 +114,7 @@ const appRoute = createRoute({
 });
 
 const homeRoute = createRoute({ getParentRoute: () => appRoute, path: "/", component: lazy(pages.home, "HomePage") });
+const sessionsRoute = createRoute({ getParentRoute: () => appRoute, path: "settings/sessions", component: lazy(pages.account, "SessionsPage") });
 const profileRoute = createRoute({ getParentRoute: () => appRoute, path: "settings/profile", component: lazy(pages.account, "ProfilePage") });
 /** The person's API keys; the status filter (?status=) passes through. */
 const apiKeysRoute = createRoute({
@@ -245,6 +246,7 @@ const adminTabs = <P extends string, T extends string>(path: P, tabs: readonly T
 const appTree = appRoute.addChildren([
   homeRoute,
   profileRoute,
+  sessionsRoute,
   apiKeysRoute,
   connectedAppsRoute,
   myConnectionsRoute,

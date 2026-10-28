@@ -1957,16 +1957,19 @@ func (e PublishPolicy) Valid() bool {
 
 // Defines values for PublishRequestedDataReason.
 const (
-	PublishRequestedDataReasonNew                 PublishRequestedDataReason = "new"
-	PublishRequestedDataReasonRequirementChanged  PublishRequestedDataReason = "requirement_changed"
-	PublishRequestedDataReasonUpstreamAuthChanged PublishRequestedDataReason = "upstream_auth_changed"
-	PublishRequestedDataReasonUpstreamTlsChanged  PublishRequestedDataReason = "upstream_tls_changed"
-	PublishRequestedDataReasonUrlChanged          PublishRequestedDataReason = "url_changed"
+	PublishRequestedDataReasonClassificationChanged PublishRequestedDataReason = "classification_changed"
+	PublishRequestedDataReasonNew                   PublishRequestedDataReason = "new"
+	PublishRequestedDataReasonRequirementChanged    PublishRequestedDataReason = "requirement_changed"
+	PublishRequestedDataReasonUpstreamAuthChanged   PublishRequestedDataReason = "upstream_auth_changed"
+	PublishRequestedDataReasonUpstreamTlsChanged    PublishRequestedDataReason = "upstream_tls_changed"
+	PublishRequestedDataReasonUrlChanged            PublishRequestedDataReason = "url_changed"
 )
 
 // Valid indicates whether the value is a known member of the PublishRequestedDataReason enum.
 func (e PublishRequestedDataReason) Valid() bool {
 	switch e {
+	case PublishRequestedDataReasonClassificationChanged:
+		return true
 	case PublishRequestedDataReasonNew:
 		return true
 	case PublishRequestedDataReasonRequirementChanged:
@@ -2222,6 +2225,27 @@ func (e TeamStatus) Valid() bool {
 	case TeamStatusActive:
 		return true
 	case TeamStatusArchived:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ToolClass.
+const (
+	Destructive ToolClass = "destructive"
+	Read        ToolClass = "read"
+	Write       ToolClass = "write"
+)
+
+// Valid indicates whether the value is a known member of the ToolClass enum.
+func (e ToolClass) Valid() bool {
+	switch e {
+	case Destructive:
+		return true
+	case Read:
+		return true
+	case Write:
 		return true
 	default:
 		return false
@@ -3145,6 +3169,21 @@ type AutomationTokenKind string
 // AutomationTokenScope platform:read: the platform-admin API's read operations. platform:write: its provisioning operations (never token management, roles, reviews or settings that widen trust). servers:read and servers:write: a team's MCP servers (write never deletes, approves capabilities or changes gateways or members). A write scope includes its read scope. docs/automation-tokens.md lists the operations.
 type AutomationTokenScope string
 
+// BrowserSession defines model for BrowserSession.
+type BrowserSession struct {
+	ClientIp  string    `json:"clientIp"`
+	CreatedAt time.Time `json:"createdAt"`
+	Current   bool      `json:"current"`
+
+	// ExpiresAt Absolute expiry; an idle limit may end it earlier
+	ExpiresAt time.Time          `json:"expiresAt"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// LastSeenAt Activity recorded at most once a minute
+	LastSeenAt time.Time `json:"lastSeenAt"`
+	UserAgent  string    `json:"userAgent"`
+}
+
 // CallPayload What a call sent and received, as captured (redacted, then truncated). Never contains the identity JWT, provider tokens, client credentials or the server's static header.
 type CallPayload struct {
 	// Arguments The call's arguments (tools/call, prompts/get) or {"uri": <exposed URI>} (resources/read)
@@ -3256,6 +3295,21 @@ type CapabilityChangedDataCapabilitiesChange string
 // CapabilityChangedDataCapabilitiesKind defines model for CapabilityChangedData.Capabilities.Kind.
 type CapabilityChangedDataCapabilitiesKind string
 
+// CapabilityClassInput defines model for CapabilityClassInput.
+type CapabilityClassInput struct {
+	ToolClass     *ToolClass `json:"toolClass"`
+	ViaSuggestion *bool      `json:"viaSuggestion,omitempty"`
+}
+
+// CapabilityClassesInput defines model for CapabilityClassesInput.
+type CapabilityClassesInput struct {
+	Items []struct {
+		CapabilityId  openapi_types.UUID `json:"capabilityId"`
+		ToolClass     *ToolClass         `json:"toolClass"`
+		ViaSuggestion *bool              `json:"viaSuggestion,omitempty"`
+	} `json:"items"`
+}
+
 // CapabilityCounts defines model for CapabilityCounts.
 type CapabilityCounts struct {
 	Prompts           int64 `json:"prompts"`
@@ -3356,8 +3410,9 @@ type CatalogCapability struct {
 	Name        string                 `json:"name"`
 
 	// Requires The account a person must connect to use it (null; none)
-	Requires *CapabilityRequirement `json:"requires"`
-	Title    string                 `json:"title"`
+	Requires  *CapabilityRequirement `json:"requires"`
+	Title     string                 `json:"title"`
+	ToolClass *ToolClass             `json:"toolClass,omitempty"`
 }
 
 // CatalogServer defines model for CatalogServer.
@@ -3770,8 +3825,9 @@ type GatewayCapability struct {
 	ServerSlug             string             `json:"serverSlug"`
 
 	// TeamSlug The server's team
-	TeamSlug string `json:"teamSlug"`
-	Title    string `json:"title"`
+	TeamSlug  string     `json:"teamSlug"`
+	Title     string     `json:"title"`
+	ToolClass *ToolClass `json:"toolClass,omitempty"`
 
 	// UnavailableReason server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved / changed: the current definition isn't approved. gone: the server no longer lists it. team_archived: the team that owns its server, or the team gateway's own team, is archived (unarchiving restores it).
 	UnavailableReason *GatewayUnavailableReason `json:"unavailableReason,omitempty"`
@@ -3852,10 +3908,11 @@ type GatewayOption struct {
 	ServerSlug             string             `json:"serverSlug"`
 
 	// Source team: the gateway team's own server; catalog: a published server
-	Source   GatewayOptionSource `json:"source"`
-	TeamName string              `json:"teamName"`
-	TeamSlug string              `json:"teamSlug"`
-	Title    string              `json:"title"`
+	Source    GatewayOptionSource `json:"source"`
+	TeamName  string              `json:"teamName"`
+	TeamSlug  string              `json:"teamSlug"`
+	Title     string              `json:"title"`
+	ToolClass *ToolClass          `json:"toolClass,omitempty"`
 }
 
 // GatewayOptionSource team: the gateway team's own server; catalog: a published server
@@ -4040,11 +4097,12 @@ type McpCall struct {
 	Principal CallPrincipal  `json:"principal"`
 
 	// ProviderSlug The auth provider the capability required at the time of the call (absent when none)
-	ProviderSlug  *string  `json:"providerSlug,omitempty"`
-	RequestBytes  int64    `json:"requestBytes"`
-	RequestId     string   `json:"requestId"`
-	ResponseBytes int64    `json:"responseBytes"`
-	Server        *CallRef `json:"server,omitempty"`
+	ProviderSlug  *string    `json:"providerSlug,omitempty"`
+	RequestBytes  int64      `json:"requestBytes"`
+	RequestId     string     `json:"requestId"`
+	ResponseBytes int64      `json:"responseBytes"`
+	Server        *CallRef   `json:"server,omitempty"`
+	ToolClass     *ToolClass `json:"toolClass,omitempty"`
 
 	// TraceId The request's OpenTelemetry trace ID (32 hex digits), present when the portal had tracing on and the trace was sampled (decision 71). Absent otherwise, and for calls recorded before v0.3.1
 	TraceId *string `json:"traceId,omitempty"`
@@ -4072,6 +4130,9 @@ type McpCapability struct {
 	// Changed Approved once, but the definition changed since (published servers); hidden from the catalog
 	Changed bool `json:"changed"`
 
+	// ClassDrift A classified tool differs from its annotation suggestion
+	ClassDrift bool `json:"classDrift"`
+
 	// Definition The full definition as listed (input/output schema, annotations, arguments, mime type ...)
 	Definition  map[string]interface{} `json:"definition"`
 	Description string                 `json:"description"`
@@ -4094,7 +4155,11 @@ type McpCapability struct {
 	// Requires The effective requirement (the server's, or the override); null when calls get no provider token
 	Requires *CapabilityRequirement `json:"requires"`
 	ServerId openapi_types.UUID     `json:"serverId"`
-	Title    string                 `json:"title"`
+
+	// SuggestedClass Untrusted annotation suggestion; null for non-tools
+	SuggestedClass *ToolClass `json:"suggestedClass"`
+	Title          string     `json:"title"`
+	ToolClass      *ToolClass `json:"toolClass"`
 }
 
 // McpCapabilityApproval defines model for McpCapabilityApproval.
@@ -5581,6 +5646,11 @@ type RetentionSettingsUpdate struct {
 // Revision Increases on every change. Send it back in If-Match.
 type Revision = int64
 
+// RevokeSessionsInput defines model for RevokeSessionsInput.
+type RevokeSessionsInput struct {
+	KeepCurrent *bool `json:"keepCurrent,omitempty"`
+}
+
 // ScopeList OAuth scopes exactly as the provider names them (RFC 6749 scope characters, no spaces or quotes); duplicates collapse. Use the provider's canonical names (the ones its token response returns), otherwise the gateway can't tell that they were granted.
 type ScopeList = []string
 
@@ -6027,6 +6097,9 @@ type TlsCertificate struct {
 	Subject string `json:"subject"`
 }
 
+// ToolClass defines model for ToolClass.
+type ToolClass string
+
 // TrustedClient defines model for TrustedClient.
 type TrustedClient struct {
 	// ClientId Example: https://claude.ai/oauth/claude-code-client-metadata
@@ -6363,6 +6436,11 @@ type OkReply struct {
 // RetentionSettingsReply defines model for RetentionSettingsReply.
 type RetentionSettingsReply struct {
 	Data RetentionSettings `json:"data"`
+}
+
+// SessionListReply defines model for SessionListReply.
+type SessionListReply struct {
+	Data []BrowserSession `json:"data"`
 }
 
 // TeamLimitsReply defines model for TeamLimitsReply.
@@ -6836,6 +6914,18 @@ type ListTeamMcpCapabilitiesParams struct {
 	Kind *CapabilityKindParam `form:"kind,omitempty" json:"kind,omitempty"`
 }
 
+// SetTeamMcpCapabilityClassesParams defines parameters for SetTeamMcpCapabilityClasses.
+type SetTeamMcpCapabilityClassesParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
+// SetTeamMcpCapabilityClassParams defines parameters for SetTeamMcpCapabilityClass.
+type SetTeamMcpCapabilityClassParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
 // SetTeamMcpCapabilityPresentPersonParams defines parameters for SetTeamMcpCapabilityPresentPerson.
 type SetTeamMcpCapabilityPresentPersonParams struct {
 	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
@@ -7004,6 +7094,9 @@ type UpdateMyNotificationPreferencesJSONRequestBody = NotificationPreferencesUpd
 // SetMyServerSecretJSONRequestBody defines body for SetMyServerSecret for application/json ContentType.
 type SetMyServerSecretJSONRequestBody = SetServerSecret
 
+// SignOutEverywhereJSONRequestBody defines body for SignOutEverywhere for application/json ContentType.
+type SignOutEverywhereJSONRequestBody = RevokeSessionsInput
+
 // DecideOAuthConsentJSONRequestBody defines body for DecideOAuthConsent for application/json ContentType.
 type DecideOAuthConsentJSONRequestBody = OAuthConsentDecision
 
@@ -7031,8 +7124,14 @@ type GetTeamMcpServerIdentityDefaultJSONRequestBody = DetectAuthRequest
 // UpdateTeamMcpServerJSONRequestBody defines body for UpdateTeamMcpServer for application/json ContentType.
 type UpdateTeamMcpServerJSONRequestBody = McpServerUpdate
 
+// SetTeamMcpCapabilityClassesJSONRequestBody defines body for SetTeamMcpCapabilityClasses for application/json ContentType.
+type SetTeamMcpCapabilityClassesJSONRequestBody = CapabilityClassesInput
+
 // ApproveTeamMcpCapabilityJSONRequestBody defines body for ApproveTeamMcpCapability for application/json ContentType.
 type ApproveTeamMcpCapabilityJSONRequestBody = McpCapabilityApproval
+
+// SetTeamMcpCapabilityClassJSONRequestBody defines body for SetTeamMcpCapabilityClass for application/json ContentType.
+type SetTeamMcpCapabilityClassJSONRequestBody = CapabilityClassInput
 
 // SetTeamMcpCapabilityPresentPersonJSONRequestBody defines body for SetTeamMcpCapabilityPresentPerson for application/json ContentType.
 type SetTeamMcpCapabilityPresentPersonJSONRequestBody = CapabilityPresentPersonOverride

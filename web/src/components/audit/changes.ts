@@ -176,6 +176,8 @@ function fieldsFor(action: string): Fields | undefined {
       return { name: ["Name"], issuer: ["Issuer"], jwksUrl: ["Keys address"], audience: ["Audience"], enabled: ["Enabled", onOff] };
     case "mcp_capability.presence_set":
       return { mode: ["Present person", label(presenceWords)], effective: ["Needs a present person", yesNo] };
+    case "mcp_capability.class_set":
+      return { toolClass: ["Tool class", (v) => v === null ? "Unclassified" : label({ read: "Read", write: "Write", destructive: "Destructive" })(v)] };
     case "service_account_key.create":
     case "service_account_key.revoke":
       return { serviceAccount: ["Service account"], expiresAt: ["Expires"], gatewayIds: null, serviceAccountId: null };

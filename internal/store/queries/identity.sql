@@ -26,8 +26,8 @@ WHERE id = @id
 RETURNING *;
 
 -- name: CreateSession :one
-INSERT INTO sessions (user_id, token_digest, csrf_token, user_agent, client_ip, expires_at)
-VALUES (@user_id, @token_digest, @csrf_token, @user_agent, @client_ip, @expires_at)
+INSERT INTO sessions (user_id, token_digest, csrf_token, user_agent, client_ip, expires_at, created_at, last_seen_at)
+VALUES (@user_id, @token_digest, @csrf_token, @user_agent, @client_ip, @expires_at, @as_of, @as_of)
 RETURNING id;
 
 -- name: GetSessionUser :one
@@ -35,7 +35,28 @@ SELECT sqlc.embed(sessions), sqlc.embed(users)
 FROM sessions
 JOIN users ON users.id = sessions.user_id
 WHERE sessions.token_digest = @token_digest
-  AND sessions.expires_at > now();
+  AND sessions.expires_at > @as_of::timestamptz
+  AND sessions.last_seen_at > @idle_since::timestamptz;
+
+-- name: TouchSession :exec
+UPDATE sessions SET last_seen_at = @as_of::timestamptz
+WHERE id = @id AND last_seen_at <= @touch_before::timestamptz
+  AND expires_at > @as_of::timestamptz AND last_seen_at > @idle_since::timestamptz;
+
+-- name: ListUserSessions :many
+SELECT id, created_at, last_seen_at, expires_at, user_agent, client_ip
+FROM sessions WHERE user_id = @user_id
+  AND expires_at > @as_of::timestamptz AND last_seen_at > @idle_since::timestamptz
+ORDER BY created_at DESC, id DESC;
+
+-- name: RevokeSessions :many
+DELETE FROM sessions WHERE user_id = @user_id
+  AND (sqlc.narg(session_id)::uuid IS NULL OR id = sqlc.narg(session_id)::uuid)
+  AND (sqlc.narg(keep_id)::uuid IS NULL OR id <> sqlc.narg(keep_id)::uuid)
+RETURNING id;
+
+-- name: DeleteSessionAuthStates :exec
+DELETE FROM provider_auth_states WHERE session_digest = @session_digest;
 
 -- name: DeleteSessionByDigest :exec
 DELETE FROM sessions WHERE token_digest = @token_digest;
@@ -44,7 +65,7 @@ DELETE FROM sessions WHERE token_digest = @token_digest;
 DELETE FROM sessions WHERE user_id = @user_id;
 
 -- name: DeleteExpiredSessions :execrows
-DELETE FROM sessions WHERE expires_at <= now();
+DELETE FROM sessions WHERE expires_at <= @as_of::timestamptz OR last_seen_at <= @idle_since::timestamptz;
 
 -- name: ListIssuerUsers :many
 -- The accounts of one sign-in issuer by subject: the development personas as the dev data has them.

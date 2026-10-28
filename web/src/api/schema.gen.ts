@@ -668,6 +668,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teams/{team}/mcp-servers/{serverId}/capabilities/{capabilityId}/class": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                serverId: components["parameters"]["ServerIdParam"];
+                capabilityId: components["parameters"]["CapabilityIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Classify a tool (team owners and admins, browser session only)
+         * @description Server If-Match is required and its revision is bumped. Null clears classification. Lowering a class under approval_required resubmits a published server for review. viaSuggestion must match the current suggestion. Non-tools and gone tools cannot be classified.
+         */
+        put: operations["setTeamMcpCapabilityClass"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teams/{team}/mcp-servers/{serverId}/capabilities/classes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                serverId: components["parameters"]["ServerIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Atomically classify tools (team owners and admins, browser session only)
+         * @description At most 500 unique capability IDs. Server If-Match applies to the whole batch; one revision bump and no partial changes. viaSuggestion must match each current suggestion. Null clears classification.
+         */
+        put: operations["setTeamMcpCapabilityClasses"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teams/{team}/mcp-servers/{serverId}/capabilities/{capabilityId}/requirement": {
         parameters: {
             query?: never;
@@ -1525,6 +1574,88 @@ export interface paths {
          */
         post: operations["decideOAuthConsent"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Active browser sessions, newest first (session only) */
+        get: operations["listMySessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * End one of the caller's browser sessions (session only)
+         * @description Cancels connect flows bound to that session. Unknown and foreign sessions are both 404.
+         */
+        delete: operations["revokeMySession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/sessions/revoke-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End all browser sessions, optionally keeping this one (session only)
+         * @description Does not disconnect OAuth connected apps or other credentials. Cancels connect flows bound to ended sessions.
+         */
+        post: operations["signOutEverywhere"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/users/{userId}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserIdParam"];
+            };
+            cookie?: never;
+        };
+        /** Active browser sessions of a person (platform admins only, session only) */
+        get: operations["adminListUserSessions"];
+        put?: never;
+        post?: never;
+        /**
+         * End all browser sessions of a person (platform admins only, session only)
+         * @description Audited with a count, not session metadata. Cancels connect flows bound to ended sessions; other credentials remain.
+         */
+        delete: operations["adminRevokeUserSessions"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3092,6 +3223,29 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        BrowserSession: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description Activity recorded at most once a minute
+             */
+            lastSeenAt: string;
+            /**
+             * Format: date-time
+             * @description Absolute expiry; an idle limit may end it earlier
+             */
+            expiresAt: string;
+            userAgent: string;
+            clientIp: string;
+            current: boolean;
+        };
+        RevokeSessionsInput: {
+            /** @default false */
+            keepCurrent: boolean;
+        };
         /** @description Who made the change, resolved when the log is read */
         AuditActor: {
             /** @enum {string} */
@@ -3688,8 +3842,27 @@ export interface components {
             /** @description true for a server created in oauth mode; nobody has signed in yet, so capabilities weren't read. Call authorizeTeamMcpServerSetup next */
             setupRequired?: boolean;
         };
+        /** @enum {string} */
+        ToolClass: "read" | "write" | "destructive";
+        CapabilityClassInput: {
+            toolClass: components["schemas"]["ToolClass"] | null;
+            viaSuggestion?: boolean;
+        };
+        CapabilityClassesInput: {
+            items: {
+                /** Format: uuid */
+                capabilityId: string;
+                toolClass: components["schemas"]["ToolClass"] | null;
+                viaSuggestion?: boolean;
+            }[];
+        };
         /** @description A tool, resource, resource template or prompt as the server listed it. Descriptions and schemas are untrusted text a model will read: review them before approving. */
         McpCapability: {
+            toolClass: components["schemas"]["ToolClass"] | null;
+            /** @description Untrusted annotation suggestion; null for non-tools */
+            suggestedClass: components["schemas"]["ToolClass"] | null;
+            /** @description A classified tool differs from its annotation suggestion */
+            classDrift: boolean;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -3984,6 +4157,7 @@ export interface components {
         CatalogCapability: {
             /** @description The account a person must connect to use it (null; none) */
             requires: components["schemas"]["CapabilityRequirement"] | null;
+            toolClass?: components["schemas"]["ToolClass"] | null;
             /** Format: uuid */
             id: string;
             kind: components["schemas"]["CapabilityKind"];
@@ -4101,6 +4275,7 @@ export interface components {
          */
         GatewayUnavailableReason: "server_disabled" | "not_published" | "not_approved" | "changed" | "gone" | "team_archived";
         GatewayCapability: {
+            toolClass?: components["schemas"]["ToolClass"] | null;
             /** @description The account a person must connect to use it (null; none). Service accounts can't call capabilities that require one. In MyGatewayDetail, connected says whether the caller's connection covers it now */
             requires: components["schemas"]["CapabilityRequirement"] | null;
             /** Format: uuid */
@@ -4152,6 +4327,7 @@ export interface components {
             serverName: string;
             teamSlug: string;
             teamName: string;
+            toolClass?: components["schemas"]["ToolClass"] | null;
             /**
              * @description team: the gateway team's own server; catalog: a published server
              * @enum {string}
@@ -4305,6 +4481,7 @@ export interface components {
             errorClass?: string;
             /** @description The auth provider the capability required at the time of the call (absent when none) */
             providerSlug?: string;
+            toolClass?: components["schemas"]["ToolClass"];
             /** @description Whether the signed identity token (name, email, teams) was attached to the request to the server (decision 64). true: sent. false: not sent (the server's Send identity token switch was off). null: the call was not forwarded (denied, needs authorization, rate limited) or was recorded before this field existed */
             identitySent?: boolean | null;
             /** Format: int32 */
@@ -6123,7 +6300,7 @@ export interface components {
         PublishRequestedData: {
             server: components["schemas"]["NotificationServerRef"];
             /** @enum {string} */
-            reason: "new" | "url_changed" | "upstream_auth_changed" | "upstream_tls_changed" | "requirement_changed";
+            reason: "new" | "url_changed" | "upstream_auth_changed" | "upstream_tls_changed" | "requirement_changed" | "classification_changed";
             note?: string;
             requestedBy: {
                 /** @enum {string} */
@@ -6270,6 +6447,17 @@ export interface components {
         };
     };
     responses: {
+        /** @description Active browser sessions, newest first */
+        SessionListReply: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["BrowserSession"][];
+                };
+            };
+        };
         /** @description A page of audit entries, newest first */
         AuditPageReply: {
             headers: {
@@ -7624,6 +7812,87 @@ export interface operations {
             403: components["responses"]["ErrorReply"];
             404: components["responses"]["ErrorReply"];
             409: components["responses"]["ErrorReply"];
+        };
+    };
+    setTeamMcpCapabilityClass: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                serverId: components["parameters"]["ServerIdParam"];
+                capabilityId: components["parameters"]["CapabilityIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CapabilityClassInput"];
+            };
+        };
+        responses: {
+            /** @description Updated capability */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["McpCapability"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            412: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+        };
+    };
+    setTeamMcpCapabilityClasses: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                serverId: components["parameters"]["ServerIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CapabilityClassesInput"];
+            };
+        };
+        responses: {
+            /** @description Updated capabilities in input order */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["McpCapability"][];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            412: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
         };
     };
     setTeamMcpCapabilityRequirement: {
@@ -9309,6 +9578,93 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["ErrorReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+        };
+    };
+    listMySessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["SessionListReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+        };
+    };
+    revokeMySession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkReply"];
+            400: components["responses"]["ErrorReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+        };
+    };
+    signOutEverywhere: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RevokeSessionsInput"];
+            };
+        };
+        responses: {
+            200: components["responses"]["OkReply"];
+            400: components["responses"]["ErrorReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+        };
+    };
+    adminListUserSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["SessionListReply"];
+            400: components["responses"]["ErrorReply"];
+            401: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+        };
+    };
+    adminRevokeUserSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkReply"];
             400: components["responses"]["ErrorReply"];
             401: components["responses"]["ErrorReply"];
             403: components["responses"]["ErrorReply"];

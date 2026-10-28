@@ -23,7 +23,7 @@ import (
 // resource, never the secret; machine_oauth mode, decision 73), and its
 // requirement (and its requires-a-present-person switch when on) and over
 // every listed (not gone) capability's kind, name and fingerprint (and its
-// effective requires-a-present-person, when true), sorted. A refresh that
+// effective requires-a-present-person, when true, and owner-set tool class), sorted. A refresh that
 // adds, drops or changes a definition, a new URL, another auth mode or another
 // requirement changes it, and so does relaxing (or adding) a present-person
 // requirement on the server or on a capability (L-4), so an approval made on
@@ -32,21 +32,23 @@ import (
 
 // digestVersion is hashed first so a future change of what is covered can't
 // collide with this one.
-const digestVersion = "omp-review-v3"
+const digestVersion = "omp-review-v4"
 
-// CapabilityRef is one listed capability as the digest covers it.
+// CapabilityRef is one listed capability as the digest covers it. ToolClass
+// is the owner-set class, nil when unclassified; only tools contribute it.
 // PresentPerson is whether calls relayed for a person need that person
 // present, as it applies to the capability: its own override, else the
 // server's switch (PresentPersonRequired).
 type CapabilityRef struct {
 	Kind, Name, Fingerprint string
+	ToolClass               *string
 	PresentPerson           bool
 }
 
 // CapabilityRefOf is the digest's view of a capability of server sv with the
-// given own present-person override (nil: follow the server).
-func CapabilityRefOf(sv dbgen.McpServer, kind, name, fingerprint string, presentOverride *bool) CapabilityRef {
-	return CapabilityRef{Kind: kind, Name: name, Fingerprint: fingerprint,
+// given own present-person override (nil: follow the server) and tool class.
+func CapabilityRefOf(sv dbgen.McpServer, kind, name, fingerprint string, presentOverride *bool, toolClass *string) CapabilityRef {
+	return CapabilityRef{Kind: kind, Name: name, Fingerprint: fingerprint, ToolClass: toolClass,
 		PresentPerson: PresentPersonRequired(sv, dbgen.McpCapability{RequiresPresentPerson: presentOverride})}
 }
 
@@ -146,6 +148,9 @@ func reviewDigest(sv dbgen.McpServer, caps []CapabilityRef, machine *MachineOAut
 		put(c.Kind)
 		put(c.Name)
 		put(c.Fingerprint)
+		if c.Kind == "tool" {
+			put("tool-class:" + deref(c.ToolClass))
+		}
 		if c.PresentPerson {
 			// Only when on, as for the server's switch: the digest of every
 			// capability without the requirement is what it was before.
@@ -192,7 +197,7 @@ func digestsWith(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServe
 	for _, sv := range servers {
 		refs := make([]CapabilityRef, len(byServer[sv.ID]))
 		for i, r := range byServer[sv.ID] {
-			refs[i] = CapabilityRefOf(sv, r.Kind, r.Name, r.Fingerprint, r.RequiresPresentPerson)
+			refs[i] = CapabilityRefOf(sv, r.Kind, r.Name, r.Fingerprint, r.RequiresPresentPerson, r.ToolClass)
 		}
 		out[sv.ID] = reviewDigest(sv, refs, machines[sv.ID], digestOf(tls[sv.ID]), creds[sv.ID])
 	}

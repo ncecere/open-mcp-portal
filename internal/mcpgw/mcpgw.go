@@ -961,6 +961,16 @@ func listedFor(o gateways.Offer, modern bool) (json.RawMessage, error) {
 	default:
 		def["name"] = exposed
 	}
+	if o.Capability.Kind == upstream.KindTool && o.Capability.ToolClass != nil {
+		annotations := map[string]json.RawMessage{}
+		if err := json.Unmarshal(def["annotations"], &annotations); err != nil || annotations == nil {
+			annotations = map[string]json.RawMessage{}
+		}
+		readOnly, _ := json.Marshal(*o.Capability.ToolClass == registry.ClassRead)
+		destructive, _ := json.Marshal(*o.Capability.ToolClass == registry.ClassDestructive)
+		annotations["readOnlyHint"], annotations["destructiveHint"] = readOnly, destructive
+		def["annotations"], _ = json.Marshal(annotations)
+	}
 	delete(def, "_meta")
 	if raw, ok := def["outputSchema"]; ok && !modern && !objectSchema(raw) {
 		// The MCP schema requires an outputSchema of type "object"; strict

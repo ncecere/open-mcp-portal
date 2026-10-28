@@ -179,6 +179,7 @@ var settings = []setting{
 	{key: "HEALTH_CHECK_INTERVAL", apply: duration(func(c *Config) *time.Duration { return &c.HealthCheckInterval }, 0, 24*time.Hour)},
 	{key: "PROVIDER_REFRESH_INTERVAL", apply: duration(func(c *Config) *time.Duration { return &c.ProviderRefreshInterval }, 0, 24*time.Hour)},
 	{key: "SIGNING_KEY_PREPUBLISH", apply: duration(func(c *Config) *time.Duration { return &c.SigningKeyPrepublish }, 0, 7*24*time.Hour)},
+	{key: "SESSION_IDLE_TIMEOUT", apply: duration(func(c *Config) *time.Duration { return &c.SessionIdleTimeout }, 0, 30*24*time.Hour)},
 	{key: "SESSION_TTL", apply: duration(func(c *Config) *time.Duration { return &c.SessionTTL }, 5*time.Minute, 30*24*time.Hour)},
 	{key: "TRUSTED_PROXIES", apply: trustedProxies},
 	{key: "UPSTREAM_ALLOWED_NETWORKS", apply: upstreamAllowedNetworks},

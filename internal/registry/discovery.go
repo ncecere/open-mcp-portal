@@ -342,6 +342,15 @@ func (s *Service) refresh(ctx context.Context, a authz.Actor, sv dbgen.McpServer
 		if out, err = storeCapabilities(ctx, q, cur.ID, d.Capabilities); err != nil {
 			return err
 		}
+		// If-Match on owner edits must bind the capability definitions the
+		// owner read, even when a changed definition suggests the same class.
+		// Unchanged refreshes only update health/discovery timestamps.
+		if out.Added+out.Changed+out.Gone > 0 {
+			cur, err = q.BumpMCPServerRevision(ctx, dbgen.BumpMCPServerRevisionParams{ID: cur.ID, UpdatedBy: by(a)})
+			if err != nil {
+				return err
+			}
+		}
 		if err := q.SetMCPServerRefreshed(ctx, cur.ID); err != nil {
 			return err
 		}

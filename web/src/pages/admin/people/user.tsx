@@ -12,6 +12,7 @@ import { api, ifMatch, unwrap, type Schemas } from "@/api/client";
 import { adminUserQuery } from "@/api/queries";
 import { ConnectedApps } from "@/components/oauth/connected-apps";
 import { ProviderConnections } from "@/components/providers/connections";
+import { BrowserSessions } from "@/components/sessions/browser-sessions";
 import { ServerSecrets } from "@/components/secrets/server-secrets";
 import { ActionMenu } from "@/components/templates/action-menu";
 import { Time } from "@/components/ui/time/time";
@@ -110,6 +111,9 @@ export function AdminUserPage() {
       <div className={p.sections}>
         <UserAccessCard user={user} isAdmin={isAdmin} update={update} self={self} otherDialogOpen={confirmSuspend} />
         <UserTeamsCard teams={teams} />
+        {isAdmin && <Card title="Sessions" description="Browser sign-ins. Revoking them does not disconnect apps or other credentials.">
+          <BrowserSessions owner={{ self: false, userId: user.id, name }} />
+        </Card>}
         <Card
           title="Connected apps"
           description={`MCP clients ${self ? "you" : name} allowed with OAuth sign-in, per gateway.${isAdmin ? " Disconnecting one stops it at once." : ""}`}

@@ -44,6 +44,9 @@ func (c Config) validateProcess() []error {
 	if c.LogFormat != "json" && c.LogFormat != "text" {
 		errs = append(errs, errors.New("LOG_FORMAT must be json or text"))
 	}
+	if c.SessionIdleTimeout != 0 && (c.SessionIdleTimeout < 5*time.Minute || c.SessionIdleTimeout > c.SessionTTL) {
+		errs = append(errs, errors.New("SESSION_IDLE_TIMEOUT must be 0 (off) or between 5m and SESSION_TTL"))
+	}
 	if c.ListenAddr == "" {
 		errs = append(errs, errors.New("LISTEN_ADDR must not be empty"))
 	}

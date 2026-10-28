@@ -103,6 +103,7 @@ type Claims struct {
 	Name          string   // the person's display name, or the service account's name
 	Teams         []string // slugs of the person's teams, or the service account's team
 	Gateway       string   // the gateway's slug
+	ToolClass     string   // owner-set read, write or destructive; empty when unclassified
 	Tool          string   // the exposed tool name (tools/call)
 	Prompt        string   // the exposed prompt name (prompts/get)
 	Resource      string   // the exposed resource URI read (resources/read)
@@ -150,6 +151,7 @@ type tokenClaims struct {
 	Name          string   `json:"name,omitempty"`
 	Teams         []string `json:"teams"`
 	Gateway       string   `json:"gateway"`
+	ToolClass     string   `json:"tool_class,omitempty"`
 	Tool          string   `json:"tool,omitempty"`
 	Prompt        string   `json:"prompt,omitempty"`
 	Resource      string   `json:"resource,omitempty"`
@@ -230,7 +232,7 @@ func (s *Service) Sign(ctx context.Context, c Claims) (string, error) {
 	if pt == "" {
 		pt = PrincipalUser
 	}
-	priv := tokenClaims{PrincipalType: pt, Email: c.Email, Name: c.Name, Teams: teams, Gateway: c.Gateway, Tool: c.Tool, Prompt: c.Prompt, Resource: c.Resource, Client: c.Client, ClientVerified: c.ClientVerified, Provider: c.Provider, Act: c.Act}
+	priv := tokenClaims{PrincipalType: pt, Email: c.Email, Name: c.Name, Teams: teams, Gateway: c.Gateway, ToolClass: c.ToolClass, Tool: c.Tool, Prompt: c.Prompt, Resource: c.Resource, Client: c.Client, ClientVerified: c.ClientVerified, Provider: c.Provider, Act: c.Act}
 	return jwt.Signed(k.signer).Claims(reg).Claims(priv).Serialize()
 }
 

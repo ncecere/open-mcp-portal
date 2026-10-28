@@ -11,6 +11,7 @@ import { RequiresBadge } from "../providers/requires";
 import { serviceAccountsCant } from "../providers/labels";
 import { Badge, StatusBadge } from "@/components/ui/badge/badge";
 import { CaptureBadge } from "../capture";
+import { ClassificationBadges } from "../servers/classification";
 import { AvailabilityBadge } from "./badges";
 import { type GatewayCapability, gatewayKindLabels, minRoleLabels } from "./labels";
 import g from "./gateways.module.css";
@@ -68,6 +69,7 @@ function RowBadges({ cap, availability, roles, connections }: { cap: GatewayCapa
       <Badge size="sm" variant="outline">
         {gatewayKindLabels[cap.kind].one}
       </Badge>
+      <ClassificationBadges cap={cap} />
       {cap.requires && <RequiresBadge req={cap.requires} note={connections ? undefined : serviceAccountsCant} />}
       {cap.serverCapturesPayloads && <CaptureBadge label={connections ? "Records what you send" : "Server records contents"} />}
       {cap.requires &&

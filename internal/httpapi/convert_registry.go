@@ -177,10 +177,14 @@ func toAPICapability(c registry.CapabilityView) apitypes.McpCapability {
 	out := apitypes.McpCapability{
 		Id: cp.ID, ServerId: cp.ServerID, Kind: apitypes.CapabilityKind(cp.Kind), Name: cp.Name, Title: cp.Title,
 		Description: cp.Description, Definition: definitionMap(cp.Definition), Fingerprint: cp.Fingerprint,
-		Approved: c.Approved(), Changed: c.Changed(),
+		Approved: c.Approved(), Changed: c.Changed(), ToolClass: (*apitypes.ToolClass)(cp.ToolClass), ClassDrift: registry.ClassDrift(cp),
 		FirstSeenAt: cp.FirstSeenAt, LastSeenAt: cp.LastSeenAt, GoneAt: cp.GoneAt,
 		RequirementOverride: toAPIOverride(cp), Requires: toAPIRequirement(c.Requires, nil),
 		PresentPerson: &apitypes.CapabilityPresentPerson{Mode: apitypes.CapabilityPresentPersonMode(registry.PresenceMode(cp)), Effective: c.EffectivePresentPerson},
+	}
+	if cp.Kind == "tool" {
+		suggestion := apitypes.ToolClass(registry.SuggestedClass(cp.Definition))
+		out.SuggestedClass = &suggestion
 	}
 	if cp.ApprovedFingerprint != nil {
 		out.ApprovedAt, out.ApprovedByName = cp.ApprovedAt, nonEmpty(c.ApprovedByName)
@@ -252,7 +256,7 @@ func toAPICatalogServer(v registry.ServerView) apitypes.CatalogServer {
 func toAPICatalogCapability(cc registry.CatalogCapability) apitypes.CatalogCapability {
 	c := cc.Capability
 	return apitypes.CatalogCapability{Id: c.ID, Kind: apitypes.CapabilityKind(c.Kind), Name: c.Name, Title: c.Title,
-		Description: c.Description, Definition: definitionMap(c.Definition), Requires: toAPIRequirement(cc.Requires, nil)}
+		Description: c.Description, Definition: definitionMap(c.Definition), Requires: toAPIRequirement(cc.Requires, nil), ToolClass: (*apitypes.ToolClass)(c.ToolClass)}
 }
 
 func toAPITeamPublishing(p registry.TeamPublishing) apitypes.TeamPublishing {

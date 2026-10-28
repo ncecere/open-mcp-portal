@@ -37,9 +37,10 @@ type Config struct {
 	// service desk request). Optional.
 	TeamRequestURL string
 
-	DevAuth    bool
-	OIDC       OIDC
-	SessionTTL time.Duration
+	DevAuth            bool
+	OIDC               OIDC
+	SessionTTL         time.Duration
+	SessionIdleTimeout time.Duration
 
 	// EncryptionKey (32 bytes, base64) encrypts secrets stored in the
 	// database, such as MCP server header values. EncryptionKeyPrevious is

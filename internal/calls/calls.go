@@ -103,6 +103,8 @@ type Call struct {
 	// IdentitySent says whether the identity token was attached to the
 	// request to the server (nil: the call was not forwarded).
 	IdentitySent *bool
+	// ToolClass is the owner-set classification at the time of the call.
+	ToolClass *string
 
 	// TraceID is the request's trace when it was sampled (32 hex digits;
 	// empty: tracing off or the request not sampled).
@@ -183,7 +185,7 @@ func insertParams(c Call) dbgen.InsertMCPCallParams {
 		ServiceAccountTeamID: null(c.ServiceAccountTeamID), OauthGrantID: null(c.OAuthGrantID), OauthClientName: clip(c.OAuthClientName, 200),
 		OauthClientKind: clip(c.OAuthClientKind, 20), ClientName: clip(c.ClientName, 200), Outcome: c.Outcome, ErrorClass: clip(c.ErrorClass, 64),
 		LatencyMs: int32(min(c.Latency.Milliseconds(), 1<<31-1)), RequestBytes: max(c.RequestBytes, 0), ResponseBytes: max(c.ResponseBytes, 0),
-		ProviderSlug: clip(c.ProviderSlug, 48), IdentitySent: c.IdentitySent,
+		ProviderSlug: clip(c.ProviderSlug, 48), IdentitySent: c.IdentitySent, ToolClass: c.ToolClass,
 		AgentID: clip(c.AgentID, 128), AgentName: clip(c.AgentName, 200), ViaPlatformID: null(c.ViaPlatformID),
 		ViaPlatformName: clip(c.ViaPlatformName, 100), PersonPresent: c.PersonPresent, TraceID: clip(c.TraceID, 32),
 	}

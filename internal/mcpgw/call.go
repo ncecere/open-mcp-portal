@@ -68,6 +68,7 @@ func (rc *request) call(kind string) {
 		c := calls.Call{Outcome: calls.OutcomeDenied, ErrorClass: "unknown", ExposedName: p.Name}
 		if offer != nil {
 			c.ErrorClass, c.Server, c.CapabilityID = offer.Denied, &offer.Server, offer.Capability.ID
+			c.ToolClass = offer.Capability.ToolClass
 			if offer.Requires != nil {
 				c.ProviderSlug = offer.Requires.Provider.Slug
 			}
@@ -79,7 +80,7 @@ func (rc *request) call(kind string) {
 		if eerr := validateParamHeaders(rc.r.Header, offer.Capability.Definition, args); eerr != nil {
 			n := writeRPC(rc.w, eerr.status, rc.msg.ID, nil, &rpcError{Code: eerr.code, Message: eerr.message})
 			rc.record(calls.Call{Outcome: calls.OutcomeBadRequest, ErrorClass: "header_mismatch", ExposedName: p.Name, Server: &offer.Server,
-				CapabilityID: offer.Capability.ID}, n)
+				CapabilityID: offer.Capability.ID, ToolClass: offer.Capability.ToolClass}, n)
 			return
 		}
 	}
@@ -97,7 +98,7 @@ func (rc *request) call(kind string) {
 // (stream.go).
 func (rc *request) forward(kind string, o gateways.Offer, args json.RawMessage, again retry) {
 	ctx := rc.r.Context()
-	rec := calls.Call{ExposedName: o.ExposedName, Server: &o.Server, CapabilityID: o.Capability.ID}
+	rec := calls.Call{ExposedName: o.ExposedName, Server: &o.Server, CapabilityID: o.Capability.ID, ToolClass: o.Capability.ToolClass}
 	if !rc.presenceOK(o, &rec) {
 		return
 	}
@@ -337,6 +338,9 @@ type identityFor struct {
 func (rc *request) identityToken(what identityFor, o gateways.Offer, cred *providers.Credential) (string, error) {
 	p := rc.principal
 	c := identity.Claims{Audience: o.Server.URL, Gateway: rc.gateway.Slug, Tool: what.tool, Prompt: what.prompt, Resource: what.resource}
+	if what.tool != "" && o.Capability.ToolClass != nil {
+		c.ToolClass = *o.Capability.ToolClass
+	}
 	if cred != nil && !serverBound(cred) {
 		// Only calls that carry a platform provider's token name the
 		// provider (an oauth server's own token is its bearer).

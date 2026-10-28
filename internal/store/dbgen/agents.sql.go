@@ -427,7 +427,7 @@ func (q *Queries) SetAgentPlatformJWKSResult(ctx context.Context, arg SetAgentPl
 const setMCPCapabilityPresentPerson = `-- name: SetMCPCapabilityPresentPerson :one
 UPDATE mcp_capabilities SET requires_present_person = $1::boolean
 WHERE id = $2 AND server_id = $3
-RETURNING id, server_id, kind, name, title, description, definition, fingerprint, approved_fingerprint, approved_by, approved_at, first_seen_at, last_seen_at, gone_at, requirement_mode, requirement_scopes, requires_present_person
+RETURNING id, server_id, kind, name, title, description, definition, fingerprint, approved_fingerprint, approved_by, approved_at, first_seen_at, last_seen_at, gone_at, requirement_mode, requirement_scopes, requires_present_person, tool_class, class_set_by, class_set_at
 `
 
 type SetMCPCapabilityPresentPersonParams struct {
@@ -458,6 +458,9 @@ func (q *Queries) SetMCPCapabilityPresentPerson(ctx context.Context, arg SetMCPC
 		&i.RequirementMode,
 		&i.RequirementScopes,
 		&i.RequiresPresentPerson,
+		&i.ToolClass,
+		&i.ClassSetBy,
+		&i.ClassSetAt,
 	)
 	return i, err
 }

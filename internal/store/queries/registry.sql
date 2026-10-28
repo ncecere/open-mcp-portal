@@ -173,7 +173,7 @@ GROUP BY c.server_id, c.kind;
 -- What a reviewer's digest covers: the listed (not gone) capabilities of
 -- servers, as (kind, name, fingerprint) and the capability's own present-person
 -- override (NULL: the server's switch decides).
-SELECT c.server_id, c.kind, c.name, c.fingerprint, c.requires_present_person
+SELECT c.server_id, c.kind, c.name, c.fingerprint, c.requires_present_person, c.tool_class
 FROM mcp_capabilities c
 WHERE c.server_id = ANY(@server_ids::uuid[]) AND c.gone_at IS NULL
 ORDER BY c.server_id, c.kind, c.name;
@@ -211,11 +211,20 @@ SET title = EXCLUDED.title, description = EXCLUDED.description, definition = EXC
 -- Marks the server's listed capabilities that the refresh didn't list as
 -- gone, and withdraws their approval.
 UPDATE mcp_capabilities c
-SET gone_at = now(), approved_fingerprint = NULL, approved_by = NULL, approved_at = NULL
+SET gone_at = now(), approved_fingerprint = NULL, approved_by = NULL, approved_at = NULL,
+    tool_class = NULL, class_set_by = NULL, class_set_at = NULL
 WHERE c.server_id = @server_id AND c.gone_at IS NULL
   -- listed holds "kind name" for every capability the refresh listed.
   AND NOT ((c.kind || ' ' || c.name) = ANY(@listed::text[]))
 RETURNING c.kind, c.name;
+
+-- name: SetMCPCapabilityClass :one
+UPDATE mcp_capabilities
+SET tool_class = sqlc.narg(tool_class),
+    class_set_by = CASE WHEN sqlc.narg(tool_class)::text IS NULL THEN NULL ELSE @class_set_by::uuid END,
+    class_set_at = CASE WHEN sqlc.narg(tool_class)::text IS NULL THEN NULL ELSE now() END
+WHERE id = @id AND server_id = @server_id
+RETURNING *;
 
 -- name: ApproveMCPCapability :one
 UPDATE mcp_capabilities
