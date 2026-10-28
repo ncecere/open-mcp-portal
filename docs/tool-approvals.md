@@ -93,8 +93,11 @@ Final approval transactions acquire an owner-definer **EXCLUSIVE NOWAIT table fe
 tables, including row-locking readers, before validation/consumption. Both legacy shared/exclusive helper
 interfaces use this conservative fence. A busy/partial fence aborts with `55P03`; roll back and refuse/retry,
 never wait or spend authorization. This avoids existing-writer cycles without rewriting their lock order.
-It intentionally trades availability under concurrent authority writes for fail-closed safety; load/latency
-behavior still needs measurement. The initial context read is unfenced and committed-snapshot-only.
+It intentionally trades availability under concurrent authority writes, row-locking reads and PostgreSQL
+maintenance (including `ANALYZE`) for fail-closed safety; load/latency behavior still needs measurement.
+Keep production autovacuum enabled. Matrix fixtures alone quiesce maintenance in their disposable databases;
+a separate deterministic lock regression verifies that real contention refuses admission without spending.
+The initial context read is unfenced and committed-snapshot-only.
 
 For browser audit attribution, take the actor user's `KEY SHARE` **before** the fence, then requester
 advisory/request/rule locks. Validation under the fence uses non-locking reads. Request/rule historical
