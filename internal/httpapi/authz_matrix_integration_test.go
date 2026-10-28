@@ -78,10 +78,32 @@ type matrixEnv struct {
 	// (repo) with an approved tool on platformGateway: every signed-in caller
 	// may use it, so each may allow it to use their connection.
 	allowableServer string
-	n               int
+	n               *int // shared by subtest-scoped helper copies
 }
 
-func (e *matrixEnv) next() int { e.n++; return e.n }
+func (e *matrixEnv) next() int {
+	(*e.n)++
+	return *e.n
+}
+
+// withTest keeps every fixture/client failure on the currently running subtest,
+// not the parent that owns the database. Copies share only the fixture counter
+// and infrastructure; matrix subtests are deliberately sequential.
+func (e *matrixEnv) withTest(t *testing.T) *matrixEnv {
+	scoped := *e
+	scoped.t = t
+	app := *e.app
+	app.t = t
+	scoped.app = &app
+	for who, original := range e.callers {
+		if original != nil {
+			s := *original
+			s.t, s.app = t, &app
+			scoped.callers[who] = &s
+		}
+	}
+	return &scoped
+}
 
 func (e *matrixEnv) exec(sql string, args ...any) string {
 	e.t.Helper()
@@ -257,12 +279,15 @@ func newMatrixEnv(t *testing.T) *matrixEnv { return newMatrixEnvWith(t, nil) }
 // newMatrixEnvWith is newMatrixEnv with extra configuration.
 func newMatrixEnvWith(t *testing.T, mutate func(*testConfig)) *matrixEnv {
 	smtp := matrixSMTP(t)
-	e := &matrixEnv{t: t, app: newTestApp(t, func(c *config.Config) {
+	e := &matrixEnv{t: t, n: new(int), app: newTestApp(t, func(c *config.Config) {
 		smtp(c)
 		if mutate != nil {
 			mutate(c)
 		}
 	}), fakeURL: testutil.NewFakeMCP(t).URL()}
+	if err := quiesceApprovalMatrix(context.Background(), testutil.OwnerPool(t, e.app.Pool)); err != nil {
+		t.Fatalf("quiesce matrix maintenance: %v", err)
+	}
 	e.a = e.newTeam("alpha", "Alpha Confidential Team")
 	e.b = e.newTeam("bravo", "Bravo Team")
 	e.exec(`UPDATE teams SET publish_policy_override = 'self_publish' WHERE id = $1 RETURNING slug`, e.b.id)
@@ -545,6 +570,7 @@ func (c *mctx) spareTeam() string {
 // call runs one request as who and checks the outcome.
 func (e *matrixEnv) call(t *testing.T, op string, p policy, tf *teamFix, who caller, allowed, foreign bool) {
 	t.Helper()
+	e = e.withTest(t)
 	c := &mctx{e: e, tf: tf, who: who, allowed: allowed}
 	req := p.build(c)
 	s := e.callers[who]

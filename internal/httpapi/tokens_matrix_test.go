@@ -161,6 +161,7 @@ func TestTokenMatrix(t *testing.T) {
 		}
 		o, annotated := byOp[op]
 		t.Run(op, func(t *testing.T) {
+			e := e.withTest(t)
 			for _, c := range creds {
 				scopeHeld := false
 				if annotated {
