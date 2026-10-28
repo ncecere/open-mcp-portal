@@ -77,11 +77,11 @@ func New(pool *pgxpool.Pool, box *secrets.Box, patterns func(context.Context) ([
 	if pool == nil || box == nil || err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return nil, ErrUnavailable
 	}
-	keys, err := box.Derive("open-mcp-portal/tool-approvals/argument-binding/v1")
-	if err != nil || len(keys) == 0 {
+	root, err := loadBindingKey(pool, box)
+	if err != nil {
 		return nil, ErrUnavailable
 	}
-	return &Service{pool: pool, box: box, keys: keys, patterns: patterns, appURL: strings.TrimRight(appURL, "/"), now: time.Now}, nil
+	return &Service{pool: pool, box: box, keys: [][]byte{root}, patterns: patterns, appURL: strings.TrimRight(appURL, "/"), now: time.Now}, nil
 }
 func (s *Service) SetClock(now func() time.Time) {
 	s.clockMu.Lock()

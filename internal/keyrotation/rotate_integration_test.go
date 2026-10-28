@@ -91,16 +91,31 @@ func seed(t *testing.T, pool *pgxpool.Pool, b *secrets.Box) map[string]string {
 		 exposed_name,args_digest,binding_digest,capability_fingerprint,server_origin,preview_cipher,expires_at)
 		VALUES(gen_random_uuid(),1,public.omp_current_approval_context(),'user',$1,$2,$3,gen_random_uuid(),
 		 's__sensitive',repeat('a',64),repeat('b',64),repeat('c',64),'https://x','\x00',now()+interval '1 hour') RETURNING id::text`, user, gw, keys["mcp_servers"])
+	keys["approval_binding_keys"] = "1"
 	for _, c := range keyrotation.Columns {
-		ct, err := b.Seal([]byte("secret of "+c.Name()), c.AAD(keys[c.Table]))
+		ct, err := b.Seal(columnPlaintext(c), c.AAD(keys[c.Table]))
 		if err != nil {
 			t.Fatal(err)
+		}
+		if c.Table == "approval_binding_keys" {
+			var stored []byte
+			if err := pool.QueryRow(context.Background(), `SELECT public.omp_ensure_approval_binding_key($1)`, ct).Scan(&stored); err != nil {
+				t.Fatal(err)
+			}
+			continue
 		}
 		if _, err := pool.Exec(context.Background(), `UPDATE `+c.Table+` SET `+c.Column+` = $1 WHERE `+c.Key+`::text = $2`, ct, keys[c.Table]); err != nil {
 			t.Fatalf("%s: %v", c.Name(), err)
 		}
 	}
 	return keys
+}
+
+func columnPlaintext(c keyrotation.Column) []byte {
+	if c.Table == "approval_binding_keys" {
+		return bytes.Repeat([]byte{0x42}, 32)
+	}
+	return []byte("secret of " + c.Name())
 }
 
 // Every *_cipher column in the schema is listed in Columns.
@@ -168,7 +183,7 @@ func TestRotateKeys(t *testing.T) {
 			t.Fatal(err)
 		}
 		plain, err := onlyNew.Open(ct, c.AAD(keys[c.Table]))
-		if err != nil || string(plain) != "secret of "+c.Name() {
+		if err != nil || !bytes.Equal(plain, columnPlaintext(c)) {
 			t.Errorf("%s after rotation: %q %v", c.Name(), plain, err)
 		}
 	}

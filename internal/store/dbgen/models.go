@@ -57,6 +57,11 @@ type ApiKeyGateway struct {
 	AddedAt     time.Time
 }
 
+type ApprovalBindingKey struct {
+	ID               int64
+	BindingKeyCipher []byte
+}
+
 type ApprovalContext struct {
 	ID    int16
 	Epoch int64

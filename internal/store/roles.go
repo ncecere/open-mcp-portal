@@ -20,6 +20,7 @@ var protectedFunctions = []string{
 	"public.omp_purge_mcp_calls(timestamp with time zone,integer,integer)",
 	"public.omp_lock_approval_context(boolean)",
 	"public.omp_current_approval_context()",
+	"public.omp_ensure_approval_binding_key(bytea)",
 }
 
 // ValidateRoleName rejects names PostgreSQL would truncate, and embedded NULs.
@@ -158,6 +159,17 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
 				out.Problems = append(out.Problems, "forbidden write privilege on "+table+": "+r.name)
 			}
 		}
+		// Only ciphertext-column UPDATE is legitimate for root rewrapping. An
+		// INSERT grant would let runtime bypass the singleton bootstrap helper.
+		var bindingWrite bool
+		if err := db.QueryRow(ctx, `SELECT has_any_column_privilege($1::oid,'public.approval_binding_keys','INSERT')
+ OR has_table_privilege($1::oid,'public.approval_binding_keys','UPDATE,DELETE,TRUNCATE,TRIGGER')
+ OR has_column_privilege($1::oid,'public.approval_binding_keys','id','UPDATE')`, r.oid).Scan(&bindingWrite); err != nil {
+			return out, err
+		}
+		if bindingWrite {
+			out.Problems = append(out.Problems, "forbidden write privilege on public.approval_binding_keys: "+r.name)
+		}
 		var eventSequence bool
 		if err := db.QueryRow(ctx, `SELECT has_sequence_privilege($1::oid,'public.approval_context_events_event_id_seq','USAGE,SELECT,UPDATE')`, r.oid).Scan(&eventSequence); err != nil {
 			return out, err
@@ -210,9 +222,10 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
 		err := db.QueryRow(ctx, `SELECT NOT has_schema_privilege($1, 'public', 'USAGE') OR EXISTS (
  SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
  WHERE n.nspname = 'public' AND c.relkind IN ('r','p','v','m','f') AND
- (NOT has_table_privilege($1,c.oid,'SELECT') OR (c.relname NOT IN ('goose_db_version','approval_context','approval_context_events') AND NOT has_table_privilege($1,c.oid,'INSERT'))
- OR (c.relname NOT IN ('audit_log','mcp_calls','goose_db_version','approval_context','approval_context_events') AND
+ (NOT has_table_privilege($1,c.oid,'SELECT') OR (c.relname NOT IN ('goose_db_version','approval_context','approval_context_events','approval_binding_keys') AND NOT has_table_privilege($1,c.oid,'INSERT'))
+ OR (c.relname NOT IN ('audit_log','mcp_calls','goose_db_version','approval_context','approval_context_events','approval_binding_keys') AND
  (NOT has_table_privilege($1,c.oid,'UPDATE') OR NOT has_table_privilege($1,c.oid,'DELETE')))))
+ OR NOT has_column_privilege($1,'public.approval_binding_keys','binding_key_cipher','UPDATE')
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
  WHERE n.nspname='public' AND c.relname <> 'approval_context_events_event_id_seq'
  AND CASE WHEN c.relkind='S' THEN NOT has_sequence_privilege($1,c.oid,'USAGE') ELSE false END)`, name).Scan(&missing)
@@ -277,7 +290,7 @@ func ReconcileRuntimeGrants(ctx context.Context, conn *pgx.Conn, role string) er
 				}
 			} else if t.name == "audit_log" || t.name == "mcp_calls" {
 				grants = "SELECT, INSERT"
-			} else if t.name == "goose_db_version" || t.name == "approval_context" || t.name == "approval_context_events" {
+			} else if t.name == "goose_db_version" || t.name == "approval_context" || t.name == "approval_context_events" || t.name == "approval_binding_keys" {
 				grants = "SELECT"
 			}
 			if _, err := tx.Exec(ctx, "REVOKE ALL PRIVILEGES ON "+object+" "+ident+" FROM "+quoted+" CASCADE"); err != nil {
@@ -314,6 +327,9 @@ func ReconcileRuntimeGrants(ctx context.Context, conn *pgx.Conn, role string) er
 					return err
 				}
 			}
+		}
+		if _, err := tx.Exec(ctx, "GRANT UPDATE (binding_key_cipher) ON TABLE public.approval_binding_keys TO "+quoted); err != nil {
+			return err
 		}
 		var database string
 		if err := tx.QueryRow(ctx, "SELECT current_database()").Scan(&database); err != nil {
