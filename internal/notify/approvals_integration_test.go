@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ncecere/open-mcp-portal/internal/apperr"
 	"github.com/ncecere/open-mcp-portal/internal/approvals"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 	"github.com/ncecere/open-mcp-portal/internal/testutil"
@@ -230,7 +231,7 @@ func TestApprovalWebhookSubscriptionsRejected(t *testing.T) {
 			events := []string{event}
 			on := true
 			_, _, err := e.svc.Create(context.Background(), actor, sc, Input{Name: &name, Format: "json", URL: &raw, Events: &events, TeamEvents: &on})
-			if code(err) != "invalid_events" {
+			if ae, ok := apperr.As(err); !ok || ae.Code != "invalid_events" {
 				t.Fatalf("private subscription %s platform=%v: %v", event, platform, err)
 			}
 		}

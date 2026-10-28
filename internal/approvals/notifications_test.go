@@ -30,7 +30,26 @@ func noticeAudience(t *testing.T, f *serviceFixture, id uuid.UUID, requested boo
 // authority edit; production never rebases their epoch.
 func rebaseNoticeFixture(t *testing.T, f *serviceFixture, id uuid.UUID) {
 	t.Helper()
-	execFixture(t, f.db, `UPDATE approval_requests SET context_epoch=public.omp_current_approval_context() WHERE id=$1`, id)
+	ctx := context.Background()
+	tx, err := f.owner.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	// Owner-only test instrumentation, atomically restored; runtime cannot
+	// disable this immutable-binding guard. Never used by application code.
+	for _, query := range []string{
+		`ALTER TABLE approval_requests DISABLE TRIGGER approval_request_lifecycle`,
+		`UPDATE approval_requests SET context_epoch=public.omp_current_approval_context() WHERE id='` + id.String() + `'`,
+		`ALTER TABLE approval_requests ENABLE TRIGGER approval_request_lifecycle`,
+	} {
+		if _, err := tx.Exec(ctx, query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestNotificationRecipientsLiveGroupsAndFallback(t *testing.T) {
