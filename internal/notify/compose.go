@@ -26,6 +26,7 @@ const (
 	LinkTeamAutomationTokens = "team_automation_tokens"
 	LinkAccountConnections   = "account_connections"
 	LinkAccountAPIKeys       = "account_api_keys"
+	LinkApproval             = "approval"
 )
 
 // Link is where an inbox row goes.
@@ -104,6 +105,22 @@ func compose(ev dbgen.NotificationEvent, team *teamInfo) Message {
 	}
 	m := Message{Title: ev.Event, Body: ""}
 	switch ev.Event {
+	case ApprovalRequested, ApprovalDecided:
+		var d approvalNotificationData
+		if json.Unmarshal(ev.Payload, &d) != nil || d.ApprovalID == uuid.Nil {
+			break
+		}
+		m.Link = &Link{Type: LinkApproval, ID: d.ApprovalID.String()}
+		if ev.Event == ApprovalRequested {
+			m.Title = fmt.Sprintf("Approval requested for %s", nm(d.ExposedName))
+			m.Body = "A sensitive tool call is waiting for review. Open the receipt to review it."
+		} else {
+			if d.Status != "approved" && d.Status != "denied" {
+				break
+			}
+			m.Title = fmt.Sprintf("Approval for %s was %s", nm(d.ExposedName), d.Status)
+			m.Body = "Open the receipt for its current status. Approval authorizes one attempt; it does not confirm execution."
+		}
 	case ServerUnhealthy:
 		var d apitypes.ServerUnhealthyData
 		if json.Unmarshal(ev.Payload, &d) != nil {
@@ -251,6 +268,12 @@ func (l *Link) path() string {
 	}
 	team := "/teams/" + url.PathEscape(l.TeamSlug)
 	switch l.Type {
+	case LinkApproval:
+		id, err := uuid.Parse(l.ID)
+		if err != nil || id == uuid.Nil {
+			return "/approvals"
+		}
+		return "/approvals/" + id.String()
 	case LinkServer:
 		return team + "/servers/" + url.PathEscape(l.ID)
 	case LinkServers:

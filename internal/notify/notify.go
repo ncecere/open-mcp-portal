@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ncecere/open-mcp-portal/internal/config"
@@ -34,15 +35,17 @@ const (
 	ConnectionNeedsReconsent = "connection.needs_reconsent"
 	UpstreamSigninLapsed     = "upstream_signin.lapsed"
 	KeyExpiring              = "key.expiring"
+	ApprovalRequested        = "approval.requested"
+	ApprovalDecided          = "approval.decided"
 	// Test is the type of a destination's test payload; it is not an event.
 	Test = "test"
 )
 
 // Events lists every event in the order the API shows them.
 var Events = []string{ServerUnhealthy, ServerRecovered, CapabilityChanged, PublishRequested, PublishDecided,
-	ConnectionNeedsReconsent, UpstreamSigninLapsed, KeyExpiring}
+	ConnectionNeedsReconsent, UpstreamSigninLapsed, KeyExpiring, ApprovalRequested, ApprovalDecided}
 
-// ValidEvent reports whether e is one of the eight events.
+// ValidEvent reports whether e is a supported event.
 func ValidEvent(e string) bool {
 	for _, x := range Events {
 		if x == e {
@@ -126,6 +129,10 @@ type Service struct {
 	Observe func(channel, event, outcome string)
 	// ObserveLeader is told whether this replica led the latest run.
 	ObserveLeader func(leader bool)
+	// ApprovalRecipients resolves private approval audiences at fan-out using
+	// this transaction's queries and nonlocking live eligibility reads. Nil
+	// fails closed (no recipients). Wire approvals.Service.NotificationRecipients.
+	ApprovalRecipients func(ctx context.Context, q *dbgen.Queries, requestID uuid.UUID, requested bool) ([]uuid.UUID, error)
 }
 
 // Config is what the service needs from the deployment.

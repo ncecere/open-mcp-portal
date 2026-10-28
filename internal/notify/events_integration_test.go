@@ -165,7 +165,7 @@ func TestPreferencesDecideTheChannels(t *testing.T) {
 	for _, it := range p.Items {
 		names = append(names, it.Event)
 	}
-	if got := strings.Join(names, ","); got != "server.unhealthy,server.recovered,capability.changed,connection.needs_reconsent,upstream_signin.lapsed,key.expiring" {
+	if got := strings.Join(names, ","); got != "server.unhealthy,server.recovered,capability.changed,connection.needs_reconsent,upstream_signin.lapsed,key.expiring,approval.requested,approval.decided" {
 		t.Errorf("an editor can receive: %s", got)
 	}
 }

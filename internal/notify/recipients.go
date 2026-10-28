@@ -107,6 +107,8 @@ func (s *Service) recipients(ctx context.Context, q *dbgen.Queries, ev dbgen.Not
 	}
 	var err error
 	switch ev.Event {
+	case ApprovalRequested, ApprovalDecided:
+		out, err = s.approvalRecipients(ctx, q, ev)
 	case ServerUnhealthy, ServerRecovered, CapabilityChanged, UpstreamSigninLapsed:
 		err = team(editorsUp)
 	case PublishDecided:
@@ -156,7 +158,7 @@ func webhookRoute(ev dbgen.NotificationEvent) (team, platform, platformNeedsTeam
 			return false, true, false
 		}
 	}
-	return false, false, false // connection.needs_reconsent and personal keys never leave
+	return false, false, false // private approvals, personal connections and keys never leave
 }
 
 // channelPrefs says, for each person, which channels they chose to receive
@@ -183,7 +185,9 @@ func (s *Service) channelPrefs(ctx context.Context, q *dbgen.Queries, event stri
 
 // receivable lists the events a person can receive, from their live roles:
 // team events for the roles they hold, publish.requested for platform
-// admins, key.expiring and connection.needs_reconsent for everyone.
+// admins; personal connection/key and private approval choices for everyone.
+// Any human can be a named/group reviewer or requester. Listing a preference
+// grants no receipt visibility; the live resolver controls actual fan-out.
 func (s *Service) receivable(ctx context.Context, userID uuid.UUID, platformRole string) ([]string, error) {
 	roles, err := s.q.ListUserTeamRoles(ctx, userID)
 	if err != nil {

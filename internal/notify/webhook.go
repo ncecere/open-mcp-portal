@@ -260,6 +260,9 @@ func classifyNetError(err error) result {
 // deliverWebhook is one attempt of an outbox row: the destination must still
 // exist, be enabled and take the event (else the row is skipped).
 func (s *Service) deliverWebhook(ctx context.Context, row dbgen.NotificationOutbox, ev dbgen.NotificationEvent, team *teamInfo, msg Message) result {
+	if isApprovalEvent(ev.Event) {
+		return skipped // private even if a malformed/legacy outbox row exists
+	}
 	d, err := s.q.GetNotificationDestination(ctx, row.DestinationID.UUID)
 	if errors.Is(store.NotFound(err), store.ErrNotFound) {
 		return skipped
