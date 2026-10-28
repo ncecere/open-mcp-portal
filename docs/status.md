@@ -1,16 +1,16 @@
 # Status and handoff
 
-Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.3.2, **cut on 2026-10-20**
-(release notes: [releases/v0.3.2.md](releases/v0.3.2.md); earlier: [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.3.3, **release preparation on 2026-10-28**
+(release notes: [releases/v0.3.3.md](releases/v0.3.3.md); earlier: [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
-## Current implementation batch (unreleased)
+## v0.3.3 (release preparation)
 
 The [implementation order](implementation-order.md) reconciles all 36 open GitHub issues with the v0.3.2
 checkout. Implemented locally: **#28 owner-set tool classification** and independent **#37 browser sessions**.
 The classification [design](tool-classification.md) records the trust boundary and migration `00027`;
 [session management](phase4-client-auth.md#browser-sessions-37-decision-76) uses migration `00028`.
-The combined implementation is validated and being committed for the next additive release. No deployment
-has been performed. GitHub issue closure will follow the implementation commit landing on `main`.
+The combined implementation is committed as `9864b75`; release preparation is in progress. No deployment
+has been performed. GitHub issue closure follows that implementation commit landing on `main`.
 
 Subagent implementation and independent code reviews found and fixed three regressions before finishing:
 
