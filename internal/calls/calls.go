@@ -35,6 +35,8 @@ const (
 	// connect (or reconnect) an account; the client got a consent link
 	// (JSON-RPC -32042).
 	OutcomeNeedsAuthorization = "needs_authorization"
+	// OutcomeNeedsApproval means no tool dispatch occurred: a human review is pending.
+	OutcomeNeedsApproval = "needs_approval"
 	// OutcomeRateLimited: not forwarded because a rate limit was exceeded
 	// (HTTP 429, JSON-RPC -32029); the error class names the limit.
 	OutcomeRateLimited = "rate_limited"
@@ -44,7 +46,7 @@ const (
 func ValidOutcome(o string) bool {
 	switch o {
 	case OutcomeOK, OutcomeToolError, OutcomeDenied, OutcomeUpstreamError, OutcomeTimeout, OutcomeTooLarge, OutcomeBadRequest,
-		OutcomeNeedsAuthorization, OutcomeRateLimited:
+		OutcomeNeedsAuthorization, OutcomeNeedsApproval, OutcomeRateLimited:
 		return true
 	}
 	return false

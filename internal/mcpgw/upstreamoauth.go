@@ -148,6 +148,9 @@ func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.C
 		if err == nil {
 			return result, isError, true
 		}
+		if rc.approvalTransportFailed(*rec, err) {
+			return nil, false, false
+		}
 		var ue *upstream.Error
 		if rc.secretRefusal(err) {
 			// The server refused the person's own secret (decision 72).

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ncecere/open-mcp-portal/internal/calls"
@@ -97,11 +98,18 @@ func (rc *request) call(kind string) {
 		params["arguments"] = args
 		rc.msg.Params, _ = json.Marshal(params)
 	}
+	if kind == upstream.KindTool && rc.h.Approvals != nil && (len(args) == 0 || bytes.Equal(args, []byte("null"))) {
+		args = json.RawMessage("{}")
+		var params map[string]json.RawMessage
+		_ = json.Unmarshal(rc.msg.Params, &params)
+		params["arguments"] = args
+		rc.msg.Params, _ = json.Marshal(params)
+	}
 	again, ok := rc.checkRetry(calls.Call{ExposedName: p.Name})
 	if !ok {
 		return
 	}
-	if again.declined {
+	if again.declined && again.approvalID == uuid.Nil {
 		rc.declined(*offer)
 		return
 	}
@@ -164,6 +172,9 @@ func (rc *request) forward(kind string, o gateways.Offer, args json.RawMessage, 
 	if !ok {
 		return
 	}
+	if kind == upstream.KindTool && !rc.prepareApproval(o, args, again, &target, &fwd, rec) {
+		return
+	}
 	if progress, ok := rc.wantsStream(); ok && kind == upstream.KindTool {
 		st := rc.startStream(progress)
 		defer st.close()
@@ -200,6 +211,10 @@ func (rc *request) forwardCall(o gateways.Offer, rec calls.Call, cred *providers
 	}
 	fr := out.(*upstream.ForwardResult)
 	if fr.Input != nil {
+		if rc.approval != nil && rc.approval.spent.Load() {
+			rc.approvalUnknown(rec)
+			return
+		}
 		rc.relayInput(o, rec, fr.Input)
 		return
 	}

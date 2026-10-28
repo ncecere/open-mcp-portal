@@ -160,8 +160,11 @@ var slugRE = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$`)
 
 // Handler serves /mcp/{slug}.
 type Handler struct {
-	Gateways *gateways.Service
-	Keys     *apikeys.Service
+	// Approvals is optional only for legacy test/service compositions. Serving
+	// applications wire it so every tool dispatch observes live approval policy.
+	Approvals ApprovalRuntime
+	Gateways  *gateways.Service
+	Keys      *apikeys.Service
 	// OAuth checks connected clients' access tokens (nil: none accepted).
 	OAuth *oauth.Service
 	// ServiceAccounts checks service account keys (nil: none accepted).
@@ -285,6 +288,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusForbidden, "Origin not allowed")
 		return
 	}
+	var approvalEpoch int64
+	if h.Approvals != nil {
+		var err error
+		approvalEpoch, err = h.Approvals.Epoch(r.Context())
+		if err != nil {
+			refuse(w, http.StatusServiceUnavailable, "Approval policy is unavailable")
+			return
+		}
+	}
 	authStart := time.Now()
 	principal, ok := h.authenticate(w, r, slug)
 	tr.authenticated(authStart, principal.kind, ok)
@@ -336,7 +348,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rc := &request{h: h, w: w, r: r, start: start, msg: msg, principal: principal, requestBytes: int64(len(body)),
-		modern: era.modern, clientCaps: era.caps}
+		modern: era.modern, clientCaps: era.caps, approvalEpoch: approvalEpoch}
 	if tr != nil {
 		tr.rc = rc
 	}
@@ -480,15 +492,17 @@ func (h *Handler) credential(w http.ResponseWriter, r *http.Request, slug string
 
 // request is one exchange.
 type request struct {
-	h            *Handler
-	w            http.ResponseWriter
-	r            *http.Request
-	start        time.Time
-	msg          message
-	principal    principal
-	requestBytes int64
-	gateway      dbgen.Gateway
-	caller       gateways.Caller
+	approvalEpoch int64
+	approval      *approvalAttempt
+	h             *Handler
+	w             http.ResponseWriter
+	r             *http.Request
+	start         time.Time
+	msg           message
+	principal     principal
+	requestBytes  int64
+	gateway       dbgen.Gateway
+	caller        gateways.Caller
 	// outcome is the recorded outcome (metrics; "" for requests that are
 	// not recorded).
 	outcome string

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/ncecere/open-mcp-portal/internal/calls"
 	"github.com/ncecere/open-mcp-portal/internal/gateways"
 	"github.com/ncecere/open-mcp-portal/internal/providers"
@@ -47,8 +48,9 @@ const (
 	stateInfo    = "open-mcp-portal/mcp-request-state/v1"
 	stateVersion = byte(1)
 	// stateTTL is how long a person has to open the link and retry.
-	stateTTL       = 10 * time.Minute
-	purposeConsent = "consent"
+	stateTTL        = 10 * time.Minute
+	purposeConsent  = "consent"
+	purposeApproval = "approval"
 	// purposeRelay seals an upstream server's own requestState (relay.go).
 	purposeRelay = "relay"
 	// maxStateLen bounds the requestState a client may send back (a relay
@@ -73,14 +75,16 @@ var (
 
 // stateClaims is what a requestState carries.
 type stateClaims struct {
-	Purpose   string `json:"u"`
-	Principal string `json:"p"`
-	Gateway   string `json:"g"`
-	Method    string `json:"m"`
-	Name      string `json:"n"`
-	Digest    string `json:"d"`
-	IssuedAt  int64  `json:"iat"`
-	ExpiresAt int64  `json:"exp"`
+	Purpose          string `json:"u"`
+	Principal        string `json:"p"`
+	Gateway          string `json:"g"`
+	Method           string `json:"m"`
+	Name             string `json:"n"`
+	Digest           string `json:"d"`
+	IssuedAt         int64  `json:"iat"`
+	ExpiresAt        int64  `json:"exp"`
+	ApprovalID       string `json:"approval,omitempty"`
+	ApprovalRevision int64  `json:"ar,omitempty"`
 	// The fields of a relay state (purposeRelay, relay.go): the upstream
 	// server the input requests came from, the keys of the requests relayed
 	// (a retry may answer only those) and the upstream's own requestState.
@@ -138,9 +142,14 @@ func (h *Handler) states() *stateBox {
 }
 
 // seal issues a token for c, valid for stateTTL from now.
-func (s *stateBox) seal(c stateClaims) (string, error) {
+func (s *stateBox) seal(c stateClaims) (string, error) { return s.sealTTL(c, stateTTL) }
+
+func (s *stateBox) sealTTL(c stateClaims, ttl time.Duration) (string, error) {
+	if ttl <= 0 || ttl > 24*time.Hour {
+		return "", errStateInvalid
+	}
 	now := s.now()
-	c.IssuedAt, c.ExpiresAt = now.Unix(), now.Add(stateTTL).Unix()
+	c.IssuedAt, c.ExpiresAt = now.Unix(), now.Add(ttl).Unix()
 	plain, err := json.Marshal(c)
 	if err != nil {
 		return "", err
@@ -247,6 +256,8 @@ func (rc *request) urlElicitation() bool {
 
 // retry is what a modern request's multi round-trip fields say.
 type retry struct {
+	approvalID       uuid.UUID
+	approvalRevision int64
 	// verified: the request carries a requestState we issued for it.
 	verified bool
 	// declined: an input response says the person declined or cancelled
@@ -306,7 +317,7 @@ func (rc *request) checkRetry(rec calls.Call) (retry, bool) {
 	switch {
 	case errors.Is(err, errStateExpired):
 		return reject(ClassStateExpired, "Invalid parameters: requestState has expired. Retry the original request without it.")
-	case err != nil || (c.Purpose != purposeConsent && c.Purpose != purposeRelay) || c.Principal != rc.principalID():
+	case err != nil || (c.Purpose != purposeConsent && c.Purpose != purposeRelay && c.Purpose != purposeApproval) || c.Principal != rc.principalID():
 		return reject(ClassStateInvalid, "Invalid parameters: requestState is not valid. Retry the original request without it.")
 	}
 	want := rc.stateFor(c.Purpose)
@@ -314,6 +325,13 @@ func (rc *request) checkRetry(rec calls.Call) (retry, bool) {
 		return reject(ClassStateMismatch, "Invalid parameters: requestState was issued for a different request. Retry the original request, echoing the requestState you were given for it.")
 	}
 	r.verified = true
+	if c.Purpose == purposeApproval {
+		id, err := uuid.Parse(c.ApprovalID)
+		if err != nil || id == uuid.Nil || c.ApprovalRevision < 1 {
+			return reject(ClassStateInvalid, "Invalid approval requestState; retry the original call")
+		}
+		r.approvalID, r.approvalRevision = id, c.ApprovalRevision
+	}
 	if c.Purpose == purposeRelay {
 		r.relay = &relayState{server: c.Server, keys: strings.Split(c.Keys, "\n"), upstream: c.Upstream}
 		return r, true
