@@ -115,6 +115,17 @@ type Target struct {
 	// ParamHeaders are a tools/call's Mcp-Param-* headers (ParamHeaders),
 	// added only to the tools/call request itself.
 	ParamHeaders map[string]string
+	// BeforeTransport runs immediately before each outbound MCP HTTP
+	// exchange, including negotiation and session cleanup. The bool is true
+	// only for a JSON-RPC tools/call POST. An error prevents the exchange;
+	// errors.Is/As on the returned error can recover its cause. It may be
+	// called concurrently by the SDK and must be safe for concurrent use.
+	BeforeTransport func(context.Context, bool) error
+	// NoReplay permits at most one tools/call transport attempt per Forward,
+	// even if authorization fails or the response is lost. Negotiation may
+	// still recover before that attempt. This does not provide exactly-once
+	// execution: a failed exchange may have executed on the server.
+	NoReplay bool
 	// Timeout bounds the whole exchange (connect and every list page).
 	Timeout time.Duration
 	// ServerID names the registered server, for the era cache (empty: the
@@ -467,12 +478,23 @@ type Error struct {
 	// failure was the portal's own doing rather than the server's (today only
 	// ReasonMachineAuthUnavailable); empty for every other failure.
 	Reason string
+	// cause preserves a local transport guard failure without exposing its
+	// potentially sensitive message.
+	cause error
 }
 
 func (e *Error) Error() string { return e.Message }
 
+// Unwrap preserves local transport guard failures for errors.Is/As.
+func (e *Error) Unwrap() error { return e.cause }
+
 // classify turns a transport or protocol error into an *Error.
 func (c *Client) classify(ctx context.Context, t Target, ex *exchange, err error) error {
+	// The SDK sometimes formats a transport error with %v, losing its chain.
+	// Keep the original guard failure on the exchange, not in that string.
+	if guardErr := ex.guardFailure(); guardErr != nil {
+		return &Error{Class: ClassUnavailable, Message: guardErr.Error(), cause: guardErr}
+	}
 	var e *Error
 	if errors.As(err, &e) {
 		return e

@@ -238,6 +238,8 @@ type exchange struct {
 	// detail is the start of the last error response's body (at most
 	// errorPeek bytes, raw: classify redacts it before anyone sees it).
 	detail string
+	// guardErr survives SDK paths that stringify transport failures.
+	guardErr *BeforeTransportError
 }
 
 // errorPeek bounds how much of an error response's body is kept to explain
@@ -279,30 +281,61 @@ func (e *exchange) lastChallenge() []string {
 	return e.challenge
 }
 
+// BeforeTransportError is a local refusal to send an MCP HTTP exchange.
+// Its message is deliberately generic: the hook's cause may contain secrets.
+// Use errors.Is/As to inspect the cause instead.
+type BeforeTransportError struct {
+	Err error
+}
+
+func (e *BeforeTransportError) Error() string { return "The outbound MCP exchange was not authorized." }
+func (e *BeforeTransportError) Unwrap() error { return e.Err }
+
+func (e *exchange) refuse(err error) *BeforeTransportError {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.guardErr == nil {
+		e.guardErr = &BeforeTransportError{Err: err}
+	}
+	return e.guardErr
+}
+
+func (e *exchange) guardFailure() *BeforeTransportError {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.guardErr
+}
+
 // ErrResponseTooLarge: a response body passed MaxResponseBytes.
 var ErrResponseTooLarge = errors.New("upstream: response too large")
 
 // headerTransport adds the server's credential parts, records error statuses
 // and caps response bodies.
 type headerTransport struct {
-	next          http.RoundTripper
-	creds         []Credential
-	identity      string
-	identityValue string
-	provider      string
-	providerToken string
-	bearer        string
-	params        map[string]string
-	maxResponse   int64
-	ex            *exchange
+	next            http.RoundTripper
+	creds           []Credential
+	identity        string
+	identityValue   string
+	provider        string
+	providerToken   string
+	bearer          string
+	params          map[string]string
+	maxResponse     int64
+	ex              *exchange
+	beforeTransport func(context.Context, bool) error
+	noReplay        bool
 }
 
 func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	orig := req
-	if len(t.creds) > 0 || t.identity != "" || t.providerToken != "" || t.bearer != "" || len(t.params) > 0 {
+	if len(t.creds) > 0 || t.identity != "" || t.providerToken != "" || t.bearer != "" || len(t.params) > 0 || t.beforeTransport != nil || t.noReplay {
 		req = req.Clone(req.Context())
 	}
-	if len(t.params) > 0 && isToolsCall(req) {
+	toolCall := false
+	if len(t.params) > 0 || t.beforeTransport != nil || t.noReplay {
+		toolCall = isToolsCall(req)
+	}
+	if len(t.params) > 0 && toolCall {
 		for k, v := range t.params {
 			req.Header.Set(k, v)
 		}
@@ -322,6 +355,25 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if t.providerToken != "" {
 		req.Header.Set("MCP-Gateway-Provider", t.provider)
 		req.Header.Set("MCP-Gateway-Provider-Token", t.providerToken)
+	}
+	if t.noReplay && toolCall {
+		// Do this after all body inspection and credential/header handling:
+		// isToolsCall can install GetBody and credentials can mark a POST as
+		// idempotent. Neither may allow net/http to replay an authorized call.
+		req.GetBody = nil
+		for k := range req.Header {
+			if strings.EqualFold(k, "Idempotency-Key") || strings.EqualFold(k, "X-Idempotency-Key") {
+				delete(req.Header, k)
+			}
+		}
+	}
+	if t.beforeTransport != nil {
+		if err := t.beforeTransport(req.Context(), toolCall); err != nil {
+			if req.Body != nil {
+				_ = req.Body.Close()
+			}
+			return nil, t.ex.refuse(err)
+		}
 	}
 	res, err := t.next.RoundTrip(req)
 	if err != nil {
@@ -365,10 +417,10 @@ func isToolsCall(req *http.Request) bool {
 	if req.Method != http.MethodPost || req.Body == nil || req.Body == http.NoBody {
 		return false
 	}
-	if req.Header.Get("Mcp-Method") == "tools/call" {
-		return true
-	}
-	body, err := io.ReadAll(io.LimitReader(req.Body, 4<<20))
+	// Inspect the internally constructed JSON-RPC body, not a header that
+	// could disagree with it. Do not truncate a large outgoing arguments
+	// object while inspecting it (response bodies remain capped separately).
+	body, err := io.ReadAll(req.Body)
 	_ = req.Body.Close()
 	req.Body = io.NopCloser(bytes.NewReader(body))
 	req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(body)), nil }
@@ -427,7 +479,8 @@ func (c *Client) httpClient(t Target, ex *exchange) (client *http.Client, done f
 	return &http.Client{
 		Transport: &headerTransport{next: tr, creds: t.Credentials, identity: t.IdentityHeader,
 			identityValue: t.IdentityValue, provider: t.Provider, providerToken: t.ProviderToken, bearer: t.BearerToken,
-			params: t.ParamHeaders, maxResponse: c.bodyCap(t), ex: ex},
+			params: t.ParamHeaders, maxResponse: c.bodyCap(t), ex: ex,
+			beforeTransport: t.BeforeTransport, noReplay: t.NoReplay},
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return fmt.Errorf("%w: MCP servers may not redirect", ErrBlockedAddress)
 		},

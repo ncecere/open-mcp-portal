@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -87,12 +89,39 @@ type ForwardResult struct {
 	Latency  time.Duration
 }
 
+// ErrReplayPrevented means a NoReplay Forward refused a second tools/call
+// transport attempt. It is recoverable through errors.Is.
+var ErrReplayPrevented = errors.New("upstream: tool call replay prevented")
+
+// forwardTransportGuard is shared by every HTTP client/session of a NoReplay
+// Forward, including any SDK reconnect or protocol recovery.
+type forwardTransportGuard struct {
+	attempted atomic.Bool
+	before    func(context.Context, bool) error
+}
+
+func (g *forwardTransportGuard) check(ctx context.Context, toolCall bool) error {
+	// Consume the attempt before the caller's guard: a refusal must not
+	// cause a retry to re-authorize or send the call either.
+	if toolCall && !g.attempted.CompareAndSwap(false, true) {
+		return ErrReplayPrevented
+	}
+	if g.before != nil {
+		return g.before(ctx, toolCall)
+	}
+	return nil
+}
+
 // Forward makes the call. Failures to get a result are *Error; a tool's own
 // failure is a Tool result with IsError set.
 func (c *Client) Forward(ctx context.Context, t Target, req ForwardRequest) (*ForwardResult, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, t.Timeout)
 	defer cancel()
+	guard := &forwardTransportGuard{before: t.BeforeTransport}
+	if t.NoReplay {
+		t.BeforeTransport = guard.check
+	}
 	proto, cached, err := c.negotiate(ctx, t)
 	if err != nil {
 		return nil, err
@@ -105,7 +134,7 @@ func (c *Client) Forward(ctx context.Context, t Target, req ForwardRequest) (*Fo
 		} else {
 			res, stale, err = c.forwardLegacy(ctx, t, proto, req)
 		}
-		if err != nil && cached && stale && attempt == 0 {
+		if err != nil && cached && stale && attempt == 0 && !guard.attempted.Load() {
 			// The remembered era no longer fits the server: learn it again.
 			c.ForgetEra(t)
 			if proto, _, err = c.negotiate(ctx, t); err != nil {
