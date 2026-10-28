@@ -6,6 +6,11 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
+## Unreleased
+
+- **Breaking retirement in progress** (#68, decision 81): remove external agent-platform trust and person impersonation, including Pi Durable Platform. Existing relay credentials must be disabled/revoked rather than silently becoming ordinary service-account access. Historical records remain; normal MCP OAuth, API keys, service accounts, provider connections and outbound identity remain supported. #62/#63 were withdrawn, not verified.
+- **Staged, not released:** credential scopes (#29), per-selection tool curation (#30), shared service connections (#26) and migration/runtime database roles (#44). Independent review, combined-tree fixes, browser checks and release gates are still in progress; see [status](docs/status.md).
+
 ## [0.3.3] - 2026-10-28
 
 - **Kubernetes smoke harness:** own/reap the real port-forward process and wait for the evicted pod to disappear before recovery checks; deterministic lifecycle regressions run in CI.

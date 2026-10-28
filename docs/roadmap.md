@@ -10,7 +10,9 @@ design gets one in `docs/` before code, as the earlier phases did. The decisions
 
 Open MCP Portal is a portal for MCP servers: teams register them, a catalog lists them, gateways curate them, and
 people and agents get governed access. It is **not** an LLM gateway, an agent runtime, a workflow engine or a RAG
-system, and the roadmap adds none of those.
+system, and the roadmap adds none of those. The owner has also withdrawn external agent-platform trust and
+person impersonation ([decision 81](decisions.md)); #68 removes that integration safely. Ordinary MCP clients,
+including coding assistants, still use the portal's standard credentials.
 
 Decided out of scope:
 
@@ -41,16 +43,16 @@ the pilot (#20). [status.md](status.md) records what each release verified.
 ## How the next work is ordered
 
 The [implementation order](implementation-order.md) reconciles the open GitHub issues with what has already
-shipped, including the newer agent-platform follow-ups (#62 and #63). **#28 classification** and
-**#37 session hardening** shipped in v0.3.3. The next batch integrates **#29 scopes**, **#30 curation**,
-**#26 service connections** and **#44 database roles**, subject to independent review and merged-tree gates.
+shipped. **#28 classification** and **#37 session hardening** shipped in v0.3.3. The next batch integrates
+**#29 scopes**, **#30 curation**, **#26 service connections** and **#44 database roles**, subject to independent
+review and merged-tree gates. **#68 external-platform retirement** is now a release prerequisite; #62 and
+#63 are withdrawn as not planned, not completed verification.
 
 1. **Verify and pilot alongside implementation.** Decisions #5, #6 and #7 shipped in v0.2.2. The
-   real-client checks (#14–#17), provider/channel checks (#18–#19), independent review (#13), live
-   agent-platform run (#63) and team pilot (#20) still need evidence, not more fake-server tests.
+   real-client checks (#14–#17), provider/channel checks (#18–#19), independent review (#13) and
+   team pilot (#20) still need evidence, not more fake-server tests.
 2. **Credentials foundations already shipped.** Waves 1 and 2 below are complete except #26, shared
-   service connections. #62's gateway/relay token binding is a security-priority coordination lane requiring
-   a compatible Pi Durable Platform change.
+   service connections. External-platform impersonation is being retired in #68, not extended or verified.
 3. **Governance builds on classification.** Ship #28 before scopes (#29), then curation (#30) and
    approvals (#31). #32 is independent; #33's read retries also need classification.
 4. **Operations before scale.** Split database roles (#44), then prove upgrades, ingress and restores (#43)
@@ -63,7 +65,6 @@ the fail-closed recommendation and keeps classification with team owners/admins 
 
 | Issue | Decision | Recommended |
 | --- | --- | --- |
-| [#26](https://github.com/ncecere/open-mcp-portal/issues/26) | Does a shared service connection stop working when the admin who made it leaves? | Yes (it lapses); it may hold an admin's own account with the account label shown and audited. |
 | [#36](https://github.com/ncecere/open-mcp-portal/issues/36) | How a SCIM user links to a login, and whether `active: false` suspends or destroys. | Link by a configurable claim (default `sub`), never bare email; `active: false` suspends, `DELETE` destroys. |
 | [#51](https://github.com/ncecere/open-mcp-portal/issues/51) / [#39](https://github.com/ncecere/open-mcp-portal/issues/39) | How usage is attributed to a calling team; whether erasure leaves audit snapshots. | The team of the grant that admitted the call (a billing team for user and group grants); erasure leaves audit snapshots, bounded by audit retention, documented. |
 
@@ -90,7 +91,6 @@ and the pilot. Milestone: [v0.2.x](https://github.com/ncecere/open-mcp-portal/mi
 | [#18](https://github.com/ncecere/open-mcp-portal/issues/18) | Verify delegated credentials with real Google and Microsoft Entra ID providers **needs real-world testing** | M | Auth providers for Google and Microsoft exist as presets and run against a fake OAuth provider, but only GitHub (per-person OAuth to its hosted MCP server) has run end to end against a real provider. | – |
 | [#19](https://github.com/ncecere/open-mcp-portal/issues/19) | Verify notifications with a real Slack webhook and a real SMTP provider over TLS **needs real-world testing** | S | Notifications were tested against a local SMTP sink and local webhook receivers. A real Slack incoming webhook and a real SMTP server with STARTTLS/TLS have not been run. | – |
 | [#20](https://github.com/ncecere/open-mcp-portal/issues/20) | Run a pilot with a real team and define when the portal is ready for wider use **needs real-world testing** | M | Everything so far was built and tested by the maintainers. A pilot with one real team (3 to 5 people, a few real servers) is the next evidence, with success criteria written down first. | – |
-| [#63](https://github.com/ncecere/open-mcp-portal/issues/63) | Run a live Pi Durable Platform instance end to end **needs real-world testing** | M | Verify the real relay, token claims, access intersection and credential delivery; contract fixtures alone do not prove the live integration. | Coordinate with #62 |
 | [#21](https://github.com/ncecere/open-mcp-portal/issues/21) | ~~Write the triage and support policy (labels, expectations, supported versions)~~ **done in v0.2.2** | S | The repo has issue forms and Discussions now. People need to know how issues are labelled and triaged, what response to expect from a single maintainer, and which versions are supported. | – |
 
 ## v0.3: credentials and tool policy
@@ -107,12 +107,9 @@ Making "all MCP servers" true, then governing what runs. Milestone: [v0.3](https
 
 | Issue | Item | Size | What it does, and why | Depends on |
 | --- | --- | --- | --- | --- |
-| [#55](https://github.com/ncecere/open-mcp-portal/issues/55) | ~~Trust an external agent platform as an issuer of agent identity tokens~~ **done in v0.3.0** | M | Trust Pi Durable Platform as an issuer, treat relayed agent calls as the person's, without consent links ([agent-platforms.md](agent-platforms.md)). | – |
-| [#56](https://github.com/ncecere/open-mcp-portal/issues/56) | ~~Accept agent identity tokens from relay service accounts as the person's identity~~ **done in v0.3.0** | L | Trust Pi Durable Platform as an issuer, treat relayed agent calls as the person's, without consent links ([agent-platforms.md](agent-platforms.md)). | – |
-| [#57](https://github.com/ncecere/open-mcp-portal/issues/57) | ~~No consent links in agent calls, and an option to require a present person~~ **done in v0.3.0** | S | Trust Pi Durable Platform as an issuer, treat relayed agent calls as the person's, without consent links ([agent-platforms.md](agent-platforms.md)). | – |
-| [#58](https://github.com/ncecere/open-mcp-portal/issues/58) | ~~Name the agent in the upstream identity token (act claim) and document the agent-platform setup~~ **done in v0.3.0** | M | Trust Pi Durable Platform as an issuer, treat relayed agent calls as the person's, without consent links ([agent-platforms.md](agent-platforms.md)). | – |
-| [#60](https://github.com/ncecere/open-mcp-portal/issues/60) | ~~Let a person allow a server from My connections (agent calls can't use consent links)~~ **done in v0.3.0** | S | Trust Pi Durable Platform as an issuer, treat relayed agent calls as the person's, without consent links ([agent-platforms.md](agent-platforms.md)). | – |
-| [#62](https://github.com/ncecere/open-mcp-portal/issues/62) | Bind agent identity tokens to a gateway and relay | M | Close the accepted M-1 residual with per-gateway audience validation and an agreed relay claim. Requires coordination with Pi Durable Platform; existing platform-wide audiences must not silently change. | Pi Durable Platform relay-claim support |
+| [#55–#58](https://github.com/ncecere/open-mcp-portal/issues/55) | External-platform trust and impersonation **historically shipped in v0.3.0; withdrawn** | – | Owner decision 81 retires these features in #68. Historical release/audit records remain; this is no longer a supported direction for new work. | #68 |
+| [#60](https://github.com/ncecere/open-mcp-portal/issues/60) | ~~Let a person allow a server from My connections~~ **done in v0.3.0; retained** | S | Self-service per-server origin/scope consent remains useful for ordinary MCP connections independently of the retired integration. | decision 60 |
+| [#68](https://github.com/ncecere/open-mcp-portal/issues/68) | Retire external agent-platform trust and impersonation | M | Remove active integration and fence obsolete relay credentials without erasing history or weakening normal MCP authentication. Replaces withdrawn #62/#63. | decision 81 |
 | [#22](https://github.com/ncecere/open-mcp-portal/issues/22) | ~~Add per-person secrets as an upstream auth mode for MCP servers~~ **done in v0.3.2** | L | Add an upstream auth mode `person_secret` where each person pastes their own API key or token for a server once. The portal seals it, binds it to the server's origin, and sends it as a header, bearer token or query parameter on that person's calls. It makes servers that want a personal key usable without a shared static header that erases who is calling. | #23, decision 19, decision 59, decision 60 |
 | [#23](https://github.com/ncecere/open-mcp-portal/issues/23) | ~~Support several headers, query keys and Basic auth for a server's own credential~~ **done in v0.3.1** | M | Let a server's own static credential be a list of parts instead of one header: several headers, a query-string key, Basic auth, or a bearer token. Values stay sealed, bound to the origin they were entered for, and redacted everywhere. It also introduces the shared credential list on the upstream target that per-person secrets and machine OAuth reuse. | decision 39, decision 44 |
 | [#24](https://github.com/ncecere/open-mcp-portal/issues/24) | ~~Add OAuth client credentials for servers that authenticate the portal itself~~ **done in v0.3.2** | M | Add an upstream auth mode where the portal itself is an OAuth client: it fetches a token with the client-credentials grant and sends it as the bearer on every call, discovery and health check. It covers servers that trust the portal, not a person, and works for service accounts because no person is needed. | #23, decision 39, decision 40 |

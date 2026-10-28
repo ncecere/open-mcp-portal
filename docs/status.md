@@ -3,6 +3,20 @@
 Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.3.3, **released on 2026-10-28**
 (release notes: [releases/v0.3.3.md](releases/v0.3.3.md); earlier: [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
+## Unreleased: MCP-only scope and staged governance
+
+The owner removed Pi Durable Platform/external-platform impersonation from scope on 2026-10-28
+([decision 81](decisions.md)). #62 and #63 are closed as **not planned**, not as completed remediation or
+verification. **#68** tracks actual removal and a fail-closed upgrade: retire relay credentials without
+silently turning them into ordinary service accounts; keep historical records and normal MCP authentication.
+No development data or running deployment has been changed by this decision.
+
+Scopes (#29), curation (#30), shared service connections (#26) and database-role separation (#44) are staged
+on `integration/credential-policy`, not published on `main`. Initial combined legacy race tests passed;
+split-role testing found a migration-fixture ownership error, now corrected. Review follow-ups and final
+combined legacy/split-role, web, browser and deployment checks remain. External-platform retirement is a
+prerequisite for the next release. The current published release remains v0.3.3.
+
 ## v0.3.3 (2026-10-28)
 
 The [implementation order](implementation-order.md) reconciled 36 open GitHub issues with the v0.3.2
@@ -42,8 +56,9 @@ expiry soak, a full mobile/all-page browser pass or a fresh conformance-suite ru
 checks subsequently passed in release CI, as recorded below. Idle boundaries,
 cleanup and activity throttling are covered with an injected clock. Very large session inventories have not
 been load-tested; revoke-all currently deletes pending connect states per ended session.
-The external claim agreement for #62 remains outstanding; its linked upstream repository returned 404 to the
-current credentials, so current upstream fixes/claims could not be verified. Next implementation lanes are
+At release preparation, the external agreement for #62 could not be verified (the linked upstream repository
+returned 404). That work has since been withdrawn by the owner; see the unreleased scope change above.
+The next implementation lanes were
 **#29 scopes**, **#30 curation**, **#26 service connections** and **#44 database roles**, in isolated branches.
 
 The first release-candidate CI passed the full Go race suite, Docker builds, generated-code and deployment
@@ -63,11 +78,10 @@ transparency-log inclusion. The arm64 image ran read-only with no network and re
 `sha256:021672961ead3bc78de0e2383373e780ce1035b34b25d676e433199dcf8c5ed8`; the example overlay is pinned to it.
 GitHub reported zero open Dependabot alerts after publication.
 
-**Next batch, not shipped:** #29 backend and UI and #30 curation are implemented in isolated branches;
-independent reviews and combined-tree enforcement checks remain. #26 service connections is still being
-implemented. #44 database roles passed isolated legacy/split-role tests and kindnet; an independent review
-requires a follow-up fix and validation before integration. These results do not establish that the combined
-feature tree is ready for release.
+**Next batch, not shipped:** #29, #30, #26 and #44 are now staged together. #44's follow-up passed full
+legacy and authenticated split-role race suites; other review corrections and combined-tree checks are
+ongoing. Earlier staging web checks passed 790 tests, but that is not the final combined feature tree.
+See the unreleased section for the new MCP-only retirement prerequisite. No production deployment is implied.
 
 ## v0.3.2 (2026-10-20)
 
