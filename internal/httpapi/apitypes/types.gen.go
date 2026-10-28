@@ -2648,6 +2648,9 @@ type ApiKey struct {
 	Prefix    string       `json:"prefix"`
 	RevokedAt *time.Time   `json:"revokedAt,omitempty"`
 	Status    ApiKeyStatus `json:"status"`
+
+	// ToolScope Optional tool ceiling. Null is unrestricted; an empty object denies all tools. Classes OR exact exposed names match within a scope; independent layers intersect. Prompts and resources are unchanged.
+	ToolScope *ToolScope `json:"toolScope,omitempty"`
 }
 
 // ApiKeyStatus defines model for ApiKey.Status.
@@ -2663,6 +2666,9 @@ type ApiKeyCreate struct {
 
 	// Name Example: Claude Code on my laptop
 	Name string `json:"name"`
+
+	// ToolScope Optional tool ceiling. Null is unrestricted; an empty object denies all tools. Classes OR exact exposed names match within a scope; independent layers intersect. Prompts and resources are unchanged.
+	ToolScope *ToolScope `json:"toolScope,omitempty"`
 }
 
 // ApiKeyCreated defines model for ApiKeyCreated.
@@ -3866,7 +3872,10 @@ type GatewayGrant struct {
 	Id          openapi_types.UUID      `json:"id"`
 	SubjectKind GatewayGrantSubjectKind `json:"subjectKind"`
 	Team        *GrantTeam              `json:"team,omitempty"`
-	User        *MemberUser             `json:"user,omitempty"`
+
+	// ToolScope Optional tool ceiling. Null is unrestricted; an empty object denies all tools. Classes OR exact exposed names match within a scope; independent layers intersect. Prompts and resources are unchanged.
+	ToolScope *ToolScope  `json:"toolScope,omitempty"`
+	User      *MemberUser `json:"user,omitempty"`
 }
 
 // GatewayGrantCreate Exactly one of team, userEmail or group, matching subjectKind
@@ -3876,6 +3885,9 @@ type GatewayGrantCreate struct {
 
 	// Team Team slug or ID
 	Team *string `json:"team,omitempty"`
+
+	// ToolScope Optional tool ceiling. Null is unrestricted; an empty object denies all tools. Classes OR exact exposed names match within a scope; independent layers intersect. Prompts and resources are unchanged.
+	ToolScope *ToolScope `json:"toolScope,omitempty"`
 
 	// UserEmail An existing user's email
 	UserEmail *string `json:"userEmail,omitempty"`
@@ -4074,7 +4086,7 @@ type McpCall struct {
 	// ClientName clientInfo.name from initialize, when sent
 	ClientName *string `json:"clientName,omitempty"`
 
-	// ErrorClass Why a call was denied or failed, for example no_access, role, unknown, key_scope (the API key is limited to other gateways), gateway_disabled or an unavailability reason. For capabilities that require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or server_not_allowed (connected, but the person hasn't allowed this server, at its current address, to use the account); denied with service_account, provider_disabled, provider_not_allowed (the provider is restricted and its access list excludes the server), person_not_present (an agent's call whose server or capability requires a present person) or, for an agent's call for a person, person_no_account or person_suspended; needs_authorization with needs_connection for an agent's call (the person must connect an account; the answer was a tool error with no link); upstream_error with provider_unavailable. For a server where each person enters their own key (decision 72): needs_authorization with secret_missing or secret_rejected (the answer carried the link, or for an agent's call a tool error with none) or agents_not_allowed (an agent's call, the person has a key but hasn't allowed agents); denied with service_account or person_suspended.
+	// ErrorClass Why a call was denied or failed, for example no_access, role, unknown, key_scope (the API key is limited to other gateways), tool_scope (a credential, account or matching gateway-grant ceiling excludes the tool), gateway_disabled or an unavailability reason. For capabilities that require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or server_not_allowed (connected, but the person hasn't allowed this server, at its current address, to use the account); denied with service_account, provider_disabled, provider_not_allowed (the provider is restricted and its access list excludes the server), person_not_present (an agent's call whose server or capability requires a present person) or, for an agent's call for a person, person_no_account or person_suspended; needs_authorization with needs_connection for an agent's call (the person must connect an account; the answer was a tool error with no link); upstream_error with provider_unavailable. For a server where each person enters their own key (decision 72): needs_authorization with secret_missing or secret_rejected (the answer carried the link, or for an agent's call a tool error with none) or agents_not_allowed (an agent's call, the person has a key but hasn't allowed agents); denied with service_account or person_suspended.
 	ErrorClass *string `json:"errorClass,omitempty"`
 
 	// ExposedName The tool or prompt name, or the exposed resource URI, the client used (absent for list calls)
@@ -5245,6 +5257,9 @@ type OAuthConsent struct {
 
 	// Remembered The caller already allowed this client for this gateway
 	Remembered bool `json:"remembered"`
+
+	// RequestedToolScope Optional tool ceiling. Null is unrestricted; an empty object denies all tools. Classes OR exact exposed names match within a scope; independent layers intersect. Prompts and resources are unchanged.
+	RequestedToolScope *ToolScope `json:"requestedToolScope,omitempty"`
 }
 
 // OAuthConsentDecision defines model for OAuthConsentDecision.
@@ -5253,6 +5268,9 @@ type OAuthConsentDecision struct {
 
 	// Query The authorization request's query string, as the consent page received it
 	Query string `json:"query"`
+
+	// ToolScope Classes only. Omitted defaults to the requested ceiling; null must not widen a restricted request.
+	ToolScope *ToolScope `json:"toolScope,omitempty"`
 }
 
 // OAuthConsentDecisionDecision defines model for OAuthConsentDecision.Decision.
@@ -5268,6 +5286,9 @@ type OAuthGrant struct {
 	Gateway    CallRef            `json:"gateway"`
 	Id         openapi_types.UUID `json:"id"`
 	LastUsedAt *time.Time         `json:"lastUsedAt,omitempty"`
+
+	// ToolScope Optional tool ceiling. Null is unrestricted; an empty object denies all tools. Classes OR exact exposed names match within a scope; independent layers intersect. Prompts and resources are unchanged.
+	ToolScope *ToolScope `json:"toolScope,omitempty"`
 }
 
 // OAuthSetupStart defines model for OAuthSetupStart.
@@ -5798,10 +5819,13 @@ type ServiceAccount struct {
 	Revision Revision `json:"revision"`
 
 	// Role The team role used for capabilities' minimum roles (decision 22)
-	Role      ServiceAccountRole `json:"role"`
-	TeamId    openapi_types.UUID `json:"teamId"`
-	TeamSlug  string             `json:"teamSlug"`
-	UpdatedAt time.Time          `json:"updatedAt"`
+	Role     ServiceAccountRole `json:"role"`
+	TeamId   openapi_types.UUID `json:"teamId"`
+	TeamSlug string             `json:"teamSlug"`
+
+	// ToolScope Optional tool ceiling. Null is unrestricted; an empty object denies all tools. Classes OR exact exposed names match within a scope; independent layers intersect. Prompts and resources are unchanged.
+	ToolScope *ToolScope `json:"toolScope,omitempty"`
+	UpdatedAt time.Time  `json:"updatedAt"`
 }
 
 // ServiceAccountCreate defines model for ServiceAccountCreate.
@@ -5812,6 +5836,9 @@ type ServiceAccountCreate struct {
 	// Name Lower-case letters, digits and dashes; unique within the team
 	Name string              `json:"name"`
 	Role *ServiceAccountRole `json:"role,omitempty"`
+
+	// ToolScope Optional tool ceiling. Null is unrestricted; an empty object denies all tools. Classes OR exact exposed names match within a scope; independent layers intersect. Prompts and resources are unchanged.
+	ToolScope *ToolScope `json:"toolScope,omitempty"`
 }
 
 // ServiceAccountKey defines model for ServiceAccountKey.
@@ -5830,6 +5857,9 @@ type ServiceAccountKey struct {
 	Prefix    string                  `json:"prefix"`
 	RevokedAt *time.Time              `json:"revokedAt,omitempty"`
 	Status    ServiceAccountKeyStatus `json:"status"`
+
+	// ToolScope Optional tool ceiling. Null is unrestricted; an empty object denies all tools. Classes OR exact exposed names match within a scope; independent layers intersect. Prompts and resources are unchanged.
+	ToolScope *ToolScope `json:"toolScope,omitempty"`
 }
 
 // ServiceAccountKeyStatus defines model for ServiceAccountKey.Status.
@@ -5840,6 +5870,9 @@ type ServiceAccountKeyCreate struct {
 	ExpiresInDays *int32                `json:"expiresInDays,omitempty"`
 	GatewayIds    *[]openapi_types.UUID `json:"gatewayIds,omitempty"`
 	Name          string                `json:"name"`
+
+	// ToolScope Optional tool ceiling. Null is unrestricted; an empty object denies all tools. Classes OR exact exposed names match within a scope; independent layers intersect. Prompts and resources are unchanged.
+	ToolScope *ToolScope `json:"toolScope,omitempty"`
 }
 
 // ServiceAccountKeyCreated defines model for ServiceAccountKeyCreated.
@@ -5873,6 +5906,9 @@ type ServiceAccountUpdate struct {
 
 	// Role The team role used for capabilities' minimum roles (decision 22)
 	Role *ServiceAccountRole `json:"role,omitempty"`
+
+	// ToolScope Omitted retains the ceiling; null clears it; an object replaces it. Existing keys intersect this live value on every call.
+	ToolScope *ToolScope `json:"toolScope,omitempty"`
 }
 
 // SetServerSecret A key, or a change to the caller's entry for one server
@@ -6099,6 +6135,12 @@ type TlsCertificate struct {
 
 // ToolClass defines model for ToolClass.
 type ToolClass string
+
+// ToolScope Optional tool ceiling. Null is unrestricted; an empty object denies all tools. Classes OR exact exposed names match within a scope; independent layers intersect. Prompts and resources are unchanged.
+type ToolScope struct {
+	Classes *[]ToolClass `json:"classes,omitempty"`
+	Tools   *[]string    `json:"tools,omitempty"`
+}
 
 // TrustedClient defines model for TrustedClient.
 type TrustedClient struct {

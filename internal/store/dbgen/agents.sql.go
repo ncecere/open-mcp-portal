@@ -99,7 +99,7 @@ func (q *Queries) GetAgentPlatformByIssuer(ctx context.Context, issuer string) (
 }
 
 const getServiceAccountRelayView = `-- name: GetServiceAccountRelayView :one
-SELECT sa.id, sa.team_id, sa.name, sa.description, sa.role, sa.enabled, sa.revision, sa.created_by, sa.created_at, sa.updated_by, sa.updated_at, sa.last_used_at, sa.relay_platform_id, sa.relay_marked_by, sa.relay_marked_at, t.slug AS team_slug, t.name AS team_name, t.status AS team_status
+SELECT sa.id, sa.team_id, sa.name, sa.description, sa.role, sa.enabled, sa.revision, sa.created_by, sa.created_at, sa.updated_by, sa.updated_at, sa.last_used_at, sa.relay_platform_id, sa.relay_marked_by, sa.relay_marked_at, sa.tool_scope, t.slug AS team_slug, t.name AS team_name, t.status AS team_status
 FROM service_accounts sa
 JOIN teams t ON t.id = sa.team_id
 WHERE sa.id = $1
@@ -132,6 +132,7 @@ func (q *Queries) GetServiceAccountRelayView(ctx context.Context, id uuid.UUID) 
 		&i.ServiceAccount.RelayPlatformID,
 		&i.ServiceAccount.RelayMarkedBy,
 		&i.ServiceAccount.RelayMarkedAt,
+		&i.ServiceAccount.ToolScope,
 		&i.TeamSlug,
 		&i.TeamName,
 		&i.TeamStatus,
@@ -292,7 +293,7 @@ func (q *Queries) ListAgentPlatforms(ctx context.Context) ([]ListAgentPlatformsR
 }
 
 const listRelayServiceAccounts = `-- name: ListRelayServiceAccounts :many
-SELECT sa.id, sa.team_id, sa.name, sa.description, sa.role, sa.enabled, sa.revision, sa.created_by, sa.created_at, sa.updated_by, sa.updated_at, sa.last_used_at, sa.relay_platform_id, sa.relay_marked_by, sa.relay_marked_at, t.slug AS team_slug, t.name AS team_name
+SELECT sa.id, sa.team_id, sa.name, sa.description, sa.role, sa.enabled, sa.revision, sa.created_by, sa.created_at, sa.updated_by, sa.updated_at, sa.last_used_at, sa.relay_platform_id, sa.relay_marked_by, sa.relay_marked_at, sa.tool_scope, t.slug AS team_slug, t.name AS team_name
 FROM service_accounts sa
 JOIN teams t ON t.id = sa.team_id
 WHERE sa.relay_platform_id = $1
@@ -331,6 +332,7 @@ func (q *Queries) ListRelayServiceAccounts(ctx context.Context, relayPlatformID 
 			&i.ServiceAccount.RelayPlatformID,
 			&i.ServiceAccount.RelayMarkedBy,
 			&i.ServiceAccount.RelayMarkedAt,
+			&i.ServiceAccount.ToolScope,
 			&i.TeamSlug,
 			&i.TeamName,
 		); err != nil {
@@ -372,7 +374,7 @@ func (q *Queries) LockAgentPlatform(ctx context.Context, id uuid.UUID) (AgentPla
 }
 
 const lockServiceAccountByID = `-- name: LockServiceAccountByID :one
-SELECT id, team_id, name, description, role, enabled, revision, created_by, created_at, updated_by, updated_at, last_used_at, relay_platform_id, relay_marked_by, relay_marked_at FROM service_accounts WHERE id = $1 FOR UPDATE
+SELECT id, team_id, name, description, role, enabled, revision, created_by, created_at, updated_by, updated_at, last_used_at, relay_platform_id, relay_marked_by, relay_marked_at, tool_scope FROM service_accounts WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockServiceAccountByID(ctx context.Context, id uuid.UUID) (ServiceAccount, error) {
@@ -394,6 +396,7 @@ func (q *Queries) LockServiceAccountByID(ctx context.Context, id uuid.UUID) (Ser
 		&i.RelayPlatformID,
 		&i.RelayMarkedBy,
 		&i.RelayMarkedAt,
+		&i.ToolScope,
 	)
 	return i, err
 }
@@ -472,7 +475,7 @@ SET relay_platform_id = $1::uuid,
     relay_marked_at = CASE WHEN $1::uuid IS NULL THEN NULL ELSE now() END,
     revision = revision + 1, updated_at = now()
 WHERE id = $3
-RETURNING id, team_id, name, description, role, enabled, revision, created_by, created_at, updated_by, updated_at, last_used_at, relay_platform_id, relay_marked_by, relay_marked_at
+RETURNING id, team_id, name, description, role, enabled, revision, created_by, created_at, updated_by, updated_at, last_used_at, relay_platform_id, relay_marked_by, relay_marked_at, tool_scope
 `
 
 type SetServiceAccountRelayParams struct {
@@ -502,6 +505,7 @@ func (q *Queries) SetServiceAccountRelay(ctx context.Context, arg SetServiceAcco
 		&i.RelayPlatformID,
 		&i.RelayMarkedBy,
 		&i.RelayMarkedAt,
+		&i.ToolScope,
 	)
 	return i, err
 }

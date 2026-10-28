@@ -46,6 +46,7 @@ type ApiKey struct {
 	RevokedAt  *time.Time
 	LastUsedAt *time.Time
 	PepperID   []byte
+	ToolScope  json.RawMessage
 }
 
 type ApiKeyGateway struct {
@@ -192,6 +193,7 @@ type GatewayGrant struct {
 	GroupName   *string
 	AddedBy     uuid.NullUUID
 	AddedAt     time.Time
+	ToolScope   json.RawMessage
 }
 
 type LimitSetting struct {
@@ -532,6 +534,7 @@ type OauthGrant struct {
 	RevokedAt     *time.Time
 	RevokedReason *string
 	AuthorizedAt  *time.Time
+	ToolScope     json.RawMessage
 }
 
 type OauthSetting struct {
@@ -696,6 +699,7 @@ type ServiceAccount struct {
 	RelayPlatformID uuid.NullUUID
 	RelayMarkedBy   uuid.NullUUID
 	RelayMarkedAt   *time.Time
+	ToolScope       json.RawMessage
 }
 
 type ServiceAccountKey struct {
@@ -710,6 +714,7 @@ type ServiceAccountKey struct {
 	RevokedAt        *time.Time
 	LastUsedAt       *time.Time
 	PepperID         []byte
+	ToolScope        json.RawMessage
 }
 
 type ServiceAccountKeyGateway struct {

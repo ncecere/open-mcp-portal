@@ -147,8 +147,8 @@ WHERE gg.gateway_id = @gateway_id
 ORDER BY gg.added_at, gg.id;
 
 -- name: InsertGatewayGrant :one
-INSERT INTO gateway_grants (gateway_id, subject_kind, team_id, user_id, group_name, added_by)
-VALUES (@gateway_id, @subject_kind, sqlc.narg(team_id), sqlc.narg(user_id), sqlc.narg(group_name), @added_by)
+INSERT INTO gateway_grants (gateway_id, subject_kind, team_id, user_id, group_name, added_by, tool_scope)
+VALUES (@gateway_id, @subject_kind, sqlc.narg(team_id), sqlc.narg(user_id), sqlc.narg(group_name), @added_by, sqlc.narg(tool_scope))
 RETURNING *;
 
 -- name: DeleteGatewayGrant :one
@@ -163,9 +163,18 @@ WHERE gg.gateway_id = @gateway_id AND gg.group_name = ANY(@groups::text[])
 ORDER BY 1;
 
 -- name: GatewayGrantKindsForUser :many
+-- Kept until the runtime switches to scoped matching rows.
+SELECT DISTINCT gg.subject_kind
+FROM gateway_grants gg
+WHERE gg.gateway_id = @gateway_id
+  AND (gg.user_id = @user_id
+       OR gg.team_id IN (SELECT m.team_id FROM team_members m WHERE m.user_id = @user_id)
+       OR gg.group_name = ANY(@groups::text[]));
+
+-- name: GatewayGrantsForUser :many
 -- How a person reaches a gateway through its grants: their team's grant,
 -- their own, or one of their groups'.
-SELECT DISTINCT gg.subject_kind
+SELECT gg.*
 FROM gateway_grants gg
 WHERE gg.gateway_id = @gateway_id
   AND (gg.user_id = @user_id

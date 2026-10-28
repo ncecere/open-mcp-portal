@@ -29,13 +29,13 @@ SELECT * FROM service_accounts WHERE id = @id AND team_id = @team_id FOR UPDATE;
 SELECT count(*)::bigint FROM service_accounts WHERE team_id = $1;
 
 -- name: InsertServiceAccount :one
-INSERT INTO service_accounts (team_id, name, description, role, enabled, created_by, updated_by)
-VALUES (@team_id, @name, @description, @role, @enabled, @created_by, @created_by)
+INSERT INTO service_accounts (team_id, name, description, role, enabled, created_by, updated_by, tool_scope)
+VALUES (@team_id, @name, @description, @role, @enabled, @created_by, @created_by, sqlc.narg(tool_scope))
 RETURNING *;
 
 -- name: UpdateServiceAccount :one
 UPDATE service_accounts
-SET name = @name, description = @description, role = @role, enabled = @enabled,
+SET name = @name, description = @description, role = @role, enabled = @enabled, tool_scope = sqlc.narg(tool_scope),
     revision = revision + 1, updated_by = @updated_by, updated_at = now()
 WHERE id = @id
 RETURNING *;
@@ -52,8 +52,8 @@ SELECT count(*)::bigint FROM service_account_keys
 WHERE service_account_id = $1 AND revoked_at IS NULL AND expires_at > now();
 
 -- name: InsertServiceAccountKey :one
-INSERT INTO service_account_keys (service_account_id, name, prefix, digest, created_by, expires_at, pepper_id)
-VALUES (@service_account_id, @name, @prefix, @digest, @created_by, @expires_at, sqlc.narg(pepper_id))
+INSERT INTO service_account_keys (service_account_id, name, prefix, digest, created_by, expires_at, pepper_id, tool_scope)
+VALUES (@service_account_id, @name, @prefix, @digest, @created_by, @expires_at, sqlc.narg(pepper_id), sqlc.narg(tool_scope))
 RETURNING *;
 
 -- name: ListServiceAccountKeys :many
@@ -111,8 +111,11 @@ UPDATE service_account_keys SET last_used_at = now()
 WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < now() - interval '1 minute');
 
 -- name: TeamHasGatewayGrant :one
--- Whether a platform gateway is granted to a team.
+-- Kept until the runtime switches to scoped matching rows.
 SELECT EXISTS (SELECT 1 FROM gateway_grants WHERE gateway_id = @gateway_id AND team_id = @team_id)::bool;
+
+-- name: GatewayGrantsForTeam :many
+SELECT * FROM gateway_grants WHERE gateway_id = @gateway_id AND team_id = @team_id;
 
 -- name: AdminListServiceAccounts :many
 -- One page of every team's service accounts ordered by (name, id), with

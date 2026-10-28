@@ -1433,7 +1433,7 @@ export interface paths {
         put?: never;
         /**
          * Grant a platform gateway to a team, a user or an SSO group (platform admins)
-         * @description 403 team_gateway for a team gateway. 409 grant_exists. 404 subject_not_found for an unknown team or user.
+         * @description 403 team_gateway for a team gateway. 409 grant_exists. 404 subject_not_found for an unknown team or user. 400 invalid_tool_scope for an invalid tool ceiling. Matching grants union their tool ceilings.
          */
         post: operations["adminAddGatewayGrant"];
         delete?: never;
@@ -1527,7 +1527,7 @@ export interface paths {
         put?: never;
         /**
          * Create a personal API key (browser session only); the secret is shown once
-         * @description 409 too_many_keys (at most 20 active keys per person). 400 too_many_gateways (more than 50 gatewayIds). 422 gateway_not_usable (details.gatewayIds) when a gateway in gatewayIds doesn't exist, is switched off or the caller can't use it now. An API key can't create keys.
+         * @description 409 too_many_keys (at most 20 active keys per person). 400 too_many_gateways (more than 50 gatewayIds). 422 gateway_not_usable (details.gatewayIds) when a gateway in gatewayIds doesn't exist, is switched off or the caller can't use it now. 400 invalid_tool_scope for an invalid tool ceiling. An API key can't create keys.
          */
         post: operations["createMyApiKey"];
         delete?: never;
@@ -1570,7 +1570,7 @@ export interface paths {
         put?: never;
         /**
          * Allow or deny an authorization request; returns where to send the browser
-         * @description Allow records the caller's consent for the client and gateway (audited as oauth.consent, or as oauth.grant_confirmed when the page was the first-use notice of a trusted client) and issues a single-use authorization code valid for 60 seconds. Deny sends the client access_denied.
+         * @description Allow records the caller's consent for the client and gateway (audited as oauth.consent, or as oauth.grant_confirmed when the page was the first-use notice of a trusted client) and issues a single-use authorization code valid for 60 seconds. Deny sends the client access_denied. The optional toolScope contains classes only and may narrow but not widen the request (400 oauth_invalid_scope); omission uses the requested ceiling. Changing scope replaces the grant and invalidates its old tokens and pending codes.
          */
         post: operations["decideOAuthConsent"];
         delete?: never;
@@ -1775,7 +1775,7 @@ export interface paths {
         put?: never;
         /**
          * Create a service account (team owners and admins)
-         * @description 409 name_taken (names are unique within the team); 409 team_archived. At most 100 per team.
+         * @description 409 name_taken (names are unique within the team); 409 team_archived. At most 100 per team. 400 invalid_tool_scope for an invalid tool ceiling.
          */
         post: operations["createServiceAccount"];
         delete?: never;
@@ -1803,7 +1803,10 @@ export interface paths {
         delete: operations["deleteServiceAccount"];
         options?: never;
         head?: never;
-        /** Change a service account (team owners and admins); turning it off stops its keys at the next request */
+        /**
+         * Change a service account (team owners and admins); turning it off stops its keys at the next request
+         * @description 400 invalid_tool_scope for an invalid tool ceiling. Omitted toolScope retains, null clears, an object replaces; all keys intersect the live account ceiling on their next call.
+         */
         patch: operations["updateServiceAccount"];
         trace?: never;
     };
@@ -1847,7 +1850,7 @@ export interface paths {
         put?: never;
         /**
          * Create a key (team owners and admins, browser session only); the secret is shown once
-         * @description 409 too_many_keys (at most 2 active keys, for rotation). 422 gateway_not_usable (details.gatewayIds) when a scoped gateway isn't one the service account can use. 409 disabled for a turned-off account.
+         * @description 409 too_many_keys (at most 2 active keys, for rotation). 422 gateway_not_usable (details.gatewayIds) when a scoped gateway isn't one the service account can use. 409 disabled for a turned-off account. 400 invalid_tool_scope for an invalid tool ceiling. A null key ceiling inherits the account ceiling by runtime intersection; a key never widens account or gateway-grant access.
          */
         post: operations["createServiceAccountKey"];
         delete?: never;
@@ -4349,7 +4352,13 @@ export interface components {
         };
         /** @enum {string} */
         GatewayGrantSubjectKind: "team" | "user" | "group";
+        /** @description Optional tool ceiling. Null is unrestricted; an empty object denies all tools. Classes OR exact exposed names match within a scope; independent layers intersect. Prompts and resources are unchanged. */
+        ToolScope: {
+            classes?: components["schemas"]["ToolClass"][];
+            tools?: string[];
+        } | null;
         GatewayGrant: {
+            toolScope?: components["schemas"]["ToolScope"];
             /** Format: uuid */
             id: string;
             subjectKind: components["schemas"]["GatewayGrantSubjectKind"];
@@ -4369,6 +4378,7 @@ export interface components {
         };
         /** @description Exactly one of team, userEmail or group, matching subjectKind */
         GatewayGrantCreate: {
+            toolScope?: components["schemas"]["ToolScope"];
             subjectKind: components["schemas"]["GatewayGrantSubjectKind"];
             /** @description Team slug or ID */
             team?: string;
@@ -4411,6 +4421,7 @@ export interface components {
             capabilities: components["schemas"]["GatewayCapability"][];
         };
         ApiKey: {
+            toolScope?: components["schemas"]["ToolScope"];
             /** Format: uuid */
             id: string;
             name: string;
@@ -4438,6 +4449,7 @@ export interface components {
             exists: boolean;
         };
         ApiKeyCreate: {
+            toolScope?: components["schemas"]["ToolScope"];
             /** @example Claude Code on my laptop */
             name: string;
             /**
@@ -4477,7 +4489,7 @@ export interface components {
             /** @description clientInfo.name from initialize, when sent */
             clientName?: string;
             outcome: components["schemas"]["McpCallOutcome"];
-            /** @description Why a call was denied or failed, for example no_access, role, unknown, key_scope (the API key is limited to other gateways), gateway_disabled or an unavailability reason. For capabilities that require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or server_not_allowed (connected, but the person hasn't allowed this server, at its current address, to use the account); denied with service_account, provider_disabled, provider_not_allowed (the provider is restricted and its access list excludes the server), person_not_present (an agent's call whose server or capability requires a present person) or, for an agent's call for a person, person_no_account or person_suspended; needs_authorization with needs_connection for an agent's call (the person must connect an account; the answer was a tool error with no link); upstream_error with provider_unavailable. For a server where each person enters their own key (decision 72): needs_authorization with secret_missing or secret_rejected (the answer carried the link, or for an agent's call a tool error with none) or agents_not_allowed (an agent's call, the person has a key but hasn't allowed agents); denied with service_account or person_suspended. */
+            /** @description Why a call was denied or failed, for example no_access, role, unknown, key_scope (the API key is limited to other gateways), tool_scope (a credential, account or matching gateway-grant ceiling excludes the tool), gateway_disabled or an unavailability reason. For capabilities that require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or server_not_allowed (connected, but the person hasn't allowed this server, at its current address, to use the account); denied with service_account, provider_disabled, provider_not_allowed (the provider is restricted and its access list excludes the server), person_not_present (an agent's call whose server or capability requires a present person) or, for an agent's call for a person, person_no_account or person_suspended; needs_authorization with needs_connection for an agent's call (the person must connect an account; the answer was a tool error with no link); upstream_error with provider_unavailable. For a server where each person enters their own key (decision 72): needs_authorization with secret_missing or secret_rejected (the answer carried the link, or for an agent's call a tool error with none) or agents_not_allowed (an agent's call, the person has a key but hasn't allowed agents); denied with service_account or person_suspended. */
             errorClass?: string;
             /** @description The auth provider the capability required at the time of the call (absent when none) */
             providerSlug?: string;
@@ -4555,6 +4567,7 @@ export interface components {
             trusted: boolean;
         };
         OAuthConsent: {
+            requestedToolScope?: components["schemas"]["ToolScope"];
             client: components["schemas"]["OAuthClientInfo"];
             gateway: components["schemas"]["MyGateway"];
             redirectUri: string;
@@ -4566,12 +4579,15 @@ export interface components {
             notice: boolean;
         };
         OAuthConsentDecision: {
+            /** @description Classes only. Omitted defaults to the requested ceiling; null must not widen a restricted request. */
+            toolScope?: components["schemas"]["ToolScope"] | null;
             /** @description The authorization request's query string, as the consent page received it */
             query: string;
             /** @enum {string} */
             decision: "allow" | "deny";
         };
         OAuthGrant: {
+            toolScope?: components["schemas"]["ToolScope"];
             /** Format: uuid */
             id: string;
             client: components["schemas"]["OAuthClientInfo"];
@@ -4611,6 +4627,7 @@ export interface components {
          */
         ServiceAccountRole: "member" | "editor";
         ServiceAccount: {
+            toolScope?: components["schemas"]["ToolScope"];
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -4644,6 +4661,7 @@ export interface components {
             nextCursor?: string | null;
         };
         ServiceAccountCreate: {
+            toolScope?: components["schemas"]["ToolScope"];
             /** @description Lower-case letters, digits and dashes; unique within the team */
             name: string;
             description?: string;
@@ -4653,12 +4671,15 @@ export interface components {
             enabled: boolean;
         };
         ServiceAccountUpdate: {
+            /** @description Omitted retains the ceiling; null clears it; an object replaces it. Existing keys intersect this live value on every call. */
+            toolScope?: components["schemas"]["ToolScope"] | null;
             name?: string;
             description?: string;
             role?: components["schemas"]["ServiceAccountRole"];
             enabled?: boolean;
         };
         ServiceAccountKey: {
+            toolScope?: components["schemas"]["ToolScope"];
             /** Format: uuid */
             id: string;
             name: string;
@@ -4679,6 +4700,7 @@ export interface components {
             gateways: components["schemas"]["ApiKeyGateway"][];
         };
         ServiceAccountKeyCreate: {
+            toolScope?: components["schemas"]["ToolScope"];
             name: string;
             /**
              * Format: int32

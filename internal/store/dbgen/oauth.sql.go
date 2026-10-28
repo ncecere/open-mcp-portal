@@ -114,7 +114,7 @@ func (q *Queries) DeleteUnusedOAuthClients(ctx context.Context, arg DeleteUnused
 }
 
 const getActiveOAuthGrant = `-- name: GetActiveOAuthGrant :one
-SELECT id, user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, created_at, last_used_at, revoked_at, revoked_reason, authorized_at FROM oauth_grants
+SELECT id, user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, created_at, last_used_at, revoked_at, revoked_reason, authorized_at, tool_scope FROM oauth_grants
 WHERE user_id = $1 AND client_id = $2 AND gateway_id = $3 AND revoked_at IS NULL
 `
 
@@ -142,6 +142,7 @@ func (q *Queries) GetActiveOAuthGrant(ctx context.Context, arg GetActiveOAuthGra
 		&i.RevokedAt,
 		&i.RevokedReason,
 		&i.AuthorizedAt,
+		&i.ToolScope,
 	)
 	return i, err
 }
@@ -200,7 +201,7 @@ func (q *Queries) GetOAuthSettings(ctx context.Context) (OauthSetting, error) {
 }
 
 const getOAuthToken = `-- name: GetOAuthToken :one
-SELECT t.id, t.grant_id, t.kind, t.token_hash, t.resource, t.expires_at, t.rotated_at, t.created_at, t.pepper_id, gr.id, gr.user_id, gr.gateway_id, gr.client_id, gr.client_kind, gr.client_name, gr.client_uri, gr.logo_uri, gr.resource, gr.created_at, gr.last_used_at, gr.revoked_at, gr.revoked_reason, gr.authorized_at, u.id, u.oidc_issuer, u.oidc_subject, u.email, u.display_name, u.platform_role, u.status, u.claims, u.revision, u.created_at, u.updated_at, u.last_login_at, u.groups, u.email_verified, g.slug AS gateway_slug
+SELECT t.id, t.grant_id, t.kind, t.token_hash, t.resource, t.expires_at, t.rotated_at, t.created_at, t.pepper_id, gr.id, gr.user_id, gr.gateway_id, gr.client_id, gr.client_kind, gr.client_name, gr.client_uri, gr.logo_uri, gr.resource, gr.created_at, gr.last_used_at, gr.revoked_at, gr.revoked_reason, gr.authorized_at, gr.tool_scope, u.id, u.oidc_issuer, u.oidc_subject, u.email, u.display_name, u.platform_role, u.status, u.claims, u.revision, u.created_at, u.updated_at, u.last_login_at, u.groups, u.email_verified, g.slug AS gateway_slug
 FROM oauth_tokens t
 JOIN oauth_grants gr ON gr.id = t.grant_id
 JOIN users u ON u.id = gr.user_id
@@ -248,6 +249,7 @@ func (q *Queries) GetOAuthToken(ctx context.Context, arg GetOAuthTokenParams) (G
 		&i.OauthGrant.RevokedAt,
 		&i.OauthGrant.RevokedReason,
 		&i.OauthGrant.AuthorizedAt,
+		&i.OauthGrant.ToolScope,
 		&i.User.ID,
 		&i.User.OIDCIssuer,
 		&i.User.OIDCSubject,
@@ -336,9 +338,9 @@ func (q *Queries) InsertOAuthCode(ctx context.Context, arg InsertOAuthCodeParams
 }
 
 const insertOAuthGrant = `-- name: InsertOAuthGrant :one
-INSERT INTO oauth_grants (user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, authorized_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
-RETURNING id, user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, created_at, last_used_at, revoked_at, revoked_reason, authorized_at
+INSERT INTO oauth_grants (user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, authorized_at, tool_scope)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), $9)
+RETURNING id, user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, created_at, last_used_at, revoked_at, revoked_reason, authorized_at, tool_scope
 `
 
 type InsertOAuthGrantParams struct {
@@ -350,6 +352,7 @@ type InsertOAuthGrantParams struct {
 	ClientUri  *string
 	LogoUri    *string
 	Resource   string
+	ToolScope  json.RawMessage
 }
 
 func (q *Queries) InsertOAuthGrant(ctx context.Context, arg InsertOAuthGrantParams) (OauthGrant, error) {
@@ -362,6 +365,7 @@ func (q *Queries) InsertOAuthGrant(ctx context.Context, arg InsertOAuthGrantPara
 		arg.ClientUri,
 		arg.LogoUri,
 		arg.Resource,
+		arg.ToolScope,
 	)
 	var i OauthGrant
 	err := row.Scan(
@@ -379,6 +383,7 @@ func (q *Queries) InsertOAuthGrant(ctx context.Context, arg InsertOAuthGrantPara
 		&i.RevokedAt,
 		&i.RevokedReason,
 		&i.AuthorizedAt,
+		&i.ToolScope,
 	)
 	return i, err
 }
@@ -410,7 +415,7 @@ func (q *Queries) InsertOAuthToken(ctx context.Context, arg InsertOAuthTokenPara
 }
 
 const listUserOAuthGrants = `-- name: ListUserOAuthGrants :many
-SELECT gr.id, gr.user_id, gr.gateway_id, gr.client_id, gr.client_kind, gr.client_name, gr.client_uri, gr.logo_uri, gr.resource, gr.created_at, gr.last_used_at, gr.revoked_at, gr.revoked_reason, gr.authorized_at, g.slug AS gateway_slug, g.name AS gateway_name
+SELECT gr.id, gr.user_id, gr.gateway_id, gr.client_id, gr.client_kind, gr.client_name, gr.client_uri, gr.logo_uri, gr.resource, gr.created_at, gr.last_used_at, gr.revoked_at, gr.revoked_reason, gr.authorized_at, gr.tool_scope, g.slug AS gateway_slug, g.name AS gateway_name
 FROM oauth_grants gr
 JOIN gateways g ON g.id = gr.gateway_id
 WHERE gr.user_id = $1 AND gr.revoked_at IS NULL
@@ -448,6 +453,7 @@ func (q *Queries) ListUserOAuthGrants(ctx context.Context, userID uuid.UUID) ([]
 			&i.OauthGrant.RevokedAt,
 			&i.OauthGrant.RevokedReason,
 			&i.OauthGrant.AuthorizedAt,
+			&i.OauthGrant.ToolScope,
 			&i.GatewaySlug,
 			&i.GatewayName,
 		); err != nil {
@@ -473,7 +479,7 @@ func (q *Queries) LockOAuthClients(ctx context.Context) error {
 }
 
 const lockOAuthGrant = `-- name: LockOAuthGrant :one
-SELECT id, user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, created_at, last_used_at, revoked_at, revoked_reason, authorized_at FROM oauth_grants WHERE id = $1 FOR UPDATE
+SELECT id, user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, created_at, last_used_at, revoked_at, revoked_reason, authorized_at, tool_scope FROM oauth_grants WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockOAuthGrant(ctx context.Context, id uuid.UUID) (OauthGrant, error) {
@@ -494,6 +500,7 @@ func (q *Queries) LockOAuthGrant(ctx context.Context, id uuid.UUID) (OauthGrant,
 		&i.RevokedAt,
 		&i.RevokedReason,
 		&i.AuthorizedAt,
+		&i.ToolScope,
 	)
 	return i, err
 }

@@ -62,8 +62,8 @@ SELECT * FROM oauth_grants
 WHERE user_id = @user_id AND client_id = @client_id AND gateway_id = @gateway_id AND revoked_at IS NULL;
 
 -- name: InsertOAuthGrant :one
-INSERT INTO oauth_grants (user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, authorized_at)
-VALUES (@user_id, @gateway_id, @client_id, @client_kind, @client_name, @client_uri, @logo_uri, @resource, now())
+INSERT INTO oauth_grants (user_id, gateway_id, client_id, client_kind, client_name, client_uri, logo_uri, resource, authorized_at, tool_scope)
+VALUES (@user_id, @gateway_id, @client_id, @client_kind, @client_name, @client_uri, @logo_uri, @resource, now(), sqlc.narg(tool_scope))
 RETURNING *;
 
 -- name: RenewOAuthGrant :exec

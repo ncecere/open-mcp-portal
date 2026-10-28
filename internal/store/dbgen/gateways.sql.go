@@ -7,6 +7,7 @@ package dbgen
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 )
@@ -55,7 +56,7 @@ func (q *Queries) DeleteGateway(ctx context.Context, id uuid.UUID) error {
 
 const deleteGatewayGrant = `-- name: DeleteGatewayGrant :one
 DELETE FROM gateway_grants WHERE id = $1 AND gateway_id = $2
-RETURNING id, gateway_id, subject_kind, team_id, user_id, group_name, added_by, added_at
+RETURNING id, gateway_id, subject_kind, team_id, user_id, group_name, added_by, added_at, tool_scope
 `
 
 type DeleteGatewayGrantParams struct {
@@ -75,6 +76,7 @@ func (q *Queries) DeleteGatewayGrant(ctx context.Context, arg DeleteGatewayGrant
 		&i.GroupName,
 		&i.AddedBy,
 		&i.AddedAt,
+		&i.ToolScope,
 	)
 	return i, err
 }
@@ -127,8 +129,7 @@ type GatewayGrantKindsForUserParams struct {
 	Groups    []string
 }
 
-// How a person reaches a gateway through its grants: their team's grant,
-// their own, or one of their groups'.
+// Kept until the runtime switches to scoped matching rows.
 func (q *Queries) GatewayGrantKindsForUser(ctx context.Context, arg GatewayGrantKindsForUserParams) ([]string, error) {
 	rows, err := q.db.Query(ctx, gatewayGrantKindsForUser, arg.GatewayID, arg.UserID, arg.Groups)
 	if err != nil {
@@ -142,6 +143,53 @@ func (q *Queries) GatewayGrantKindsForUser(ctx context.Context, arg GatewayGrant
 			return nil, err
 		}
 		items = append(items, subject_kind)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const gatewayGrantsForUser = `-- name: GatewayGrantsForUser :many
+SELECT gg.id, gg.gateway_id, gg.subject_kind, gg.team_id, gg.user_id, gg.group_name, gg.added_by, gg.added_at, gg.tool_scope
+FROM gateway_grants gg
+WHERE gg.gateway_id = $1
+  AND (gg.user_id = $2
+       OR gg.team_id IN (SELECT m.team_id FROM team_members m WHERE m.user_id = $2)
+       OR gg.group_name = ANY($3::text[]))
+`
+
+type GatewayGrantsForUserParams struct {
+	GatewayID uuid.UUID
+	UserID    uuid.NullUUID
+	Groups    []string
+}
+
+// How a person reaches a gateway through its grants: their team's grant,
+// their own, or one of their groups'.
+func (q *Queries) GatewayGrantsForUser(ctx context.Context, arg GatewayGrantsForUserParams) ([]GatewayGrant, error) {
+	rows, err := q.db.Query(ctx, gatewayGrantsForUser, arg.GatewayID, arg.UserID, arg.Groups)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GatewayGrant{}
+	for rows.Next() {
+		var i GatewayGrant
+		if err := rows.Scan(
+			&i.ID,
+			&i.GatewayID,
+			&i.SubjectKind,
+			&i.TeamID,
+			&i.UserID,
+			&i.GroupName,
+			&i.AddedBy,
+			&i.AddedAt,
+			&i.ToolScope,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -384,9 +432,9 @@ func (q *Queries) InsertGateway(ctx context.Context, arg InsertGatewayParams) (G
 }
 
 const insertGatewayGrant = `-- name: InsertGatewayGrant :one
-INSERT INTO gateway_grants (gateway_id, subject_kind, team_id, user_id, group_name, added_by)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, gateway_id, subject_kind, team_id, user_id, group_name, added_by, added_at
+INSERT INTO gateway_grants (gateway_id, subject_kind, team_id, user_id, group_name, added_by, tool_scope)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, gateway_id, subject_kind, team_id, user_id, group_name, added_by, added_at, tool_scope
 `
 
 type InsertGatewayGrantParams struct {
@@ -396,6 +444,7 @@ type InsertGatewayGrantParams struct {
 	UserID      uuid.NullUUID
 	GroupName   *string
 	AddedBy     uuid.NullUUID
+	ToolScope   json.RawMessage
 }
 
 func (q *Queries) InsertGatewayGrant(ctx context.Context, arg InsertGatewayGrantParams) (GatewayGrant, error) {
@@ -406,6 +455,7 @@ func (q *Queries) InsertGatewayGrant(ctx context.Context, arg InsertGatewayGrant
 		arg.UserID,
 		arg.GroupName,
 		arg.AddedBy,
+		arg.ToolScope,
 	)
 	var i GatewayGrant
 	err := row.Scan(
@@ -417,12 +467,13 @@ func (q *Queries) InsertGatewayGrant(ctx context.Context, arg InsertGatewayGrant
 		&i.GroupName,
 		&i.AddedBy,
 		&i.AddedAt,
+		&i.ToolScope,
 	)
 	return i, err
 }
 
 const listGatewayGrants = `-- name: ListGatewayGrants :many
-SELECT gg.id, gg.gateway_id, gg.subject_kind, gg.team_id, gg.user_id, gg.group_name, gg.added_by, gg.added_at,
+SELECT gg.id, gg.gateway_id, gg.subject_kind, gg.team_id, gg.user_id, gg.group_name, gg.added_by, gg.added_at, gg.tool_scope,
        COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name,
        COALESCE(u.email::text, '')::text AS user_email, COALESCE(u.display_name, '')::text AS user_display_name,
        COALESCE(u.status, '')::text AS user_status,
@@ -463,6 +514,7 @@ func (q *Queries) ListGatewayGrants(ctx context.Context, gatewayID uuid.UUID) ([
 			&i.GatewayGrant.GroupName,
 			&i.GatewayGrant.AddedBy,
 			&i.GatewayGrant.AddedAt,
+			&i.GatewayGrant.ToolScope,
 			&i.TeamSlug,
 			&i.TeamName,
 			&i.UserEmail,

@@ -7,13 +7,14 @@ package dbgen
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 const adminListServiceAccounts = `-- name: AdminListServiceAccounts :many
-SELECT sa.id, sa.team_id, sa.name, sa.description, sa.role, sa.enabled, sa.revision, sa.created_by, sa.created_at, sa.updated_by, sa.updated_at, sa.last_used_at, sa.relay_platform_id, sa.relay_marked_by, sa.relay_marked_at, t.slug AS team_slug,
+SELECT sa.id, sa.team_id, sa.name, sa.description, sa.role, sa.enabled, sa.revision, sa.created_by, sa.created_at, sa.updated_by, sa.updated_at, sa.last_used_at, sa.relay_platform_id, sa.relay_marked_by, sa.relay_marked_at, sa.tool_scope, t.slug AS team_slug,
        (SELECT count(*) FROM service_account_keys k
         WHERE k.service_account_id = sa.id AND k.revoked_at IS NULL AND k.expires_at > now())::bigint AS active_keys,
        u.display_name AS created_by_name,
@@ -81,6 +82,7 @@ func (q *Queries) AdminListServiceAccounts(ctx context.Context, arg AdminListSer
 			&i.ServiceAccount.RelayPlatformID,
 			&i.ServiceAccount.RelayMarkedBy,
 			&i.ServiceAccount.RelayMarkedAt,
+			&i.ServiceAccount.ToolScope,
 			&i.TeamSlug,
 			&i.ActiveKeys,
 			&i.CreatedByName,
@@ -128,8 +130,47 @@ func (q *Queries) DeleteServiceAccount(ctx context.Context, id uuid.UUID) error 
 	return err
 }
 
+const gatewayGrantsForTeam = `-- name: GatewayGrantsForTeam :many
+SELECT id, gateway_id, subject_kind, team_id, user_id, group_name, added_by, added_at, tool_scope FROM gateway_grants WHERE gateway_id = $1 AND team_id = $2
+`
+
+type GatewayGrantsForTeamParams struct {
+	GatewayID uuid.UUID
+	TeamID    uuid.NullUUID
+}
+
+func (q *Queries) GatewayGrantsForTeam(ctx context.Context, arg GatewayGrantsForTeamParams) ([]GatewayGrant, error) {
+	rows, err := q.db.Query(ctx, gatewayGrantsForTeam, arg.GatewayID, arg.TeamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GatewayGrant{}
+	for rows.Next() {
+		var i GatewayGrant
+		if err := rows.Scan(
+			&i.ID,
+			&i.GatewayID,
+			&i.SubjectKind,
+			&i.TeamID,
+			&i.UserID,
+			&i.GroupName,
+			&i.AddedBy,
+			&i.AddedAt,
+			&i.ToolScope,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getServiceAccountKey = `-- name: GetServiceAccountKey :one
-SELECT k.id, k.service_account_id, k.name, k.prefix, k.digest, k.created_by, k.created_at, k.expires_at, k.revoked_at, k.last_used_at, k.pepper_id, u.display_name AS created_by_name
+SELECT k.id, k.service_account_id, k.name, k.prefix, k.digest, k.created_by, k.created_at, k.expires_at, k.revoked_at, k.last_used_at, k.pepper_id, k.tool_scope, u.display_name AS created_by_name
 FROM service_account_keys k
 LEFT JOIN users u ON u.id = k.created_by
 WHERE k.id = $1 AND k.service_account_id = $2
@@ -160,13 +201,14 @@ func (q *Queries) GetServiceAccountKey(ctx context.Context, arg GetServiceAccoun
 		&i.ServiceAccountKey.RevokedAt,
 		&i.ServiceAccountKey.LastUsedAt,
 		&i.ServiceAccountKey.PepperID,
+		&i.ServiceAccountKey.ToolScope,
 		&i.CreatedByName,
 	)
 	return i, err
 }
 
 const getServiceAccountKeyByDigest = `-- name: GetServiceAccountKeyByDigest :one
-SELECT k.id, k.service_account_id, k.name, k.prefix, k.digest, k.created_by, k.created_at, k.expires_at, k.revoked_at, k.last_used_at, k.pepper_id, sa.id, sa.team_id, sa.name, sa.description, sa.role, sa.enabled, sa.revision, sa.created_by, sa.created_at, sa.updated_by, sa.updated_at, sa.last_used_at, sa.relay_platform_id, sa.relay_marked_by, sa.relay_marked_at, t.id, t.slug, t.name, t.description, t.status, t.created_by, t.revision, t.created_at, t.updated_at, t.archived_at, t.publish_policy_override, t.limit_overrides, t.retention_overrides
+SELECT k.id, k.service_account_id, k.name, k.prefix, k.digest, k.created_by, k.created_at, k.expires_at, k.revoked_at, k.last_used_at, k.pepper_id, k.tool_scope, sa.id, sa.team_id, sa.name, sa.description, sa.role, sa.enabled, sa.revision, sa.created_by, sa.created_at, sa.updated_by, sa.updated_at, sa.last_used_at, sa.relay_platform_id, sa.relay_marked_by, sa.relay_marked_at, sa.tool_scope, t.id, t.slug, t.name, t.description, t.status, t.created_by, t.revision, t.created_at, t.updated_at, t.archived_at, t.publish_policy_override, t.limit_overrides, t.retention_overrides
 FROM service_account_keys k
 JOIN service_accounts sa ON sa.id = k.service_account_id
 JOIN teams t ON t.id = sa.team_id
@@ -195,6 +237,7 @@ func (q *Queries) GetServiceAccountKeyByDigest(ctx context.Context, digest strin
 		&i.ServiceAccountKey.RevokedAt,
 		&i.ServiceAccountKey.LastUsedAt,
 		&i.ServiceAccountKey.PepperID,
+		&i.ServiceAccountKey.ToolScope,
 		&i.ServiceAccount.ID,
 		&i.ServiceAccount.TeamID,
 		&i.ServiceAccount.Name,
@@ -210,6 +253,7 @@ func (q *Queries) GetServiceAccountKeyByDigest(ctx context.Context, digest strin
 		&i.ServiceAccount.RelayPlatformID,
 		&i.ServiceAccount.RelayMarkedBy,
 		&i.ServiceAccount.RelayMarkedAt,
+		&i.ServiceAccount.ToolScope,
 		&i.Team.ID,
 		&i.Team.Slug,
 		&i.Team.Name,
@@ -228,7 +272,7 @@ func (q *Queries) GetServiceAccountKeyByDigest(ctx context.Context, digest strin
 }
 
 const getServiceAccountView = `-- name: GetServiceAccountView :one
-SELECT sa.id, sa.team_id, sa.name, sa.description, sa.role, sa.enabled, sa.revision, sa.created_by, sa.created_at, sa.updated_by, sa.updated_at, sa.last_used_at, sa.relay_platform_id, sa.relay_marked_by, sa.relay_marked_at,
+SELECT sa.id, sa.team_id, sa.name, sa.description, sa.role, sa.enabled, sa.revision, sa.created_by, sa.created_at, sa.updated_by, sa.updated_at, sa.last_used_at, sa.relay_platform_id, sa.relay_marked_by, sa.relay_marked_at, sa.tool_scope,
        (SELECT count(*) FROM service_account_keys k
         WHERE k.service_account_id = sa.id AND k.revoked_at IS NULL AND k.expires_at > now())::bigint AS active_keys,
        u.display_name AS created_by_name,
@@ -269,6 +313,7 @@ func (q *Queries) GetServiceAccountView(ctx context.Context, arg GetServiceAccou
 		&i.ServiceAccount.RelayPlatformID,
 		&i.ServiceAccount.RelayMarkedBy,
 		&i.ServiceAccount.RelayMarkedAt,
+		&i.ServiceAccount.ToolScope,
 		&i.ActiveKeys,
 		&i.CreatedByName,
 		&i.RelayPlatformName,
@@ -277,9 +322,9 @@ func (q *Queries) GetServiceAccountView(ctx context.Context, arg GetServiceAccou
 }
 
 const insertServiceAccount = `-- name: InsertServiceAccount :one
-INSERT INTO service_accounts (team_id, name, description, role, enabled, created_by, updated_by)
-VALUES ($1, $2, $3, $4, $5, $6, $6)
-RETURNING id, team_id, name, description, role, enabled, revision, created_by, created_at, updated_by, updated_at, last_used_at, relay_platform_id, relay_marked_by, relay_marked_at
+INSERT INTO service_accounts (team_id, name, description, role, enabled, created_by, updated_by, tool_scope)
+VALUES ($1, $2, $3, $4, $5, $6, $6, $7)
+RETURNING id, team_id, name, description, role, enabled, revision, created_by, created_at, updated_by, updated_at, last_used_at, relay_platform_id, relay_marked_by, relay_marked_at, tool_scope
 `
 
 type InsertServiceAccountParams struct {
@@ -289,6 +334,7 @@ type InsertServiceAccountParams struct {
 	Role        string
 	Enabled     bool
 	CreatedBy   uuid.NullUUID
+	ToolScope   json.RawMessage
 }
 
 func (q *Queries) InsertServiceAccount(ctx context.Context, arg InsertServiceAccountParams) (ServiceAccount, error) {
@@ -299,6 +345,7 @@ func (q *Queries) InsertServiceAccount(ctx context.Context, arg InsertServiceAcc
 		arg.Role,
 		arg.Enabled,
 		arg.CreatedBy,
+		arg.ToolScope,
 	)
 	var i ServiceAccount
 	err := row.Scan(
@@ -317,14 +364,15 @@ func (q *Queries) InsertServiceAccount(ctx context.Context, arg InsertServiceAcc
 		&i.RelayPlatformID,
 		&i.RelayMarkedBy,
 		&i.RelayMarkedAt,
+		&i.ToolScope,
 	)
 	return i, err
 }
 
 const insertServiceAccountKey = `-- name: InsertServiceAccountKey :one
-INSERT INTO service_account_keys (service_account_id, name, prefix, digest, created_by, expires_at, pepper_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, service_account_id, name, prefix, digest, created_by, created_at, expires_at, revoked_at, last_used_at, pepper_id
+INSERT INTO service_account_keys (service_account_id, name, prefix, digest, created_by, expires_at, pepper_id, tool_scope)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, service_account_id, name, prefix, digest, created_by, created_at, expires_at, revoked_at, last_used_at, pepper_id, tool_scope
 `
 
 type InsertServiceAccountKeyParams struct {
@@ -335,6 +383,7 @@ type InsertServiceAccountKeyParams struct {
 	CreatedBy        uuid.NullUUID
 	ExpiresAt        time.Time
 	PepperID         []byte
+	ToolScope        json.RawMessage
 }
 
 func (q *Queries) InsertServiceAccountKey(ctx context.Context, arg InsertServiceAccountKeyParams) (ServiceAccountKey, error) {
@@ -346,6 +395,7 @@ func (q *Queries) InsertServiceAccountKey(ctx context.Context, arg InsertService
 		arg.CreatedBy,
 		arg.ExpiresAt,
 		arg.PepperID,
+		arg.ToolScope,
 	)
 	var i ServiceAccountKey
 	err := row.Scan(
@@ -360,6 +410,7 @@ func (q *Queries) InsertServiceAccountKey(ctx context.Context, arg InsertService
 		&i.RevokedAt,
 		&i.LastUsedAt,
 		&i.PepperID,
+		&i.ToolScope,
 	)
 	return i, err
 }
@@ -457,7 +508,7 @@ func (q *Queries) ListServiceAccountKeyGateways(ctx context.Context, keyIds []uu
 }
 
 const listServiceAccountKeys = `-- name: ListServiceAccountKeys :many
-SELECT k.id, k.service_account_id, k.name, k.prefix, k.digest, k.created_by, k.created_at, k.expires_at, k.revoked_at, k.last_used_at, k.pepper_id, u.display_name AS created_by_name
+SELECT k.id, k.service_account_id, k.name, k.prefix, k.digest, k.created_by, k.created_at, k.expires_at, k.revoked_at, k.last_used_at, k.pepper_id, k.tool_scope, u.display_name AS created_by_name
 FROM service_account_keys k
 LEFT JOIN users u ON u.id = k.created_by
 WHERE k.service_account_id = $1
@@ -493,6 +544,7 @@ func (q *Queries) ListServiceAccountKeys(ctx context.Context, serviceAccountID u
 			&i.ServiceAccountKey.RevokedAt,
 			&i.ServiceAccountKey.LastUsedAt,
 			&i.ServiceAccountKey.PepperID,
+			&i.ServiceAccountKey.ToolScope,
 			&i.CreatedByName,
 		); err != nil {
 			return nil, err
@@ -507,7 +559,7 @@ func (q *Queries) ListServiceAccountKeys(ctx context.Context, serviceAccountID u
 
 const listServiceAccounts = `-- name: ListServiceAccounts :many
 
-SELECT sa.id, sa.team_id, sa.name, sa.description, sa.role, sa.enabled, sa.revision, sa.created_by, sa.created_at, sa.updated_by, sa.updated_at, sa.last_used_at, sa.relay_platform_id, sa.relay_marked_by, sa.relay_marked_at,
+SELECT sa.id, sa.team_id, sa.name, sa.description, sa.role, sa.enabled, sa.revision, sa.created_by, sa.created_at, sa.updated_by, sa.updated_at, sa.last_used_at, sa.relay_platform_id, sa.relay_marked_by, sa.relay_marked_at, sa.tool_scope,
        (SELECT count(*) FROM service_account_keys k
         WHERE k.service_account_id = sa.id AND k.revoked_at IS NULL AND k.expires_at > now())::bigint AS active_keys,
        u.display_name AS created_by_name,
@@ -552,6 +604,7 @@ func (q *Queries) ListServiceAccounts(ctx context.Context, teamID uuid.UUID) ([]
 			&i.ServiceAccount.RelayPlatformID,
 			&i.ServiceAccount.RelayMarkedBy,
 			&i.ServiceAccount.RelayMarkedAt,
+			&i.ServiceAccount.ToolScope,
 			&i.ActiveKeys,
 			&i.CreatedByName,
 			&i.RelayPlatformName,
@@ -567,7 +620,7 @@ func (q *Queries) ListServiceAccounts(ctx context.Context, teamID uuid.UUID) ([]
 }
 
 const lockServiceAccount = `-- name: LockServiceAccount :one
-SELECT id, team_id, name, description, role, enabled, revision, created_by, created_at, updated_by, updated_at, last_used_at, relay_platform_id, relay_marked_by, relay_marked_at FROM service_accounts WHERE id = $1 AND team_id = $2 FOR UPDATE
+SELECT id, team_id, name, description, role, enabled, revision, created_by, created_at, updated_by, updated_at, last_used_at, relay_platform_id, relay_marked_by, relay_marked_at, tool_scope FROM service_accounts WHERE id = $1 AND team_id = $2 FOR UPDATE
 `
 
 type LockServiceAccountParams struct {
@@ -594,6 +647,7 @@ func (q *Queries) LockServiceAccount(ctx context.Context, arg LockServiceAccount
 		&i.RelayPlatformID,
 		&i.RelayMarkedBy,
 		&i.RelayMarkedAt,
+		&i.ToolScope,
 	)
 	return i, err
 }
@@ -601,7 +655,7 @@ func (q *Queries) LockServiceAccount(ctx context.Context, arg LockServiceAccount
 const revokeServiceAccountKey = `-- name: RevokeServiceAccountKey :one
 UPDATE service_account_keys SET revoked_at = now()
 WHERE id = $1 AND service_account_id = $2 AND revoked_at IS NULL
-RETURNING id, service_account_id, name, prefix, digest, created_by, created_at, expires_at, revoked_at, last_used_at, pepper_id
+RETURNING id, service_account_id, name, prefix, digest, created_by, created_at, expires_at, revoked_at, last_used_at, pepper_id, tool_scope
 `
 
 type RevokeServiceAccountKeyParams struct {
@@ -624,6 +678,7 @@ func (q *Queries) RevokeServiceAccountKey(ctx context.Context, arg RevokeService
 		&i.RevokedAt,
 		&i.LastUsedAt,
 		&i.PepperID,
+		&i.ToolScope,
 	)
 	return i, err
 }
@@ -646,7 +701,7 @@ type TeamHasGatewayGrantParams struct {
 	TeamID    uuid.NullUUID
 }
 
-// Whether a platform gateway is granted to a team.
+// Kept until the runtime switches to scoped matching rows.
 func (q *Queries) TeamHasGatewayGrant(ctx context.Context, arg TeamHasGatewayGrantParams) (bool, error) {
 	row := q.db.QueryRow(ctx, teamHasGatewayGrant, arg.GatewayID, arg.TeamID)
 	var column_1 bool
@@ -676,10 +731,10 @@ func (q *Queries) TouchServiceAccountKey(ctx context.Context, id uuid.UUID) erro
 
 const updateServiceAccount = `-- name: UpdateServiceAccount :one
 UPDATE service_accounts
-SET name = $1, description = $2, role = $3, enabled = $4,
-    revision = revision + 1, updated_by = $5, updated_at = now()
-WHERE id = $6
-RETURNING id, team_id, name, description, role, enabled, revision, created_by, created_at, updated_by, updated_at, last_used_at, relay_platform_id, relay_marked_by, relay_marked_at
+SET name = $1, description = $2, role = $3, enabled = $4, tool_scope = $5,
+    revision = revision + 1, updated_by = $6, updated_at = now()
+WHERE id = $7
+RETURNING id, team_id, name, description, role, enabled, revision, created_by, created_at, updated_by, updated_at, last_used_at, relay_platform_id, relay_marked_by, relay_marked_at, tool_scope
 `
 
 type UpdateServiceAccountParams struct {
@@ -687,6 +742,7 @@ type UpdateServiceAccountParams struct {
 	Description string
 	Role        string
 	Enabled     bool
+	ToolScope   json.RawMessage
 	UpdatedBy   uuid.NullUUID
 	ID          uuid.UUID
 }
@@ -697,6 +753,7 @@ func (q *Queries) UpdateServiceAccount(ctx context.Context, arg UpdateServiceAcc
 		arg.Description,
 		arg.Role,
 		arg.Enabled,
+		arg.ToolScope,
 		arg.UpdatedBy,
 		arg.ID,
 	)
@@ -717,6 +774,7 @@ func (q *Queries) UpdateServiceAccount(ctx context.Context, arg UpdateServiceAcc
 		&i.RelayPlatformID,
 		&i.RelayMarkedBy,
 		&i.RelayMarkedAt,
+		&i.ToolScope,
 	)
 	return i, err
 }

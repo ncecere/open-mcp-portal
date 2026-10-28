@@ -28,7 +28,7 @@ func (q *Queries) CountActiveAPIKeys(ctx context.Context, userID uuid.UUID) (int
 }
 
 const getAPIKeyByDigest = `-- name: GetAPIKeyByDigest :one
-SELECT k.id, k.user_id, k.name, k.prefix, k.digest, k.created_at, k.expires_at, k.revoked_at, k.last_used_at, k.pepper_id, u.id, u.oidc_issuer, u.oidc_subject, u.email, u.display_name, u.platform_role, u.status, u.claims, u.revision, u.created_at, u.updated_at, u.last_login_at, u.groups, u.email_verified
+SELECT k.id, k.user_id, k.name, k.prefix, k.digest, k.created_at, k.expires_at, k.revoked_at, k.last_used_at, k.pepper_id, k.tool_scope, u.id, u.oidc_issuer, u.oidc_subject, u.email, u.display_name, u.platform_role, u.status, u.claims, u.revision, u.created_at, u.updated_at, u.last_login_at, u.groups, u.email_verified
 FROM api_keys k
 JOIN users u ON u.id = k.user_id
 WHERE k.digest = $1
@@ -53,6 +53,7 @@ func (q *Queries) GetAPIKeyByDigest(ctx context.Context, digest string) (GetAPIK
 		&i.ApiKey.RevokedAt,
 		&i.ApiKey.LastUsedAt,
 		&i.ApiKey.PepperID,
+		&i.ApiKey.ToolScope,
 		&i.User.ID,
 		&i.User.OIDCIssuer,
 		&i.User.OIDCSubject,
@@ -116,7 +117,7 @@ func (q *Queries) GetNextSigningKey(ctx context.Context) (SigningKey, error) {
 }
 
 const getUserAPIKey = `-- name: GetUserAPIKey :one
-SELECT id, user_id, name, prefix, digest, created_at, expires_at, revoked_at, last_used_at, pepper_id FROM api_keys WHERE id = $1 AND user_id = $2
+SELECT id, user_id, name, prefix, digest, created_at, expires_at, revoked_at, last_used_at, pepper_id, tool_scope FROM api_keys WHERE id = $1 AND user_id = $2
 `
 
 type GetUserAPIKeyParams struct {
@@ -138,14 +139,15 @@ func (q *Queries) GetUserAPIKey(ctx context.Context, arg GetUserAPIKeyParams) (A
 		&i.RevokedAt,
 		&i.LastUsedAt,
 		&i.PepperID,
+		&i.ToolScope,
 	)
 	return i, err
 }
 
 const insertAPIKey = `-- name: InsertAPIKey :one
-INSERT INTO api_keys (user_id, name, prefix, digest, expires_at, pepper_id)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, name, prefix, digest, created_at, expires_at, revoked_at, last_used_at, pepper_id
+INSERT INTO api_keys (user_id, name, prefix, digest, expires_at, pepper_id, tool_scope)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, user_id, name, prefix, digest, created_at, expires_at, revoked_at, last_used_at, pepper_id, tool_scope
 `
 
 type InsertAPIKeyParams struct {
@@ -155,6 +157,7 @@ type InsertAPIKeyParams struct {
 	Digest    string
 	ExpiresAt time.Time
 	PepperID  []byte
+	ToolScope json.RawMessage
 }
 
 func (q *Queries) InsertAPIKey(ctx context.Context, arg InsertAPIKeyParams) (ApiKey, error) {
@@ -165,6 +168,7 @@ func (q *Queries) InsertAPIKey(ctx context.Context, arg InsertAPIKeyParams) (Api
 		arg.Digest,
 		arg.ExpiresAt,
 		arg.PepperID,
+		arg.ToolScope,
 	)
 	var i ApiKey
 	err := row.Scan(
@@ -178,6 +182,7 @@ func (q *Queries) InsertAPIKey(ctx context.Context, arg InsertAPIKeyParams) (Api
 		&i.RevokedAt,
 		&i.LastUsedAt,
 		&i.PepperID,
+		&i.ToolScope,
 	)
 	return i, err
 }
@@ -300,7 +305,7 @@ func (q *Queries) ListAPIKeyGateways(ctx context.Context, keyIds []uuid.UUID) ([
 }
 
 const listAPIKeys = `-- name: ListAPIKeys :many
-SELECT id, user_id, name, prefix, digest, created_at, expires_at, revoked_at, last_used_at, pepper_id FROM api_keys
+SELECT id, user_id, name, prefix, digest, created_at, expires_at, revoked_at, last_used_at, pepper_id, tool_scope FROM api_keys
 WHERE user_id = $1
   AND LEAST(COALESCE(revoked_at, 'infinity'::timestamptz), expires_at) > now() - interval '30 days'
 ORDER BY created_at DESC, id DESC
@@ -328,6 +333,7 @@ func (q *Queries) ListAPIKeys(ctx context.Context, userID uuid.UUID) ([]ApiKey, 
 			&i.RevokedAt,
 			&i.LastUsedAt,
 			&i.PepperID,
+			&i.ToolScope,
 		); err != nil {
 			return nil, err
 		}
@@ -435,7 +441,7 @@ func (q *Queries) RetireExpiredSigningKeys(ctx context.Context) (int64, error) {
 const revokeAPIKey = `-- name: RevokeAPIKey :one
 UPDATE api_keys SET revoked_at = now()
 WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
-RETURNING id, user_id, name, prefix, digest, created_at, expires_at, revoked_at, last_used_at, pepper_id
+RETURNING id, user_id, name, prefix, digest, created_at, expires_at, revoked_at, last_used_at, pepper_id, tool_scope
 `
 
 type RevokeAPIKeyParams struct {
@@ -457,6 +463,7 @@ func (q *Queries) RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (Api
 		&i.RevokedAt,
 		&i.LastUsedAt,
 		&i.PepperID,
+		&i.ToolScope,
 	)
 	return i, err
 }

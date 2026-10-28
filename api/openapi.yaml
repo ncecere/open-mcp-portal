@@ -2946,7 +2946,7 @@ paths:
       - platform:write
       summary: Grant a platform gateway to a team, a user or an SSO group (platform admins)
       description: 403 team_gateway for a team gateway. 409 grant_exists. 404 subject_not_found for an unknown team
-        or user.
+        or user. 400 invalid_tool_scope for an invalid tool ceiling. Matching grants union their tool ceilings.
       requestBody:
         required: true
         content:
@@ -3103,7 +3103,7 @@ paths:
       summary: Create a personal API key (browser session only); the secret is shown once
       description: 409 too_many_keys (at most 20 active keys per person). 400 too_many_gateways (more than 50 gatewayIds).
         422 gateway_not_usable (details.gatewayIds) when a gateway in gatewayIds doesn't exist, is switched off
-        or the caller can't use it now. An API key can't create keys.
+        or the caller can't use it now. 400 invalid_tool_scope for an invalid tool ceiling. An API key can't create keys.
       requestBody:
         required: true
         content:
@@ -3226,7 +3226,9 @@ paths:
       summary: Allow or deny an authorization request; returns where to send the browser
       description: Allow records the caller's consent for the client and gateway (audited as oauth.consent, or as
         oauth.grant_confirmed when the page was the first-use notice of a trusted client) and issues a single-use
-        authorization code valid for 60 seconds. Deny sends the client access_denied.
+        authorization code valid for 60 seconds. Deny sends the client access_denied. The optional toolScope contains
+        classes only and may narrow but not widen the request (400 oauth_invalid_scope); omission uses the requested
+        ceiling. Changing scope replaces the grant and invalidates its old tokens and pending codes.
       requestBody:
         required: true
         content:
@@ -3531,6 +3533,7 @@ paths:
       operationId: createServiceAccount
       summary: Create a service account (team owners and admins)
       description: 409 name_taken (names are unique within the team); 409 team_archived. At most 100 per team.
+        400 invalid_tool_scope for an invalid tool ceiling.
       requestBody:
         required: true
         content:
@@ -3591,6 +3594,8 @@ paths:
       - service-accounts
       operationId: updateServiceAccount
       summary: Change a service account (team owners and admins); turning it off stops its keys at the next request
+      description: 400 invalid_tool_scope for an invalid tool ceiling. Omitted toolScope retains, null clears, an object
+        replaces; all keys intersect the live account ceiling on their next call.
       parameters:
       - $ref: '#/components/parameters/IfMatchHeader'
       requestBody:
@@ -3702,6 +3707,8 @@ paths:
       summary: Create a key (team owners and admins, browser session only); the secret is shown once
       description: 409 too_many_keys (at most 2 active keys, for rotation). 422 gateway_not_usable (details.gatewayIds)
         when a scoped gateway isn't one the service account can use. 409 disabled for a turned-off account.
+        400 invalid_tool_scope for an invalid tool ceiling. A null key ceiling inherits the account ceiling by runtime
+        intersection; a key never widens account or gateway-grant access.
       requestBody:
         required: true
         content:
@@ -9024,6 +9031,25 @@ components:
       - team
       - user
       - group
+    ToolScope:
+      type: object
+      nullable: true
+      additionalProperties: false
+      description: Optional tool ceiling. Null is unrestricted; an empty object denies all tools. Classes OR exact exposed names match within a scope; independent layers intersect. Prompts and resources are unchanged.
+      properties:
+        classes:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/ToolClass'
+        tools:
+          type: array
+          maxItems: 500
+          items:
+            type: string
+            minLength: 1
+            maxLength: 200
+            pattern: '^[A-Za-z0-9_.-]+__[A-Za-z0-9_.-]+$'
     GatewayGrant:
       type: object
       required:
@@ -9031,6 +9057,8 @@ components:
       - subjectKind
       - createdAt
       properties:
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         id:
           type: string
           format: uuid
@@ -9069,6 +9097,8 @@ components:
       - subjectKind
       description: Exactly one of team, userEmail or group, matching subjectKind
       properties:
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         subjectKind:
           $ref: '#/components/schemas/GatewayGrantSubjectKind'
         team:
@@ -9166,6 +9196,8 @@ components:
       - status
       - gateways
       properties:
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         id:
           type: string
           format: uuid
@@ -9224,6 +9256,8 @@ components:
       required:
       - name
       properties:
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         name:
           type: string
           minLength: 1
@@ -9317,7 +9351,7 @@ components:
         errorClass:
           type: string
           description: 'Why a call was denied or failed, for example no_access, role, unknown, key_scope (the API
-            key is limited to other gateways), gateway_disabled or an unavailability reason. For capabilities that
+            key is limited to other gateways), tool_scope (a credential, account or matching gateway-grant ceiling excludes the tool), gateway_disabled or an unavailability reason. For capabilities that
             require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or
             server_not_allowed (connected, but the person hasn''t allowed this server, at its current address, to use
             the account); denied with
@@ -9486,6 +9520,8 @@ components:
       - remembered
       - notice
       properties:
+        requestedToolScope:
+          $ref: '#/components/schemas/ToolScope'
         client:
           $ref: '#/components/schemas/OAuthClientInfo'
         gateway:
@@ -9508,6 +9544,11 @@ components:
       - query
       - decision
       properties:
+        toolScope:
+          allOf:
+          - $ref: '#/components/schemas/ToolScope'
+          nullable: true
+          description: Classes only. Omitted defaults to the requested ceiling; null must not widen a restricted request.
         query:
           type: string
           maxLength: 8000
@@ -9525,6 +9566,8 @@ components:
       - gateway
       - createdAt
       properties:
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         id:
           type: string
           format: uuid
@@ -9613,6 +9656,8 @@ components:
       - createdAt
       - updatedAt
       properties:
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         id:
           type: string
           format: uuid
@@ -9682,6 +9727,8 @@ components:
       required:
       - name
       properties:
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         name:
           type: string
           pattern: ^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$
@@ -9699,6 +9746,11 @@ components:
     ServiceAccountUpdate:
       type: object
       properties:
+        toolScope:
+          allOf:
+          - $ref: '#/components/schemas/ToolScope'
+          nullable: true
+          description: Omitted retains the ceiling; null clears it; an object replaces it. Existing keys intersect this live value on every call.
         name:
           type: string
           pattern: ^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$
@@ -9720,6 +9772,8 @@ components:
       - expiresAt
       - gateways
       properties:
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         id:
           type: string
           format: uuid
@@ -9761,6 +9815,8 @@ components:
       required:
       - name
       properties:
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         name:
           type: string
           minLength: 1
