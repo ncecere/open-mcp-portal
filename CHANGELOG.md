@@ -6,6 +6,10 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
+## Unreleased
+
+- **In progress, not enforced yet:** sensitive-call approvals (#31, decision 82). The owner continued with the proposed defaults; the design binds exact merged arguments and live authority to one actual tool dispatch, without automatic replay. See [design](docs/tool-approvals.md); foundational work is not release acceptance.
+
 ## [0.4.0] - 2026-10-28
 
 - **Breaking: MCP-only product boundary** (#68, decision 81). Removed external agent-platform trust and person impersonation, including Pi Durable Platform, their administration/presence controls and obsolete inbound identity headers. Migration `00034` disables issuers and marked relay accounts, revokes their keys and fences authority-restoring writes from older replicas. Historical marks and attribution remain; the new API keeps retired accounts read-only. Normal MCP clients, OAuth, keys, service accounts, provider connections and outbound portal identity remain supported. #62/#63 were withdrawn, not verified. Read the [retirement/rollback guide](docs/platform-retirement.md).

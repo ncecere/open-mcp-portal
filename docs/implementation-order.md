@@ -15,8 +15,8 @@ numbers and file paths are suggestions, not instructions to overwrite existing c
 #44 database roles and #68 external-platform retirement. Independent reviews, final-tree normal/race suites
 in both database-role modes, 796 web tests, browser checks, main CI and both deployment smoke CNIs passed.
 The published multi-architecture image/signature/SBOMs were verified; see [status](status.md). No production
-deployment is implied. Approvals (#31) are next, after policy choices are confirmed; reserve migration
-`00035` and proposed decision 82.
+deployment is implied. Approvals (#31) are now in progress under decision 82 and
+[their implementation design](tool-approvals.md); reserve migration `00035`.
 
 ## Ordered backlog
 

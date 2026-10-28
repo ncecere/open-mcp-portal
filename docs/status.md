@@ -417,12 +417,12 @@ blind restart/seed of an existing one. The historical dev-database migration hel
 
 ## Next steps
 
-1. v0.4.0 is published and verified; #26/#29/#30/#44/#68 are closed with acceptance evidence. Keep its
-   immutable digest/signature/CI record intact rather than treating a later docs commit as the release tag.
-2. Before implementing #31 sensitive-call approvals, confirm remaining policy choices: unclassified matching,
-   explicit renewal after denial, service-account administrator separation of duties and preview/metadata
-   retention. The source-grounded plan was refreshed against the combined MCP-only code; it is not owner
-   acceptance. Reserve migration **`00035`** and proposed decision **82**; earlier numbers were superseded.
+1. v0.4.0 is published and verified; #26/#29/#30/#44/#68 are closed with acceptance evidence. Its follow-up
+   documentation/image-pin CI and both smoke jobs also passed. Keep the immutable release tag/digest intact.
+2. #31 sensitive-call approvals are now in progress on `feature/31-sensitive-call-approvals`. The owner said
+   to continue after the proposed defaults; decision **82** records them and [design](tool-approvals.md)
+   describes the exact-dispatch boundary, no-replay behavior, live context and preview/retention policy.
+   Reserve migration **`00035`**. Foundational code/design is not completed enforcement or release acceptance.
 3. Continue #32/#33 and the ordered operations/lifecycle/audit lanes in
    [implementation order](implementation-order.md). #43 must prove upgrades, ingress, restore and load before
    Helm packaging; existing kindnet/Calico smoke does not establish those broader requirements.

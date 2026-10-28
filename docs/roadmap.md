@@ -48,15 +48,15 @@ shipped. **#28 classification** and **#37 session hardening** shipped in v0.3.3.
 #29 scopes, #30 curation, #26 service connections, #44 database roles and #68 external-platform retirement**,
 with independent review corrections, full-tree tests, browser checks and CI/deployment/artifact verification.
 #62/#63 are withdrawn as not planned, not completed verification. Historical milestone headings below are
-planning buckets, not a promise of release numbering. #31 approvals follow after their policy choices are confirmed.
+planning buckets, not a promise of release numbering. #31 approvals are in progress under decision 82.
 
 1. **Verify and pilot alongside implementation.** Decisions #5, #6 and #7 shipped in v0.2.2. The
    real-client checks (#14–#17), provider/channel checks (#18–#19), independent review (#13) and
    team pilot (#20) still need evidence, not more fake-server tests.
 2. **Credentials foundations shipped.** Waves 1 and 2 below are complete, including #26 shared service
    connections. External-platform impersonation was retired in #68, not extended or verified.
-3. **Governance builds on shipped classification, scopes and curation.** #31 approvals are next, after
-   policy confirmation. #32 is independent; #33's read retries also need classification.
+3. **Governance builds on shipped classification, scopes and curation.** #31 approvals are now in progress,
+   with defaults recorded in decision 82. #32 is independent; #33's read retries also need classification.
 4. **Operations before scale.** #44 database roles shipped; next prove upgrades, ingress and restores (#43)
    before releasing the Helm chart (#42). See the implementation order for staged lifecycle/audit dependencies.
 
@@ -67,7 +67,6 @@ the fail-closed recommendation and keeps classification with team owners/admins 
 
 | Issue | Decision | Recommended |
 | --- | --- | --- |
-| [#31](https://github.com/ncecere/open-mcp-portal/issues/31) | Unclassified approval matching, denial renewal, service-account separation of duties and preview/metadata retention. | Confirm before implementing policy behavior; the refreshed architecture plan is not owner acceptance. |
 | [#36](https://github.com/ncecere/open-mcp-portal/issues/36) | How a SCIM user links to a login, and whether `active: false` suspends or destroys. | Link by a configurable claim (default `sub`), never bare email; `active: false` suspends, `DELETE` destroys. |
 | [#51](https://github.com/ncecere/open-mcp-portal/issues/51) / [#39](https://github.com/ncecere/open-mcp-portal/issues/39) | How usage is attributed to a calling team; whether erasure leaves audit snapshots. | The team of the grant that admitted the call (a billing team for user and group grants); erasure leaves audit snapshots, bounded by audit retention, documented. |
 
