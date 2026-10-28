@@ -261,8 +261,10 @@ func (s *Service) Approve(ctx context.Context, a authz.Actor, c Client, g dbgen.
 	code := newToken(codePrefix)
 	err = store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
 		// Serializes first creation and replacement, including silent flows that
-		// raced with a human narrowing. The grant itself is immutable.
-		if _, err := q.GetUserForUpdate(ctx, a.UserID); err != nil {
+		// raced with a human narrowing. The grant itself is immutable. Use a
+		// non-key lock: token issuance and revocation hold the grant first,
+		// then need KEY SHARE on the user for the audit actor foreign key.
+		if _, err := q.GetOAuthUserForApproval(ctx, a.UserID); err != nil {
 			return err
 		}
 		gr, err := s.grantFor(ctx, q, a, c, g, how, scope)

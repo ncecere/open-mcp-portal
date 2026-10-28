@@ -3,6 +3,11 @@
 -- name: GetOAuthSettings :one
 SELECT * FROM oauth_settings WHERE id = 1;
 
+-- name: GetOAuthUserForApproval :one
+-- Serializes grant creation/replacement without blocking the user FK's KEY
+-- SHARE lock in token-issue/revocation audits (which already hold the grant).
+SELECT * FROM users WHERE id = $1 FOR NO KEY UPDATE;
+
 -- name: LockOAuthSettings :one
 SELECT * FROM oauth_settings WHERE id = 1 FOR UPDATE;
 

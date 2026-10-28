@@ -269,6 +269,34 @@ func (q *Queries) GetOAuthToken(ctx context.Context, arg GetOAuthTokenParams) (G
 	return i, err
 }
 
+const getOAuthUserForApproval = `-- name: GetOAuthUserForApproval :one
+SELECT id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified FROM users WHERE id = $1 FOR NO KEY UPDATE
+`
+
+// Serializes grant creation/replacement without blocking the user FK's KEY
+// SHARE lock in token-issue/revocation audits (which already hold the grant).
+func (q *Queries) GetOAuthUserForApproval(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getOAuthUserForApproval, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.OIDCIssuer,
+		&i.OIDCSubject,
+		&i.Email,
+		&i.DisplayName,
+		&i.PlatformRole,
+		&i.Status,
+		&i.Claims,
+		&i.Revision,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LastLoginAt,
+		&i.Groups,
+		&i.EmailVerified,
+	)
+	return i, err
+}
+
 const insertOAuthClient = `-- name: InsertOAuthClient :one
 INSERT INTO oauth_clients (client_id, client_name, redirect_uris, client_uri, logo_uri, registered_from)
 VALUES ($1, $2, $3, $4, $5, $6)
