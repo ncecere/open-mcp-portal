@@ -442,6 +442,9 @@ func (s *Service) Delete(ctx context.Context, a authz.Actor, ref string, id uuid
 		if err := ta.writable(); err != nil {
 			return err
 		}
+		if cur.RelayPlatformID.Valid {
+			return errRetired
+		}
 		if err := q.DeleteServiceAccount(ctx, cur.ID); err != nil {
 			return err
 		}

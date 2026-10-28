@@ -99,6 +99,14 @@ func TestRetiredPlatformContractAndAccountAreReadOnly(t *testing.T) {
 	if code != 409 || errorCode(raw) != "service_account_retired" {
 		t.Fatalf("retired key: %d %s", code, raw)
 	}
+	code, raw = e.owner.raw("DELETE", toolsTeam+"/service-accounts/"+sa.Id.String(), nil, nil)
+	if code != 409 || errorCode(raw) != "service_account_retired" {
+		t.Fatalf("retired delete: %d %s", code, raw)
+	}
+	if e.scalar(`SELECT count(*)::text FROM service_accounts WHERE id=$1 AND relay_platform_id IS NOT NULL`, sa.Id) != "1" ||
+		e.scalar(`SELECT count(*)::text FROM service_account_keys WHERE service_account_id=$1`, sa.Id) != "1" {
+		t.Fatal("retired deletion removed account, mark or key inventory")
+	}
 	var view map[string]any
 	if code := e.owner.get(toolsTeam+"/service-accounts/"+sa.Id.String(), &view); code != 200 || view["retired"] != true || view["relayPlatform"] != nil {
 		t.Fatalf("retired view: %d %v", code, view)
