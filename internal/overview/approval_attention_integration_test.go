@@ -94,6 +94,12 @@ func TestApprovalAttentionRealServiceOverview(t *testing.T) {
 			if err != nil || len(find(platform.Attention, ApprovalPending)) != 0 || platform.Totals[ApprovalPending] != 0 {
 				t.Fatalf("token scope widened: %+v %v", platform, err)
 			}
+			teamToken := a
+			teamToken.Kind = authz.KindAutomationToken
+			card, err = f.svc.Team(ctx, teamToken, team.String())
+			if err != nil || len(find(card.Attention, ApprovalPending)) != 0 || card.Totals[ApprovalPending] != 0 {
+				t.Fatalf("team token scope widened: %+v %v", card, err)
+			}
 			f.svc.Approvals = nil
 			card, err = f.svc.Team(ctx, a, team.String())
 			if err != nil || len(find(card.Attention, ApprovalPending)) != 0 {
