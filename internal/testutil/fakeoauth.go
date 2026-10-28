@@ -57,6 +57,9 @@ type FakeOAuth struct {
 	RefreshGrantedScopes []string
 	// BeforeCodeExchange coordinates callback races without timing sleeps.
 	BeforeCodeExchange func()
+	// BeforeRevoke coordinates revocation races outside the fake's mutex.
+	BeforeRevoke func()
+	FailRevoke   bool
 	// FormEncoded answers the token endpoint form-encoded (like GitHub
 	// without Accept: application/json); Slack answers like Slack's
 	// oauth.v2.access with the user token under authed_user.
@@ -738,6 +741,16 @@ func (f *FakeOAuth) revoke(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, ok := f.clientOK(r); !ok {
 		f.fail(w, http.StatusUnauthorized, "invalid_client")
+		return
+	}
+	f.mu.Lock()
+	before, fail := f.BeforeRevoke, f.FailRevoke
+	f.mu.Unlock()
+	if before != nil {
+		before()
+	}
+	if fail {
+		f.fail(w, http.StatusServiceUnavailable, "revocation_unavailable")
 		return
 	}
 	token := r.PostForm.Get("token")

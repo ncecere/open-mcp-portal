@@ -53,22 +53,27 @@ func pauseServiceMutation(t *testing.T, e *provEnv, lock string, args ...any) *s
 
 func (g *serviceMutationWait) blocked(queryPart string) {
 	g.t.Helper()
+	g.blockedBy(g.pid, queryPart)
+}
+
+func (g *serviceMutationWait) blockedBy(blocker int32, queryPart string) int32 {
+	g.t.Helper()
 	ctx, cancel := context.WithTimeout(g.ctx, 5*time.Second)
 	defer cancel()
 	tick := time.NewTicker(10 * time.Millisecond)
 	defer tick.Stop()
 	for {
-		var waiting bool
-		err := g.observer.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+		var waiting int32
+		err := g.observer.QueryRow(ctx, `SELECT pid FROM pg_stat_activity
 WHERE datname=current_database() AND wait_event_type='Lock'
-AND $1::int = ANY(pg_blocking_pids(pid)) AND strpos(query,$2)>0)`, g.pid, queryPart).Scan(&waiting)
-		if err != nil {
+AND $1::int = ANY(pg_blocking_pids(pid)) AND strpos(query,$2)>0 LIMIT 1`, blocker, queryPart).Scan(&waiting)
+		if err != nil && err != pgx.ErrNoRows {
 			var dump string
 			_ = g.e.app.Pool.QueryRow(g.ctx, `SELECT coalesce(json_agg(a)::text,'') FROM (SELECT pid,wait_event,query,pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE datname=current_database()) a`).Scan(&dump)
 			g.t.Fatalf("observe lock: %v; %s", err, dump)
 		}
-		if waiting {
-			return
+		if err == nil {
+			return waiting
 		}
 		select {
 		case <-tick.C:
@@ -80,6 +85,11 @@ AND $1::int = ANY(pg_blocking_pids(pid)) AND strpos(query,$2)>0)`, g.pid, queryP
 
 func (g *serviceMutationWait) launch(method, path string, body any, rev int64) <-chan oauthConcurrentResponse {
 	g.t.Helper()
+	return g.launchAs(g.e.owner, method, path, body, rev)
+}
+
+func (g *serviceMutationWait) launchAs(who *session, method, path string, body any, rev int64) <-chan oauthConcurrentResponse {
+	g.t.Helper()
 	b, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(g.ctx, method, g.e.app.URL+path, strings.NewReader(string(b)))
 	if err != nil {
@@ -87,9 +97,9 @@ func (g *serviceMutationWait) launch(method, path string, body any, rev int64) <
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", g.e.app.URL)
-	req.Header.Set("X-CSRF-Token", g.e.owner.csrf)
+	req.Header.Set("X-CSRF-Token", who.csrf)
 	req.Header.Set("If-Match", fmt.Sprintf(`"%d"`, rev))
-	client := &http.Client{Jar: g.e.owner.client.Jar, CheckRedirect: noFollow}
+	client := &http.Client{Jar: who.client.Jar, CheckRedirect: noFollow}
 	done := make(chan oauthConcurrentResponse, 1)
 	go func() {
 		res, err := client.Do(req)
