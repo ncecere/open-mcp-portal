@@ -21,13 +21,13 @@ func TestApprovalBindingKeyRuntimeBoundary(t *testing.T) {
 	runtime, owner, role := splitFixture(t)
 	ctx := context.Background()
 	if n := roleCount(t, runtime, `SELECT count(*) FROM pg_catalog.pg_proc p
- JOIN pg_catalog.pg_class c ON c.oid='public.approval_binding_keys'::regclass
- WHERE p.oid='public.omp_ensure_approval_binding_key(bytea)'::regprocedure
+ JOIN pg_catalog.pg_class c ON c.oid='omp_private.approval_binding_keys'::regclass
+ WHERE p.oid='omp_private.omp_ensure_approval_binding_key(bytea)'::regprocedure
  AND p.prosecdef AND p.proconfig=ARRAY['search_path=pg_catalog, pg_temp'] AND p.proowner=c.relowner`); n != 1 {
 		t.Fatal("bootstrap helper lacks the fixed-path owner-definer boundary")
 	}
 	if n := roleCount(t, runtime, `SELECT count(*) FROM pg_catalog.pg_trigger
- WHERE tgrelid='public.approval_binding_keys'::regclass AND tgfoid='public.approval_authority_changed()'::regprocedure`); n != 0 {
+ WHERE tgrelid='omp_private.approval_binding_keys'::regclass AND tgfoid='omp_private.approval_authority_changed()'::regprocedure`); n != 0 {
 		t.Fatal("ciphertext rewrapping must not be an authority mutation")
 	}
 	candidate := bytes.Repeat([]byte{0x42}, 69)
@@ -41,26 +41,26 @@ func TestApprovalBindingKeyRuntimeBoundary(t *testing.T) {
 		t.Fatal("helper replaced root", err)
 	}
 	for _, sql := range []string{
-		`INSERT INTO approval_binding_keys VALUES(1,decode(repeat('42',69),'hex'))`,
-		`UPDATE approval_binding_keys SET id=1`,
-		`DELETE FROM approval_binding_keys`,
-		`TRUNCATE approval_binding_keys`,
+		`INSERT INTO omp_private.approval_binding_keys VALUES(1,decode(repeat('42',69),'hex'))`,
+		`UPDATE omp_private.approval_binding_keys SET id=1`,
+		`DELETE FROM omp_private.approval_binding_keys`,
+		`TRUNCATE omp_private.approval_binding_keys`,
 	} {
 		roleDenied(t, runtime, sql, "42501")
 	}
 	// Runtime's sole write privilege supports generic keyrotation's UPDATE.
-	roleExec(t, runtime, `UPDATE approval_binding_keys SET binding_key_cipher=$1 WHERE id=1`, other)
-	roleDenied(t, runtime, `UPDATE approval_binding_keys SET binding_key_cipher=NULL`, "23502")
-	roleDenied(t, runtime, `UPDATE approval_binding_keys SET binding_key_cipher='\x00'`, "23514")
-	for _, sql := range []string{`DELETE FROM approval_binding_keys`, `TRUNCATE approval_binding_keys`, `UPDATE approval_binding_keys SET id=2`} {
+	roleExec(t, runtime, `UPDATE omp_private.approval_binding_keys SET binding_key_cipher=$1 WHERE id=1`, other)
+	roleDenied(t, runtime, `UPDATE omp_private.approval_binding_keys SET binding_key_cipher=NULL`, "23502")
+	roleDenied(t, runtime, `UPDATE omp_private.approval_binding_keys SET binding_key_cipher='\x00'`, "23514")
+	for _, sql := range []string{`DELETE FROM omp_private.approval_binding_keys`, `TRUNCATE omp_private.approval_binding_keys`, `UPDATE omp_private.approval_binding_keys SET id=2`} {
 		roleDenied(t, owner, sql, "P0001")
 	}
 	outsider, _ := auxiliaryRole(t, owner, "binding_outsider_"+role)
-	roleDenied(t, outsider, `SELECT public.omp_ensure_approval_binding_key(decode(repeat('42',69),'hex'))`, "42501")
+	roleDenied(t, outsider, `SELECT omp_private.omp_ensure_approval_binding_key(decode(repeat('42',69),'hex'))`, "42501")
 
 	// Reconciliation removes accidental direct table/identity privileges.
-	roleExec(t, owner, "GRANT ALL ON approval_binding_keys TO "+pgx.Identifier{role}.Sanitize())
-	roleExec(t, owner, "GRANT UPDATE(id) ON approval_binding_keys TO "+pgx.Identifier{role}.Sanitize())
+	roleExec(t, owner, "GRANT ALL ON omp_private.approval_binding_keys TO "+pgx.Identifier{role}.Sanitize())
+	roleExec(t, owner, "GRANT UPDATE(id) ON omp_private.approval_binding_keys TO "+pgx.Identifier{role}.Sanitize())
 	if err := store.Migrate(ctx, owner, testutil.Logger(), role); err != nil {
 		t.Fatal(err)
 	}
@@ -68,14 +68,14 @@ func TestApprovalBindingKeyRuntimeBoundary(t *testing.T) {
 	if err != nil || !safety.Safe() {
 		t.Fatalf("unsafe reconciled root permissions: %+v %v", safety, err)
 	}
-	roleDenied(t, runtime, `UPDATE approval_binding_keys SET id=1`, "42501")
+	roleDenied(t, runtime, `UPDATE omp_private.approval_binding_keys SET id=1`, "42501")
 }
 
 func TestApprovalBindingKeyInheritedPrivilegesRejected(t *testing.T) {
 	for _, grant := range []string{"INSERT", "UPDATE", "UPDATE(id)", "DELETE"} {
 		t.Run(grant, func(t *testing.T) {
 			runtime, owner, role := splitFixture(t)
-			roleExec(t, owner, "GRANT "+grant+" ON approval_binding_keys TO PUBLIC")
+			roleExec(t, owner, "GRANT "+grant+" ON omp_private.approval_binding_keys TO PUBLIC")
 			safety, err := store.InspectRoles(context.Background(), runtime, "", true)
 			if err != nil || safety.Safe() {
 				t.Fatalf("unsafe root grant missed: %+v %v", safety, err)
@@ -111,11 +111,11 @@ func TestApprovalBindingKeyMigrationInvalidatesLegacyBindings(t *testing.T) {
 		return store.Migrate(ctx, owner, testutil.Logger(), role)
 	})
 	owner := testutil.OwnerPool(t, runtime)
-	after := roleCount(t, runtime, `SELECT public.omp_current_approval_context()`)
-	if after <= before || roleCount(t, runtime, `SELECT count(*) FROM approval_requests WHERE context_epoch=public.omp_current_approval_context()`) != 0 {
+	after := roleCount(t, runtime, `SELECT omp_private.omp_current_approval_context()`)
+	if after <= before || roleCount(t, runtime, `SELECT count(*) FROM approval_requests WHERE context_epoch=omp_private.omp_current_approval_context()`) != 0 {
 		t.Fatal("legacy binding survived root migration")
 	}
-	if roleCount(t, runtime, `SELECT count(*) FROM approval_binding_keys`) != 0 {
+	if roleCount(t, runtime, `SELECT count(*) FROM omp_private.approval_binding_keys`) != 0 {
 		t.Fatal("DDL required a configured encryption key")
 	}
 	role := ""
@@ -125,13 +125,23 @@ func TestApprovalBindingKeyMigrationInvalidatesLegacyBindings(t *testing.T) {
 	if err := store.Migrate(ctx, owner, testutil.Logger(), role); err != nil {
 		t.Fatal(err)
 	}
-	if roleCount(t, runtime, `SELECT public.omp_current_approval_context()`) != after {
+	if roleCount(t, runtime, `SELECT omp_private.omp_current_approval_context()`) != after {
 		t.Fatal("root migration invalidation repeated")
 	}
 }
 
 func TestApprovalBindingKeyMigrationRejectsDifferentOwner(t *testing.T) {
-	_, owner, _ := splitFixture(t)
+	runtime, _ := testutil.NewDBWithMigration(t, func(ctx context.Context, owner *pgxpool.Pool, role string) error {
+		db := stdlib.OpenDBFromPool(owner)
+		defer db.Close()
+		provider, err := goose.NewProvider(goose.DialectPostgres, db, migrations.FS)
+		if err != nil {
+			return err
+		}
+		_, err = provider.UpTo(ctx, 40)
+		return err
+	})
+	owner := testutil.OwnerPool(t, runtime)
 	root, err := pgx.ParseConfig(testutil.DatabaseURL())
 	if err != nil {
 		t.Fatal(err)

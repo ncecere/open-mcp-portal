@@ -57,20 +57,6 @@ type ApiKeyGateway struct {
 	AddedAt     time.Time
 }
 
-type ApprovalBindingKey struct {
-	ID               int64
-	BindingKeyCipher []byte
-}
-
-type ApprovalContext struct {
-	ID    int16
-	Epoch int64
-}
-
-type ApprovalContextEvent struct {
-	EventID int64
-}
-
 type ApprovalRequest struct {
 	ID                    uuid.UUID
 	RuleID                uuid.UUID
@@ -632,6 +618,20 @@ type OauthToken struct {
 	RotatedAt *time.Time
 	CreatedAt time.Time
 	PepperID  []byte
+}
+
+type OmpPrivateApprovalBindingKey struct {
+	ID               int64
+	BindingKeyCipher []byte
+}
+
+type OmpPrivateApprovalContext struct {
+	ID    int16
+	Epoch int64
+}
+
+type OmpPrivateApprovalContextEvent struct {
+	EventID int64
 }
 
 type PersonSecret struct {

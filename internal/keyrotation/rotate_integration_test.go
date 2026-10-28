@@ -89,17 +89,17 @@ func seed(t *testing.T, pool *pgxpool.Pool, b *secrets.Box) map[string]string {
 	keys["approval_requests"] = scalar(t, pool, `INSERT INTO approval_requests
 		(rule_id,rule_revision,context_epoch,requester_kind,requester_id,gateway_id,server_id,capability_id,
 		 exposed_name,args_digest,binding_digest,capability_fingerprint,server_origin,preview_cipher,expires_at)
-		VALUES(gen_random_uuid(),1,public.omp_current_approval_context(),'user',$1,$2,$3,gen_random_uuid(),
+		VALUES(gen_random_uuid(),1,omp_private.omp_current_approval_context(),'user',$1,$2,$3,gen_random_uuid(),
 		 's__sensitive',repeat('a',64),repeat('b',64),repeat('c',64),'https://x','\x00',now()+interval '1 hour') RETURNING id::text`, user, gw, keys["mcp_servers"])
-	keys["approval_binding_keys"] = "1"
+	keys["omp_private.approval_binding_keys"] = "1"
 	for _, c := range keyrotation.Columns {
 		ct, err := b.Seal(columnPlaintext(c), c.AAD(keys[c.Table]))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if c.Table == "approval_binding_keys" {
+		if c.Table == "omp_private.approval_binding_keys" {
 			var stored []byte
-			if err := pool.QueryRow(context.Background(), `SELECT public.omp_ensure_approval_binding_key($1)`, ct).Scan(&stored); err != nil {
+			if err := pool.QueryRow(context.Background(), `SELECT omp_private.omp_ensure_approval_binding_key($1)`, ct).Scan(&stored); err != nil {
 				t.Fatal(err)
 			}
 			continue
@@ -112,7 +112,7 @@ func seed(t *testing.T, pool *pgxpool.Pool, b *secrets.Box) map[string]string {
 }
 
 func columnPlaintext(c keyrotation.Column) []byte {
-	if c.Table == "approval_binding_keys" {
+	if c.Table == "omp_private.approval_binding_keys" {
 		return bytes.Repeat([]byte{0x42}, 32)
 	}
 	return []byte("secret of " + c.Name())
@@ -121,8 +121,8 @@ func columnPlaintext(c keyrotation.Column) []byte {
 // Every *_cipher column in the schema is listed in Columns.
 func TestColumnsCoverTheSchema(t *testing.T) {
 	pool, _ := testutil.NewDB(t)
-	rows, err := pool.Query(context.Background(), `SELECT table_name || '.' || column_name FROM information_schema.columns
-		WHERE table_schema = 'public' AND data_type = 'bytea' AND column_name LIKE '%cipher%'`)
+	rows, err := pool.Query(context.Background(), `SELECT CASE WHEN table_schema='public' THEN table_name ELSE table_schema||'.'||table_name END || '.' || column_name FROM information_schema.columns
+		WHERE table_schema IN ('public','omp_private') AND data_type = 'bytea' AND column_name LIKE '%cipher%'`)
 	if err != nil {
 		t.Fatal(err)
 	}

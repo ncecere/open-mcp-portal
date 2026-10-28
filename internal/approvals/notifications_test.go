@@ -40,7 +40,7 @@ func rebaseNoticeFixture(t *testing.T, f *serviceFixture, id uuid.UUID) {
 	// disable this immutable-binding guard. Never used by application code.
 	for _, query := range []string{
 		`ALTER TABLE approval_requests DISABLE TRIGGER approval_request_lifecycle`,
-		`UPDATE approval_requests SET context_epoch=public.omp_current_approval_context() WHERE id='` + id.String() + `'`,
+		`UPDATE approval_requests SET context_epoch=omp_private.omp_current_approval_context() WHERE id='` + id.String() + `'`,
 		`ALTER TABLE approval_requests ENABLE TRIGGER approval_request_lifecycle`,
 	} {
 		if _, err := tx.Exec(ctx, query); err != nil {

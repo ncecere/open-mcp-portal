@@ -18,6 +18,7 @@ package keyrotation
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -41,7 +42,7 @@ type Column struct {
 // Name is "table.column".
 func (c Column) Name() string { return c.Table + "." + c.Column }
 
-func (c Column) table() string { return pgx.Identifier{c.Table}.Sanitize() }
+func (c Column) table() string { return pgx.Identifier(strings.Split(c.Table, ".")).Sanitize() }
 func (c Column) col() string   { return pgx.Identifier{c.Column}.Sanitize() }
 func (c Column) key() string   { return pgx.Identifier{c.Key}.Sanitize() }
 
@@ -114,7 +115,7 @@ var Columns = []Column{
 	{Table: "notification_destinations", Column: "secret_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(notify.SecretAAD)},
 	{Table: "notification_destinations", Column: "secret_previous_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(notify.PreviousSecretAAD)},
 	{Table: "approval_requests", Column: "preview_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(approvals.PreviewAAD)},
-	{Table: "approval_binding_keys", Column: "binding_key_cipher", Key: "id", KeyType: "bigint", AAD: func(string) []byte { return approvals.BindingKeyAAD() }},
+	{Table: "omp_private.approval_binding_keys", Column: "binding_key_cipher", Key: "id", KeyType: "bigint", AAD: func(string) []byte { return approvals.BindingKeyAAD() }},
 	{Table: "mcp_call_payloads", Column: "arguments_cipher", Key: "call_id", KeyType: "bigint", AAD: callAAD(capture.PartArguments)},
 	{Table: "mcp_call_payloads", Column: "result_cipher", Key: "call_id", KeyType: "bigint", AAD: callAAD(capture.PartResult)},
 }

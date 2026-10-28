@@ -10,7 +10,7 @@ import (
 )
 
 const ensureApprovalBindingKey = `-- name: EnsureApprovalBindingKey :one
-SELECT public.omp_ensure_approval_binding_key($1::bytea)::bytea
+SELECT omp_private.omp_ensure_approval_binding_key($1::bytea)::bytea
 `
 
 func (q *Queries) EnsureApprovalBindingKey(ctx context.Context, cipher []byte) ([]byte, error) {

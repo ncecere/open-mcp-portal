@@ -43,7 +43,7 @@ func TestConcurrentNewUsesWinningBindingRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	var cipher []byte
-	if err := db.QueryRow(context.Background(), `SELECT binding_key_cipher FROM approval_binding_keys WHERE id=1`).Scan(&cipher); err != nil {
+	if err := db.QueryRow(context.Background(), `SELECT binding_key_cipher FROM omp_private.approval_binding_keys WHERE id=1`).Scan(&cipher); err != nil {
 		t.Fatal(err)
 	}
 	root, err := box.Open(cipher, BindingKeyAAD())
@@ -103,7 +103,7 @@ func TestNewFailsClosedOnInvalidStoredBindingRoot(t *testing.T) {
 				t.Fatalf("invalid root did not fail closed: %v", err)
 			}
 			var after []byte
-			if err := db.QueryRow(context.Background(), `SELECT binding_key_cipher FROM approval_binding_keys WHERE id=1`).Scan(&after); err != nil || !bytes.Equal(after, cipher) {
+			if err := db.QueryRow(context.Background(), `SELECT binding_key_cipher FROM omp_private.approval_binding_keys WHERE id=1`).Scan(&after); err != nil || !bytes.Equal(after, cipher) {
 				t.Fatal("invalid root was replaced", err)
 			}
 		})

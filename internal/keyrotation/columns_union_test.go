@@ -25,8 +25,8 @@ func TestColumnsIncludeEveryFeaturesSealedValues(t *testing.T) {
 		"mcp_server_machine_oauth.client_secret_cipher", // machine OAuth (73)
 		"mcp_server_tls.client_key_cipher",              // mTLS (74)
 		"auth_providers.client_secret_cipher", "provider_connections.access_token_cipher", "mcp_call_payloads.result_cipher",
-		"approval_requests.preview_cipher",         // sensitive-call review preview (82)
-		"approval_binding_keys.binding_key_cipher", // stable approval HMAC root
+		"approval_requests.preview_cipher",                     // sensitive-call review preview (82)
+		"omp_private.approval_binding_keys.binding_key_cipher", // stable approval HMAC root
 	} {
 		if !slices.Contains(have, want) {
 			t.Errorf("keyrotation.Columns lacks %s", want)

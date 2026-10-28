@@ -15,14 +15,6 @@ type RoleDB interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-var protectedFunctions = []string{
-	"public.omp_purge_audit_log(integer,integer)",
-	"public.omp_purge_mcp_calls(timestamp with time zone,integer,integer)",
-	"public.omp_lock_approval_context(boolean)",
-	"public.omp_current_approval_context()",
-	"public.omp_ensure_approval_binding_key(bytea)",
-}
-
 // ValidateRoleName rejects names PostgreSQL would truncate, and embedded NULs.
 // Names are looked up with parameters and quoted as identifiers for DDL.
 func ValidateRoleName(role string) error {
@@ -55,6 +47,14 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
 	var out RoleSafety
 	if err := db.QueryRow(ctx, "SELECT session_user::text, current_user::text").Scan(&out.Session, &out.Effective); err != nil {
 		return out, err
+	}
+	var layout approvalLayout
+	if privileges {
+		var err error
+		layout, err = inspectApprovalLayout(ctx, db)
+		if err != nil {
+			return out, err
+		}
 	}
 	roots := []string{out.Session}
 	if out.Effective != out.Session {
@@ -112,8 +112,8 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
  EXISTS (SELECT 1 FROM pg_catalog.pg_database WHERE datname = current_database() AND datdba = $1)
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_namespace WHERE nspowner = $1
  AND nspname NOT LIKE 'pg_temp_%' AND nspname NOT LIKE 'pg_toast_temp_%')
- OR EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relowner = $1)
- OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proowner = $1)`, r.oid).Scan(&owns)
+ OR EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname IN ('public','omp_private') AND c.relowner = $1)
+ OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname IN ('public','omp_private') AND p.proowner = $1)`, r.oid).Scan(&owns)
 		if err != nil {
 			return out, err
 		}
@@ -148,7 +148,11 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
 		}
 		// Base and journal are read-only; only owner-definer functions append,
 		// compact or fence. Runtime must not allocate/reset event sequence values.
-		for _, table := range []string{"public.approval_context", "public.approval_context_events"} {
+		contextTables := []string{layout.schema + ".approval_context"}
+		if layout.journal {
+			contextTables = append(contextTables, layout.schema+".approval_context_events")
+		}
+		for _, table := range contextTables {
 			var contextWrite bool
 			if err := db.QueryRow(ctx, `SELECT has_any_column_privilege($1::oid,$2,'UPDATE')
  OR has_any_column_privilege($1::oid,$2,'INSERT')
@@ -161,33 +165,37 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
 		}
 		// Only ciphertext-column UPDATE is legitimate for root rewrapping. An
 		// INSERT grant would let runtime bypass the singleton bootstrap helper.
-		var bindingWrite bool
-		if err := db.QueryRow(ctx, `SELECT has_any_column_privilege($1::oid,'public.approval_binding_keys','INSERT')
- OR has_table_privilege($1::oid,'public.approval_binding_keys','UPDATE,DELETE,TRUNCATE,TRIGGER')
- OR has_column_privilege($1::oid,'public.approval_binding_keys','id','UPDATE')`, r.oid).Scan(&bindingWrite); err != nil {
-			return out, err
+		if layout.binding {
+			var bindingWrite bool
+			if err := db.QueryRow(ctx, `SELECT has_any_column_privilege($1::oid,$2,'INSERT')
+ OR has_table_privilege($1::oid,$2,'UPDATE,DELETE,TRUNCATE,TRIGGER')
+ OR has_column_privilege($1::oid,$2,'id','UPDATE')`, r.oid, layout.schema+".approval_binding_keys").Scan(&bindingWrite); err != nil {
+				return out, err
+			}
+			if bindingWrite {
+				out.Problems = append(out.Problems, "forbidden write privilege on "+layout.schema+".approval_binding_keys: "+r.name)
+			}
 		}
-		if bindingWrite {
-			out.Problems = append(out.Problems, "forbidden write privilege on public.approval_binding_keys: "+r.name)
-		}
-		var eventSequence bool
-		if err := db.QueryRow(ctx, `SELECT has_sequence_privilege($1::oid,'public.approval_context_events_event_id_seq','USAGE,SELECT,UPDATE')`, r.oid).Scan(&eventSequence); err != nil {
-			return out, err
-		}
-		if eventSequence {
-			out.Problems = append(out.Problems, "forbidden approval event sequence privilege: "+r.name)
+		if layout.journal {
+			var eventSequence bool
+			if err := db.QueryRow(ctx, `SELECT has_sequence_privilege($1::oid,$2,'USAGE,SELECT,UPDATE')`, r.oid, layout.schema+".approval_context_events_event_id_seq").Scan(&eventSequence); err != nil {
+				return out, err
+			}
+			if eventSequence {
+				out.Problems = append(out.Problems, "forbidden approval event sequence privilege: "+r.name)
+			}
 		}
 		var options bool
 		err = db.QueryRow(ctx, `SELECT
  EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace,
- LATERAL aclexplode(c.relacl) a WHERE n.nspname = 'public' AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
+ LATERAL aclexplode(c.relacl) a WHERE n.nspname IN ('public','omp_private') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_attribute at JOIN pg_catalog.pg_class c ON c.oid = at.attrelid
  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace, LATERAL aclexplode(at.attacl) a
- WHERE n.nspname = 'public' AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
+ WHERE n.nspname IN ('public','omp_private') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_namespace n, LATERAL aclexplode(n.nspacl) a
- WHERE n.nspname = 'public' AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
+ WHERE n.nspname IN ('public','omp_private') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace,
- LATERAL aclexplode(p.proacl) a WHERE n.nspname = 'public' AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
+ LATERAL aclexplode(p.proacl) a WHERE n.nspname IN ('public','omp_private') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_database d, LATERAL aclexplode(d.datacl) a
  WHERE d.datname = current_database() AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))`, r.oid).Scan(&options)
 		if err != nil {
@@ -215,6 +223,9 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
 	if !privileges {
 		return out, nil
 	}
+	if err := inspectApprovalBoundary(ctx, db, layout, &out); err != nil {
+		return out, err
+	}
 	// Legitimate rights are checked for the actual serving identities only, not
 	// every reachable auxiliary role (NOINHERIT may lack them until SET ROLE).
 	for _, name := range roots {
@@ -225,23 +236,31 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
  (NOT has_table_privilege($1,c.oid,'SELECT') OR (c.relname NOT IN ('goose_db_version','approval_context','approval_context_events','approval_binding_keys') AND NOT has_table_privilege($1,c.oid,'INSERT'))
  OR (c.relname NOT IN ('audit_log','mcp_calls','goose_db_version','approval_context','approval_context_events','approval_binding_keys') AND
  (NOT has_table_privilege($1,c.oid,'UPDATE') OR NOT has_table_privilege($1,c.oid,'DELETE')))))
- OR NOT has_column_privilege($1,'public.approval_binding_keys','binding_key_cipher','UPDATE')
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
  WHERE n.nspname='public' AND c.relname <> 'approval_context_events_event_id_seq'
  AND CASE WHEN c.relkind='S' THEN NOT has_sequence_privilege($1,c.oid,'USAGE') ELSE false END)`, name).Scan(&missing)
 		if err != nil {
 			return out, err
 		}
+		if !missing {
+			err = db.QueryRow(ctx, `SELECT NOT has_schema_privilege($1,$2,'USAGE') OR EXISTS (
+ SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+ WHERE n.nspname=$2 AND c.relname IN ('approval_context','approval_context_events','approval_binding_keys')
+ AND (NOT has_table_privilege($1,c.oid,'SELECT') OR (c.relname='approval_binding_keys' AND NOT has_column_privilege($1,c.oid,'binding_key_cipher','UPDATE'))))`, name, layout.schema).Scan(&missing)
+			if err != nil {
+				return out, err
+			}
+		}
 		if missing {
 			out.Problems = append(out.Problems, "missing operational table/schema/sequence privileges: "+name)
 		}
-		for _, fn := range protectedFunctions {
+		for _, fn := range layout.functions() {
 			var exec, consistent, publicExec bool
 			err := db.QueryRow(ctx, `SELECT has_function_privilege($1,$2,'EXECUTE'),
     (SELECT proowner FROM pg_catalog.pg_proc WHERE oid=$2::regprocedure) = ALL(
-      SELECT relowner FROM pg_catalog.pg_class WHERE oid IN ('public.audit_log'::regclass,'public.mcp_calls'::regclass,'public.approval_binding_keys'::regclass)),
+      SELECT c.relowner FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE (n.nspname='public' AND c.relname IN ('audit_log','mcp_calls')) OR (n.nspname=$3 AND c.relname IN ('approval_context','approval_context_events','approval_binding_keys'))),
     EXISTS (SELECT 1 FROM pg_catalog.pg_proc p, LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
-      WHERE p.oid=$2::regprocedure AND a.grantee=0 AND a.privilege_type='EXECUTE')`, name, fn).Scan(&exec, &consistent, &publicExec)
+      WHERE p.oid=$2::regprocedure AND a.grantee=0 AND a.privilege_type='EXECUTE')`, name, fn, layout.schema).Scan(&exec, &consistent, &publicExec)
 			if err != nil {
 				return out, err
 			}
@@ -260,16 +279,20 @@ func ReconcileRuntimeGrants(ctx context.Context, conn *pgx.Conn, role string) er
 		return err
 	}
 	return pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
-		quoted := pgx.Identifier{role}.Sanitize()
-		rows, err := tx.Query(ctx, `SELECT c.relname, c.relkind::text FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p','v','m','f','S') ORDER BY c.relname`)
+		layout, err := inspectApprovalLayout(ctx, tx)
 		if err != nil {
 			return err
 		}
-		type relation struct{ name, kind string }
+		quoted := pgx.Identifier{role}.Sanitize()
+		rows, err := tx.Query(ctx, `SELECT n.nspname, c.relname, c.relkind::text FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','omp_private') AND c.relkind IN ('r','p','v','m','f','S') ORDER BY n.nspname,c.relname`)
+		if err != nil {
+			return err
+		}
+		type relation struct{ schema, name, kind string }
 		var tables []relation
 		for rows.Next() {
 			var t relation
-			if err := rows.Scan(&t.name, &t.kind); err != nil {
+			if err := rows.Scan(&t.schema, &t.name, &t.kind); err != nil {
 				rows.Close()
 				return err
 			}
@@ -281,8 +304,11 @@ func ReconcileRuntimeGrants(ctx context.Context, conn *pgx.Conn, role string) er
 			return err
 		}
 		for _, t := range tables {
-			ident := pgx.Identifier{"public", t.name}.Sanitize()
+			ident := pgx.Identifier{t.schema, t.name}.Sanitize()
 			object, grants := "TABLE", "SELECT, INSERT, UPDATE, DELETE"
+			if t.schema == "omp_private" && !layout.protected(t.name) && t.name != "approval_context_events_event_id_seq" {
+				return fmt.Errorf("unexpected private approval relation: %s", t.name)
+			}
 			if t.kind == "S" {
 				object, grants = "SEQUENCE", "USAGE"
 				if t.name == "approval_context_events_event_id_seq" {
@@ -328,8 +354,17 @@ func ReconcileRuntimeGrants(ctx context.Context, conn *pgx.Conn, role string) er
 				}
 			}
 		}
-		if _, err := tx.Exec(ctx, "GRANT UPDATE (binding_key_cipher) ON TABLE public.approval_binding_keys TO "+quoted); err != nil {
-			return err
+		if layout.binding {
+			if _, err := tx.Exec(ctx, "GRANT UPDATE (binding_key_cipher) ON TABLE "+layout.schema+".approval_binding_keys TO "+quoted); err != nil {
+				return err
+			}
+		}
+		if layout.schema == "omp_private" {
+			for _, sql := range []string{"REVOKE ALL ON SCHEMA omp_private FROM " + quoted + " CASCADE", "GRANT USAGE ON SCHEMA omp_private TO " + quoted, "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA omp_private FROM " + quoted + " CASCADE"} {
+				if _, err := tx.Exec(ctx, sql); err != nil {
+					return err
+				}
+			}
 		}
 		var database string
 		if err := tx.QueryRow(ctx, "SELECT current_database()").Scan(&database); err != nil {
@@ -346,7 +381,7 @@ func ReconcileRuntimeGrants(ctx context.Context, conn *pgx.Conn, role string) er
 				return err
 			}
 		}
-		for _, fn := range protectedFunctions {
+		for _, fn := range layout.functions() {
 			if _, err := tx.Exec(ctx, "REVOKE ALL PRIVILEGES ON FUNCTION "+fn+" FROM "+quoted+" CASCADE"); err != nil {
 				return err
 			}

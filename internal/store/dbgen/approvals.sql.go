@@ -18,7 +18,7 @@ UPDATE approval_requests SET status = 'approved', review_revision = review_revis
     valid_until = least(expires_at, $3::timestamptz)
 WHERE approval_requests.id = $4 AND status = 'pending' AND binding_digest = $5
     AND review_revision = $6 AND expires_at > $2::timestamptz
-    AND context_epoch = public.omp_current_approval_context()
+    AND context_epoch = omp_private.omp_current_approval_context()
     AND $3::timestamptz > $2::timestamptz
     AND $3::timestamptz <= $2::timestamptz + interval '60 minutes'
 RETURNING id, rule_id, rule_revision, context_epoch, requester_kind, requester_id, requester_team_id, gateway_id, server_id, capability_id, exposed_name, tool_class, args_digest, binding_digest, capability_fingerprint, server_origin, preview_cipher, preview_truncated, preview_redacted, status, review_revision, decided_by, created_at, expires_at, valid_until, decided_at, used_at, terminal_at
@@ -197,7 +197,7 @@ UPDATE approval_requests SET status = 'denied', review_revision = review_revisio
     decided_by = $1, decided_at = $2, terminal_at = $2
 WHERE approval_requests.id = $3 AND status = 'pending' AND binding_digest = $4
     AND review_revision = $5 AND expires_at > $2::timestamptz
-    AND context_epoch = public.omp_current_approval_context()
+    AND context_epoch = omp_private.omp_current_approval_context()
 RETURNING id, rule_id, rule_revision, context_epoch, requester_kind, requester_id, requester_team_id, gateway_id, server_id, capability_id, exposed_name, tool_class, args_digest, binding_digest, capability_fingerprint, server_origin, preview_cipher, preview_truncated, preview_redacted, status, review_revision, decided_by, created_at, expires_at, valid_until, decided_at, used_at, terminal_at
 `
 
@@ -370,7 +370,7 @@ func (q *Queries) FindApprovalRequestBinding(ctx context.Context, bindingDigest 
 
 const getApprovalContext = `-- name: GetApprovalContext :one
 
-SELECT public.omp_current_approval_context()::bigint AS epoch
+SELECT omp_private.omp_current_approval_context()::bigint AS epoch
 `
 
 // Lock order: human actor KEY SHARE BEFORE the NOWAIT authority-table fence,
@@ -391,7 +391,7 @@ SELECT id,rule_id,rule_revision,context_epoch,requester_kind,requester_id,reques
     capability_fingerprint,server_origin,
     CASE WHEN status IN ('pending','approved') AND expires_at > clock_timestamp()
         AND (status = 'pending' OR valid_until > clock_timestamp())
-        AND context_epoch = public.omp_current_approval_context()
+        AND context_epoch = omp_private.omp_current_approval_context()
         THEN preview_cipher ELSE NULL::bytea END AS preview_cipher,
     preview_truncated,preview_redacted,status,review_revision,decided_by,created_at,expires_at,
     valid_until,decided_at,used_at,terminal_at
@@ -905,7 +905,7 @@ func (q *Queries) LockApprovalActor(ctx context.Context, id uuid.UUID) (uuid.UUI
 }
 
 const lockApprovalContext = `-- name: LockApprovalContext :one
-SELECT public.omp_lock_approval_context(false)::bigint AS epoch
+SELECT omp_private.omp_lock_approval_context(false)::bigint AS epoch
 `
 
 func (q *Queries) LockApprovalContext(ctx context.Context) (int64, error) {
@@ -916,7 +916,7 @@ func (q *Queries) LockApprovalContext(ctx context.Context) (int64, error) {
 }
 
 const lockApprovalContextExclusive = `-- name: LockApprovalContextExclusive :one
-SELECT public.omp_lock_approval_context(true)::bigint AS epoch
+SELECT omp_private.omp_lock_approval_context(true)::bigint AS epoch
 `
 
 func (q *Queries) LockApprovalContextExclusive(ctx context.Context) (int64, error) {
@@ -1090,7 +1090,7 @@ UPDATE approval_requests SET status = 'used', review_revision = review_revision 
 WHERE approval_requests.id = $2 AND status = 'approved' AND binding_digest = $3
     AND args_digest = $4 AND rule_revision = $5
     AND review_revision = $6 AND context_epoch = $7
-    AND context_epoch = public.omp_current_approval_context()
+    AND context_epoch = omp_private.omp_current_approval_context()
     AND expires_at > $1::timestamptz AND valid_until > $1::timestamptz
 RETURNING id, rule_id, rule_revision, context_epoch, requester_kind, requester_id, requester_team_id, gateway_id, server_id, capability_id, exposed_name, tool_class, args_digest, binding_digest, capability_fingerprint, server_origin, preview_cipher, preview_truncated, preview_redacted, status, review_revision, decided_by, created_at, expires_at, valid_until, decided_at, used_at, terminal_at
 `

@@ -91,7 +91,7 @@ func TestServiceBindingsSurviveEncryptionKeyRetirement(t *testing.T) {
 		p.Receipt = r
 	}
 	var beforeRoot []byte
-	if err := db.QueryRow(ctx, `SELECT binding_key_cipher FROM approval_binding_keys WHERE id=1`).Scan(&beforeRoot); err != nil {
+	if err := db.QueryRow(ctx, `SELECT binding_key_cipher FROM omp_private.approval_binding_keys WHERE id=1`).Scan(&beforeRoot); err != nil {
 		t.Fatal(err)
 	}
 	root, err := box(t, oldKey).Open(beforeRoot, approvals.BindingKeyAAD())
@@ -137,7 +137,7 @@ func TestServiceBindingsSurviveEncryptionKeyRetirement(t *testing.T) {
 	current := checkDedup(retired)
 	checkDedup(s) // Already-running A service retains the same cached plaintext.
 	var afterRoot []byte
-	if err := db.QueryRow(ctx, `SELECT binding_key_cipher FROM approval_binding_keys WHERE id=1`).Scan(&afterRoot); err != nil {
+	if err := db.QueryRow(ctx, `SELECT binding_key_cipher FROM omp_private.approval_binding_keys WHERE id=1`).Scan(&afterRoot); err != nil {
 		t.Fatal(err)
 	}
 	afterPlain, err := onlyB.Open(afterRoot, approvals.BindingKeyAAD())

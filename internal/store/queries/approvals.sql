@@ -5,13 +5,13 @@
 -- Never keep these locks through network I/O. Callers own transaction + audit.
 
 -- name: GetApprovalContext :one
-SELECT public.omp_current_approval_context()::bigint AS epoch;
+SELECT omp_private.omp_current_approval_context()::bigint AS epoch;
 
 -- name: LockApprovalContext :one
-SELECT public.omp_lock_approval_context(false)::bigint AS epoch;
+SELECT omp_private.omp_lock_approval_context(false)::bigint AS epoch;
 
 -- name: LockApprovalContextExclusive :one
-SELECT public.omp_lock_approval_context(true)::bigint AS epoch;
+SELECT omp_private.omp_lock_approval_context(true)::bigint AS epoch;
 
 -- name: LockApprovalActor :one
 SELECT id FROM users WHERE id = $1 FOR KEY SHARE;
@@ -71,7 +71,7 @@ SELECT id,rule_id,rule_revision,context_epoch,requester_kind,requester_id,reques
     capability_fingerprint,server_origin,
     CASE WHEN status IN ('pending','approved') AND expires_at > clock_timestamp()
         AND (status = 'pending' OR valid_until > clock_timestamp())
-        AND context_epoch = public.omp_current_approval_context()
+        AND context_epoch = omp_private.omp_current_approval_context()
         THEN preview_cipher ELSE NULL::bytea END AS preview_cipher,
     preview_truncated,preview_redacted,status,review_revision,decided_by,created_at,expires_at,
     valid_until,decided_at,used_at,terminal_at
@@ -117,7 +117,7 @@ UPDATE approval_requests SET status = 'approved', review_revision = review_revis
     valid_until = least(expires_at, sqlc.arg(valid_until)::timestamptz)
 WHERE approval_requests.id = sqlc.arg(id) AND status = 'pending' AND binding_digest = sqlc.arg(binding_digest)
     AND review_revision = sqlc.arg(expected_review_revision) AND expires_at > sqlc.arg(at_time)::timestamptz
-    AND context_epoch = public.omp_current_approval_context()
+    AND context_epoch = omp_private.omp_current_approval_context()
     AND sqlc.arg(valid_until)::timestamptz > sqlc.arg(at_time)::timestamptz
     AND sqlc.arg(valid_until)::timestamptz <= sqlc.arg(at_time)::timestamptz + interval '60 minutes'
 RETURNING *;
@@ -127,7 +127,7 @@ UPDATE approval_requests SET status = 'denied', review_revision = review_revisio
     decided_by = sqlc.arg(decided_by), decided_at = sqlc.arg(at_time), terminal_at = sqlc.arg(at_time)
 WHERE approval_requests.id = sqlc.arg(id) AND status = 'pending' AND binding_digest = sqlc.arg(binding_digest)
     AND review_revision = sqlc.arg(expected_review_revision) AND expires_at > sqlc.arg(at_time)::timestamptz
-    AND context_epoch = public.omp_current_approval_context()
+    AND context_epoch = omp_private.omp_current_approval_context()
 RETURNING *;
 
 -- name: CancelApprovalRequest :one
@@ -144,7 +144,7 @@ UPDATE approval_requests SET status = 'used', review_revision = review_revision 
 WHERE approval_requests.id = sqlc.arg(id) AND status = 'approved' AND binding_digest = sqlc.arg(binding_digest)
     AND args_digest = sqlc.arg(args_digest) AND rule_revision = sqlc.arg(rule_revision)
     AND review_revision = sqlc.arg(expected_review_revision) AND context_epoch = sqlc.arg(context_epoch)
-    AND context_epoch = public.omp_current_approval_context()
+    AND context_epoch = omp_private.omp_current_approval_context()
     AND expires_at > sqlc.arg(at_time)::timestamptz AND valid_until > sqlc.arg(at_time)::timestamptz
 RETURNING *;
 
