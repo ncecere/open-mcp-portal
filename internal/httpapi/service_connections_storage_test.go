@@ -3,10 +3,13 @@ package httpapi_test
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/ncecere/open-mcp-portal/internal/httpapi/apitypes"
-	"testing"
+	"github.com/ncecere/open-mcp-portal/internal/testutil"
 )
 
 func TestServiceConnectionStorageAssignmentConstraints(t *testing.T) {
@@ -37,7 +40,7 @@ func TestServiceConnectionAuditFailureRollsBackAssignment(t *testing.T) {
 	e := newProvEnv(t)
 	c := connectShared(t, e.owner, e.provider.Id, "atomic")
 	sa := createSA(t, e.owner, map[string]any{"name": "atomic-ci"})
-	_, err := e.app.Pool.Exec(context.Background(), `CREATE FUNCTION fail_service_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action LIKE 'service_connection.%' THEN RAISE EXCEPTION 'audit unavailable'; END IF; RETURN NEW; END; $$;
+	_, err := testutil.OwnerPool(t, e.app.Pool).Exec(context.Background(), `CREATE FUNCTION fail_service_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action LIKE 'service_connection.%' THEN RAISE EXCEPTION 'audit unavailable'; END IF; RETURN NEW; END; $$;
  CREATE TRIGGER service_audit_failure BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION fail_service_audit();`)
 	if err != nil {
 		t.Fatal(err)
