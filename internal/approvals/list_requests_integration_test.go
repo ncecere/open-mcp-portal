@@ -15,17 +15,22 @@ import (
 )
 
 type queueTrace struct {
-	mu            sync.Mutex
-	sql           []string
-	candidateRows int64
-	pause         chan uint32
-	release       chan struct{}
-	once          sync.Once
+	mu                sync.Mutex
+	sql               []string
+	candidateRows     int64
+	unboundedDeadline bool
+	pause             chan uint32
+	release           chan struct{}
+	once              sync.Once
 }
 
 func (tr *queueTrace) TraceQueryStart(ctx context.Context, c *pgx.Conn, d pgx.TraceQueryStartData) context.Context {
 	tr.mu.Lock()
 	tr.sql = append(tr.sql, d.SQL)
+	deadline, ok := ctx.Deadline()
+	if !ok || time.Until(deadline) > 5*time.Second {
+		tr.unboundedDeadline = true
+	}
 	tr.mu.Unlock()
 	if tr.pause != nil && strings.Contains(d.SQL, "-- name: ApprovalQueueCandidates") {
 		tr.once.Do(func() {
@@ -139,6 +144,9 @@ func TestQueueEmptyHistoryHasNoFenceOrWriterWait(t *testing.T) {
 				if e != nil || len(r) != 0 || n != "" {
 					t.Fatalf("history leaked to %s: %d %q %v", view, len(r), n, e)
 				}
+				if tr.unboundedDeadline {
+					t.Fatal("queue query escaped the overall 5s deadline")
+				}
 				if len(tr.sql) != before || tr.candidateRows != 0 {
 					t.Fatalf("history-dependent queries/candidates: %d vs %d; rows=%d", len(tr.sql), before, tr.candidateRows)
 				}
@@ -147,6 +155,25 @@ func TestQueueEmptyHistoryHasNoFenceOrWriterWait(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestQueueDeadlineCancelsBlockedMetadataRead(t *testing.T) {
+	f := newServiceFixture(t)
+	tx, err := f.owner.Begin(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if _, err = tx.Exec(context.Background(), `LOCK TABLE approval_requests IN ACCESS EXCLUSIVE MODE`); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, _, err = f.s.ListRequestsPage(ctx, f.outsider, "requested", "", 200)
+	if err == nil || time.Since(start) > time.Second {
+		t.Fatalf("blocked queue escaped deadline: %v", err)
 	}
 }
 
@@ -266,6 +293,62 @@ func TestQueueEmptyPageAdvancesPastFalsePositiveReviewers(t *testing.T) {
 	}
 	if total != 406 {
 		t.Fatalf("scanned %d candidates", total)
+	}
+}
+
+func TestQueueReviewerCandidatesKeepExactFallbackAndSeparation(t *testing.T) {
+	f := newServiceFixture(t)
+	ctx := context.Background()
+	in := f.rule.RuleInput
+	in.Approvers = []Selector{{Kind: "user", UserID: &f.saOwner.UserID}}
+	var err error
+	f.rule, err = f.s.ReplaceRule(ctx, f.reviewer, f.team.String(), f.rule.ID, f.rule.Revision, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.input.Binding.RequesterKind = "service_account"
+	f.input.Binding.RequesterID = f.sa
+	f.input.Binding.RequesterTeamID = &f.saTeam
+	f.input.Binding.Epoch = mustEpoch(t, f.s)
+	beginFixture(t, f)
+	admin := f.admin
+	admin.PlatformRole = authz.PlatformNone // cached role must not hide a live admin
+	rows, _, err := f.s.ListRequestsPage(ctx, admin, "actionable", "", 200)
+	if err != nil || len(rows) != 1 || !rows[0].CanDecide {
+		t.Fatalf("live fallback admin hidden: %v %v", rows, err)
+	}
+	rows, _, err = f.s.ListRequestsPage(ctx, f.saOwner, "actionable", "", 200)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("SA separation weakened: %v %v", rows, err)
+	}
+	execFixture(t, f.db, `UPDATE users SET platform_role='none' WHERE id=$1`, f.admin.UserID)
+	execFixture(t, f.db, `UPDATE users SET platform_role='platform_admin' WHERE id=$1`, f.outsider.UserID)
+	f.input.Binding.Epoch = mustEpoch(t, f.s)
+	beginFixture(t, f)
+	rows, _, err = f.s.ListRequestsPage(ctx, f.outsider, "actionable", "", 200)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("live promotion ignored: %v %v", rows, err)
+	}
+	rows, _, err = f.s.ListRequestsPage(ctx, f.admin, "actionable", "", 200)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("cached admin role trusted: %v %v", rows, err)
+	}
+	in.Approvers = []Selector{{Kind: "group", GroupName: ptrString("Reviewers")}}
+	f.rule, err = f.s.ReplaceRule(ctx, f.reviewer, f.team.String(), f.rule.ID, f.rule.Revision, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	execFixture(t, f.db, `UPDATE users SET groups=ARRAY['Reviewers'] WHERE id=$1`, f.reviewer.UserID)
+	execFixture(t, f.db, `UPDATE users SET groups=ARRAY['Reviewers-extra'] WHERE id=$1`, f.outsider.UserID)
+	f.input.Binding.Epoch = mustEpoch(t, f.s)
+	beginFixture(t, f)
+	rows, _, err = f.s.ListRequestsPage(ctx, f.reviewer, "actionable", "", 200)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("selected exact group hidden: %v %v", rows, err)
+	}
+	rows, _, err = f.s.ListRequestsPage(ctx, f.outsider, "actionable", "", 200)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("group/fallback predicate weakened: %v %v", rows, err)
 	}
 }
 
