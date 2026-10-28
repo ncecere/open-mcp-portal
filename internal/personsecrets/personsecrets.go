@@ -16,8 +16,6 @@
 //   - The person decides. Entering and replacing happen in a browser session
 //     (My connections, or a link a call returned), for a server they may use
 //     through a gateway now, and the request names the origin they were shown.
-//   - An agent's call (decisions 65 to 68) uses a person's secret only when
-//     the person allowed agents for that server, and never gets a link.
 //   - A service account has no secret (roadmap #26 is shared team secrets).
 package personsecrets
 
@@ -188,8 +186,7 @@ type Secret struct {
 	Sealed []byte
 }
 
-// NeedsSecret: the person must enter (or enter again) their key. URL is the
-// link (empty for an agent's call).
+// NeedsSecret: the person must enter (or enter again) their key at URL.
 type NeedsSecret struct {
 	Reason, RequestID, URL string
 	Server                 ServerRef
@@ -502,9 +499,8 @@ func (s *Service) reachableServer(ctx context.Context, u dbgen.User, id uuid.UUI
 }
 
 // SetInput is what a person sends: the key (nil keeps the stored one; needed
-// when there is none), the origin of the server they were shown, whether
-// agents may use it (nil keeps), and whether to read the server's
-// capabilities with it.
+// when there is none), the origin of the server they were shown, and whether
+// to read the server's capabilities with it.
 type SetInput struct {
 	Value       *string
 	Origin      string
@@ -516,9 +512,7 @@ type SetInput struct {
 // not_person_secret, 409 server_changed (the origin differs from what they
 // were shown), 422 invalid_secret_value or secret_required, 403 when they
 // ask to read the server with a key and are not an editor of its team.
-// Audited as person_secret.create or person_secret.rotate (and
-// person_secret.agents_update when the agents switch changes on its own);
-// never the value.
+// Audited as person_secret.create or person_secret.rotate; never the value.
 func (s *Service) Set(ctx context.Context, a authz.Actor, serverID uuid.UUID, in SetInput) (Mine, error) {
 	if in.Origin == "" {
 		return Mine{}, errShown

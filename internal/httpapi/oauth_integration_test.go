@@ -489,6 +489,17 @@ func TestOAuthFlowWithMetadataDocument(t *testing.T) {
 		t.Errorf("oauth.token_issue entries = %s", n)
 	}
 
+	// Retired identity input is refused even on a valid ordinary OAuth token,
+	// before either era can run as that person or start upstream processing.
+	for _, era := range []string{"2025-11-25", "2026-07-28"} {
+		before := e.fake.Requests()
+		status, _, out := rawMCP(t, app, "POST", "support", access, rpc(1, "tools/call", toolCall("status__whoami", nil)),
+			map[string]string{"MCP-Gateway-Identity": "retired-oauth-identity-sentinel", "MCP-Protocol-Version": era})
+		if status != 403 || e.fake.Requests() != before {
+			t.Fatalf("retired OAuth identity input: %d %v", status, out)
+		}
+	}
+
 	// The token signs in to its gateway: the identity names the person and the client.
 	cs := connect(t, app, "support", access)
 	if got := toolNames(t, cs); strings.Join(got, ",") != "status__whoami" {

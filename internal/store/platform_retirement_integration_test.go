@@ -2,10 +2,12 @@ package store_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
@@ -89,7 +91,7 @@ func TestPlatformRetirementUpgradeAndOldReplicaFences(t *testing.T) {
 	if got := scalar(`SELECT count(*)::text FROM mcp_calls WHERE agent_id='agent-history' AND agent_name='Historical agent' AND person_present`); got != "1" {
 		t.Fatal("history lost")
 	}
-	audit := scalar(`SELECT metadata::text FROM audit_log WHERE action='agent_platform.retire' AND actor_kind='system'`)
+	audit := scalar(`SELECT metadata::text FROM audit_log WHERE action='agent_platform.retire' AND actor_kind='system' ORDER BY id DESC LIMIT 1`)
 	for _, want := range []string{`"platformCount": 1`, `"accountCount": 1`, `"revokedKeyCount": 1`, scalar(`SELECT id::text FROM service_accounts WHERE name='legacy'`)} {
 		if !strings.Contains(audit, want) {
 			t.Fatalf("missing audit %s in %s", want, audit)
@@ -114,8 +116,10 @@ func TestPlatformRetirementUpgradeAndOldReplicaFences(t *testing.T) {
 		`INSERT INTO service_account_keys(service_account_id,name,prefix,digest,expires_at) SELECT id,'new','prefix','digest',now()+interval '1 hour' FROM service_accounts WHERE name='legacy'`,
 		`DELETE FROM agent_platforms`, // ON DELETE SET NULL cannot clear a retired mark.
 	} {
-		if _, err := runtime.Exec(ctx, sql); err == nil {
-			t.Errorf("old replica operation succeeded: %s", sql)
+		_, err := runtime.Exec(ctx, sql)
+		var pgerr *pgconn.PgError
+		if !errors.As(err, &pgerr) || pgerr.Code != "23514" {
+			t.Errorf("old replica operation was not fenced (23514): %s: %v", sql, err)
 		}
 	}
 	if _, err := runtime.Exec(ctx, `UPDATE service_accounts SET enabled=false WHERE name='ordinary'; UPDATE service_accounts SET enabled=true WHERE name='ordinary'`); err != nil {

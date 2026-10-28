@@ -31,7 +31,8 @@ describe("External-platform retirement", () => {
     await u.click(screen.getByRole("tab", { name: "Settings" }));
     expect(await screen.findByRole("switch", { name: "Enabled" })).toHaveAttribute("aria-disabled", "true");
     await u.click(screen.getByRole("tab", { name: /Keys/ }));
-    expect(await screen.findByText(/Permanently retired. Create a new ordinary service account and key/)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Create key" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create key" })).toHaveAttribute("title", "Permanently retired. Create a new ordinary service account and key.");
     expect(calls.some((c) => c.url.includes("agent-platforms") || c.method === "PATCH" || c.method === "POST")).toBe(false);
   });
 

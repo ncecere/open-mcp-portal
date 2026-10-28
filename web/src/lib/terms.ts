@@ -38,7 +38,6 @@ export const terms = {
   notifications: "Notifications",
   inbox: "Inbox",
   automationTokens: "Automation tokens",
-  agentPlatforms: "Trusted agent platforms",
 } as const;
 
 /** A switchable object's state. */

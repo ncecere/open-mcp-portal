@@ -34,13 +34,9 @@ import (
 //     a prompt or a read, for one that didn't), recorded needs_authorization
 //     with class secret_missing or secret_rejected, and nothing is forwarded:
 //     there is never a fallback to another credential;
-//  3. relayed by an agent for a person (decision 66) uses the person's secret
-//     only when they allowed agents for the server (Account › My
-//     connections) and never gets a link: a tool error says where to enter
-//     or allow it;
-//  4. is forwarded with the secret and the identity token (which moves to
+//  3. is forwarded with the secret and the identity token (which moves to
 //     MCP-Gateway-Identity when the secret occupies Authorization);
-//  5. answered 401 or 403 by the server marks the secret rejected (no retry:
+//  4. answered 401 or 403 by the server marks the secret rejected (no retry:
 //     the server said no, and nothing ran) and asks again.
 
 // Error classes of person secret calls (mcp_calls.error_class).
@@ -140,10 +136,8 @@ func (rc *request) secretRefusal(err error) bool {
 	return rc.personSecretUsed != nil && errors.As(err, &ue) && (ue.HTTPStatus == http.StatusUnauthorized || ue.HTTPStatus == http.StatusForbidden)
 }
 
-// needsSecret answers a call that needs the person to enter, enter again or
-// allow their key: the link in the three shapes of decision 59, or for an
-// agent's call (decision 66) a tool error that names where, and never a link,
-// -32042 or an input request.
+// needsSecret asks the person to enter or replace their key, with a link in
+// the three response shapes of decision 59.
 func (rc *request) needsSecret(o gateways.Offer, n *personsecrets.NeedsSecret, rec *calls.Call) {
 	class := n.Reason
 	label, server := n.Label, fmt.Sprintf("%s (%s)", n.Server.Name, n.Server.TeamSlug)

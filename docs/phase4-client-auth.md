@@ -49,6 +49,11 @@ resource indicators, PKCE S256, RFC 9207 `iss`), like Grounded.
 
 ## Service accounts
 
+Ordinary service accounts remain supported. The former external-platform relay accounts are permanently
+retired: migration `00034` disables them and revokes their keys without clearing their marks. They cannot
+be enabled or issued new keys; create an explicit new ordinary account/key instead. See
+[platform-retirement.md](platform-retirement.md). The pi coding client remains an ordinary MCP client.
+
 - Team-owned; created, edited, disabled and deleted by team **owners and admins**. Fields: name, description,
   **team role** used for minimum-role checks (*proposed*: `member` or `editor`; never owner/admin), enabled.
 - **Keys:** `omp_sa_…`, HMAC digest, always expire (max 365 days), at most 2 active per account so keys can be

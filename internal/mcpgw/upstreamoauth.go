@@ -216,7 +216,7 @@ func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.C
 			return nil, false, false
 		case ue.HTTPStatus == 403 && ch != nil && ch.Error() == "insufficient_scope":
 			var err error = providers.ErrInsufficientScope
-			if !(rc.principal.account != nil) {
+			if rc.principal.account == nil {
 				err = rc.h.Providers.StepUp(ctx, o.Requires, cc, ch.Scopes())
 			}
 			var consent *providers.ConsentNeeded

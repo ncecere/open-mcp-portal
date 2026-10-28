@@ -1,7 +1,5 @@
 package mcpgw
 
-func (p principal) isServiceAccount() bool { return p.account != nil }
-
 // refuseText answers a refusal in the appropriate MCP result shape.
 func (rc *request) refuseText(tool bool, msg, reason, provider string) int64 {
 	if tool {

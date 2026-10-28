@@ -31,7 +31,7 @@ SELECT 'system', 'agent_platform.retire', 'platform', 'external-agent-platforms'
 -- Static invoker functions: no dynamic SQL, no elevated role, no new grants.
 -- +goose StatementBegin
 CREATE FUNCTION retire_agent_platform_trust() RETURNS trigger
-LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
+LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public, pg_temp AS $$
 BEGIN
     IF NEW.enabled THEN
         RAISE EXCEPTION 'external agent-platform trust is permanently retired' USING ERRCODE = '23514';
@@ -46,7 +46,7 @@ FOR EACH ROW EXECUTE FUNCTION retire_agent_platform_trust();
 
 -- +goose StatementBegin
 CREATE FUNCTION retire_relay_account() RETURNS trigger
-LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
+LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public, pg_temp AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
         IF NEW.relay_platform_id IS NOT NULL THEN
@@ -69,10 +69,10 @@ BEFORE INSERT OR UPDATE ON service_accounts
 FOR EACH ROW EXECUTE FUNCTION retire_relay_account();
 
 -- Old replicas cannot issue usable keys for retired accounts, or un-revoke
--- one. Account locking orders concurrent key creation against retirement.
+-- one. The table locks above serialize retirement with existing key writers.
 -- +goose StatementBegin
 CREATE FUNCTION retire_relay_key() RETURNS trigger
-LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
+LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public, pg_temp AS $$
 BEGIN
     IF NEW.revoked_at IS NULL AND EXISTS (
         SELECT 1 FROM public.service_accounts
