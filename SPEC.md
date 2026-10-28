@@ -131,6 +131,12 @@ team, under `self_publish`) approves the change.
 **Gateway**: owner (team or platform), slug, name, description, enabled, selected capabilities (each with an
 optional minimum team role), access grants (team | user | SSO group), payload capture setting.
 
+**Sensitive-call approval** (decision 82): owner-managed server/gateway rules gate exact tool calls.
+Human reviewers cannot approve their own requests; service-account separation of duties also applies.
+Approvals bind merged arguments, definition, destination and live authority, and authorize one actual
+transport attempt, never an automatic replay. Session-only review uses redacted sealed previews; private
+notifications and attention links contain metadata only. See [tool approvals](docs/tool-approvals.md).
+
 **Identity JWT** (sent upstream as `Authorization: Bearer` or a configurable header): `iss` = gateway URL,
 `aud` = server URL, `sub` = user ID, `email`, `name`, `teams`, `gateway`, `tool`, `exp` ≤ 5 minutes, `jti`. Signed ES256; keys rotate; published at `/.well-known/jwks.json`.
 

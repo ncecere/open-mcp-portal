@@ -210,6 +210,7 @@ func (s *Service) auditRequest(ctx context.Context, q *dbgen.Queries, a *authz.A
 	e.Metadata = map[string]any{"name": r.ExposedName, "requesterKind": r.RequesterKind, "requesterId": r.RequesterID,
 		"gatewayId": r.GatewayID, "serverId": r.ServerID, "capabilityId": r.CapabilityID,
 		"capabilityFingerprint": r.CapabilityFingerprint, "contextEpoch": r.ContextEpoch,
+		"argsDigest": r.ArgsDigest, "bindingDigest": r.BindingDigest,
 		"ruleId": r.RuleID, "ruleRevision": r.RuleRevision, "reviewRevision": r.ReviewRevision, "status": r.Status}
 	if r.DecidedBy.Valid {
 		e.Metadata["deciderId"] = r.DecidedBy.UUID

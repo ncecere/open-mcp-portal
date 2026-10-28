@@ -6,9 +6,11 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
-## Unreleased
+## [0.5.0] - 2026-10-28
 
-- **In progress, not enforced yet:** sensitive-call approvals (#31, decision 82). The owner continued with the proposed defaults; the design binds exact merged arguments and live authority to one actual tool dispatch, without automatic replay. See [design](docs/tool-approvals.md); foundational work is not release acceptance.
+- **Sensitive-call approvals** (#31, decision 82). Team/server and platform-gateway policies gate exact merged tool arguments with live reviewer/requester authority, separated human review, expiring private receipts and an atomic single-use dispatch permit. Server rules outrank gateway rules; unclassified matches destructive only for approval policy. Human self-approval is forbidden; requesting service-account admins are excluded unless explicitly permitted. Modern URL, modern tool-error and legacy `-32042` client shapes are supported; governed calls cannot continue elicitation or automatically replay after spending authorization.
+- **Private review and operations.** Session-only rule/receipt APIs, a browser queue, redacted sealed previews, keyed argument digests, private notices and eligible attention items. Lists never contain previews; platform metadata oversight never grants preview access. Terminal previews are hidden immediately and cleared within 24 hours; metadata lasts 90 days. Stable sealed binding-root rotation preserves denial memory, renewal and single consumption. Audit entries retain keyed binding evidence, never arguments or previews.
+- **Upgrade and concurrency safeguards.** Migrations `00035`–`00042` preserve applied history and move protected internals into `omp_private`, retaining unmodified v0.4.0 strict-role startup against the expanded schema. Governed spends use short nonblocking authority fences; unrestricted calls retain normal concurrent-refresh behavior through read-only admission snapshots. Lossy Unicode is refused before governed argument binding. Finish rollout and drain older images before enabling rules: schema compatibility is not enforcement compatibility. See [release notes](docs/releases/v0.5.0.md) and [design](docs/tool-approvals.md).
 
 ## [0.4.0] - 2026-10-28
 

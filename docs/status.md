@@ -1,7 +1,34 @@
 # Status and handoff
 
-Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.4.0, **released on 2026-10-28**
+Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.5.0 release candidate; not published yet**. The latest published release is v0.4.0.
 (release notes: [releases/v0.4.0.md](releases/v0.4.0.md); earlier: [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+
+## v0.5.0 candidate: exact-call approvals
+
+Implementation of #31 is integrated, independently reviewed and locally validated. Migrations `00035`–`00042`
+provide exact-call requests/rules, nonblocking authority journaling, stable binding-key rotation and protected
+private-schema storage. Browser/session APIs, all three MCP client response shapes, single-use dispatch,
+no post-spend replay, private notifications and eligible attention are implemented. See
+[release notes](releases/v0.5.0.md) and [design](tool-approvals.md).
+
+Evidence before publication:
+- Full required-PostgreSQL normal and race suites passed in legacy and genuinely authenticated split-role
+  modes (four runs, 1,425 seconds). Subsequent exact-Unicode binding regressions passed in both modes.
+- Generation, lint, build, generated-code freshness and all web gates passed; **836 web tests**. Final
+  release-version/deployment checks, actionlint and the smoke-helper regressions passed. Main CI/smoke
+  remain pending.
+- CI-pinned govulncheck reports zero reachable vulnerabilities (two module advisories are unreachable);
+  npm audit reports zero vulnerabilities. No dependency manifests were changed except release versions.
+- The parent rebuilt untouched v0.4.0 from its tag and independently ran strict split-role startup, HTTP
+  readiness and a journaled HTTP authority write against schema 42. No old-image approval enforcement is implied.
+- Owned disposable browser checks covered rule creation, URL review, redaction, exact MCP dispatch, spent
+  receipts, auditor metadata-only access and consuming a pre-relocation request afterward. At 390px,
+  queue/receipt/rules/editor pages have no horizontal overflow and axe reports zero violations/incomplete
+  checks. Preview keyboard scrolling works. The desktop shortcut contrast is 7.30:1.
+
+#31 stays open until CI, deployment smoke, signed image publication and artifact verification succeed.
+No production deployment or external IDE/provider/pilot acceptance is claimed. Development services/data
+were untouched; browser sessions, private fixture configuration and scratch app/fake servers were cleaned up.
 
 ## v0.4.0 (2026-10-28): MCP-only governance
 
@@ -431,8 +458,8 @@ blind restart/seed of an existing one. The historical dev-database migration hel
    At 390px, receipt/queue/rules/editor pages have no horizontal overflow and axe reports zero violations
    and zero incomplete checks; the scrollable preview was keyboard-tested. The desktop header shortcut's
    axe-incomplete contrast was manually checked at **7.30:1**; this is not a whole-product accessibility audit. Final merged-tree
-   normal/race matrices and release gates are still pending. Nothing from this feature branch is published;
-   #31 remains open.
+   normal/race matrices and local release gates passed. Main CI, deployment smoke, image publication and
+   artifact verification remain pending. Nothing from this feature branch is published; #31 remains open.
 3. Continue #32/#33 and the ordered operations/lifecycle/audit lanes in
    [implementation order](implementation-order.md). #43 must prove upgrades, ingress, restore and load before
    Helm packaging; existing kindnet/Calico smoke does not establish those broader requirements.

@@ -14,6 +14,20 @@ suspended people receive nothing. This does not change personal connection
 notifications and does not send shared-account details to personal recipients or
 webhooks. See [service connections](service-connections.md).
 
+## Sensitive-call approval notices
+
+`approval.requested` is sent only when a new pending receipt is created (including explicit renewal),
+not when an identical request is deduplicated. `approval.decided` reports approval or denial. Recipients
+are resolved from live eligibility: current eligible reviewers for requests, the requester or requesting
+service account's active owning-team owners/admins for decisions. Self-approval and service-account
+separation of duties are enforced before fallback selection. Stale/ineligible receipts suppress delivery.
+
+These private notices use inbox/email only and cannot be subscribed to or delivered by webhooks.
+Payloads contain only `approvalId`, exposed tool name and status, never arguments, previews, digests,
+notes or credentials. They link to the authorized receipt page. Notification failure does not undo the
+approval transition or audit; the authoritative queue remains available. Preferences default to inbox
+and email on. See [tool approvals](tool-approvals.md).
+
 ## Goal
 
 Tell the right people, in the portal or elsewhere, when something needs them: a server is down or changed, a review is waiting or decided, a sign-in lapsed, a key is about to expire.
