@@ -157,7 +157,9 @@ func TestServiceBindingsSurviveEncryptionKeyRetirement(t *testing.T) {
 			t.Fatalf("review flags %d: %+v %v", i, detail, err)
 		}
 	}
-	if err := retired.Consume(ctx, current[1]); err != nil {
+	// Even the plan held before rotation must remain usable, not just a newly
+	// fetched plan whose digests might accidentally have changed.
+	if err := retired.Consume(ctx, plans[1]); err != nil {
 		t.Fatal("approved authorization unreachable after retirement", err)
 	}
 	if err := retired.Consume(ctx, current[1]); !errors.Is(err, approvals.ErrSpent) {
