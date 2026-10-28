@@ -15,6 +15,7 @@ import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { api, unwrap } from "../../api/client";
 import { myApiKeysQuery } from "../../api/queries";
+import { ScopeBadges } from "../../components/tool-scope";
 import { ConfirmMutationDialog } from "../../components/confirm-dialog";
 import type { ApiKey } from "../../components/gateways/labels";
 import { ListPage, RelativeTime, timeColumn } from "../../components/templates/list-page";
@@ -85,6 +86,7 @@ function KeyScope({ k }: { k: ApiKey }) {
 const columns: DataTableColumn<ApiKey>[] = [
   { id: "name", header: "Name", accessor: "name", rowHeader: true, hideable: false, sortable: true, cell: (k) => <CellText primary={k.name} secondary={<span className={s.mono}>{k.prefix}…</span>} /> },
   { id: "status", header: "Status", accessor: (k) => statusLabels[k.status], sortable: true, cell: (k) => <StatusBadge tone={statusTone[k.status]}>{statusLabels[k.status]}</StatusBadge> },
+  { id: "toolScope", header: "Tool scope", cell: (k) => <ScopeBadges scope={k.toolScope} /> },
   { id: "gateways", header: "Gateways", accessor: (k) => keyScopeText(k), cell: (k) => <KeyScope k={k} /> },
   { ...timeColumn<ApiKey>("lastUsedAt", "Last used", (k) => k.lastUsedAt), cell: (k) => (k.lastUsedAt ? <span className={s.nowrap}><RelativeTime value={k.lastUsedAt} /></span> : <span className={s.muted}>Never</span>) },
   {
@@ -122,7 +124,7 @@ export function ApiKeysPage() {
       <ListPage<ApiKey>
         id="my-api-keys"
         title={terms.apiKeys}
-        description="Personal keys for MCP clients, agents and scripts. A key acts as you: it reaches the gateways you can use, with your access."
+        description="Personal keys for MCP clients, agents and scripts. A key acts as you: its tool scope can only restrict your access, never add to it. Prompts and resources are unaffected."
         primaryAction={create}
         notices={
           <>

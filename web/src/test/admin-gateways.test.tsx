@@ -128,7 +128,7 @@ describe("Admin → a platform gateway › Access", () => {
     expect(dialog).toHaveTextContent("Everyone on the team, including people who join later, and the team's service accounts.");
     await u.selectOptions(await within(dialog).findByRole("combobox", { name: "Team" }), team.slug);
     await u.click(within(dialog).getByRole("button", { name: "Grant access" }));
-    await waitFor(() => expect(calls.filter((c) => c.method === "POST").at(-1)?.body).toEqual({ subjectKind: "team", team: team.slug }));
+    await waitFor(() => expect(calls.filter((c) => c.method === "POST").at(-1)?.body).toEqual({ subjectKind: "team", team: team.slug, toolScope: null }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Grant access to Company tools" })).toBeNull());
 
     await u.click(screen.getByRole("button", { name: "Add grant" }));
@@ -141,7 +141,7 @@ describe("Admin → a platform gateway › Access", () => {
     await u.click(within(dialog).getByRole("radio", { name: /An SSO group/ }));
     await u.type(within(dialog).getByRole("textbox", { name: "Group name" }), "engineering");
     await u.click(within(dialog).getByRole("button", { name: "Grant access" }));
-    await waitFor(() => expect(calls.filter((c) => c.method === "POST").at(-1)?.body).toEqual({ subjectKind: "group", group: "engineering" }));
+    await waitFor(() => expect(calls.filter((c) => c.method === "POST").at(-1)?.body).toEqual({ subjectKind: "group", group: "engineering", toolScope: null }));
   });
 
   it("removes a grant after confirming; auditors only read", async () => {

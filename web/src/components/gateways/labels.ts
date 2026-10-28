@@ -147,6 +147,7 @@ export const identitySentHelp = {
 export const callErrorLabels: Record<string, string> = {
   // Refused by the gateway (outcome "denied").
   gateway_disabled: "Gateway turned off",
+  tool_scope: "Outside tool scope",
   no_access: "No access to the gateway",
   role: "Needs a higher team role",
   key_scope: "API key limited to other gateways",

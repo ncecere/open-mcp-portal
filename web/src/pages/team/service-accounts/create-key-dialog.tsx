@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { api, ApiError, type Schemas, unwrap } from "../../../api/client";
 import { serviceAccountsKey } from "../../../api/queries";
+import { ScopeBadges, ScopeEditor, scopeProblem, type ToolScope } from "../../../components/tool-scope";
 import { Alert, ErrorAlert } from "@/components/ui/alert/alert";
 import { Button } from "@/components/ui/button/button";
 import { Combobox } from "@/components/ui/combobox/combobox";
@@ -53,6 +54,7 @@ export function CreateKeyDialog({ account, activeCount, onClose }: Props) {
   const [name, setName] = useState("");
   const [days, setDays] = useState("90");
   const [gatewayIds, setGatewayIds] = useState<string[]>([]);
+  const [toolScope, setToolScope] = useState<ToolScope>(null);
   const [submitted, setSubmitted] = useState(false);
   const gateways = useQuery(accountGatewaysQuery(team, account.id));
   const create = useMutation({
@@ -61,7 +63,7 @@ export function CreateKeyDialog({ account, activeCount, onClose }: Props) {
       unwrap(
         await api.POST("/v1/teams/{team}/service-accounts/{serviceAccountId}/keys", {
           params: { path: { team, serviceAccountId: account.id } },
-          body: { name: name.trim(), expiresInDays: Number(days), ...(gatewayIds.length > 0 ? { gatewayIds } : {}) },
+          body: { name: name.trim(), expiresInDays: Number(days), toolScope, ...(gatewayIds.length > 0 ? { gatewayIds } : {}) },
         }),
       ),
     onSuccess: () => void qc.invalidateQueries({ queryKey: serviceAccountsKey(team) }),
@@ -98,7 +100,7 @@ export function CreateKeyDialog({ account, activeCount, onClose }: Props) {
         onSubmit={(e) => {
           e.preventDefault();
           setSubmitted(true);
-          if (name.trim() && !daysProblem(days)) create.mutate({ activeBefore: activeCount });
+          if (name.trim() && !daysProblem(days) && !scopeProblem(toolScope)) create.mutate({ activeBefore: activeCount });
         }}
       >
         <Field label="Name" description="Where it's deployed, for example “GitHub Actions release workflow”." error={nameError}>
@@ -122,6 +124,9 @@ export function CreateKeyDialog({ account, activeCount, onClose }: Props) {
             emptyText="No gateway matches."
           />
         </Field>
+        <p>Account ceiling (applies together with this key, even when the key selects Everything):</p>
+        <ScopeBadges scope={account.toolScope} />
+        <ScopeEditor value={toolScope} onChange={setToolScope} disabled={create.isPending} />
         <ErrorAlert error={create.error} title="Couldn't create the key" describe={(err) => {
             const message = refusal(err);
             return message ? { message } : undefined;

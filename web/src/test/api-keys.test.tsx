@@ -50,7 +50,7 @@ describe("API keys", () => {
     expect(await within(dialog).findByText("Enter a name.")).toBeInTheDocument();
     await u.type(within(dialog).getByRole("textbox", { name: "Name" }), "CI runner");
     await u.click(within(dialog).getByRole("button", { name: "Create key" }));
-    await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toEqual({ name: "CI runner", expiresInDays: 90 }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toEqual({ name: "CI runner", expiresInDays: 90, toolScope: null }));
 
     const shown = await screen.findByRole("dialog", { name: "API key created" });
     // The dialog says it was created; no toast covers its buttons.
@@ -91,7 +91,7 @@ describe("API keys", () => {
     await waitFor(() => expect(screen.queryByRole("option", { name: /Company tools/ })).toBeNull());
     expect(within(dialog).getByText("The key works only on these gateways, and only while you can use them.")).toBeInTheDocument();
     await u.click(within(dialog).getByRole("button", { name: "Create key" }));
-    await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toEqual({ name: "CI runner", expiresInDays: 90, gatewayIds: ["g-other"] }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toEqual({ name: "CI runner", expiresInDays: 90, gatewayIds: ["g-other"], toolScope: null }));
     const shown = await screen.findByRole("dialog", { name: "API key created" });
     const choice = within(shown).getByRole("combobox", { name: "Connect a gateway" });
     expect(within(choice).getAllByRole("option").map((o) => o.textContent)).toEqual(["Company tools"]);

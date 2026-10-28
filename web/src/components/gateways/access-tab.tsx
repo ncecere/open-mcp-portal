@@ -8,6 +8,7 @@ import { Plus, Trash2, Users } from "lucide-react";
 import { useState } from "react";
 import { api, unwrap } from "../../api/client";
 import { adminGatewaysKey } from "../../api/queries";
+import { ScopeBadges } from "../tool-scope";
 import { ConfirmMutationDialog } from "../confirm-dialog";
 import { ListPage, timeColumn } from "../templates/list-page";
 import { Alert } from "@/components/ui/alert/alert";
@@ -33,6 +34,7 @@ const columns: DataTableColumn<GatewayGrant>[] = [
     sortable: true,
     cell: (g) => <CellText primary={g.subjectKind === "group" ? <span className={s.mono}>{subjectName(g)}</span> : subjectName(g)} secondary={detail(g)} />,
   },
+  { id: "toolScope", header: "Tool scope", cell: (g) => <ScopeBadges scope={g.toolScope} /> },
   { id: "kind", header: "Kind", accessor: (g) => kindLabels[g.subjectKind], sortable: true },
   { ...timeColumn<GatewayGrant>("createdAt", "Added", (g) => g.createdAt) },
   { id: "by", header: "Added by", accessor: (g) => g.addedByName ?? "", defaultHiddenNarrow: true, cell: (g) => g.addedByName ?? <span className={s.muted}>—</span> },
@@ -64,7 +66,7 @@ export function GatewayAccessTab({ gateway, abilities }: { gateway: Gateway; abi
   );
   return (
     <>
-      <Alert tone="info">{grantsHelp}</Alert>
+      <Alert tone="info">{grantsHelp} Matching grants are alternatives (class or exact name); independent credential ceilings all apply. Prompts and resources are unaffected.</Alert>
       <Card title="Grants" description="Who may use this gateway. Each person sees only the capabilities it offers." actions={add || undefined}>
         <ListPage<GatewayGrant>
           id="gateway-grants"

@@ -88,7 +88,7 @@ describe("Create service account", () => {
     await u.click(screen.getByRole("button", { name: "Create service account" }));
     await waitFor(() => expect(router.state.location.pathname).toBe(record));
     expect(router.state.location.search).toMatchObject({ tab: "keys" });
-    expect(made(calls, "POST", base).at(-1)?.body).toEqual({ name: "ci-release-bot-2", role: "editor", enabled: true });
+    expect(made(calls, "POST", base).at(-1)?.body).toEqual({ name: "ci-release-bot-2", role: "editor", enabled: true, toolScope: null });
   });
 });
 
@@ -205,7 +205,7 @@ describe("Service account › Keys", () => {
     await u.keyboard("{Escape}");
     await u.click(within(dialog).getByRole("button", { name: "Create key" }));
     await waitFor(() =>
-      expect(made(calls, "POST", `${base}/${serviceAccountId}/keys`)[0]?.body).toEqual({ name: "Release workflow", expiresInDays: 90, gatewayIds: [platformGatewayId] }),
+      expect(made(calls, "POST", `${base}/${serviceAccountId}/keys`)[0]?.body).toEqual({ name: "Release workflow", expiresInDays: 90, gatewayIds: [platformGatewayId], toolScope: null }),
     );
 
     const shown = await screen.findByRole("dialog", { name: "Key created" });

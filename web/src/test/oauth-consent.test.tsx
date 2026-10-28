@@ -1,5 +1,5 @@
 /* The OAuth consent page: the client (verified or not), the gateway, where the browser goes back to, Allow and Deny, the first-use notice of a trusted client, invalid requests and signing in first. */
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import { consentRequest, redirectTo, safeRedirect } from "../pages/oauth/consent";
@@ -78,7 +78,7 @@ describe("OAuth consent page", () => {
     await u.click(await screen.findByRole("button", { name: "Allow" }));
     await waitFor(() => expect(go).toHaveBeenCalledWith(back));
     const post = calls.find((c) => c.method === "POST" && c.url === "/v1/oauth/consent")!;
-    expect(post.body).toEqual({ query, decision: "allow" });
+    expect(post.body).toEqual({ query, decision: "allow", toolScope: null });
     expect(post.headers.get("X-CSRF-Token")).toBe("csrf-123");
     expect(screen.getByRole("status")).toHaveTextContent("Taking you back to 127.0.0.1:53211…");
     // Answered: neither button can send a second answer.
@@ -160,7 +160,7 @@ describe("OAuth consent page", () => {
     await u.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(go).toHaveBeenCalledWith(back));
     // The same answer as Allow: the server records it as a confirmation.
-    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ query, decision: "allow" });
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ query, decision: "allow", toolScope: null });
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
   });
 
@@ -196,6 +196,120 @@ describe("OAuth consent page", () => {
     expect(signIn).toHaveAttribute("href", "/auth/login?next=" + encodeURIComponent(path));
     // Nothing about the request is asked for before the person signs in.
     expect(calls.some((c) => c.url === "/v1/oauth/consent")).toBe(false);
+  });
+});
+
+describe("OAuth tool scope", () => {
+  it("shows requested classes and narrows without names or widening", async () => {
+    const u = userEvent.setup();
+    vi.spyOn(redirectTo, "go").mockImplementation(() => {});
+    const { calls, container } = openConsent({
+      "GET /v1/oauth/consent": () => oauthConsent({ requestedToolScope: { classes: ["read", "write"] } }),
+      "POST /v1/oauth/consent": () => ({ redirectUrl: back }),
+    });
+    const scope = await screen.findByRole("region", { name: "Requested tool scope" });
+    expect(scope).toHaveTextContent("Read");
+    expect(scope).toHaveTextContent("Write");
+    expect(within(scope).getByRole("radio", { name: "Everything" })).toHaveAttribute("aria-disabled", "true");
+    const destructive = within(scope).getByRole("checkbox", { name: "Destructive" });
+    expect(destructive).toHaveAttribute("aria-disabled", "true");
+    await u.click(destructive);
+    expect(destructive).not.toBeChecked();
+    expect(within(scope).queryByRole("textbox")).toBeNull();
+    await u.click(within(scope).getByRole("checkbox", { name: "Write" }));
+    expect(await axe(container)).toHaveNoViolations();
+    await u.click(screen.getByRole("button", { name: "Allow" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toEqual({ query, decision: "allow", toolScope: { classes: ["read"] } }));
+  });
+
+  it("keeps explicit three classes distinct from an absent scope", async () => {
+    const u = userEvent.setup();
+    vi.spyOn(redirectTo, "go").mockImplementation(() => {});
+    const requested = { classes: ["read", "write", "destructive"] as const };
+    const { calls } = openConsent({
+      "GET /v1/oauth/consent": () => oauthConsent({ requestedToolScope: { classes: [...requested.classes] } }),
+      "POST /v1/oauth/consent": () => ({ redirectUrl: back }),
+    });
+    expect(await screen.findByRole("checkbox", { name: "Destructive" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Everything" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText(/Even all three classes exclude unclassified/)).toBeInTheDocument();
+    await u.click(screen.getByRole("button", { name: "Allow" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toEqual({ query, decision: "allow", toolScope: requested }));
+  });
+
+  it("allows a null request to narrow to no tools, but deny never submits a scope", async () => {
+    const u = userEvent.setup();
+    vi.spyOn(redirectTo, "go").mockImplementation(() => {});
+    const { calls } = openConsent({
+      "GET /v1/oauth/consent": () => oauthConsent(),
+      "POST /v1/oauth/consent": () => ({ redirectUrl: back }),
+    });
+    await u.click(await screen.findByRole("radio", { name: "Custom" }));
+    expect(screen.getByText("No tools. Prompts and resources are unaffected.")).toBeInTheDocument();
+    await u.click(screen.getByRole("button", { name: "Deny" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toEqual({ query, decision: "deny" }));
+  });
+
+  it("freezes request and ceiling across a refetch, and captures the submitted scope while inputs are disabled", async () => {
+    const u = userEvent.setup();
+    const go = vi.spyOn(redirectTo, "go").mockImplementation(() => {});
+    let finish!: (value: { redirectUrl: string }) => void;
+    let response = oauthConsent({ requestedToolScope: { classes: ["read", "write"] } });
+    const { calls, qc } = openConsent({
+      "GET /v1/oauth/consent": () => response,
+      "POST /v1/oauth/consent": () => new Promise<{ redirectUrl: string }>((resolve) => { finish = resolve; }),
+    });
+    await u.click(await screen.findByRole("checkbox", { name: "Write" }));
+    window.history.replaceState({}, "", "/oauth/consent?scope=omp:destructive");
+    response = oauthConsent({ requestedToolScope: null });
+    await act(() => qc.invalidateQueries({ queryKey: ["oauth", "consent"] }));
+    expect(screen.getByRole("radio", { name: "Everything" })).toHaveAttribute("aria-disabled", "true");
+    await u.click(screen.getByRole("button", { name: "Allow" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST")).toBeDefined());
+    expect(screen.getByRole("checkbox", { name: "Read" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Deny" })).toBeDisabled();
+    await u.click(screen.getByRole("checkbox", { name: "Read" }));
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ query, decision: "allow", toolScope: { classes: ["read"] } });
+    await act(async () => finish({ redirectUrl: back }));
+    await waitFor(() => expect(go).toHaveBeenCalledWith(back));
+  });
+
+  it("narrows an unrestricted request to read without changing the authorization query", async () => {
+    const u = userEvent.setup();
+    vi.spyOn(redirectTo, "go").mockImplementation(() => {});
+    const { calls } = openConsent({
+      "GET /v1/oauth/consent": () => oauthConsent({ requestedToolScope: null }),
+      "POST /v1/oauth/consent": () => ({ redirectUrl: back }),
+    });
+    expect(await screen.findByRole("radio", { name: "Everything" })).toBeChecked();
+    await u.click(screen.getByRole("radio", { name: "Read only" }));
+    await u.click(screen.getByRole("button", { name: "Allow" }));
+    await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toEqual({ query, decision: "allow", toolScope: { classes: ["read"], tools: [] } }));
+  });
+
+  it("does not offer the read preset when only write was requested", async () => {
+    const u = userEvent.setup();
+    const { calls } = openConsent({
+      "GET /v1/oauth/consent": () => oauthConsent({ requestedToolScope: { classes: ["write"] } }),
+      "POST /v1/oauth/consent": () => ({ redirectUrl: back }),
+    });
+    const read = await screen.findByRole("radio", { name: "Read only" });
+    expect(read).toHaveAttribute("aria-disabled", "true");
+    await u.click(read);
+    expect(read).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Write" })).toBeChecked();
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it("can allow an empty class ceiling and reports scope errors plainly", async () => {
+    const u = userEvent.setup();
+    const { calls } = openConsent({
+      "GET /v1/oauth/consent": () => oauthConsent({ requestedToolScope: {} }),
+      "POST /v1/oauth/consent": () => Reply.error(400, "oauth_invalid_scope", "The requested tool scope changed. Start connecting again."),
+    });
+    await u.click(await screen.findByRole("button", { name: "Allow" }));
+    expect(await screen.findByText("The requested tool scope changed. Start connecting again.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ query, decision: "allow", toolScope: {} });
   });
 });
 

@@ -10,6 +10,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { api, ApiError, ifMatch, unwrap } from "../../../api/client";
 import { serviceAccountsKey } from "../../../api/queries";
+import { ScopeBadges, ScopeEditor, scopeFormValue, scopeProblem, type ToolScope } from "../../../components/tool-scope";
 import { ConfirmMutationDialog } from "../../../components/confirm-dialog";
 import { useRevisionForm } from "../../../components/templates/revision-form";
 import { DangerAction, DangerZone, SettingsPage, SettingsSection } from "../../../components/templates/settings-page";
@@ -23,9 +24,9 @@ import { useTeam } from "../common";
 import { nameProblem, roleLabel, type ServiceAccount, type ServiceAccountAbilities, type ServiceAccountRole, storeServiceAccount } from "./labels";
 import { RoleChoice } from "./role-choice";
 
-type Form = { name: string; description: string; role: ServiceAccountRole; enabled: boolean };
-const formOf = (a: ServiceAccount): Form => ({ name: a.name, description: a.description, role: a.role, enabled: a.enabled });
-const labels = { name: "Name", description: "Description", role: "Role", enabled: "Enabled" };
+type Form = { name: string; description: string; role: ServiceAccountRole; enabled: boolean; toolScope: ToolScope };
+const formOf = (a: ServiceAccount): Form => ({ name: a.name, description: a.description, role: a.role, enabled: a.enabled, toolScope: scopeFormValue(a.toolScope) });
+const labels = { name: "Name", description: "Description", role: "Role", enabled: "Enabled", toolScope: "Tool scope" };
 const choices = { role: { member: roleLabel("member"), editor: roleLabel("editor") } };
 
 type Props = { account: ServiceAccount; abilities: ServiceAccountAbilities };
@@ -43,7 +44,7 @@ export function SettingsTab({ account, abilities }: Props) {
       unwrap(
         await api.PATCH("/v1/teams/{team}/service-accounts/{serviceAccountId}", {
           params: { path: { team: account.teamSlug, serviceAccountId: account.id }, header: ifMatch(account.revision) },
-          body: { name: form.name, description: form.description, role: form.role, enabled: form.enabled },
+          body: { name: form.name, description: form.description, role: form.role, enabled: form.enabled, ...(JSON.stringify(form.toolScope) !== JSON.stringify(saved.toolScope) ? { toolScope: form.toolScope } : {}) },
         }),
       ),
     onSuccess: (updated) => {
@@ -69,7 +70,7 @@ export function SettingsTab({ account, abilities }: Props) {
       message={nameError ? "Not saved: fix the highlighted field" : undefined}
       onSave={() => {
         setSubmitted(true);
-        if (nameProblem(form.name)) return;
+        if (nameProblem(form.name) || scopeProblem(form.toolScope)) return;
         if (account.enabled && !form.enabled) setConfirmingOff(form);
         else save.mutate();
       }}
@@ -104,6 +105,9 @@ export function SettingsTab({ account, abilities }: Props) {
           checked={form.enabled}
           onCheckedChange={(v) => setForm((f) => ({ ...f, enabled: v }))}
         />
+      </SettingsSection>
+      <SettingsSection title="Account tool ceiling" description="Applies immediately to every key together with its own ceiling. Everything on a key inherits this live limit.">
+        {canEdit ? <ScopeEditor value={form.toolScope} onChange={(toolScope) => setForm((f) => ({ ...f, toolScope: scopeFormValue(toolScope) }))} disabled={save.isPending} /> : <ScopeBadges scope={account.toolScope} />}
       </SettingsSection>
       {canEdit && <DeleteAccount account={account} />}
       <ConfirmMutationDialog

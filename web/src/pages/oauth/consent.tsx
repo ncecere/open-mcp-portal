@@ -23,6 +23,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { ApiError, api, unwrap, type Schemas } from "../../api/client";
+import { ScopeBadges, ScopeEditor, type ToolScope } from "../../components/tool-scope";
 import { clientHostText, safeLogo } from "../../components/oauth/client-host";
 import { capabilityCount } from "../../components/gateways/labels";
 import { useCurrentUser, useInstance } from "../../session";
@@ -38,7 +39,7 @@ import { VisuallyHidden } from "@/components/ui/visually-hidden/visually-hidden"
 import styles from "./consent.module.css";
 
 type Consent = Schemas["OAuthConsent"];
-type Decision = Schemas["OAuthConsentDecision"]["decision"];
+type Submission = Pick<Schemas["OAuthConsentDecision"], "decision" | "toolScope">;
 
 /** Leaves the app for the client (a seam for tests). */
 export const redirectTo = { go: (url: string) => window.location.assign(url) };
@@ -91,11 +92,13 @@ export function OAuthConsentPage() {
     queryFn: async () => unwrap(await api.GET("/v1/oauth/consent", { params: { query: request.params } })),
     retry: false,
     staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
   const [leaving, setLeaving] = useState<string | null>(null);
   const decide = useMutation({
-    mutationFn: async (decision: Decision) => {
-      const out = unwrap(await api.POST("/v1/oauth/consent", { body: { query: request.raw, decision } }));
+    mutationFn: async (submission: Submission) => {
+      const out = unwrap(await api.POST("/v1/oauth/consent", { body: { query: request.raw, ...submission } }));
       const target = safeRedirect(out.redirectUrl);
       if (!target) throw new Error("The portal answered with an address your browser can't go to, so you weren't sent anywhere.");
       return target;
@@ -140,11 +143,14 @@ type BodyProps = {
   consent: Consent;
   titleId: string;
   email: string;
-  decide: { mutate: (d: Decision) => void; isPending: boolean; variables?: Decision; error: unknown };
+  decide: { mutate: (d: Submission) => void; isPending: boolean; variables?: Submission; error: unknown };
   leaving: string | null;
 };
 
-function ConsentBody({ consent, titleId, email, decide, leaving }: BodyProps) {
+function ConsentBody({ consent: loaded, titleId, email, decide, leaving }: BodyProps) {
+  // Bind the displayed request and ceiling once. Refetches cannot widen this consent.
+  const [consent] = useState(loaded);
+  const [toolScope, setToolScope] = useState<ToolScope>(consent.requestedToolScope ?? null);
   const { client, gateway } = consent;
   const unverified = client.kind === "registered";
   const logo = safeLogo(client);
@@ -212,13 +218,19 @@ function ConsentBody({ consent, titleId, email, decide, leaving }: BodyProps) {
         </h2>
         <ul className={styles.list}>
           <li>
-            <Check aria-hidden /> Use the tools, prompts and resources {gateway.name} offers you, as you
+            <Check aria-hidden /> Use only the selected tools, plus the prompts and resources {gateway.name} offers you, as you
           </li>
           <li>
             <Check aria-hidden /> Only with your access: not other gateways, and nothing you can&apos;t do yourself
           </li>
         </ul>
         <p className={styles.muted}>Its calls are recorded under your name. You can disconnect it at any time from Account › Connected apps.</p>
+      </section>
+      <section aria-labelledby={`${titleId}-scope`}>
+        <h2 id={`${titleId}-scope`} className={styles.heading}>Requested tool scope</h2>
+        <ScopeBadges scope={consent.requestedToolScope} />
+        <p>You may narrow the requested classes, never add to them. Exact tool names cannot be added.</p>
+        <ScopeEditor value={toolScope} onChange={setToolScope} ceiling={consent.requestedToolScope ?? null} allowNames={false} disabled={busy} />
       </section>
       <p className={styles.muted}>
         Signed in as <strong>{email}</strong>. After you answer, your browser goes back to <strong>{consent.redirectHost}</strong>.
@@ -228,10 +240,10 @@ function ConsentBody({ consent, titleId, email, decide, leaving }: BodyProps) {
         {leaving ? `Taking you back to ${consent.redirectHost}…` : ""}
       </p>
       <div className={styles.actions}>
-        <Button variant="secondary" disabled={busy} loading={decide.isPending && decide.variables === "deny"} onClick={() => decide.mutate("deny")}>
+        <Button variant="secondary" disabled={busy} loading={decide.isPending && decide.variables?.decision === "deny"} onClick={() => decide.mutate({ decision: "deny" })}>
           {notice ? "Cancel" : "Deny"}
         </Button>
-        <Button disabled={busy} loading={decide.isPending && decide.variables === "allow"} onClick={() => decide.mutate("allow")}>
+        <Button disabled={busy} loading={decide.isPending && decide.variables?.decision === "allow"} onClick={() => decide.mutate({ decision: "allow", toolScope })}>
           {notice ? "Continue" : "Allow"}
         </Button>
       </div>

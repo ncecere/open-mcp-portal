@@ -13,6 +13,7 @@ import { KeyRound, Lock, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { api, unwrap } from "../../../api/client";
 import { serviceAccountsKey } from "../../../api/queries";
+import { ScopeBadges, scopeInheritance } from "../../../components/tool-scope";
 import { ConfirmMutationDialog } from "../../../components/confirm-dialog";
 import { ListPage, RelativeTime, timeColumn } from "../../../components/templates/list-page";
 import { formatDate, toDate } from "../../../lib/bitop-format";
@@ -53,6 +54,7 @@ function Expiry({ k }: { k: ServiceAccountKey }) {
 const columns: DataTableColumn<ServiceAccountKey>[] = [
   { id: "name", header: "Name", accessor: "name", rowHeader: true, hideable: false, sortable: true, cell: (k) => <CellText primary={k.name} secondary={<span className={s.mono}>{k.prefix}…</span>} /> },
   { id: "status", header: "Status", accessor: (k) => keyStatusLabels[k.status], sortable: true, cell: (k) => <StatusBadge tone={keyStatusTone[k.status]}>{keyStatusLabels[k.status]}</StatusBadge> },
+  { id: "toolScope", header: "Tool scope", cell: (k) => <ScopeBadges scope={k.toolScope} /> },
   { id: "gateways", header: "Gateways", accessor: (k) => keyScopeText(k), cell: (k) => <span className={k.gateways.length === 0 ? s.muted : undefined}>{keyScopeText(k)}</span> },
   { ...timeColumn<ServiceAccountKey>("lastUsedAt", "Last used", (k) => k.lastUsedAt), cell: (k) => (k.lastUsedAt ? <span className={s.nowrap}><RelativeTime value={k.lastUsedAt} /></span> : <span className={s.muted}>Never</span>) },
   { id: "expiresAt", header: "Expires", accessor: (k) => new Date(k.expiresAt), sortable: true, cell: (k) => <Expiry k={k} /> },
@@ -103,6 +105,10 @@ function KeyList({ account, canManage }: { account: ServiceAccount; canManage: b
   const onlyActive = revoking?.status === "active" && active.length === 1;
   return (
     <>
+      <Alert tone="info" title="Account tool ceiling">
+        <ScopeBadges scope={account.toolScope} />
+        {scopeInheritance} Keys may store Everything under a restricted account; they inherit its live ceiling.
+      </Alert>
       {activeCount >= maxActiveKeys ? (
         <Alert tone="warning" title={`${maxActiveKeys} active keys: the most it can have`}>
           {canManage ? `Once the newer key is deployed everywhere, revoke the older one; then you can create another. ${rotationSteps}` : rotationSteps}

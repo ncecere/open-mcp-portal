@@ -9,6 +9,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, unwrap } from "../../../api/client";
+import { ScopeEditor, scopeProblem, type ToolScope } from "../../../components/tool-scope";
 import { FormPage, FormSection } from "../../../components/templates/form-page";
 import m from "../../../components/servers/servers.module.css";
 import { ErrorAlert } from "@/components/ui/alert/alert";
@@ -27,11 +28,12 @@ export function CreateServiceAccountForm({ team, onClose }: { team: string; onCl
   const [description, setDescription] = useState("");
   const [role, setRole] = useState<ServiceAccountRole>("member");
   const [enabled, setEnabled] = useState(true);
+  const [toolScope, setToolScope] = useState<ToolScope>(null);
   const [submitted, setSubmitted] = useState(false);
   const [created, setCreated] = useState<ServiceAccount | null>(null);
   const create = useMutation({
     mutationFn: async () =>
-      unwrap(await api.POST("/v1/teams/{team}/service-accounts", { params: { path: { team } }, body: { name, description: description.trim() || undefined, role, enabled } })),
+      unwrap(await api.POST("/v1/teams/{team}/service-accounts", { params: { path: { team } }, body: { name, description: description.trim() || undefined, role, enabled, toolScope } })),
     onSuccess: (a) => {
       storeServiceAccount(qc, a);
       toast.success(`${a.name} was created`, "Create its first key.");
@@ -48,7 +50,7 @@ export function CreateServiceAccountForm({ team, onClose }: { team: string; onCl
   const nameError = (submitted ? nameProblem(name) : undefined) ?? (taken ? "Another service account in this team has this name. Choose another." : undefined);
   const submit = () => {
     setSubmitted(true);
-    if (nameProblem(name)) {
+    if (nameProblem(name) || scopeProblem(toolScope)) {
       requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
       return;
     }
@@ -88,6 +90,9 @@ export function CreateServiceAccountForm({ team, onClose }: { team: string; onCl
         <div className={m.wide}>
           <Switch label="Enabled" description="Turned off, its keys are refused until it's turned on again." checked={enabled} onCheckedChange={setEnabled} />
         </div>
+      </FormSection>
+      <FormSection title="Account tool ceiling">
+        <ScopeEditor value={toolScope} onChange={setToolScope} disabled={create.isPending} />
       </FormSection>
       <ErrorAlert error={taken ? undefined : create.error} title="Couldn't create the service account" />
     </FormPage>

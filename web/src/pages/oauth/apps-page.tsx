@@ -16,7 +16,7 @@ export function ConnectedAppsPage() {
       owner={{ self: true }}
       canDisconnect
       title={terms.connectedApps}
-      description="MCP clients you allowed to use gateways as you, with OAuth sign-in. Each one reaches only the gateway you connected it to, with your access. Disconnecting one stops it at once."
+      description="MCP clients you allowed to use gateways as you, with OAuth sign-in. Each one reaches only the gateway you connected it to, within its tool scope and your access. Tool scopes do not restrict prompts or resources. Disconnecting one stops it at once."
       notices={
         <Alert tone="info">
           Connect a client from <TextLink render={<Link to="/gateways" />}>{terms.myGateways}</TextLink>: it signs you in through your browser the first time it

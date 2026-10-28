@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, ApiError, type Schemas, unwrap } from "../../api/client";
 import { adminGatewaysKey } from "../../api/queries";
+import { ScopeEditor, scopeProblem, type ToolScope } from "../tool-scope";
 import { FormDialog } from "../form-dialog";
 import { ErrorAlert } from "@/components/ui/alert/alert";
 import { Field } from "@/components/ui/field/field";
@@ -39,6 +40,7 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
   const [team, setTeam] = useState("");
   const [email, setEmail] = useState("");
   const [group, setGroup] = useState("");
+  const [toolScope, setToolScope] = useState<ToolScope>(null);
   const [submitted, setSubmitted] = useState(false);
   const teams = useQuery({
     queryKey: ["admin", "teams", "grant-options"],
@@ -50,7 +52,7 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
       unwrap(
         await api.POST("/v1/admin/gateways/{gatewayId}/grants", {
           params: { path: { gatewayId: gateway.id } },
-          body: kind === "team" ? { subjectKind: kind, team } : kind === "user" ? { subjectKind: kind, userEmail: email.trim() } : { subjectKind: kind, group: group.trim() },
+          body: { ...(kind === "team" ? { subjectKind: kind, team } : kind === "user" ? { subjectKind: kind, userEmail: email.trim() } : { subjectKind: kind, group: group.trim() }), toolScope },
         }),
       ),
     onSuccess: (grant) => {
@@ -75,7 +77,7 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
       onClose={onClose}
       onSubmit={() => {
         setSubmitted(true);
-        if (value) add.mutate();
+        if (value && !scopeProblem(toolScope)) add.mutate();
       }}
       submitLabel="Grant access"
       busy={add.isPending}
@@ -113,6 +115,8 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
           <Input spellCheck={false} autoComplete="off" maxLength={256} value={group} onChange={(e) => change(setGroup)(e.target.value)} />
         </Field>
       )}
+      <ScopeEditor value={toolScope} onChange={setToolScope} disabled={add.isPending} />
+      <p>Matching grants are alternatives: another grant can allow additional tools. Independent credential limits still apply.</p>
       <ErrorAlert error={refused ? undefined : add.error} title="Couldn't grant access" />
     </FormDialog>
   );

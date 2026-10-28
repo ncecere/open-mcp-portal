@@ -12,6 +12,7 @@ import { Link } from "@tanstack/react-router";
 import { Plug, Unplug } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { api, type Schemas, unwrap } from "../../api/client";
+import { ScopeBadges } from "../tool-scope";
 import { ConfirmMutationDialog } from "../confirm-dialog";
 import { ListPage, RelativeTime, timeColumn } from "../templates/list-page";
 import { Badge } from "@/components/ui/badge/badge";
@@ -94,6 +95,7 @@ function columns(admin: boolean): DataTableColumn<OAuthGrant>[] {
       ),
     },
     { id: "gateway", header: "Gateway", accessor: (g) => g.gateway.name, sortable: true, cell: (g) => <GatewayCell g={g} admin={admin} /> },
+    { id: "toolScope", header: "Tool scope", cell: (g) => <ScopeBadges scope={g.toolScope} /> },
     timeColumn<OAuthGrant>("createdAt", "Connected", (g) => g.createdAt),
     {
       ...timeColumn<OAuthGrant>("lastUsedAt", "Last used", (g) => g.lastUsedAt),

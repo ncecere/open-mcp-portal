@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { api, type Schemas, unwrap } from "../../api/client";
 import { myApiKeysQuery, myGatewaysQuery } from "../../api/queries";
+import { ScopeEditor, scopeProblem, type ToolScope } from "../../components/tool-scope";
 import { ConnectSection } from "../../components/gateways/connect";
 import { Alert, ErrorAlert } from "@/components/ui/alert/alert";
 import { Button } from "@/components/ui/button/button";
@@ -38,13 +39,14 @@ export function CreateKeyDialog({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState("");
   const [days, setDays] = useState("90");
   const [gatewayIds, setGatewayIds] = useState<string[]>([]);
+  const [toolScope, setToolScope] = useState<ToolScope>(null);
   const [submitted, setSubmitted] = useState(false);
   const gateways = useQuery(myGatewaysQuery());
   const create = useMutation({
     mutationFn: async () =>
       unwrap(
         await api.POST("/v1/me/api-keys", {
-          body: { name: name.trim(), expiresInDays: Number(days), ...(gatewayIds.length > 0 ? { gatewayIds } : {}) },
+          body: { name: name.trim(), expiresInDays: Number(days), toolScope, ...(gatewayIds.length > 0 ? { gatewayIds } : {}) },
         }),
       ),
     onSuccess: () => void qc.invalidateQueries({ queryKey: myApiKeysQuery().queryKey }),
@@ -81,7 +83,7 @@ export function CreateKeyDialog({ onClose }: { onClose: () => void }) {
         onSubmit={(e) => {
           e.preventDefault();
           setSubmitted(true);
-          if (name.trim() && !daysProblem(days)) create.mutate();
+          if (name.trim() && !daysProblem(days) && !scopeProblem(toolScope)) create.mutate();
         }}
       >
         <Field label="Name" description="Where you'll use it, for example “Claude Code on my laptop”." error={nameError}>
@@ -109,6 +111,7 @@ export function CreateKeyDialog({ onClose }: { onClose: () => void }) {
             emptyText="No gateway matches."
           />
         </Field>
+        <ScopeEditor value={toolScope} onChange={setToolScope} disabled={create.isPending} />
         <ErrorAlert error={create.error} title="Couldn't create the key" />
       </Form>
     </Dialog>
