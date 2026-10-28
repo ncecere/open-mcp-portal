@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **2026-10-28.** v0.3.3 is the current release. This is an order of work, not a schedule, for one maintainer. Every item below is an
+Status: **2026-10-28.** v0.4.0 is the current release. This is an order of work, not a schedule, for one maintainer. Every item below is an
 issue with its implementation plan (data model, API, packages to change, tests, acceptance criteria, open questions):
 [all roadmap issues](https://github.com/ncecere/open-mcp-portal/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap), grouped by
 [milestone](https://github.com/ncecere/open-mcp-portal/milestones). Sizes are relative effort: **S** a few days, **M** a week or two, **L** several weeks. Each item that needs a
@@ -11,7 +11,7 @@ design gets one in `docs/` before code, as the earlier phases did. The decisions
 Open MCP Portal is a portal for MCP servers: teams register them, a catalog lists them, gateways curate them, and
 people and agents get governed access. It is **not** an LLM gateway, an agent runtime, a workflow engine or a RAG
 system, and the roadmap adds none of those. The owner has also withdrawn external agent-platform trust and
-person impersonation ([decision 81](decisions.md)); #68 removes that integration safely. Ordinary MCP clients,
+person impersonation ([decision 81](decisions.md)); #68 retired that integration safely in v0.4.0. Ordinary MCP clients,
 including coding assistants, still use the portal's standard credentials.
 
 Decided out of scope:
@@ -34,6 +34,7 @@ Decided out of scope:
 | [v0.3.1](releases/v0.3.1.md) | 2026-10-20 | A per-provider access list and narrower tokens per call (closes the F-3 residual), a server's own credential as several parts (headers, bearer, Basic, a query key), OpenTelemetry tracing, Grafana dashboards and Prometheus alert rules. |
 | [v0.3.2](releases/v0.3.2.md) | 2026-10-20 | Three more ways to authenticate to a server: each person's own key, the portal's own OAuth client (client credentials), and mTLS with a private CA; found and fixed a migration interplay before release. |
 | [v0.3.3](releases/v0.3.3.md) | 2026-10-28 | Owner-set tool classification and review binding; browser-session inventory/revocation and optional idle expiry; patched dependencies and deterministic smoke-helper lifecycle tests. |
+| [v0.4.0](releases/v0.4.0.md) | 2026-10-28 | Credential tool scopes, per-selection tool curation, team-owned service connections, migration/runtime database roles and safe retirement of external-platform impersonation. |
 
 Proven on a real deployment (one Talos cluster, Authentik sign-in, CloudNativePG with continuous archiving and daily backups, a restore tested twice):
 Claude Code over OAuth and an API key on the 2026-07-28 revision; per-person OAuth to GitHub's hosted MCP server; DeepWiki through a gateway.
@@ -43,20 +44,20 @@ the pilot (#20). [status.md](status.md) records what each release verified.
 ## How the next work is ordered
 
 The [implementation order](implementation-order.md) reconciles the open GitHub issues with what has already
-shipped. **#28 classification** and **#37 session hardening** shipped in v0.3.3. The **v0.4.0 candidate**
-integrates implemented **#29 scopes**, **#30 curation**, **#26 service connections**, **#44 database roles** and
-**#68 external-platform retirement**, with independent review corrections and browser checks; final full-tree
-and release/deployment gates still precede publication. #62/#63 are withdrawn as not planned, not completed
-verification. Historical milestone headings below are planning buckets, not a promise of release numbering.
+shipped. **#28 classification** and **#37 session hardening** shipped in v0.3.3. **v0.4.0 shipped and closed
+#29 scopes, #30 curation, #26 service connections, #44 database roles and #68 external-platform retirement**,
+with independent review corrections, full-tree tests, browser checks and CI/deployment/artifact verification.
+#62/#63 are withdrawn as not planned, not completed verification. Historical milestone headings below are
+planning buckets, not a promise of release numbering. #31 approvals follow after their policy choices are confirmed.
 
 1. **Verify and pilot alongside implementation.** Decisions #5, #6 and #7 shipped in v0.2.2. The
    real-client checks (#14–#17), provider/channel checks (#18–#19), independent review (#13) and
    team pilot (#20) still need evidence, not more fake-server tests.
-2. **Credentials foundations already shipped.** Waves 1 and 2 below are complete except #26, shared
-   service connections. External-platform impersonation is being retired in #68, not extended or verified.
-3. **Governance builds on classification.** Ship #28 before scopes (#29), then curation (#30) and
-   approvals (#31). #32 is independent; #33's read retries also need classification.
-4. **Operations before scale.** Split database roles (#44), then prove upgrades, ingress and restores (#43)
+2. **Credentials foundations shipped.** Waves 1 and 2 below are complete, including #26 shared service
+   connections. External-platform impersonation was retired in #68, not extended or verified.
+3. **Governance builds on shipped classification, scopes and curation.** #31 approvals are next, after
+   policy confirmation. #32 is independent; #33's read retries also need classification.
+4. **Operations before scale.** #44 database roles shipped; next prove upgrades, ingress and restores (#43)
    before releasing the Helm chart (#42). See the implementation order for staged lifecycle/audit dependencies.
 
 ## Owner decisions needed
@@ -66,6 +67,7 @@ the fail-closed recommendation and keeps classification with team owners/admins 
 
 | Issue | Decision | Recommended |
 | --- | --- | --- |
+| [#31](https://github.com/ncecere/open-mcp-portal/issues/31) | Unclassified approval matching, denial renewal, service-account separation of duties and preview/metadata retention. | Confirm before implementing policy behavior; the refreshed architecture plan is not owner acceptance. |
 | [#36](https://github.com/ncecere/open-mcp-portal/issues/36) | How a SCIM user links to a login, and whether `active: false` suspends or destroys. | Link by a configurable claim (default `sub`), never bare email; `active: false` suspends, `DELETE` destroys. |
 | [#51](https://github.com/ncecere/open-mcp-portal/issues/51) / [#39](https://github.com/ncecere/open-mcp-portal/issues/39) | How usage is attributed to a calling team; whether erasure leaves audit snapshots. | The team of the grant that admitted the call (a billing team for user and group grants); erasure leaves audit snapshots, bounded by audit retention, documented. |
 
@@ -101,25 +103,25 @@ Making "all MCP servers" true, then governing what runs. Milestone: [v0.3](https
 **Order** (each wave can ship as it is ready):
 
 - **Wave 1, shipped in v0.3.1:** #27 (provider access and narrower tokens), #34 (tracing/observability), and #23 (credential parts and multi-secret redaction).
-- **Wave 2:** #22, #24 and #25 shipped in v0.3.2; #26 remains, now unblocked by the provider allow-list.
-- **Wave 3, tool policy, strictly in this order:** #28, #29, #30, then #31, which consumes the classes, digests the merged arguments and adds notifications. #32 is independent and can run beside it.
+- **Wave 2, shipped:** #22, #24 and #25 in v0.3.2; #26 in v0.4.0.
+- **Wave 3, tool policy:** #28 shipped v0.3.3; #29/#30 shipped v0.4.0. Next #31 consumes classes, digests merged arguments and adds notifications. #32 is independent.
 - **Wave 4:** #33 (retries of reads need classification; failover is the contentious part and may become its own issue) and #35 last, once its shape is confirmed against the specification and approvals exist.
 - **Patch-release candidates** (additive, expand-only migrations): #34, #27, #23, #25, #32, #28.
 
 | Issue | Item | Size | What it does, and why | Depends on |
 | --- | --- | --- | --- | --- |
-| [#55–#58](https://github.com/ncecere/open-mcp-portal/issues/55) | External-platform trust and impersonation **historically shipped in v0.3.0; withdrawn** | – | Owner decision 81 retires these features in #68. Historical release/audit records remain; this is no longer a supported direction for new work. | #68 |
+| [#55–#58](https://github.com/ncecere/open-mcp-portal/issues/55) | External-platform trust and impersonation **historically shipped v0.3.0; retired v0.4.0** | – | Owner decision 81 retires these features in #68. Historical release/audit records remain; this is no longer a supported direction for new work. | #68 |
 | [#60](https://github.com/ncecere/open-mcp-portal/issues/60) | ~~Let a person allow a server from My connections~~ **done in v0.3.0; retained** | S | Self-service per-server origin/scope consent remains useful for ordinary MCP connections independently of the retired integration. | decision 60 |
-| [#68](https://github.com/ncecere/open-mcp-portal/issues/68) | Retire external agent-platform trust and impersonation | M | Remove active integration and fence obsolete relay credentials without erasing history or weakening normal MCP authentication. Replaces withdrawn #62/#63. | decision 81 |
+| [#68](https://github.com/ncecere/open-mcp-portal/issues/68) | ~~Retire external agent-platform trust and impersonation~~ **done in v0.4.0** | M | Remove active integration and fence obsolete relay credentials without erasing history or weakening normal MCP authentication. Replaces withdrawn #62/#63. | decision 81 |
 | [#22](https://github.com/ncecere/open-mcp-portal/issues/22) | ~~Add per-person secrets as an upstream auth mode for MCP servers~~ **done in v0.3.2** | L | Add an upstream auth mode `person_secret` where each person pastes their own API key or token for a server once. The portal seals it, binds it to the server's origin, and sends it as a header, bearer token or query parameter on that person's calls. It makes servers that want a personal key usable without a shared static header that erases who is calling. | #23, decision 19, decision 59, decision 60 |
 | [#23](https://github.com/ncecere/open-mcp-portal/issues/23) | ~~Support several headers, query keys and Basic auth for a server's own credential~~ **done in v0.3.1** | M | Let a server's own static credential be a list of parts instead of one header: several headers, a query-string key, Basic auth, or a bearer token. Values stay sealed, bound to the origin they were entered for, and redacted everywhere. It also introduces the shared credential list on the upstream target that per-person secrets and machine OAuth reuse. | decision 39, decision 44 |
 | [#24](https://github.com/ncecere/open-mcp-portal/issues/24) | ~~Add OAuth client credentials for servers that authenticate the portal itself~~ **done in v0.3.2** | M | Add an upstream auth mode where the portal itself is an OAuth client: it fetches a token with the client-credentials grant and sends it as the bearer on every call, discovery and health check. It covers servers that trust the portal, not a person, and works for service accounts because no person is needed. | #23, decision 39, decision 40 |
 | [#25](https://github.com/ncecere/open-mcp-portal/issues/25) | ~~Add mTLS client certificates and a per-server CA for upstream connections~~ **done in v0.3.2** | M | Let a server present a client certificate to its upstream and trust a private CA for that server only. The SSRF guard and the internal-network allow-list stay in force, certificate verification is never turned off, and the private key is sealed and never returned. | decision 20, decision 45 |
-| [#26](https://github.com/ncecere/open-mcp-portal/issues/26) | Add team service connections so service accounts can call credentialed tools | L | Let a team own a shared connection (a platform-provider token or an upstream sign-in) that its service accounts can use. Agents and CI can then call tools that today answer `-32010` `service_account`. The team consents per server and origin, exactly as a person does after F-3. | #27, decision 22, decision 23, decision 29, decision 60 |
+| [#26](https://github.com/ncecere/open-mcp-portal/issues/26) | ~~Add team service connections so service accounts can call credentialed tools~~ **done in v0.4.0** | L | Let a team own a shared connection (a platform-provider token or an upstream sign-in) that its service accounts can use. Agents and CI can then call tools that today answer `-32010` `service_account`. The team consents per server and origin, exactly as a person does after F-3. | #27, decision 22, decision 23, decision 29, decision 60 |
 | [#27](https://github.com/ncecere/open-mcp-portal/issues/27) | ~~Add a per-provider allow-list and narrower delegated tokens (H-5)~~ **done in v0.3.1** | M | Close the residual of finding F-3 (threat model H-5a): platform admins decide which teams or servers may require a provider, and a call gets a token narrowed to the scopes it needs where the provider supports that. Background refresh falls out naturally; several accounts per provider does not. | decision 60, decision 26 |
 | [#28](https://github.com/ncecere/open-mcp-portal/issues/28) | ~~Let server owners classify each tool as read, write or destructive~~ **done in v0.3.3** | M | Add a tool class (read, write, destructive) set by the server's team owners and admins. The server's own annotations are shown as a suggestion and never trusted. The class is the input for scoped credentials, approval rules and read-only retries, and the gateway can publish it back to clients as trustworthy annotations. | decision 48, decision 49 |
-| [#29](https://github.com/ncecere/open-mcp-portal/issues/29) | Limit keys, OAuth grants, service accounts and grants by tool class or name | L | Let a credential or grant be limited to tool classes or named tools (a read-only key). Scopes only narrow what the owner may already use. The OAuth consent screen shows the scope, the `scope` parameter maps to classes, and tools outside the scope are hidden and refused like unknown tools. | #28, decision 49, decision 24 |
-| [#30](https://github.com/ncecere/open-mcp-portal/issues/30) | Constrain, rename and re-describe tools per gateway | L | Per gateway tool, let owners fix or restrict argument values (pin GitHub's `owner`), show the model a narrowed schema, rename the tool and rewrite its description. Curation is stored beside the approved definition, never replaces it, and fails closed when the upstream definition changes. | decision 49 |
+| [#29](https://github.com/ncecere/open-mcp-portal/issues/29) | ~~Limit keys, OAuth grants, service accounts and grants by tool class or name~~ **done in v0.4.0** | L | Let a credential or grant be limited to tool classes or named tools (a read-only key). Scopes only narrow what the owner may already use. The OAuth consent screen shows the scope, the `scope` parameter maps to classes, and tools outside the scope are hidden and refused like unknown tools. | #28, decision 49, decision 24 |
+| [#30](https://github.com/ncecere/open-mcp-portal/issues/30) | ~~Constrain, rename and re-describe tools per gateway~~ **done in v0.4.0** | L | Per gateway tool, let owners fix or restrict argument values (pin GitHub's `owner`), show the model a narrowed schema, rename the tool and rewrite its description. Curation is stored beside the approved definition, never replaces it, and fails closed when the upstream definition changes. | decision 49 |
 | [#31](https://github.com/ncecere/open-mcp-portal/issues/31) | Require approval before sensitive tool calls | L | Add rules (for example 'destructive tools need approval') that stop a call and return a multi-round-trip result with an approval link. Named approvers approve in the portal; the person retries. Approvals are bound to the arguments and the definition, expire, are single use and audited, and the requester can never approve their own call. | #28, decision 48, decision 52, decision 59 |
 | [#32](https://github.com/ncecere/open-mcp-portal/issues/32) | Let people request access to a gateway and owners approve it | M | Let a signed-in person ask for access to a platform gateway that its owner has made requestable, with a reason. Approvers decide in the portal and approval creates the normal gateway grant, optionally with an expiry. Gateways stay invisible to people who cannot use them unless an owner opts in. | decision 17, decision 23 |
 | [#33](https://github.com/ncecere/open-mcp-portal/issues/33) | Add per-server quotas, concurrency caps, retries, a circuit breaker and failover | L | Protect upstream servers and callers: a quota and a concurrency cap per server, retries only for reads that cannot have run, a circuit breaker, and several upstream URLs per server with failover. Failover is limited to auth modes where a second origin cannot receive a credential nobody entered for it. | #28, decision 31 |
@@ -142,7 +144,7 @@ Leavers lose access automatically, the audit trail leaves the database, and oper
 | [#41](https://github.com/ncecere/open-mcp-portal/issues/41) | Wrap stored secrets with OpenBao, Vault or a cloud KMS using envelope encryption | M | Stop requiring the master key to sit in an environment variable: let a Vault, OpenBao or cloud KMS hold the key-encryption key and wrap per-epoch data keys stored in PostgreSQL. A rewrap then rotates the master without re-sealing every column. | #44, decision 36 |
 | [#42](https://github.com/ncecere/open-mcp-portal/issues/42) | Publish a Helm chart with autoscaling, backup job and restore runbook | L | Ship a Helm chart that deploys the same hardened workload as the Kustomize base, with an optional HorizontalPodAutoscaler, guidance for highly available PostgreSQL (CloudNativePG), a backup job and a tested restore runbook. Keep one source of truth by testing the two renderings against each other. | #43, #44, #41 |
 | [#43](https://github.com/ncecere/open-mcp-portal/issues/43) | Extend the kind smoke test with upgrade, ingress, OIDC, restore and load | L | Grow the kind-based smoke test into the release gate: install the previous release and upgrade it, route through a real ingress with TLS, sign in through a real OIDC provider, prove a restore, and run a multi-replica load test. | #44 |
-| [#44](https://github.com/ncecere/open-mcp-portal/issues/44) | Split migration-owner and runtime database roles | M | Run migrations as an owner role and the portal as a runtime role that cannot change or delete the append-only audit and call tables. A stolen runtime credential or a SQL-capable bug can then no longer rewrite history (threat-model H-11). | decision 11 |
+| [#44](https://github.com/ncecere/open-mcp-portal/issues/44) | ~~Split migration-owner and runtime database roles~~ **done in v0.4.0** | M | Run migrations as an owner role and the portal as a runtime role that cannot change or delete the append-only audit and call tables. A stolen runtime credential or a SQL-capable bug can then no longer rewrite history (threat-model H-11). | decision 11 |
 | [#45](https://github.com/ncecere/open-mcp-portal/issues/45) | Implement subscriptions/listen for list-changed notifications | M | Let modern-era clients keep one long-lived stream open to a gateway and be told when its tools or prompts change, instead of polling lists every 30 seconds. Gateways are stateless today, so the design centres on fan-out across replicas and on closing streams when access is revoked. | decision 51 |
 
 ## v0.5: developer experience and catalog

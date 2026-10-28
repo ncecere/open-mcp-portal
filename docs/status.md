@@ -1,12 +1,14 @@
 # Status and handoff
 
-Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.3.3, **released on 2026-10-28**
-(release notes: [releases/v0.3.3.md](releases/v0.3.3.md); earlier: [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.4.0, **released on 2026-10-28**
+(release notes: [releases/v0.4.0.md](releases/v0.4.0.md); earlier: [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
-## v0.4.0 release candidate: MCP-only governance
+## v0.4.0 (2026-10-28): MCP-only governance
 
-Scopes (#29), curation (#30), shared service connections (#26), database-role separation (#44) and
-external-platform retirement (#68) were integrated on `integration/credential-policy` for the main release candidate.
+Shipped and closed: scopes (#29), curation (#30), shared service connections (#26), database-role separation
+(#44) and external-platform retirement (#68). Integrated on `integration/credential-policy`, fast-forwarded
+to main and tagged at `d6fe895c1aa732b2cdc6c6016b63ebd59c6710d3`; the release is
+[published on GitHub](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.4.0).
 [Release/upgrade notes](releases/v0.4.0.md) cover migrations `00029`–`00034` and mixed-version policy limits.
 The owner withdrew Pi Durable Platform/external-platform impersonation ([decision 81](decisions.md));
 #62/#63 are closed as **not planned**, not completed remediation or verification. Retirement disables
@@ -35,13 +37,25 @@ explicit service-account assignment and destination grants succeed. Actual legac
 receive the shared credential with verified portal identity and matching provider claim; a normal personal
 caller still needs its own consent and has no personal connection. A 390px shared-connections screen has no
 horizontal overflow and zero axe violations/incomplete checks. Browser checks found and corrected a shared
-completion page that wrongly linked personal connections, and stale relay wording. Main CI, combined
-kindnet/Calico deployment smoke and image/signature/publication gates remain pending.
+completion page that wrongly linked personal connections, and stale relay wording.
 Rebuilt mobile completion now shows shared guidance and a safe portal link, never personal-connection
 instructions. Revoking the shared connection in the UI stops the same service key's next call (`-32010`);
 all temporary wire-test keys were revoked. The completion screen has zero axe violations and one gradient
 contrast item: manual conservative calculation gives **6.49:1**, above the 4.5:1 normal-text minimum.
-These fake-server checks are not real-provider/IDE/pilot acceptance. The published release remains v0.3.3.
+These fake-server checks are not real-provider/IDE/pilot acceptance, a full mobile/all-page audit or a
+wall-clock refresh/expiry soak. No production deployment was performed.
+
+Final [main CI](https://github.com/ncecere/open-mcp-portal/actions/runs/40735137564), both
+[kindnet/Calico smoke jobs](https://github.com/ncecere/open-mcp-portal/actions/runs/40735137539) and the
+[native image/release workflow](https://github.com/ncecere/open-mcp-portal/actions/runs/40737187805) passed.
+Verified the published tag and exact amd64/arm64 index, both SPDX SBOM checksums and digest asset. Cosign
+validated the tag-specific workflow identity, GitHub issuer, trusted certificate and transparency-log
+inclusion. The arm64 image ran as `65532:65532`, read-only with no network, and reported
+`open-mcp-portal 0.4.0 (d6fe895c1aa7)`. The verified index digest, now pinned in the example overlay, is
+`sha256:7610c003c56d92e460c504b9752d91e89b75c7006630ca0e2b8d5c235d57a016`.
+Owned scratch browser/app/fake-server processes and PostgreSQL were stopped/removed; private fixture
+credentials, harness and binaries were removed. Existing development services/database were untouched.
+GitHub reported zero open Dependabot alerts after publication.
 
 ## v0.3.3 (2026-10-28)
 
@@ -101,10 +115,10 @@ passed at `8a10de3`. The published index contains linux/amd64 and linux/arm64, w
 Cosign verification checked the tag-specific workflow identity, GitHub issuer, trusted certificate and
 transparency-log inclusion. The arm64 image ran read-only with no network and reported
 `open-mcp-portal 0.3.3 (8a10de3e34ec)`. The verified index digest is
-`sha256:021672961ead3bc78de0e2383373e780ce1035b34b25d676e433199dcf8c5ed8`; the example overlay is pinned to it.
+`sha256:021672961ead3bc78de0e2383373e780ce1035b34b25d676e433199dcf8c5ed8`; the example overlay was pinned to it at publication.
 GitHub reported zero open Dependabot alerts after publication.
 
-At v0.3.3 publication, #29/#30/#26/#44 remained staged rather than shipped. See the current release-candidate
+At v0.3.3 publication, #29/#30/#26/#44 remained staged rather than shipped. See the v0.4.0
 section above for their combined verification and the subsequent MCP-only retirement. No production
 deployment is implied by either publication or scratch-environment checks.
 
@@ -386,7 +400,7 @@ server allow-list).
 
 ## Resume checklist
 
-1. Read `AGENTS.md`, this release-candidate section and [implementation order](implementation-order.md).
+1. Read `AGENTS.md`, the current release section and [implementation order](implementation-order.md).
    Check the branch, worktree changes, main CI and published tag before assuming a release is complete.
 2. Preserve existing services and the real development database. Do not reseed/reset it, run migrations
    against it, overwrite a running `bin/` executable or start duplicate servers on development ports.
@@ -403,11 +417,12 @@ blind restart/seed of an existing one. The historical dev-database migration hel
 
 ## Next steps
 
-1. Finish v0.4.0 main CI/kindnet/Calico smoke;
-   publish only after image scans/signing succeed, then verify digest/signature/SBOMs and update release status.
-   Close #26/#29/#30/#44/#68 only with their actual acceptance evidence.
-2. Implement #31 sensitive-call approvals on the combined scopes/curation path. The next reserved migration
-   is **`00035`**, with proposed decision **82**; earlier plan numbers were superseded by retirement.
+1. v0.4.0 is published and verified; #26/#29/#30/#44/#68 are closed with acceptance evidence. Keep its
+   immutable digest/signature/CI record intact rather than treating a later docs commit as the release tag.
+2. Before implementing #31 sensitive-call approvals, confirm remaining policy choices: unclassified matching,
+   explicit renewal after denial, service-account administrator separation of duties and preview/metadata
+   retention. The source-grounded plan was refreshed against the combined MCP-only code; it is not owner
+   acceptance. Reserve migration **`00035`** and proposed decision **82**; earlier numbers were superseded.
 3. Continue #32/#33 and the ordered operations/lifecycle/audit lanes in
    [implementation order](implementation-order.md). #43 must prove upgrades, ingress, restore and load before
    Helm packaging; existing kindnet/Calico smoke does not establish those broader requirements.

@@ -11,11 +11,12 @@ numbers and file paths are suggestions, not instructions to overwrite existing c
 (migration `00028`, idle expiry off by default). Both issues are closed. See [classification](tool-classification.md),
 [browser sessions](phase4-client-auth.md#browser-sessions-37-decision-76) and [validation](status.md).
 
-**Implemented together for the v0.4.0 candidate:** #29 credential scopes, #30 tool curation, #26 service
-connections, #44 database roles and #68 external-platform retirement. Independent review corrections and
-browser checks are integrated; final-tree Go/race and release CI/deployment gates precede publication and
-issue closure. The current published release remains v0.3.3. Approvals (#31) follow combined scope/curation
-enforcement, using reserved migration `00035` and proposed decision 82. No production deployment is implied.
+**Shipped and closed in v0.4.0:** #29 credential scopes, #30 tool curation, #26 service connections,
+#44 database roles and #68 external-platform retirement. Independent reviews, final-tree normal/race suites
+in both database-role modes, 796 web tests, browser checks, main CI and both deployment smoke CNIs passed.
+The published multi-architecture image/signature/SBOMs were verified; see [status](status.md). No production
+deployment is implied. Approvals (#31) are next, after policy choices are confirmed; reserve migration
+`00035` and proposed decision 82.
 
 ## Ordered backlog
 
@@ -24,15 +25,15 @@ security boundary before building on it; do not start every large issue at once.
 
 | Order | Issues | Reason / dependency |
 | --- | --- | --- |
-| 0, owner scope change | **#68** retire external-platform trust | Remove active issuer/relay impersonation and fence legacy credentials without erasing history. Preserve standard MCP authentication and outbound identity. #62/#63 are closed as not planned, not implemented/verified. |
+| 0, shipped v0.4.0 | **#68** retire external-platform trust | Remove active issuer/relay impersonation and fence legacy credentials without erasing history. Preserve standard MCP authentication and outbound identity. #62/#63 are closed as not planned, not implemented/verified. |
 | 1, shipped v0.3.3 | **#28**, **#37** | Classification unlocks policy; sessions are independent and prepare identity lifecycle work. |
-| 2, current | **#29** credential scopes | Needs #28; intersect every credential layer and preserve existing unscoped behavior. |
-| 3 | **#30** per-gateway curation | Keep approved definitions immutable; validate merged arguments and stale fingerprints before approval digests depend on them. |
-| 4 | **#31** sensitive-call approvals | Needs #28 and #30; bind approval to the merged arguments, definition, origin and requester, atomically single-use. |
-| 2–4, independent lane | **#26** team service connections; then **#32** access requests | #27 provider access control already shipped, so #26 is unblocked. Validate token delivery, lapse, grant and refresh boundaries before lifecycle integration. #32 is independent, but keep gateway/API edits serialized with scopes and curation. |
+| 2, shipped v0.4.0 | **#29** credential scopes | Needs #28; intersect every credential layer and preserve existing unscoped behavior. |
+| 3, shipped v0.4.0 | **#30** per-gateway curation | Keep approved definitions immutable; validate merged arguments and stale fingerprints before approval digests depend on them. |
+| 4, next | **#31** sensitive-call approvals | Needs #28 and #30; bind approval to the merged arguments, definition, origin and requester, atomically single-use. |
+| 2–4, independent lane | **#26** shipped v0.4.0; next **#32** access requests | Shared token delivery, lapse, grants and refresh are validated foundations for lifecycle integration. #32 is independent, but keep gateway/API edits serialized with scopes and curation. |
 | 5 | **#33** upstream protection | Classification permits safe read retries. Ship quotas/concurrency/breaker before considering failover; credential-origin binding must remain intact for every current auth mode. |
 | 6 | **#35** tasks extension | Confirm the extension specification before design/code; carry approvals and access checks into every task operation. |
-| 2, operations lane | **#44** split database roles | Independent security foundation. Preserve append-only retention through narrowly privileged definer functions; test runtime-role denial and normal operations. |
+| 2, shipped v0.4.0 | **#44** split database roles | Independent security foundation. Preserve append-only retention through narrowly privileged definer functions; test runtime-role denial and normal operations. |
 | 3, operations lane | **#43** upgrade/ingress/OIDC/restore/load gates; **#41** envelope encryption | #43 builds on #44. #41 also follows #44; select/test an actual KMS target without changing existing static-key installs by default. |
 | 4, operations lane | **#42** Helm packaging | Only after #43 proves upgrade/restore and #44/#41 establish credential handling. Test parity with Kustomize rather than duplicating unverified assumptions. |
 | 7 | **#40**, then **#36** lifecycle | #40 needs classification/approvals. Implement accountable ownership and safe transfer first; then SCIM uses that ownership model plus sessions and service connections to deprovision. Group-mapping refinements to #40 can follow #36. |
