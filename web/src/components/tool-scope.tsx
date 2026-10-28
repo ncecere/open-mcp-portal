@@ -2,10 +2,9 @@ import { useState } from "react";
 import type { Schemas } from "../api/client";
 import { Badge } from "@/components/ui/badge/badge";
 import { Checkbox } from "@/components/ui/checkbox/checkbox";
-import { Field } from "@/components/ui/field/field";
 import { Inline, Stack } from "@/components/ui/layout/layout";
 import { RadioGroup } from "@/components/ui/radio-group/radio-group";
-import { TagInput } from "@/components/ui/tag-input/tag-input";
+import { literalNameProblem, ScopeNames } from "./scope-names";
 import styles from "./tool-scope.module.css";
 
 export type ToolScope = Schemas["ToolScope"] | null;
@@ -18,7 +17,10 @@ export function scopeFormValue(scope: ToolScope | undefined): ToolScope {
 }
 export function scopeProblem(scope: ToolScope): string | undefined {
   if ((scope?.tools?.length ?? 0) > 500) return "Use at most 500 exact tool names.";
-  if (scope?.tools?.some((t) => !t.length || new TextEncoder().encode(t).length > 1100 || /[\p{Cc}*?\[\]{}]/u.test(t))) return "Use exact exposed names: 1–1100 UTF-8 bytes, without control characters or wildcard operators. No wildcards.";
+  for (const name of scope?.tools ?? []) {
+    const problem = literalNameProblem(name);
+    if (problem) return problem;
+  }
   return undefined;
 }
 
@@ -40,14 +42,17 @@ type Props = {
   /** OAuth may only remove requested classes; exact names cannot be added. */
   ceiling?: ToolScope;
   allowNames?: boolean;
+  /** Parent submissions must also refuse a pending or rejected literal-name draft. */
+  onProblemChange?: (problem: string | undefined) => void;
 };
-export function ScopeEditor({ value, onChange, disabled = false, ceiling = null, allowNames = true }: Props) {
+export function ScopeEditor({ value, onChange, disabled = false, ceiling = null, allowNames = true, onProblemChange }: Props) {
   // Keep Custom visible even when its value happens to equal the Read only preset.
   const [custom, setCustom] = useState(false);
   const preset = value === null ? "everything" : !custom && value.classes?.length === 1 && value.classes[0] === "read" && !value.tools?.length ? "read" : "custom";
   const allowed = (c: typeof classes[number]) => ceiling === null || !!ceiling.classes?.includes(c);
   return <Stack gap={3}>
     <RadioGroup legend="Tool scope" value={preset} disabled={disabled} onValueChange={(p) => {
+      onProblemChange?.(undefined);
       setCustom(p === "custom");
       onChange(p === "everything" ? null : p === "read" ? { classes: ["read"], tools: [] } : value ?? { classes: [], tools: [] });
     }} options={[
@@ -60,9 +65,7 @@ export function ScopeEditor({ value, onChange, disabled = false, ceiling = null,
         setCustom(true);
         onChange({ ...value, classes: classes.filter((candidate) => candidate === c ? checked : value?.classes?.includes(candidate)) });
       }} />)}
-      {allowNames && <Field label="Exact tool names" description="Class OR exact exposed name. Names are case-sensitive, may refer to future tools, and cannot contain wildcards. Up to 500 names, each 1–1100 UTF-8 bytes; no control characters. Renamed and future tools are allowed; no server prefix is required." error={scopeProblem(value)}>
-        <TagInput value={value?.tools ?? []} onValueChange={(tools) => onChange({ ...value, tools })} normalize={(t) => t} maxTags={500} maxTagLength={1101} disabled={disabled} noun={{ one: "tool name", other: "tool names" }} />
-      </Field>}
+      {allowNames && <ScopeNames names={value?.tools ?? []} onChange={(tools) => { setCustom(true); onChange({ ...value, tools }); }} onProblemChange={(problem) => { if (problem) setCustom(true); onProblemChange?.(problem); }} disabled={disabled} error={scopeProblem(value)} />}
     </>}
     <ScopeBadges scope={value} />
     {value !== null && !value.classes?.length && !value.tools?.length && <p>No tools. Prompts and resources are unaffected.</p>}

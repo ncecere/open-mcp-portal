@@ -40,6 +40,7 @@ export function CreateKeyDialog({ onClose }: { onClose: () => void }) {
   const [days, setDays] = useState("90");
   const [gatewayIds, setGatewayIds] = useState<string[]>([]);
   const [toolScope, setToolScope] = useState<ToolScope>(null);
+  const [scopeDraftProblem, setScopeDraftProblem] = useState<string>();
   const [submitted, setSubmitted] = useState(false);
   const gateways = useQuery(myGatewaysQuery());
   const create = useMutation({
@@ -83,7 +84,7 @@ export function CreateKeyDialog({ onClose }: { onClose: () => void }) {
         onSubmit={(e) => {
           e.preventDefault();
           setSubmitted(true);
-          if (name.trim() && !daysProblem(days) && !scopeProblem(toolScope)) create.mutate();
+          if (name.trim() && !daysProblem(days) && !scopeProblem(toolScope) && !scopeDraftProblem) create.mutate();
         }}
       >
         <Field label="Name" description="Where you'll use it, for example “Claude Code on my laptop”." error={nameError}>
@@ -111,7 +112,7 @@ export function CreateKeyDialog({ onClose }: { onClose: () => void }) {
             emptyText="No gateway matches."
           />
         </Field>
-        <ScopeEditor value={toolScope} onChange={setToolScope} disabled={create.isPending} />
+        <ScopeEditor value={toolScope} onChange={setToolScope} onProblemChange={setScopeDraftProblem} disabled={create.isPending} />
         <ErrorAlert error={create.error} title="Couldn't create the key" />
       </Form>
     </Dialog>

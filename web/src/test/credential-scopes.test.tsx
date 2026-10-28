@@ -58,7 +58,7 @@ describe("Credential scope payloads and views", () => {
     await u.type(names, "*{Enter}");
     await u.click(screen.getByRole("button", { name: "Create key" }));
     expect(calls.some((c) => c.method === "POST")).toBe(false);
-    await u.click(screen.getByRole("button", { name: "Remove tool name *" }));
+    await u.click(screen.getByRole("button", { name: "Clear name draft" }));
     await u.type(names, "RenamedFutureTool{Enter}");
     await u.click(screen.getByRole("button", { name: "Create key" }));
     await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toEqual({ name: "Exact", expiresInDays: 90, toolScope: { classes: [], tools: ["RenamedFutureTool"] } }));

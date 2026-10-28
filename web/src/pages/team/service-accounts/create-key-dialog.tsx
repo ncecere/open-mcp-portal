@@ -55,6 +55,7 @@ export function CreateKeyDialog({ account, activeCount, onClose }: Props) {
   const [days, setDays] = useState("90");
   const [gatewayIds, setGatewayIds] = useState<string[]>([]);
   const [toolScope, setToolScope] = useState<ToolScope>(null);
+  const [scopeDraftProblem, setScopeDraftProblem] = useState<string>();
   const [submitted, setSubmitted] = useState(false);
   const gateways = useQuery(accountGatewaysQuery(team, account.id));
   const create = useMutation({
@@ -100,7 +101,7 @@ export function CreateKeyDialog({ account, activeCount, onClose }: Props) {
         onSubmit={(e) => {
           e.preventDefault();
           setSubmitted(true);
-          if (name.trim() && !daysProblem(days) && !scopeProblem(toolScope)) create.mutate({ activeBefore: activeCount });
+          if (name.trim() && !daysProblem(days) && !scopeProblem(toolScope) && !scopeDraftProblem) create.mutate({ activeBefore: activeCount });
         }}
       >
         <Field label="Name" description="Where it's deployed, for example “GitHub Actions release workflow”." error={nameError}>
@@ -126,7 +127,7 @@ export function CreateKeyDialog({ account, activeCount, onClose }: Props) {
         </Field>
         <p>Account ceiling (applies together with this key, even when the key selects Everything):</p>
         <ScopeBadges scope={account.toolScope} />
-        <ScopeEditor value={toolScope} onChange={setToolScope} disabled={create.isPending} />
+        <ScopeEditor value={toolScope} onChange={setToolScope} onProblemChange={setScopeDraftProblem} disabled={create.isPending} />
         <ErrorAlert error={create.error} title="Couldn't create the key" describe={(err) => {
             const message = refusal(err);
             return message ? { message } : undefined;

@@ -13,6 +13,8 @@ type FormDialogProps = Pick<DialogProps, "title" | "description" | "size"> & {
   /** Shows the submit button as loading. */
   busy?: boolean;
   submitDisabled?: boolean;
+  /** Keep a request-bound dialog open until its result is known. */
+  closeDisabled?: boolean;
   /** Extra props for the form, e.g. noValidate. */
   formProps?: Omit<FormProps, "id" | "onSubmit" | "children">;
   children: ReactNode;
@@ -23,20 +25,20 @@ type FormDialogProps = Pick<DialogProps, "title" | "description" | "size"> & {
  * children in a Form whose submit button sits in the footer next to Cancel.
  * After anything is typed or picked, closing asks "Leave without saving?".
  */
-export function FormDialog({ title, description, size, onClose, onSubmit, submitLabel, busy, submitDisabled, formProps, children }: FormDialogProps) {
+export function FormDialog({ title, description, size, onClose, onSubmit, submitLabel, busy, submitDisabled, closeDisabled, formProps, children }: FormDialogProps) {
   const formId = useId();
   const edits = useEditTracker();
   const guard = useCloseGuard(edits.edited && !busy, onClose);
   return (
     <Dialog
       open
-      onOpenChange={(o) => !o && guard.requestClose()}
+      onOpenChange={(o) => !o && !closeDisabled && guard.requestClose()}
       title={title}
       description={description}
       size={size}
       footer={
         <>
-          <DialogClose>Cancel</DialogClose>
+          <DialogClose disabled={closeDisabled}>Cancel</DialogClose>
           <Button type="submit" form={formId} loading={busy} disabled={submitDisabled}>
             {submitLabel}
           </Button>

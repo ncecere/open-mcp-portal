@@ -19,6 +19,7 @@ import type { Gateway } from "./labels";
 import { grantsQuery } from "./scope";
 
 type Kind = Schemas["GatewayGrantSubjectKind"];
+type Submission = { gatewayId: string; gatewayName: string; body: Schemas["GatewayGrantCreate"] };
 
 const kindOptions: { value: Kind; label: string; description: string }[] = [
   { value: "team", label: "A team", description: "Everyone on the team, including people who join later, and the team's service accounts." },
@@ -41,6 +42,7 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
   const [email, setEmail] = useState("");
   const [group, setGroup] = useState("");
   const [toolScope, setToolScope] = useState<ToolScope>(null);
+  const [scopeDraftProblem, setScopeDraftProblem] = useState<string>();
   const [submitted, setSubmitted] = useState(false);
   const teams = useQuery({
     queryKey: ["admin", "teams", "grant-options"],
@@ -48,17 +50,17 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
     enabled: kind === "team",
   });
   const add = useMutation({
-    mutationFn: async () =>
+    mutationFn: async (submission: Submission) =>
       unwrap(
         await api.POST("/v1/admin/gateways/{gatewayId}/grants", {
-          params: { path: { gatewayId: gateway.id } },
-          body: { ...(kind === "team" ? { subjectKind: kind, team } : kind === "user" ? { subjectKind: kind, userEmail: email.trim() } : { subjectKind: kind, group: group.trim() }), toolScope },
+          params: { path: { gatewayId: submission.gatewayId } },
+          body: submission.body,
         }),
       ),
-    onSuccess: (grant) => {
-      void qc.invalidateQueries({ queryKey: grantsQuery(gateway.id).queryKey });
+    onSuccess: (grant, submission) => {
+      void qc.invalidateQueries({ queryKey: grantsQuery(submission.gatewayId).queryKey });
       void qc.invalidateQueries({ queryKey: adminGatewaysKey });
-      toast.success("Access granted", `${subjectName(grant)} can use ${gateway.name} from their next request.`);
+      toast.success("Access granted", `${subjectName(grant)} can use ${submission.gatewayName} from their next request.`);
       onClose();
     },
   });
@@ -67,6 +69,7 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
   const refused = fieldError(add.error, kind);
   const error = missing ?? refused;
   const change = (f: (v: string) => void) => (v: string) => {
+    if (add.isPending) return;
     if (refused) add.reset();
     f(v);
   };
@@ -76,17 +79,25 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
       description="Access takes effect on the next request. The people it covers see the gateway under My gateways."
       onClose={onClose}
       onSubmit={() => {
+        if (add.isPending) return;
         setSubmitted(true);
-        if (value && !scopeProblem(toolScope)) add.mutate();
+        if (value && !scopeProblem(toolScope) && !scopeDraftProblem) add.mutate({
+          gatewayId: gateway.id,
+          gatewayName: gateway.name,
+          body: { ...(kind === "team" ? { subjectKind: kind, team } : kind === "user" ? { subjectKind: kind, userEmail: email.trim() } : { subjectKind: kind, group: group.trim() }), toolScope },
+        });
       }}
       submitLabel="Grant access"
       busy={add.isPending}
+      closeDisabled={add.isPending}
       formProps={{ noValidate: true }}
     >
       <RadioGroup<Kind>
         legend="Grant to"
         value={kind}
+        disabled={add.isPending}
         onValueChange={(k) => {
+          if (add.isPending) return;
           setKind(k);
           setSubmitted(false);
           add.reset();
@@ -95,7 +106,7 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
       />
       {kind === "team" && (
         <Field label="Team" error={error}>
-          <NativeSelect value={team} onChange={(e) => change(setTeam)(e.target.value)}>
+          <NativeSelect disabled={add.isPending} value={team} onChange={(e) => change(setTeam)(e.target.value)}>
             <option value="">{teams.isLoading ? "Loading teams…" : "Choose a team"}</option>
             {(teams.data?.items ?? []).map((t) => (
               <option key={t.team.id} value={t.team.slug}>
@@ -107,15 +118,15 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
       )}
       {kind === "user" && (
         <Field label="Email" error={error}>
-          <Input type="email" autoComplete="off" value={email} onChange={(e) => change(setEmail)(e.target.value)} />
+          <Input disabled={add.isPending} type="email" autoComplete="off" value={email} onChange={(e) => change(setEmail)(e.target.value)} />
         </Field>
       )}
       {kind === "group" && (
         <Field label="Group name" description="Exactly as it appears in the groups claim, such as engineering or cn=engineering,ou=groups." error={error}>
-          <Input spellCheck={false} autoComplete="off" maxLength={256} value={group} onChange={(e) => change(setGroup)(e.target.value)} />
+          <Input disabled={add.isPending} spellCheck={false} autoComplete="off" maxLength={256} value={group} onChange={(e) => change(setGroup)(e.target.value)} />
         </Field>
       )}
-      <ScopeEditor value={toolScope} onChange={setToolScope} disabled={add.isPending} />
+      <ScopeEditor value={toolScope} onChange={setToolScope} onProblemChange={setScopeDraftProblem} disabled={add.isPending} />
       <p>Matching grants are alternatives: another grant can allow additional tools. Independent credential limits still apply.</p>
       <ErrorAlert error={refused ? undefined : add.error} title="Couldn't grant access" />
     </FormDialog>

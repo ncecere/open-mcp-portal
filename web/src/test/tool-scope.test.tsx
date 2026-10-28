@@ -42,7 +42,7 @@ describe("Credential tool scopes", () => {
     await u.type(names, "server__*{Enter}");
     expect(screen.getByText(/Use exact exposed names: 1–1100 UTF-8/)).toHaveTextContent("No wildcards.");
     expect(names).toHaveAttribute("aria-invalid", "true");
-    await u.click(screen.getByRole("button", { name: "Remove tool name server__*" }));
+    await u.click(screen.getByRole("button", { name: "Clear name draft" }));
     expect(screen.queryByText(/Use exact exposed names: 1–1100 UTF-8/)).toBeNull();
     expect(await axe(container)).toHaveNoViolations();
     expect(scopeProblem({ tools: ["x".repeat(1100)] })).toBeUndefined();

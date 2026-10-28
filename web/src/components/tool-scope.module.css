@@ -8,3 +8,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.literalName {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

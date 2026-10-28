@@ -37,6 +37,8 @@ export function SettingsTab({ account, abilities }: Props) {
   const saved = formOf(account);
   const [form, setForm, revision] = useRevisionForm(saved, account.revision, { labels, choices });
   const [submitted, setSubmitted] = useState(false);
+  const [scopeDraftProblem, setScopeDraftProblem] = useState<string>();
+  const [scopeEditorKey, setScopeEditorKey] = useState(0);
   // Saving would switch it off: confirmed first.
   const [confirmingOff, setConfirmingOff] = useState<Form | null>(null);
   const save = useMutation({
@@ -57,7 +59,7 @@ export function SettingsTab({ account, abilities }: Props) {
   const canEdit = abilities.canManage;
   const taken = save.error instanceof ApiError && save.error.code === "name_taken";
   const nameError = (submitted ? nameProblem(form.name) : undefined) ?? (taken ? "Another service account in this team has this name. Choose another." : undefined);
-  const dirty = JSON.stringify({ ...form, description: form.description.trim() }) !== JSON.stringify({ ...saved, description: saved.description.trim() });
+  const dirty = !!scopeDraftProblem || JSON.stringify({ ...form, description: form.description.trim() }) !== JSON.stringify({ ...saved, description: saved.description.trim() });
   return (
     <SettingsPage
       revision={revision}
@@ -67,14 +69,16 @@ export function SettingsTab({ account, abilities }: Props) {
       dirty={dirty}
       saving={save.isPending}
       error={taken ? undefined : save.error}
-      message={nameError ? "Not saved: fix the highlighted field" : undefined}
+      message={nameError || scopeDraftProblem ? "Not saved: fix the highlighted field" : undefined}
       onSave={() => {
         setSubmitted(true);
-        if (nameProblem(form.name) || scopeProblem(form.toolScope)) return;
+        if (nameProblem(form.name) || scopeProblem(form.toolScope) || scopeDraftProblem) return;
         if (account.enabled && !form.enabled) setConfirmingOff(form);
         else save.mutate();
       }}
       onDiscard={() => {
+        setScopeEditorKey((key) => key + 1);
+        setScopeDraftProblem(undefined);
         setForm(saved);
         setSubmitted(false);
         save.reset();
@@ -107,7 +111,7 @@ export function SettingsTab({ account, abilities }: Props) {
         />
       </SettingsSection>
       <SettingsSection title="Account tool ceiling" description="Applies immediately to every key together with its own ceiling. Everything on a key inherits this live limit.">
-        {canEdit ? <ScopeEditor value={form.toolScope} onChange={(toolScope) => setForm((f) => ({ ...f, toolScope: scopeFormValue(toolScope) }))} disabled={save.isPending} /> : <ScopeBadges scope={account.toolScope} />}
+        {canEdit ? <ScopeEditor key={scopeEditorKey} value={form.toolScope} onChange={(toolScope) => setForm((f) => ({ ...f, toolScope: scopeFormValue(toolScope) }))} onProblemChange={setScopeDraftProblem} disabled={save.isPending} /> : <ScopeBadges scope={account.toolScope} />}
       </SettingsSection>
       {canEdit && <DeleteAccount account={account} />}
       <ConfirmMutationDialog

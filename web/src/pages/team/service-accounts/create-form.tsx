@@ -29,6 +29,7 @@ export function CreateServiceAccountForm({ team, onClose }: { team: string; onCl
   const [role, setRole] = useState<ServiceAccountRole>("member");
   const [enabled, setEnabled] = useState(true);
   const [toolScope, setToolScope] = useState<ToolScope>(null);
+  const [scopeDraftProblem, setScopeDraftProblem] = useState<string>();
   const [submitted, setSubmitted] = useState(false);
   const [created, setCreated] = useState<ServiceAccount | null>(null);
   const create = useMutation({
@@ -50,7 +51,7 @@ export function CreateServiceAccountForm({ team, onClose }: { team: string; onCl
   const nameError = (submitted ? nameProblem(name) : undefined) ?? (taken ? "Another service account in this team has this name. Choose another." : undefined);
   const submit = () => {
     setSubmitted(true);
-    if (nameProblem(name) || scopeProblem(toolScope)) {
+    if (nameProblem(name) || scopeProblem(toolScope) || scopeDraftProblem) {
       requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
       return;
     }
@@ -92,7 +93,7 @@ export function CreateServiceAccountForm({ team, onClose }: { team: string; onCl
         </div>
       </FormSection>
       <FormSection title="Account tool ceiling">
-        <ScopeEditor value={toolScope} onChange={setToolScope} disabled={create.isPending} />
+        <ScopeEditor value={toolScope} onChange={setToolScope} onProblemChange={setScopeDraftProblem} disabled={create.isPending} />
       </FormSection>
       <ErrorAlert error={taken ? undefined : create.error} title="Couldn't create the service account" />
     </FormPage>
