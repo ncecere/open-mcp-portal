@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -60,17 +61,22 @@ func refusedCurationRefresh(t *testing.T, done <-chan map[string]any) {
 }
 
 func TestCurationRecheckedAfterMachine401Refresh(t *testing.T) {
-	for _, change := range []string{"policy", "disabled"} {
-		t.Run(change, func(t *testing.T) {
+	for _, tc := range curationRefreshCases {
+		t.Run(fmt.Sprintf("%s/identity=%t", tc.change, tc.identity), func(t *testing.T) {
+			change := tc.change
 			e := newMachineEnv(t)
-			e.mustPatch(e.editor, e.machine(nil))
+			patch := e.machine(nil)
+			patch["sendIdentity"] = tc.identity
+			e.mustPatch(e.editor, patch)
 			e.approve()
 			e.mustSetCaps(e.owner, e.supportTeamPath, sel(e.capID(e.owner, e.server, "tool", "echo")))
 			setCuration(t, e.gwEnv, e.owner, e.supportTeamPath, "echo", map[string]any{"constraints": map[string]any{"text": map[string]any{"fixed": "original"}}})
+			enableCurationCapture(t, e.gwEnv, e.supportTeamPath)
 			if _, out := e.callTool(e.key.Secret, "status__echo", nil); out["error"] != nil {
 				t.Fatal(out)
 			}
 			before := len(e.fake.ToolCalls())
+			after := curationLastCall(t, e.gwEnv)
 			requests := e.tokenRequests()
 			e.as.InvalidateAll(false)
 			entered, unblock := blockCurationRefresh(t, e.as, "client_credentials")
@@ -80,6 +86,7 @@ func TestCurationRecheckedAfterMachine401Refresh(t *testing.T) {
 			mutateCurationDuringRefresh(t, e.gwEnv, e.supportTeamPath, change)
 			unblock()
 			refusedCurationRefresh(t, done)
+			assertCurationRefusalRecord(t, e.gwEnv, after, &tc.identity, change)
 			if len(e.fake.ToolCalls()) != before || e.tokenRequests() != requests+1 {
 				t.Fatalf("stale args forwarded or no post-401 renewal: calls=%d->%d tokens=%d->%d", before, len(e.fake.ToolCalls()), requests, e.tokenRequests())
 			}
@@ -88,8 +95,9 @@ func TestCurationRecheckedAfterMachine401Refresh(t *testing.T) {
 }
 
 func TestCurationRecheckedAfterPersonal401Refresh(t *testing.T) {
-	for _, change := range []string{"policy", "disabled"} {
-		t.Run(change, func(t *testing.T) {
+	for _, tc := range curationRefreshCases {
+		t.Run(fmt.Sprintf("%s/identity=%t", tc.change, tc.identity), func(t *testing.T) {
+			change := tc.change
 			e := newUpEnv(t, true)
 			code, raw := e.createOAuth(e.owner, "gh", e.pm.URL(), map[string]any{"registration": "auto", "scopes": []string{"repo"}}, nil)
 			if code != 201 {
@@ -100,6 +108,8 @@ func TestCurationRecheckedAfterPersonal401Refresh(t *testing.T) {
 				t.Fatal(err)
 			}
 			sv := created.Data.Server
+			code, ec, _ := e.patch(e.owner, sv.Id.String(), map[string]any{"sendIdentity": tc.identity})
+			mustCode(t, "identity setting", code, ec, 200, "")
 			if _, to := e.setup(e.owner, sv.Id.String()); !strings.Contains(to, "setup=connected") {
 				t.Fatal(to)
 			}
@@ -107,6 +117,7 @@ func TestCurationRecheckedAfterPersonal401Refresh(t *testing.T) {
 			path := toolsTeam + "/gateways/" + gw.Id.String()
 			e.mustSetCaps(e.owner, path, sel(e.capID(e.owner, sv, "tool", "echo")))
 			setCuration(t, e.gwEnv, e.owner, path, "echo", map[string]any{"constraints": map[string]any{"text": map[string]any{"fixed": "original"}}})
+			enableCurationCapture(t, e.gwEnv, path)
 			key := newKey(t, e.owner, "laptop").Secret
 			call := func() map[string]any {
 				_, _, out := rawMCP(t, e.app, "POST", "curated", key, rpc(1, "tools/call", map[string]any{"name": "gh__echo"}), nil)
@@ -116,6 +127,7 @@ func TestCurationRecheckedAfterPersonal401Refresh(t *testing.T) {
 				t.Fatal(out)
 			}
 			before, refreshes := len(e.pm.ToolCalls()), e.as.RefreshRequests()
+			after := curationLastCall(t, e.gwEnv)
 			e.as.InvalidateAll(false)
 			entered, unblock := blockCurationRefresh(t, e.as, "refresh_token")
 			done := make(chan map[string]any, 1)
@@ -124,6 +136,7 @@ func TestCurationRecheckedAfterPersonal401Refresh(t *testing.T) {
 			mutateCurationDuringRefresh(t, e.gwEnv, path, change)
 			unblock()
 			refusedCurationRefresh(t, done)
+			assertCurationRefusalRecord(t, e.gwEnv, after, &tc.identity, change)
 			if len(e.pm.ToolCalls()) != before || e.as.RefreshRequests() != refreshes+1 {
 				t.Fatalf("stale args forwarded or no post-401 refresh: calls=%d->%d refreshes=%d->%d", before, len(e.pm.ToolCalls()), refreshes, e.as.RefreshRequests())
 			}

@@ -616,14 +616,25 @@ func recorded(method string) bool {
 // team, one the key is not limited to, or one they may not use, is 404
 // (recorded as denied for lists and calls of an existing gateway).
 func (rc *request) resolveGateway(slug string) bool {
+	return rc.resolveGatewayAttempt(slug, nil)
+}
+
+// prior is the explicit live-check record. Before transport its IdentitySent
+// is nil; only a completed forwarding attempt supplies attempted-call metadata.
+func (rc *request) resolveGatewayAttempt(slug string, prior *calls.Call) bool {
 	ctx := rc.r.Context()
 	g, err := rc.h.Gateways.Resolve(ctx, slug)
 	if err != nil {
 		if !isNotFound(err) {
-			rc.internal(err)
+			rc.liveInternal(err, prior)
 			return false
 		}
 		refuse(rc.w, http.StatusNotFound, "Gateway not found")
+		if prior != nil {
+			rec := *prior
+			rec.Outcome, rec.ErrorClass = calls.OutcomeDenied, "gateway_not_found"
+			rc.record(rec, 0)
+		}
 		return false
 	}
 	rc.gateway = g
@@ -631,7 +642,7 @@ func (rc *request) resolveGateway(slug string) bool {
 	if !rc.principal.inScope(g.ID) {
 		denied = DeniedKeyScope
 	} else if denied, err = rc.h.Gateways.Unserved(ctx, g); err != nil {
-		rc.internal(err)
+		rc.liveInternal(err, prior)
 		return false
 	}
 	if denied == "" {
@@ -649,7 +660,7 @@ func (rc *request) resolveGateway(slug string) bool {
 			c, err = rc.h.Gateways.CallerOf(ctx, g, rc.principal.user)
 		}
 		if err != nil {
-			rc.internal(err)
+			rc.liveInternal(err, prior)
 			return false
 		}
 		rc.caller = c
@@ -667,7 +678,12 @@ func (rc *request) resolveGateway(slug string) bool {
 		refuse(rc.w, http.StatusNotFound, "Gateway not found")
 	}
 	if recorded(rc.msg.Method) && len(rc.msg.ID) > 0 {
-		rc.record(calls.Call{Outcome: calls.OutcomeDenied, ErrorClass: denied, ExposedName: rc.requestedName()}, n)
+		rec := calls.Call{ExposedName: rc.requestedName()}
+		if prior != nil {
+			rec = *prior
+		}
+		rec.Outcome, rec.ErrorClass = calls.OutcomeDenied, denied
+		rc.record(rec, n)
 	}
 	return false
 }

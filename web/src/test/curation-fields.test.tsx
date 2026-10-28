@@ -5,7 +5,7 @@ const fixed = (text: string) => policyOf("", "", { value: { mode: "fixed", text 
 const unsafe = [
   "9007199254740990.5", "9007199254740991.1", "9007199254740992", "-9007199254740993",
   "0.10000000000000001", "1.234567890123456789", "1e309", "1e100000000000000000000000",
-  "1e-10001", "1e-324", "4e-324", "-1e-999", "0." + "0".repeat(255) + "1",
+  "1e-10001", "1e-324", "4e-324", "-1e-999", "0." + "0".repeat(511) + "1",
 ];
 
 describe("Constraint number lexemes", () => {
@@ -17,7 +17,7 @@ describe("Constraint number lexemes", () => {
     }
   });
 
-  it.each(["0.1", "1e-1", "1.5", "15e-1", "1.50", "-0", "0e10000", "5e-324", "9007199254740991", "-9007199254740991"])("preserves safe decimal value %s across save/reload and rename", (text) => {
+  it.each(["0.1", "1e-1", "1.5", "15e-1", "1.50", "-0", "0e10000", "0e-9999", "1e-254", "1e-255", "1e-300", "5e-324", "0." + "0".repeat(323) + "5", "9007199254740991", "-9007199254740991"])("preserves safe decimal value %s across save/reload and rename", (text) => {
     const original = fixed(text);
     const reloaded = JSON.parse(JSON.stringify(original));
     expect(policyOf("renamed", "description", choicesOf(reloaded, properties), properties)).toEqual({ ...reloaded, nameOverride: "renamed", descriptionOverride: "description" });
@@ -39,7 +39,7 @@ describe("Constraint number lexemes", () => {
 
   it("bounds scanning and numeric token size without large exponent arithmetic", () => {
     expect(() => fixed("[" + "0,".repeat(33000) + "0]")).toThrow(/at most 64 KiB/);
-    expect(() => fixed("0e" + "0".repeat(255))).toThrow(/Numbers must/);
+    expect(() => fixed("0e" + "0".repeat(511))).toThrow(/Numbers must/);
   });
 });
 

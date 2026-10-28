@@ -84,14 +84,29 @@ func Decode(raw []byte) (*Policy, error) {
 		if fixed {
 			vals = []json.RawMessage{c.Fixed}
 		}
-		for _, v := range vals {
+		for i, v := range vals {
 			if len(v) > MaxValueBytes {
 				return nil, errors.New("constraint value exceeds 8 KiB")
 			}
-			if _, err := parseValue(v, nil, true); err != nil {
+			parsed, err := parseValue(v, nil, true)
+			if err != nil {
 				return nil, errors.New("invalid constraint value: numbers must round-trip exactly through JSON binary64 and integral values must be safe integers")
 			}
+			// Marshal the exact typed decimals recursively, not float64 values.
+			// JSONB expands exponents: stripping redundant scale here prevents
+			// zero exponents or trailing zeros from growing without bound.
+			canonical, err := json.Marshal(parsed)
+			if err != nil {
+				return nil, errors.New("invalid constraint value")
+			}
+			vals[i] = canonical
 		}
+		if fixed {
+			c.Fixed = vals[0]
+		} else {
+			c.Allowed = vals
+		}
+		p.Constraints[name] = c
 	}
 	return &p, nil
 }

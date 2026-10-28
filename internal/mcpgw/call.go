@@ -155,7 +155,7 @@ func (rc *request) forward(kind string, o gateways.Offer, args json.RawMessage, 
 			}
 		}
 	}
-	if kind == upstream.KindTool && !rc.liveTool(o) {
+	if kind == upstream.KindTool && !rc.liveTool(o, nil) {
 		return
 	}
 	rc.captureCall(o, args, target, token, cred)

@@ -3,8 +3,10 @@ const numberToken = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
 
 // Decimal equality, not binary-float equality: 0.1 and 1e-1 are equivalent.
 // Keep only significant digits and a bounded base-ten exponent; never build powers.
+// Match Go's 512-byte bound: JSONB expands portable subnormals up to 326 bytes.
+// The API canonicalizes redundant scale (including zero exponents) before storage.
 function decimal(token: string): string {
-  if (token.length > 256) throw new Error(numericError);
+  if (token.length > 512) throw new Error(numericError);
   const [mantissa = "", power = "0"] = token.toLowerCase().split("e");
   const exponent = Number(power);
   if (!Number.isInteger(exponent) || Math.abs(exponent) > 10000) throw new Error(numericError);

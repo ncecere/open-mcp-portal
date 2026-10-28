@@ -98,11 +98,16 @@ func textOf(t *testing.T, out map[string]any) string {
 }
 
 // lastRecord waits for the latest call record to read want ("outcome class").
-func (e *relayEnv) lastRecord(want string) {
+// An optional exposed name avoids matching a preceding call's same outcome.
+func (e *relayEnv) lastRecord(want string, names ...string) {
 	e.t.Helper()
+	name := ""
+	if len(names) > 0 {
+		name = names[0]
+	}
 	last := ""
 	for range 150 {
-		last = e.scalar(`SELECT coalesce((SELECT outcome || ' ' || coalesce(error_class, '') FROM mcp_calls ORDER BY id DESC LIMIT 1), '')`)
+		last = e.scalar(`SELECT coalesce((SELECT outcome || ' ' || coalesce(error_class, '') FROM mcp_calls WHERE ($1='' OR exposed_name=$1) ORDER BY id DESC LIMIT 1), '')`, name)
 		if last == want {
 			return
 		}
@@ -939,7 +944,7 @@ func TestStreamCancelsUpstream(t *testing.T) {
 				t.Fatalf("the server saw %d cancellations after the client closed the stream", f.Cancellations())
 			}
 			// Recorded once, as a call that ended because the client left.
-			e.lastRecord("upstream_error client_cancelled")
+			e.lastRecord("upstream_error client_cancelled", slug+"__block")
 			if n := e.scalar(`SELECT count(*)::text FROM mcp_calls WHERE exposed_name = $1`, slug+"__block"); n != "1" {
 				t.Errorf("%s records", n)
 			}

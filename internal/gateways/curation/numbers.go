@@ -17,10 +17,21 @@ type decimal struct {
 	rat      *big.Rat
 }
 
-func (n *decimal) MarshalJSON() ([]byte, error) { return []byte(n.text), nil }
+func (n *decimal) MarshalJSON() ([]byte, error) {
+	// Keep portable integers as plain JSON integers for typed upstream decoders.
+	// The bound covers safe integers without ever constructing huge powers.
+	if n.text != "0" && n.exponent >= 0 && n.exponent <= 15 {
+		coefficient := n.text[:strings.IndexByte(n.text, 'e')]
+		return []byte(coefficient + strings.Repeat("0", n.exponent)), nil
+	}
+	return []byte(n.text), nil
+}
 
 func normalizeNumber(s string) (*decimal, bool) {
-	if len(s) == 0 || len(s) > 256 {
+	// JSONB expands exponent notation on reload. 512 covers every portable
+	// binary64 decimal spelling (including the 326-byte expanded 5e-324).
+	// Decode canonicalizes values before persistence to bound redundant scale.
+	if len(s) == 0 || len(s) > 512 {
 		return nil, false
 	}
 	exponent := 0

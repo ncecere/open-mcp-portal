@@ -26,10 +26,10 @@ func TestPortableConstraintNumbers(t *testing.T) {
 					t.Fatalf("%s: %v", raw, err)
 				}
 				if err == nil {
-					// Validation must never silently replace the authored spelling.
+					// Canonical spelling may change; exact value and JSON types must not.
 					out, _ := json.Marshal(p)
-					if !strings.Contains(string(out), tc.text) {
-						t.Fatalf("normalized policy: %s", out)
+					if !Equal(raw, out) {
+						t.Fatalf("normalized policy changed value: %s", out)
 					}
 				}
 			}

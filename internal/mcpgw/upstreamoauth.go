@@ -137,7 +137,12 @@ func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.C
 	for attempt := 0; ; attempt++ {
 		// Credential acquisition and a post-401 renewal can both wait. Recheck
 		// every attempt, without changing the original merged args or binding.
-		if o.Capability.Kind == upstream.KindTool && !rc.liveTool(o) {
+		var prior *calls.Call
+		if attempt > 0 {
+			// Only a completed first transport (401) establishes IdentitySent.
+			prior = rec
+		}
+		if o.Capability.Kind == upstream.KindTool && !rc.liveTool(o, prior) {
 			return nil, false, false
 		}
 		result, isError, err := do(t)
