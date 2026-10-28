@@ -88,8 +88,8 @@ func Decode(raw []byte) (*Policy, error) {
 			if len(v) > MaxValueBytes {
 				return nil, errors.New("constraint value exceeds 8 KiB")
 			}
-			if _, err := value(v); err != nil {
-				return nil, errors.New("invalid constraint value")
+			if _, err := parseValue(v, nil, true); err != nil {
+				return nil, errors.New("invalid constraint value: numbers must round-trip exactly through JSON binary64 and integral values must be safe integers")
 			}
 		}
 	}
@@ -139,18 +139,24 @@ func Project(definition []byte, p *Policy) ([]byte, *Policy, error) {
 		// An unconstrained property's reference/composition can still depend
 		// on a fixed property we remove (including via an absolute $ref).
 		// Check the entire property tree, not just the constrained nodes.
-		work := MaxSchemaNodes
-		for _, raw := range props {
+		work := newWorkBudget()
+		compiled := make(map[string]*compiledSchema, len(props))
+		for name, raw := range props {
 			property, err := object(raw)
-			if err != nil || !supported(property, 0, &work) {
+			if err != nil {
 				return nil, nil, errSchema
 			}
+			c, ok := compileSchema(property, 0, work)
+			if !ok {
+				return nil, nil, errSchema
+			}
+			compiled[name] = c
 		}
 		required := []string{}
 		if r, ok := schema["required"]; ok && (string(r) == "null" || json.Unmarshal(r, &required) != nil) {
 			return nil, nil, errSchema
 		}
-		if len(required) > work {
+		if !spend(&work.schema, len(required)) {
 			return nil, nil, errSchema
 		}
 		for arg, c := range p.Constraints {
@@ -162,9 +168,10 @@ func Project(definition []byte, p *Policy) ([]byte, *Policy, error) {
 			if err != nil {
 				return nil, nil, fmt.Errorf("argument %s has an unsupported schema", arg)
 			}
+			validator := compiled[arg]
 			if c.Fixed != nil {
-				v, _ := value(c.Fixed)
-				if !valid(prop, v, 0) {
+				v, err := parseValue(c.Fixed, work, true)
+				if err != nil || !validator.valid(v, work) {
 					return nil, nil, fmt.Errorf("argument %s fixed value does not satisfy the original schema", arg)
 				}
 				delete(props, arg)
@@ -177,10 +184,23 @@ func Project(definition []byte, p *Policy) ([]byte, *Policy, error) {
 				required = next
 			} else {
 				next := []json.RawMessage{}
+				seen := map[string]bool{}
 				for _, v := range c.Allowed {
-					parsed, _ := value(v)
-					if valid(prop, parsed, 0) && !contains(next, v) {
+					parsed, err := parseValue(v, work, true)
+					if err != nil {
+						return nil, nil, errSchema
+					}
+					key, ok := valueKey(parsed, work)
+					if !ok {
+						return nil, nil, errSchema
+					}
+					valid := validator.valid(parsed, work)
+					if work.validation < 0 || work.arithmetic < 0 {
+						return nil, nil, errSchema
+					}
+					if valid && !seen[key] {
 						next = append(next, v)
+						seen[key] = true
 					}
 				}
 				if len(next) == 0 {

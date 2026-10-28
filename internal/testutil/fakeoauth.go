@@ -61,6 +61,9 @@ type FakeOAuth struct {
 	FailUserinfo bool
 	// RefreshDelay delays refresh answers (concurrency tests).
 	RefreshDelay time.Duration
+	// BeforeToken is called outside the lock with the grant type, before a
+	// token is issued. Tests can block renewal without timing-based sleeps.
+	BeforeToken func(string)
 	// HonourRefreshScope makes a refresh request's scope parameter narrow the
 	// new access token (RFC 6749 section 6, as Microsoft's endpoint does): the
 	// token holds only those scopes, a scope outside the grant is
@@ -568,8 +571,11 @@ func (f *FakeOAuth) token(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	f.tokens++
 	f.resources = append(f.resources, r.PostForm.Get("resource"))
-	rejectResource := f.RejectResource
+	rejectResource, beforeToken := f.RejectResource, f.BeforeToken
 	f.mu.Unlock()
+	if beforeToken != nil {
+		beforeToken(r.PostForm.Get("grant_type"))
+	}
 	clientID, ok := f.clientOK(r)
 	if r.PostForm.Get("grant_type") == "client_credentials" {
 		f.recordClientCredentials(r, clientID, ok)

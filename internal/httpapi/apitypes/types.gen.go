@@ -3962,7 +3962,7 @@ type GatewayPage struct {
 	NextCursor *string   `json:"nextCursor,omitempty"`
 }
 
-// GatewayToolConstraint Exactly one of fixed (including null) or allowed. Values must satisfy the original property schema.
+// GatewayToolConstraint Exactly one of fixed (including null) or allowed. Values must satisfy the original property schema. Recursively, numbers must be finite and exactly value-round-trippable through standard JSON binary64 parsing and serialization; integral numbers must be safe integers (absolute value at most 9007199254740991). Ordinary 0.1 and 1e-1 are accepted; high-precision fractions, overflow and underflow are rejected, never silently rounded. Numeric spellings are at most 256 bytes. Projection additionally enforces cumulative compilation, validation and exact-arithmetic work budgets; expensive unsupported schemas or policies are refused as a whole. These authoring limits do not globally restrict unconstrained runtime arguments.
 type GatewayToolConstraint struct {
 	Allowed *[]interface{}  `json:"allowed,omitempty"`
 	Fixed   json.RawMessage `json:"fixed,omitempty"`

@@ -253,14 +253,22 @@ func TestCurationSelectionConcurrencyStaleAndAudit(t *testing.T) {
 	}
 }
 
-// Ensure response policy raw JSON retains null and exact integer values.
+// API authors obey the same exact JSON round-trip limits as the browser.
 func TestCurationExactPolicyAPI(t *testing.T) {
 	e := newEraEnv(t)
 	cap := selectedTool(t, e.owner, e.path, "lookup")
-	p := json.RawMessage(`{"constraints":{"limit":{"fixed":9007199254740993}}}`)
+	for _, n := range []string{"9007199254740993", "9007199254740990.5", "0.10000000000000001", "1e10000", "1e-10000"} {
+		p := json.RawMessage(`{"constraints":{"limit":{"fixed":` + n + `}}}`)
+		g := e.gateway(e.owner, e.path)
+		code, raw := e.owner.raw("PUT", e.path+"/capabilities", map[string]any{"items": []any{curationItem(cap, p)}}, ifMatch(g.Revision))
+		if code != 400 || errorCode(raw) != "invalid_curation" {
+			t.Fatalf("accepted lossy policy %s: %d %s", n, code, raw)
+		}
+	}
+	p := json.RawMessage(`{"constraints":{"limit":{"fixed":9007199254740991}}}`)
 	setCuration(t, e.gwEnv, e.owner, e.path, "lookup", p)
 	out := selectedTool(t, e.owner, e.path, "lookup")
-	if !strings.Contains(string(out.Curation), "9007199254740993") || *out.Fingerprint != *cap.Fingerprint {
+	if !strings.Contains(string(out.Curation), "9007199254740991") || *out.Fingerprint != *cap.Fingerprint {
 		t.Fatalf("precision: %s", out.Curation)
 	}
 }

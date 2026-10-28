@@ -99,12 +99,12 @@ func TestExactJSONEquality(t *testing.T) {
 			t.Errorf("%s = %s: %v", tc.a, tc.b, got)
 		}
 	}
-	p := policy(t, `{"constraints":{"n":{"fixed":9007199254740993}}}`)
-	if _, err := Merge(p, []byte(`{"n":9007199254740992}`)); err == nil {
+	p := policy(t, `{"constraints":{"n":{"fixed":9007199254740991}}}`)
+	if _, err := Merge(p, []byte(`{"n":9007199254740991.1}`)); err == nil {
 		t.Fatal("float precision bypass")
 	}
-	p = policy(t, `{"constraints":{"n":{"allowed":[9007199254740993]}}}`)
-	if _, err := Merge(p, []byte(`{"n":9007199254740992}`)); err == nil {
+	p = policy(t, `{"constraints":{"n":{"allowed":[9007199254740991]}}}`)
+	if _, err := Merge(p, []byte(`{"n":9007199254740991.1}`)); err == nil {
 		t.Fatal("allowed precision bypass")
 	}
 }

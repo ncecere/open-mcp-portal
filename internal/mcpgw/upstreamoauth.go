@@ -126,6 +126,11 @@ type exchangeFn func(upstream.Target) (any, bool, error)
 func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.Credential, t upstream.Target, do exchangeFn) (any, bool, bool) {
 	ctx := rc.r.Context()
 	for attempt := 0; ; attempt++ {
+		// Credential acquisition and a post-401 renewal can both wait. Recheck
+		// every attempt, without changing the original merged args or binding.
+		if o.Capability.Kind == upstream.KindTool && !rc.liveTool(o) {
+			return nil, false, false
+		}
 		result, isError, err := do(t)
 		if err == nil {
 			return result, isError, true
