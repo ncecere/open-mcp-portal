@@ -1272,7 +1272,7 @@ export interface paths {
         get: operations["listTeamGatewayCapabilities"];
         /**
          * Replace the gateway's selection (team owners and admins); If-Match is the gateway's revision
-         * @description 422 capability_not_selectable (details.capabilityIds, and details.reasons mapping each to unsupported_template or not_offered) when a capability is not offered by gateway-options (another team's private server, unapproved, gone, or a resource template with unsupported expressions). 422 too_many (at most 200). 422 name_clash (details.exposedName) when two selected capabilities expose the same name or URI.
+         * @description 422 capability_not_selectable (details.capabilityIds, and details.reasons mapping each to unsupported_template or not_offered) when a capability is not offered by gateway-options (another team's private server, unapproved, gone, or a resource template with unsupported expressions). 422 too_many (at most 200). 422 name_clash (details.exposedName) when non-tool selections collide. Tool name collisions are 409 name_taken, including unavailable selections. Explicit curation edits (including null) require a browser session and the current expectedFingerprint; mismatch or omission is 409 changed_since_review. Omitted curation preserves existing policy.
          */
         put: operations["setTeamGatewayCapabilities"];
         post?: never;
@@ -1389,7 +1389,7 @@ export interface paths {
         get: operations["adminListGatewayCapabilities"];
         /**
          * Replace a platform gateway's selection (platform admins); If-Match is the gateway's revision
-         * @description Platform gateways may select approved, listed tools and prompts of published, enabled servers only, and minRole must be absent. Same 422 codes as the team operation; 403 team_gateway for a team gateway.
+         * @description Platform gateways may select approved, listed tools and prompts of published, enabled servers only, and minRole must be absent. Same error codes and curation semantics as the team operation; 403 team_gateway for a team gateway. Automation tokens may change selections but cannot explicitly edit curation (403 session_required).
          */
         put: operations["adminSetGatewayCapabilities"];
         post?: never;
@@ -4273,11 +4273,25 @@ export interface components {
             rateLimitPerMinute?: number | null;
         };
         /**
-         * @description server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved / changed: the current definition isn't approved. gone: the server no longer lists it. team_archived: the team that owns its server, or the team gateway's own team, is archived (unarchiving restores it).
+         * @description curation_stale: the curated definition changed and requires owner review. server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved / changed: the current definition isn't approved. gone: the server no longer lists it. team_archived: the team that owns its server, or the team gateway's own team, is archived (unarchiving restores it).
          * @enum {string}
          */
-        GatewayUnavailableReason: "server_disabled" | "not_published" | "not_approved" | "changed" | "gone" | "team_archived";
+        GatewayUnavailableReason: "server_disabled" | "not_published" | "not_approved" | "changed" | "gone" | "team_archived" | "curation_stale";
         GatewayCapability: {
+            fingerprint?: string;
+            originalDefinition?: {
+                [key: string]: unknown;
+            };
+            effectiveDefinition?: {
+                [key: string]: unknown;
+            };
+            curation?: components["schemas"]["GatewayToolCuration"] | null;
+            stale?: boolean;
+            baseFingerprint?: string;
+            /** Format: uuid */
+            curatedBy?: string | null;
+            /** Format: date-time */
+            curatedAt?: string | null;
             toolClass?: components["schemas"]["ToolClass"] | null;
             /** @description The account a person must connect to use it (null; none). Service accounts can't call capabilities that require one. In MyGatewayDetail, connected says whether the caller's connection covers it now */
             requires: components["schemas"]["CapabilityRequirement"] | null;
@@ -4311,10 +4325,27 @@ export interface components {
             revision: components["schemas"]["Revision"];
             items: components["schemas"]["GatewayCapability"][];
         };
+        /** @description Exactly one of fixed (including null) or allowed. Values must satisfy the original property schema. */
+        GatewayToolConstraint: {
+            fixed?: unknown;
+            allowed?: unknown[];
+        };
+        GatewayToolCuration: {
+            /** @description Complete model-facing exposed tool name; null restores the default. */
+            nameOverride?: string | null;
+            descriptionOverride?: string | null;
+            constraints?: {
+                [key: string]: components["schemas"]["GatewayToolConstraint"];
+            };
+        };
         GatewayCapabilitySelection: {
             /** Format: uuid */
             capabilityId: string;
             minRole?: components["schemas"]["TeamRole"];
+            /** @description Current capability fingerprint, required for any explicit curation edit including clearing. */
+            expectedFingerprint?: string;
+            /** @description Omit to preserve existing policy; null clears; object replaces. Session only. Mismatch is 409 changed_since_review; exposed-name collision is 409 name_taken. */
+            curation?: components["schemas"]["GatewayToolCuration"] | null;
         };
         GatewayCapabilitiesUpdate: {
             items: components["schemas"]["GatewayCapabilitySelection"][];
@@ -9012,6 +9043,7 @@ export interface operations {
             400: components["responses"]["ErrorReply"];
             403: components["responses"]["ErrorReply"];
             404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
             412: components["responses"]["ErrorReply"];
             422: components["responses"]["ErrorReply"];
             428: components["responses"]["ErrorReply"];
@@ -9284,6 +9316,7 @@ export interface operations {
             400: components["responses"]["ErrorReply"];
             403: components["responses"]["ErrorReply"];
             404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
             412: components["responses"]["ErrorReply"];
             422: components["responses"]["ErrorReply"];
             428: components["responses"]["ErrorReply"];

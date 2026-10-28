@@ -385,6 +385,7 @@ type ToolCall struct {
 	Meta           map[string]any
 	RequestState   string
 	InputResponses map[string]any
+	Arguments      json.RawMessage
 }
 
 // FakeMCPTools is how many tools the fake lists by default; with the
@@ -816,7 +817,11 @@ func (f *FakeMCP) server() *mcp.Server {
 			})
 	}
 	if f.schemaTools {
-		s.AddTool(&mcp.Tool{Name: "lookup", Title: "Lookup", Description: "Looks something up (arrays, parameter headers).",
+		description := "Looks something up (arrays, parameter headers)."
+		if d, ok := f.descriptions["lookup"]; ok {
+			description = d
+		}
+		s.AddTool(&mcp.Tool{Name: "lookup", Title: "Lookup", Description: description,
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{
 				"region": map[string]any{"type": "string", "x-mcp-header": "Region"},
 				"limit":  map[string]any{"type": "integer", "x-mcp-header": "Limit"},
@@ -824,7 +829,7 @@ func (f *FakeMCP) server() *mcp.Server {
 			}},
 			OutputSchema: map[string]any{"type": []string{"null", "array"}}},
 			func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				f.sawCall("lookup", headerOf(req))
+				f.sawFull("lookup", req)
 				var args struct {
 					Region string `json:"region"`
 					Limit  int    `json:"limit"`

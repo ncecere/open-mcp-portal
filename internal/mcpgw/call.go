@@ -10,6 +10,7 @@ import (
 
 	"github.com/ncecere/open-mcp-portal/internal/calls"
 	"github.com/ncecere/open-mcp-portal/internal/gateways"
+	"github.com/ncecere/open-mcp-portal/internal/gateways/curation"
 	"github.com/ncecere/open-mcp-portal/internal/identity"
 	"github.com/ncecere/open-mcp-portal/internal/oauth"
 	"github.com/ncecere/open-mcp-portal/internal/observability"
@@ -48,10 +49,6 @@ func (rc *request) call(kind string) {
 		rc.record(calls.Call{Outcome: calls.OutcomeBadRequest, ErrorClass: "invalid_params", ExposedName: p.Name}, n)
 		return
 	}
-	again, ok := rc.checkRetry(calls.Call{ExposedName: p.Name})
-	if !ok {
-		return
-	}
 	offers, err := rc.offers(kind)
 	if err != nil {
 		rc.internal(err)
@@ -77,12 +74,32 @@ func (rc *request) call(kind string) {
 		return
 	}
 	if rc.modern && kind == upstream.KindTool {
-		if eerr := validateParamHeaders(rc.r.Header, offer.Capability.Definition, args); eerr != nil {
+		if eerr := validateParamHeaders(rc.r.Header, offer.EffectiveDefinition, args); eerr != nil {
 			n := writeRPC(rc.w, eerr.status, rc.msg.ID, nil, &rpcError{Code: eerr.code, Message: eerr.message})
 			rc.record(calls.Call{Outcome: calls.OutcomeBadRequest, ErrorClass: "header_mismatch", ExposedName: p.Name, Server: &offer.Server,
 				CapabilityID: offer.Capability.ID, ToolClass: offer.Capability.ToolClass}, n)
 			return
 		}
+	}
+	if kind == upstream.KindTool && offer.Curation != nil {
+		merged, err := curation.Merge(offer.Curation, args)
+		if err != nil {
+			n := rc.fail(codeInvalidParams, err.Error())
+			rc.record(calls.Call{Outcome: calls.OutcomeBadRequest, ErrorClass: "argument_constraint", ExposedName: p.Name, Server: &offer.Server,
+				CapabilityID: offer.Capability.ID, ToolClass: offer.Capability.ToolClass}, n)
+			return
+		}
+		args = merged
+		// Preserve modern multi-round-trip and tracing fields. Only arguments
+		// change; every sealed binding below uses the effective arguments.
+		var params map[string]json.RawMessage
+		_ = json.Unmarshal(rc.msg.Params, &params)
+		params["arguments"] = args
+		rc.msg.Params, _ = json.Marshal(params)
+	}
+	again, ok := rc.checkRetry(calls.Call{ExposedName: p.Name})
+	if !ok {
+		return
 	}
 	if again.declined {
 		rc.declined(*offer)
@@ -137,6 +154,9 @@ func (rc *request) forward(kind string, o gateways.Offer, args json.RawMessage, 
 				return
 			}
 		}
+	}
+	if kind == upstream.KindTool && !rc.liveTool(o) {
+		return
 	}
 	rc.captureCall(o, args, target, token, cred)
 	if kind == upstream.KindTool {

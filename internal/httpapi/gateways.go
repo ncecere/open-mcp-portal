@@ -209,7 +209,8 @@ func (a *api) gatewayLimits(ctx context.Context, vs []gateways.View) ([]*int64, 
 func selectionInput(in apitypes.GatewayCapabilitiesUpdate) []gateways.SelectionInput {
 	out := make([]gateways.SelectionInput, len(in.Items))
 	for i, it := range in.Items {
-		out[i] = gateways.SelectionInput{CapabilityID: it.CapabilityId, MinRole: (*string)(it.MinRole)}
+		out[i] = gateways.SelectionInput{CapabilityID: it.CapabilityId, MinRole: (*string)(it.MinRole),
+			Curation: it.Curation, ExpectedFingerprint: it.ExpectedFingerprint}
 	}
 	return out
 }
@@ -515,6 +516,12 @@ func (a *api) getMyGateway(w http.ResponseWriter, r *http.Request) {
 	out := apitypes.MyGatewayDetail{Gateway: a.toAPIMyGateway(m), Capabilities: make([]apitypes.GatewayCapability, len(offers))}
 	for i, o := range offers {
 		out.Capabilities[i] = toAPIGatewayCapability(o.Selected)
+		// My gateways is the model-facing view, not the policy editor. Keep
+		// the edited indicator but don't reveal hidden fixed values here.
+		out.Capabilities[i].OriginalDefinition = nil
+		if o.Curation != nil {
+			out.Capabilities[i].Curation = []byte(`{}`)
+		}
 		if req := o.Requires; req != nil {
 			// Connected: a call would carry the token now (the person also
 			// allowed this capability's server, at its current address).

@@ -52,6 +52,7 @@ export const unavailableLabels: Record<UnavailableReason, string> = {
   changed: "Changed, waiting for approval",
   gone: "No longer listed",
   team_archived: "Team archived",
+  curation_stale: "Tool policy needs review",
 };
 
 export const unavailableHelp: Record<UnavailableReason, string> = {
@@ -61,6 +62,7 @@ export const unavailableHelp: Record<UnavailableReason, string> = {
   changed: "Its definition changed since it was approved; it's served again once the change is approved.",
   gone: "The server doesn't list it any more.",
   team_archived: "The owning team is archived. It's served again when the team is unarchived.",
+  curation_stale: "The definition changed. An owner must review and resave this gateway's tool policy, even after catalog approval.",
 };
 
 /** Why the person may use a gateway. */

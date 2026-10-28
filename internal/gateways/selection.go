@@ -2,8 +2,10 @@ package gateways
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -11,6 +13,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/apperr"
 	"github.com/ncecere/open-mcp-portal/internal/audit"
 	"github.com/ncecere/open-mcp-portal/internal/authz"
+	"github.com/ncecere/open-mcp-portal/internal/gateways/curation"
 	"github.com/ncecere/open-mcp-portal/internal/registry"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
@@ -36,6 +39,7 @@ const (
 	ReasonNotApproved    = "not_approved"
 	ReasonChanged        = "changed"
 	ReasonGone           = "gone"
+	ReasonCurationStale  = "curation_stale"
 	// ReasonTeamArchived: the server's team, or a team gateway's own team,
 	// is archived. Nothing is changed on archive, so unarchiving restores it.
 	ReasonTeamArchived = "team_archived"
@@ -101,9 +105,15 @@ type Selected struct {
 	MinRole            *string
 	// ExposedName is the name (tools, prompts) or URI (resources,
 	// templates) clients see.
-	ExposedName string
-	Available   bool
-	Reason      string // when not Available
+	ExposedName         string
+	Curation            *curation.Policy
+	CurationStale       bool
+	EffectiveDefinition json.RawMessage
+	BaseFingerprint     *string
+	CuratedBy           uuid.NullUUID
+	CuratedAt           *time.Time
+	Available           bool
+	Reason              string // when not Available
 	// Requires is the capability's effective user-authorization
 	// requirement (nil: calls get no provider token).
 	Requires *registry.Requirement
@@ -146,8 +156,9 @@ func selection(ctx context.Context, q *dbgen.Queries, g dbgen.Gateway) ([]Select
 		ok, reason := Availability(g, r.McpCapability, r.McpServer,
 			Archived{GatewayTeam: ownArchived, ServerTeam: r.TeamStatus != teams.StatusActive})
 		out[i] = Selected{Capability: r.McpCapability, Server: r.McpServer, TeamSlug: r.TeamSlug, TeamName: r.TeamName,
-			MinRole: r.MinTeamRole, ExposedName: Exposed(r.McpCapability.Kind, r.McpServer.Slug, r.McpCapability.Name), Available: ok, Reason: reason,
+			MinRole: r.GatewayCapability.MinTeamRole, ExposedName: Exposed(r.McpCapability.Kind, r.McpServer.Slug, r.McpCapability.Name), Available: ok, Reason: reason,
 			Requires: registry.EffectiveFor(r.McpServer, r.McpCapability, ps)}
+		applyCuration(&out[i], r.GatewayCapability)
 	}
 	return out, nil
 }
@@ -298,6 +309,9 @@ func (s *Service) AdminOptions(ctx context.Context, a authz.Actor, p OptionParam
 type SelectionInput struct {
 	CapabilityID uuid.UUID
 	MinRole      *string
+	// nil: preserve; JSON null: clear; object: replace.
+	Curation            json.RawMessage
+	ExpectedFingerprint *string
 }
 
 // SetTeamSelection replaces a team gateway's selection (team owners and
@@ -381,6 +395,9 @@ func audited(items []Selected) []map[string]any {
 	out := make([]map[string]any, len(items))
 	for i, it := range items {
 		m := map[string]any{"exposedName": it.ExposedName, "kind": it.Capability.Kind}
+		if it.Curation != nil {
+			m["curation"] = curation.Summary(it.Curation)
+		}
 		if it.MinRole != nil {
 			m["minRole"] = *it.MinRole
 		}
@@ -432,8 +449,10 @@ func setSelection(ctx context.Context, q *dbgen.Queries, a authz.Actor, g dbgen.
 		}
 	}
 	names := map[uuid.UUID]string{}
+	kinds := map[uuid.UUID]string{}
 	for id, it := range current {
-		names[id] = it.ExposedName
+		kinds[id] = it.Capability.Kind
+		names[id] = Exposed(it.Capability.Kind, it.Server.Slug, it.Capability.Name)
 	}
 	if len(added) > 0 {
 		offered, err := options(ctx, q, teamOf(g), OptionParams{}, added)
@@ -442,7 +461,7 @@ func setSelection(ctx context.Context, q *dbgen.Queries, a authz.Actor, g dbgen.
 		}
 		ok := map[uuid.UUID]bool{}
 		for _, o := range offered {
-			ok[o.ID], names[o.ID] = true, o.ExposedName
+			ok[o.ID], names[o.ID], kinds[o.ID] = true, o.ExposedName, o.Kind
 		}
 		refused := []uuid.UUID{}
 		for _, id := range added {
@@ -454,15 +473,21 @@ func setSelection(ctx context.Context, q *dbgen.Queries, a authz.Actor, g dbgen.
 			return Selection{}, notSelectable(ctx, q, refused)
 		}
 	}
-	exposed := map[string]bool{}
+	policies, err := prepareCurations(ctx, q, a, items, current, names)
+	if err != nil {
+		return Selection{}, err
+	}
+	exposed := map[string]string{}
 	keep := make([]uuid.UUID, 0, len(items))
 	for _, it := range items {
 		n := strings.ToLower(names[it.CapabilityID])
-		if exposed[n] {
-			return Selection{}, unprocessable("name_clash", "Two selected capabilities expose the same name or URI",
-				map[string]any{"exposedName": names[it.CapabilityID]})
+		if previous, clash := exposed[n]; clash {
+			if previous == upstream.KindTool && kinds[it.CapabilityID] == upstream.KindTool {
+				return Selection{}, apperr.Conflict("name_taken", "Two selected tools expose the same name")
+			}
+			return Selection{}, unprocessable("name_clash", "Two selected capabilities expose the same name or URI", map[string]any{"exposedName": names[it.CapabilityID]})
 		}
-		exposed[n] = true
+		exposed[n] = kinds[it.CapabilityID]
 		keep = append(keep, it.CapabilityID)
 	}
 	if err := q.RemoveGatewayCapabilitiesExcept(ctx, dbgen.RemoveGatewayCapabilitiesExceptParams{GatewayID: g.ID, Keep: keep}); err != nil {
@@ -472,6 +497,12 @@ func setSelection(ctx context.Context, q *dbgen.Queries, a authz.Actor, g dbgen.
 		if err := q.UpsertGatewayCapability(ctx, dbgen.UpsertGatewayCapabilityParams{
 			GatewayID: g.ID, CapabilityID: it.CapabilityID, MinTeamRole: it.MinRole, AddedBy: by(a),
 		}); err != nil {
+			return Selection{}, err
+		}
+	}
+	for id, p := range policies {
+		p.GatewayID, p.CapabilityID = g.ID, id
+		if err := q.SetGatewayCapabilityCuration(ctx, p); err != nil {
 			return Selection{}, err
 		}
 	}

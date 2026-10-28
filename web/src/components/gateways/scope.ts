@@ -12,7 +12,7 @@
  * read-only except its switch (platform admins).
  */
 import { infiniteQueryOptions, type QueryClient, queryOptions } from "@tanstack/react-query";
-import { api, ifMatch, unwrap } from "../../api/client";
+import { api, ifMatch, unwrap, type Schemas } from "../../api/client";
 import { adminGatewayQuery, adminGatewaysKey, myGatewaysKey, teamGatewayQuery, teamGatewaysKey } from "../../api/queries";
 import type { Gateway, GatewayKind, TeamRole } from "./labels";
 
@@ -115,7 +115,7 @@ export async function deleteGateway(scope: GatewayScope, gateway: Gateway) {
     : unwrap(await api.DELETE("/v1/admin/gateways/{gatewayId}", { params: { path: { gatewayId: gateway.id } } }));
 }
 
-export type Selection = { capabilityId: string; minRole?: TeamRole };
+export type Selection = { capabilityId: string; minRole?: TeamRole; curation?: Schemas["GatewayToolCuration"] | null; expectedFingerprint?: string };
 
 /** Replaces the selection (If-Match: the gateway's revision). */
 export async function setCapabilities(scope: GatewayScope, gateway: Gateway, items: Selection[], revision: number) {

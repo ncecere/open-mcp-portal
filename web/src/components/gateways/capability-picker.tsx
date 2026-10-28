@@ -30,6 +30,8 @@ import { SkeletonText } from "@/components/ui/skeleton/skeleton";
 import { toast } from "@/components/ui/toast/toast";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group/toggle-group";
 import { untrustedText } from "../servers/labels";
+import { CurationDialog } from "./curation-dialog";
+import type { GatewayCapability } from "./labels";
 import { CapabilityRow } from "./capability-list";
 import { AvailabilityBadge } from "./badges";
 import { capabilityCount, type Gateway, type GatewayKind, gatewayKinds, gatewayKindLabels, type GatewayOption, maxCapabilities } from "./labels";
@@ -80,6 +82,7 @@ export function CapabilityPicker({ gateway, scope, current, onDone }: Props) {
   const [kind, setKind] = useState<GatewayKind | "">("");
   const [server, setServer] = useState("");
   const [onlySelected, setOnlySelected] = useState(false);
+  const [curating, setCurating] = useState<GatewayCapability | null>(null);
   const options = useInfiniteQuery({ ...gatewayOptionsQuery(scope, { q, kind, server }), placeholderData: keepPreviousData });
   const dirty = !same(sel, base.sel);
 
@@ -218,11 +221,15 @@ export function CapabilityPicker({ gateway, scope, current, onDone }: Props) {
               {count.toLocaleString()} of at most {maxCapabilities} selected
             </span>
           </div>
+          {current.items.some((c) => c.kind === "tool" && c.capabilityId in sel) && <section className={g.tight} aria-label="Selected tool policies">
+            <p className={g.note}>Save selection changes before editing a tool policy.</p>
+            {current.items.filter((c) => c.kind === "tool" && c.capabilityId in sel).map((c) => <Button key={c.capabilityId} size="sm" variant="secondary" disabled={dirty || save.isPending || !!theirs} onClick={() => setCurating(c)}>Curate {c.exposedName}</Button>)}
+          </section>}
           {notOffered.length > 0 && (
             <section className={g.group} aria-labelledby="not-offered">
               <h3 id="not-offered" className={g.groupHead}>
                 Selected, but can&apos;t be selected now
-                <span className={g.groupMeta}>Remove these to save: the gateway refuses them.</span>
+                <span className={g.groupMeta}>These may stay selected but are not served. Review stale tool policies above.</span>
               </h3>
               <ul className={g.list}>
                 {notOffered.map((c) => (
@@ -312,6 +319,7 @@ export function CapabilityPicker({ gateway, scope, current, onDone }: Props) {
         )}
       </SaveBar>
       {guard}
+      {curating && <CurationDialog gateway={gateway} scope={scope} current={current} capability={curating} onClose={() => { setCurating(null); }} />}
     </>
   );
 }

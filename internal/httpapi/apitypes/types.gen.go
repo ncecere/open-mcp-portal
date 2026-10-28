@@ -890,6 +890,7 @@ func (e GatewayOwnerKind) Valid() bool {
 // Defines values for GatewayUnavailableReason.
 const (
 	GatewayUnavailableReasonChanged        GatewayUnavailableReason = "changed"
+	GatewayUnavailableReasonCurationStale  GatewayUnavailableReason = "curation_stale"
 	GatewayUnavailableReasonGone           GatewayUnavailableReason = "gone"
 	GatewayUnavailableReasonNotApproved    GatewayUnavailableReason = "not_approved"
 	GatewayUnavailableReasonNotPublished   GatewayUnavailableReason = "not_published"
@@ -901,6 +902,8 @@ const (
 func (e GatewayUnavailableReason) Valid() bool {
 	switch e {
 	case GatewayUnavailableReasonChanged:
+		return true
+	case GatewayUnavailableReasonCurationStale:
 		return true
 	case GatewayUnavailableReasonGone:
 		return true
@@ -3803,14 +3806,20 @@ type GatewayCapabilitiesUpdate struct {
 
 // GatewayCapability defines model for GatewayCapability.
 type GatewayCapability struct {
-	Available    bool               `json:"available"`
-	CapabilityId openapi_types.UUID `json:"capabilityId"`
-	Description  string             `json:"description"`
+	Available           bool                `json:"available"`
+	BaseFingerprint     *string             `json:"baseFingerprint,omitempty"`
+	CapabilityId        openapi_types.UUID  `json:"capabilityId"`
+	CuratedAt           *time.Time          `json:"curatedAt,omitempty"`
+	CuratedBy           *openapi_types.UUID `json:"curatedBy,omitempty"`
+	Curation            json.RawMessage     `json:"curation,omitempty"`
+	Description         string              `json:"description"`
+	EffectiveDefinition json.RawMessage     `json:"effectiveDefinition,omitempty"`
 
 	// ExposedName What clients see: {serverSlug}__{name} for tools and prompts, omp://{serverSlug}/{uri} for resources and resource templates
 	//
 	// Example: service-status__check_outage
-	ExposedName string `json:"exposedName"`
+	ExposedName string  `json:"exposedName"`
+	Fingerprint *string `json:"fingerprint,omitempty"`
 
 	// Kind Clients see tools and prompts as {serverSlug}__{name}, resources as omp://{serverSlug}/{uri} and resource templates as omp://{serverSlug}/{uriTemplate}
 	Kind GatewayCapabilityKind `json:"kind"`
@@ -3819,7 +3828,8 @@ type GatewayCapability struct {
 	MinRole *TeamRole `json:"minRole,omitempty"`
 
 	// Name The name the server uses
-	Name string `json:"name"`
+	Name               string          `json:"name"`
+	OriginalDefinition json.RawMessage `json:"originalDefinition,omitempty"`
 
 	// Requires The account a person must connect to use it (null; none). Service accounts can't call capabilities that require one. In MyGatewayDetail, connected says whether the caller's connection covers it now
 	Requires *CapabilityRequirement `json:"requires"`
@@ -3829,13 +3839,14 @@ type GatewayCapability struct {
 	ServerId               openapi_types.UUID `json:"serverId"`
 	ServerName             string             `json:"serverName"`
 	ServerSlug             string             `json:"serverSlug"`
+	Stale                  *bool              `json:"stale,omitempty"`
 
 	// TeamSlug The server's team
 	TeamSlug  string     `json:"teamSlug"`
 	Title     string     `json:"title"`
 	ToolClass *ToolClass `json:"toolClass,omitempty"`
 
-	// UnavailableReason server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved / changed: the current definition isn't approved. gone: the server no longer lists it. team_archived: the team that owns its server, or the team gateway's own team, is archived (unarchiving restores it).
+	// UnavailableReason curation_stale: the curated definition changed and requires owner review. server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved / changed: the current definition isn't approved. gone: the server no longer lists it. team_archived: the team that owns its server, or the team gateway's own team, is archived (unarchiving restores it).
 	UnavailableReason *GatewayUnavailableReason `json:"unavailableReason,omitempty"`
 }
 
@@ -3845,7 +3856,13 @@ type GatewayCapabilityKind string
 // GatewayCapabilitySelection defines model for GatewayCapabilitySelection.
 type GatewayCapabilitySelection struct {
 	CapabilityId openapi_types.UUID `json:"capabilityId"`
-	MinRole      *TeamRole          `json:"minRole,omitempty"`
+
+	// Curation Omit to preserve existing policy; null clears; object replaces. Session only. Mismatch is 409 changed_since_review; exposed-name collision is 409 name_taken.
+	Curation json.RawMessage `json:"curation,omitempty"`
+
+	// ExpectedFingerprint Current capability fingerprint, required for any explicit curation edit including clearing.
+	ExpectedFingerprint *string   `json:"expectedFingerprint,omitempty"`
+	MinRole             *TeamRole `json:"minRole,omitempty"`
 }
 
 // GatewayCreate defines model for GatewayCreate.
@@ -3945,7 +3962,22 @@ type GatewayPage struct {
 	NextCursor *string   `json:"nextCursor,omitempty"`
 }
 
-// GatewayUnavailableReason server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved / changed: the current definition isn't approved. gone: the server no longer lists it. team_archived: the team that owns its server, or the team gateway's own team, is archived (unarchiving restores it).
+// GatewayToolConstraint Exactly one of fixed (including null) or allowed. Values must satisfy the original property schema.
+type GatewayToolConstraint struct {
+	Allowed *[]interface{}  `json:"allowed,omitempty"`
+	Fixed   json.RawMessage `json:"fixed,omitempty"`
+}
+
+// GatewayToolCuration defines model for GatewayToolCuration.
+type GatewayToolCuration struct {
+	Constraints         *map[string]GatewayToolConstraint `json:"constraints,omitempty"`
+	DescriptionOverride *string                           `json:"descriptionOverride,omitempty"`
+
+	// NameOverride Complete model-facing exposed tool name; null restores the default.
+	NameOverride *string `json:"nameOverride,omitempty"`
+}
+
+// GatewayUnavailableReason curation_stale: the curated definition changed and requires owner review. server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved / changed: the current definition isn't approved. gone: the server no longer lists it. team_archived: the team that owns its server, or the team gateway's own team, is archived (unarchiving restores it).
 type GatewayUnavailableReason string
 
 // GatewayUpdate defines model for GatewayUpdate.

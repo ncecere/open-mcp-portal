@@ -19,6 +19,7 @@ func (f *FakeMCP) sawFull(tool string, req *mcp.CallToolRequest) {
 	h := headerOf(req)
 	c := ToolCall{Tool: tool, Authorization: h.Get("Authorization"), Identity: h.Get("MCP-Gateway-Identity"), Header: h.Clone()}
 	if p := req.Params; p != nil {
+		c.Arguments = append(json.RawMessage(nil), p.Arguments...)
 		c.RequestState = p.RequestState
 		c.Meta = map[string]any(p.Meta)
 		if len(p.InputResponses) > 0 {

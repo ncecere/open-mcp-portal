@@ -180,6 +180,17 @@
   color: var(--color-text-muted);
 }
 
+.definition {
+  max-height: 24rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-sunken);
+  font-size: var(--font-size-xs);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

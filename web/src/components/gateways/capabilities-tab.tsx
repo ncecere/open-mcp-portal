@@ -16,7 +16,8 @@ import { serviceAccountsCant } from "../providers/labels";
 import { untrustedText } from "../servers/labels";
 import { CapabilityList } from "./capability-list";
 import { CapabilityPicker } from "./capability-picker";
-import { capabilityCount, type Gateway } from "./labels";
+import { CurationDialog, ToolDefinitionDialog } from "./curation-dialog";
+import { capabilityCount, type Gateway, type GatewayCapability } from "./labels";
 import { type GatewayAbilities, gatewayCapabilitiesQuery, type GatewayScope } from "./scope";
 import { UnavailableCallout } from "./unavailable";
 
@@ -25,6 +26,8 @@ type Props = { gateway: Gateway; scope: GatewayScope; abilities: GatewayAbilitie
 export function GatewayCapabilitiesTab({ gateway, scope, abilities }: Props) {
   const caps = useQuery(gatewayCapabilitiesQuery(scope, gateway.id));
   const [editing, setEditing] = useState(false);
+  const [curating, setCurating] = useState<GatewayCapability | null>(null);
+  const [inspecting, setInspecting] = useState<GatewayCapability | null>(null);
   const roles = gateway.ownerKind === "team";
   if (caps.isLoading) {
     return (
@@ -49,7 +52,7 @@ export function GatewayCapabilitiesTab({ gateway, scope, abilities }: Props) {
         title="Capabilities"
         description={
           items.length
-            ? `${capabilityCount(items.length)} selected. Clients see each one as server__name.${roles ? " A minimum role limits who on the team may use it." : ""}${
+            ? `${capabilityCount(items.length)} selected. Tools use server__name unless renamed for this gateway.${roles ? " A minimum role limits who on the team may use it." : ""}${
                 items.some((c) => c.requires) ? ` Each person connects the accounts marked Needs once. ${serviceAccountsCant}` : ""
               }`
             : undefined
@@ -71,9 +74,11 @@ export function GatewayCapabilitiesTab({ gateway, scope, abilities }: Props) {
             action={edit || undefined}
           />
         ) : (
-          <CapabilityList items={items} roles={roles} />
+          <CapabilityList items={items} roles={roles} onCurate={abilities.canEdit ? setCurating : undefined} onInspect={abilities.canReadCalls ? setInspecting : undefined} />
         )}
       </Card>
+      {inspecting && abilities.canReadCalls && <ToolDefinitionDialog capability={inspecting} onClose={() => setInspecting(null)} />}
+      {curating && abilities.canEdit && <CurationDialog gateway={gateway} scope={scope} current={caps.data} capability={curating} onClose={() => setCurating(null)} />}
     </>
   );
 }

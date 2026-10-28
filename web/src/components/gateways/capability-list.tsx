@@ -12,6 +12,7 @@ import { serviceAccountsCant } from "../providers/labels";
 import { Badge, StatusBadge } from "@/components/ui/badge/badge";
 import { CaptureBadge } from "../capture";
 import { ClassificationBadges } from "../servers/classification";
+import { Button } from "@/components/ui/button/button";
 import { AvailabilityBadge } from "./badges";
 import { type GatewayCapability, gatewayKindLabels, minRoleLabels } from "./labels";
 import g from "./gateways.module.css";
@@ -36,9 +37,11 @@ type Props = {
   roles?: boolean;
   /** The person's own view: whether their connection covers each capability that needs an account. */
   connections?: boolean;
+  onCurate?: (cap: GatewayCapability) => void;
+  onInspect?: (cap: GatewayCapability) => void;
 };
 
-export function CapabilityList({ items, availability = true, roles = false, connections = false }: Props) {
+export function CapabilityList({ items, availability = true, roles = false, connections = false, onCurate, onInspect }: Props) {
   return (
     <div className={g.stack}>
       {groupBy(items, (c) => c.serverId).map(([id, caps]) => {
@@ -53,7 +56,7 @@ export function CapabilityList({ items, availability = true, roles = false, conn
             </h3>
             <ul className={g.list}>
               {caps.map((c) => (
-                <CapabilityRow key={c.capabilityId} cap={c} side={<RowBadges cap={c} availability={availability} roles={roles} connections={connections} />} />
+                <CapabilityRow key={c.capabilityId} cap={c} side={<><RowBadges cap={c} availability={availability} roles={roles} connections={connections} />{onCurate && c.kind === "tool" && <Button size="sm" variant="secondary" onClick={() => onCurate(c)}>Curate {c.exposedName}</Button>}{!onCurate && onInspect && c.kind === "tool" && <Button size="sm" variant="secondary" onClick={() => onInspect(c)}>View definitions for {c.exposedName}</Button>}</>} />
               ))}
             </ul>
           </section>
@@ -70,6 +73,7 @@ function RowBadges({ cap, availability, roles, connections }: { cap: GatewayCapa
         {gatewayKindLabels[cap.kind].one}
       </Badge>
       <ClassificationBadges cap={cap} />
+      {cap.curation && <Badge size="sm" tone="info">Edited for this gateway</Badge>}
       {cap.requires && <RequiresBadge req={cap.requires} note={connections ? undefined : serviceAccountsCant} />}
       {cap.serverCapturesPayloads && <CaptureBadge label={connections ? "Records what you send" : "Server records contents"} />}
       {cap.requires &&

@@ -955,7 +955,11 @@ func listed(o gateways.Offer) (json.RawMessage, error) { return listedFor(o, fal
 // schemas.
 func listedFor(o gateways.Offer, modern bool) (json.RawMessage, error) {
 	def := map[string]json.RawMessage{}
-	if err := json.Unmarshal(o.Capability.Definition, &def); err != nil {
+	raw := o.EffectiveDefinition
+	if len(raw) == 0 {
+		raw = o.Capability.Definition
+	} // callers constructing an uncurated offer
+	if err := json.Unmarshal(raw, &def); err != nil {
 		return nil, err
 	}
 	exposed, _ := json.Marshal(o.ExposedName)

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/ncecere/open-mcp-portal/internal/apikeys"
@@ -39,6 +40,25 @@ func toAPIGatewayCapability(s gateways.Selected) apitypes.GatewayCapability {
 		ExposedName: s.ExposedName, Title: s.Capability.Title, Description: s.Capability.Description, Available: s.Available,
 		Requires: toAPIRequirement(s.Requires, nil), ServerCapturesPayloads: &s.Server.CapturePayloads,
 		ToolClass: (*apitypes.ToolClass)(s.Capability.ToolClass),
+	}
+	out.Fingerprint, out.Stale = &s.Capability.Fingerprint, &s.CurationStale
+	out.OriginalDefinition, out.EffectiveDefinition = s.Capability.Definition, s.EffectiveDefinition
+	out.BaseFingerprint, out.CuratedAt = s.BaseFingerprint, s.CuratedAt
+	if s.CuratedBy.Valid {
+		out.CuratedBy = &s.CuratedBy.UUID
+	}
+	if s.Curation != nil {
+		out.Curation, _ = json.Marshal(s.Curation)
+		if s.Curation.DescriptionOverride != nil {
+			out.Description = *s.Curation.DescriptionOverride
+		}
+	}
+	if s.Capability.Kind == "tool" {
+		var def map[string]json.RawMessage
+		if json.Unmarshal(out.EffectiveDefinition, &def) == nil && def != nil {
+			def["name"], _ = json.Marshal(s.ExposedName)
+			out.EffectiveDefinition, _ = json.Marshal(def)
+		}
 	}
 	if s.MinRole != nil {
 		r := apitypes.TeamRole(*s.MinRole)

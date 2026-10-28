@@ -8,6 +8,7 @@ package dbgen
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -207,6 +208,10 @@ SELECT g.id AS gateway_id,
         JOIN teams st ON st.id = s.team_id
         WHERE gc.gateway_id = g.id
           AND NOT COALESCE(c.gone_at IS NULL AND c.kind IN ('tool', 'prompt', 'resource', 'resource_template')
+                           AND (gc.base_fingerprint IS NULL OR (
+                               gc.base_fingerprint = c.fingerprint AND c.kind = 'tool'
+                               AND NOT EXISTS (SELECT 1 FROM jsonb_object_keys(gc.constraints) AS arg
+                                               WHERE NOT COALESCE((c.definition->'inputSchema'->'properties') ? arg, false))))
                            AND st.status = 'active' AND COALESCE(gt.status, 'active') = 'active' AND s.enabled
                            AND ((g.owner_kind = 'team' AND s.team_id = g.team_id)
                                 OR (s.publish_state = 'published' AND c.approved_fingerprint = c.fingerprint)), false)
@@ -655,7 +660,7 @@ func (q *Queries) ListGatewayOptions(ctx context.Context, arg ListGatewayOptions
 }
 
 const listGatewaySelection = `-- name: ListGatewaySelection :many
-SELECT c.id, c.server_id, c.kind, c.name, c.title, c.description, c.definition, c.fingerprint, c.approved_fingerprint, c.approved_by, c.approved_at, c.first_seen_at, c.last_seen_at, c.gone_at, c.requirement_mode, c.requirement_scopes, c.requires_present_person, c.tool_class, c.class_set_by, c.class_set_at, s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, gc.min_team_role, t.slug AS team_slug, t.name AS team_name, t.status AS team_status
+SELECT c.id, c.server_id, c.kind, c.name, c.title, c.description, c.definition, c.fingerprint, c.approved_fingerprint, c.approved_by, c.approved_at, c.first_seen_at, c.last_seen_at, c.gone_at, c.requirement_mode, c.requirement_scopes, c.requires_present_person, c.tool_class, c.class_set_by, c.class_set_at, s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, gc.gateway_id, gc.capability_id, gc.min_team_role, gc.added_by, gc.added_at, gc.name_override, gc.description_override, gc.constraints, gc.base_fingerprint, gc.curated_by, gc.curated_at, t.slug AS team_slug, t.name AS team_name, t.status AS team_status
 FROM gateway_capabilities gc
 JOIN mcp_capabilities c ON c.id = gc.capability_id
 JOIN mcp_servers s ON s.id = c.server_id
@@ -666,12 +671,12 @@ ORDER BY s.name, s.id,
 `
 
 type ListGatewaySelectionRow struct {
-	McpCapability McpCapability
-	McpServer     McpServer
-	MinTeamRole   *string
-	TeamSlug      string
-	TeamName      string
-	TeamStatus    string
+	McpCapability     McpCapability
+	McpServer         McpServer
+	GatewayCapability GatewayCapability
+	TeamSlug          string
+	TeamName          string
+	TeamStatus        string
 }
 
 // A gateway's selected capabilities with their servers and the servers'
@@ -751,7 +756,17 @@ func (q *Queries) ListGatewaySelection(ctx context.Context, gatewayID uuid.UUID)
 			&i.McpServer.SecretHelp,
 			&i.McpServer.SecretSetupUserID,
 			&i.McpServer.SecretSetupAt,
-			&i.MinTeamRole,
+			&i.GatewayCapability.GatewayID,
+			&i.GatewayCapability.CapabilityID,
+			&i.GatewayCapability.MinTeamRole,
+			&i.GatewayCapability.AddedBy,
+			&i.GatewayCapability.AddedAt,
+			&i.GatewayCapability.NameOverride,
+			&i.GatewayCapability.DescriptionOverride,
+			&i.GatewayCapability.Constraints,
+			&i.GatewayCapability.BaseFingerprint,
+			&i.GatewayCapability.CuratedBy,
+			&i.GatewayCapability.CuratedAt,
 			&i.TeamSlug,
 			&i.TeamName,
 			&i.TeamStatus,
@@ -1020,6 +1035,38 @@ func (q *Queries) ListUsableGatewayCandidates(ctx context.Context, ids []uuid.UU
 	return items, nil
 }
 
+const lockCapabilityForCuration = `-- name: LockCapabilityForCuration :one
+SELECT id, server_id, kind, name, title, description, definition, fingerprint, approved_fingerprint, approved_by, approved_at, first_seen_at, last_seen_at, gone_at, requirement_mode, requirement_scopes, requires_present_person, tool_class, class_set_by, class_set_at FROM mcp_capabilities WHERE id = $1 FOR SHARE
+`
+
+func (q *Queries) LockCapabilityForCuration(ctx context.Context, id uuid.UUID) (McpCapability, error) {
+	row := q.db.QueryRow(ctx, lockCapabilityForCuration, id)
+	var i McpCapability
+	err := row.Scan(
+		&i.ID,
+		&i.ServerID,
+		&i.Kind,
+		&i.Name,
+		&i.Title,
+		&i.Description,
+		&i.Definition,
+		&i.Fingerprint,
+		&i.ApprovedFingerprint,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.GoneAt,
+		&i.RequirementMode,
+		&i.RequirementScopes,
+		&i.RequiresPresentPerson,
+		&i.ToolClass,
+		&i.ClassSetBy,
+		&i.ClassSetAt,
+	)
+	return i, err
+}
+
 const lockGateway = `-- name: LockGateway :one
 SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute FROM gateways WHERE id = $1 FOR UPDATE
 `
@@ -1058,6 +1105,39 @@ type RemoveGatewayCapabilitiesExceptParams struct {
 
 func (q *Queries) RemoveGatewayCapabilitiesExcept(ctx context.Context, arg RemoveGatewayCapabilitiesExceptParams) error {
 	_, err := q.db.Exec(ctx, removeGatewayCapabilitiesExcept, arg.GatewayID, arg.Keep)
+	return err
+}
+
+const setGatewayCapabilityCuration = `-- name: SetGatewayCapabilityCuration :exec
+UPDATE gateway_capabilities SET name_override = $1,
+    description_override = $2, constraints = $3,
+    base_fingerprint = $4, curated_by = $5,
+    curated_at = $6
+WHERE gateway_id = $7 AND capability_id = $8
+`
+
+type SetGatewayCapabilityCurationParams struct {
+	NameOverride        *string
+	DescriptionOverride *string
+	Constraints         json.RawMessage
+	BaseFingerprint     *string
+	CuratedBy           uuid.NullUUID
+	CuratedAt           *time.Time
+	GatewayID           uuid.UUID
+	CapabilityID        uuid.UUID
+}
+
+func (q *Queries) SetGatewayCapabilityCuration(ctx context.Context, arg SetGatewayCapabilityCurationParams) error {
+	_, err := q.db.Exec(ctx, setGatewayCapabilityCuration,
+		arg.NameOverride,
+		arg.DescriptionOverride,
+		arg.Constraints,
+		arg.BaseFingerprint,
+		arg.CuratedBy,
+		arg.CuratedAt,
+		arg.GatewayID,
+		arg.CapabilityID,
+	)
 	return err
 }
 

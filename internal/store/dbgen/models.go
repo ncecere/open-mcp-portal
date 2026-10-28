@@ -177,11 +177,17 @@ type Gateway struct {
 }
 
 type GatewayCapability struct {
-	GatewayID    uuid.UUID
-	CapabilityID uuid.UUID
-	MinTeamRole  *string
-	AddedBy      uuid.NullUUID
-	AddedAt      time.Time
+	GatewayID           uuid.UUID
+	CapabilityID        uuid.UUID
+	MinTeamRole         *string
+	AddedBy             uuid.NullUUID
+	AddedAt             time.Time
+	NameOverride        *string
+	DescriptionOverride *string
+	Constraints         json.RawMessage
+	BaseFingerprint     *string
+	CuratedBy           uuid.NullUUID
+	CuratedAt           *time.Time
 }
 
 type GatewayGrant struct {

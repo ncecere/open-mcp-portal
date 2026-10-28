@@ -68,6 +68,10 @@ SELECT g.id AS gateway_id,
         JOIN teams st ON st.id = s.team_id
         WHERE gc.gateway_id = g.id
           AND NOT COALESCE(c.gone_at IS NULL AND c.kind IN ('tool', 'prompt', 'resource', 'resource_template')
+                           AND (gc.base_fingerprint IS NULL OR (
+                               gc.base_fingerprint = c.fingerprint AND c.kind = 'tool'
+                               AND NOT EXISTS (SELECT 1 FROM jsonb_object_keys(gc.constraints) AS arg
+                                               WHERE NOT COALESCE((c.definition->'inputSchema'->'properties') ? arg, false))))
                            AND st.status = 'active' AND COALESCE(gt.status, 'active') = 'active' AND s.enabled
                            AND ((g.owner_kind = 'team' AND s.team_id = g.team_id)
                                 OR (s.publish_state = 'published' AND c.approved_fingerprint = c.fingerprint)), false)
@@ -80,7 +84,7 @@ WHERE g.id = ANY(@ids::uuid[]);
 -- name: ListGatewaySelection :many
 -- A gateway's selected capabilities with their servers and the servers'
 -- teams, ordered by server and name (tools, prompts, resources, templates).
-SELECT sqlc.embed(c), sqlc.embed(s), gc.min_team_role, t.slug AS team_slug, t.name AS team_name, t.status AS team_status
+SELECT sqlc.embed(c), sqlc.embed(s), sqlc.embed(gc), t.slug AS team_slug, t.name AS team_name, t.status AS team_status
 FROM gateway_capabilities gc
 JOIN mcp_capabilities c ON c.id = gc.capability_id
 JOIN mcp_servers s ON s.id = c.server_id
@@ -97,6 +101,13 @@ WHERE gateway_id = @gateway_id AND NOT (capability_id = ANY(@keep::uuid[]));
 INSERT INTO gateway_capabilities (gateway_id, capability_id, min_team_role, added_by)
 VALUES (@gateway_id, @capability_id, sqlc.narg(min_team_role), @added_by)
 ON CONFLICT (gateway_id, capability_id) DO UPDATE SET min_team_role = EXCLUDED.min_team_role;
+
+-- name: SetGatewayCapabilityCuration :exec
+UPDATE gateway_capabilities SET name_override = sqlc.narg(name_override),
+    description_override = sqlc.narg(description_override), constraints = sqlc.narg(constraints),
+    base_fingerprint = sqlc.narg(base_fingerprint), curated_by = sqlc.narg(curated_by),
+    curated_at = sqlc.narg(curated_at)
+WHERE gateway_id = @gateway_id AND capability_id = @capability_id;
 
 -- name: ListGatewayOptions :many
 -- One page of the tools, prompts, resources and resource templates a
@@ -210,6 +221,9 @@ ORDER BY g.name, g.id;
 
 -- name: GetCapability :one
 SELECT * FROM mcp_capabilities WHERE id = $1;
+
+-- name: LockCapabilityForCuration :one
+SELECT * FROM mcp_capabilities WHERE id = $1 FOR SHARE;
 
 -- name: ListUsableGatewayCandidates :many
 -- Gateways by ID, for checking which a person may use (API key scopes).

@@ -114,12 +114,13 @@ Code: `internal/gateways` (service, availability, grants), `internal/mcpgw` (`/m
   server, and loads more by cursor; the selection is kept apart from what is loaded, so it survives paging and search.
 - **Selection.** New capabilities must be offered by gateway-options; capabilities **already selected may stay** in a
   `PUT` even while unavailable (for example a catalog server that left the catalog), since every call re-checks them.
-  Exposed names and exposed URIs must be unique **case-insensitively and across every kind** (`422 name_clash`). Other
+  Exposed names and exposed URIs must be unique **case-insensitively and across every kind** (`409 name_taken` for two tools; `422 name_clash` for other collisions). Other
   errors: `400 duplicate_capability`, `400 invalid_role`, `422 min_role_not_allowed` (minRole on a platform gateway; the
   contract only says "must be absent"), `422 too_many`, `422 capability_not_selectable` (`details.capabilityIds`, and
   `details.reasons` mapping each ID to `unsupported_template` or `not_offered`).
+- **Per-selection tool curation (#30, decision 80).** Owners/admins may constrain top-level arguments to fixed or allowed values, rename tools and rewrite their descriptions for one gateway only. Policies are fingerprint-bound; stale policy stays unavailable even after catalog reapproval. Selection omission preserves policy, explicit null clears it, and every explicit edit requires the current `expectedFingerprint` plus gateway `If-Match`. The model sees a narrowed copy; call checks and fixed-value injection precede consent and retry binding. Constraint values are never audited. See [gateway-curation.md](gateway-curation.md) for the schema subset, bounds, API semantics and mixed-version rollback warning.
 - **Availability order:** `gone` (also any kind that can't be selected), `team_archived` (the server's team, or a team gateway's
-  own team, is archived), `server_disabled`, then for catalog capabilities `not_published`, `not_approved`, `changed`.
+  own team, is archived), `server_disabled`, `curation_stale`, then for catalog capabilities `not_published`, `not_approved`, `changed`.
   A team gateway's own servers need no approval. `GatewayStats` (SQL) mirrors the Go rule; a test checks they agree.
 - **Archived teams.** Archiving changes no data, so unarchiving restores everything. While a team is archived its team
   gateways answer `/mcp/{slug}` with `404` (lists and calls recorded as denied, `errorClass` `team_archived`), drop out

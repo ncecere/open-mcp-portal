@@ -2563,7 +2563,9 @@ paths:
       description: 422 capability_not_selectable (details.capabilityIds, and details.reasons mapping each to unsupported_template
         or not_offered) when a capability is not offered by gateway-options (another team's private server, unapproved,
         gone, or a resource template with unsupported expressions). 422 too_many (at most 200). 422 name_clash (details.exposedName)
-        when two selected capabilities expose the same name or URI.
+        when non-tool selections collide. Tool name collisions are 409 name_taken, including unavailable selections.
+        Explicit curation edits (including null) require a browser session and the current expectedFingerprint;
+        mismatch or omission is 409 changed_since_review. Omitted curation preserves existing policy.
       parameters:
       - $ref: '#/components/parameters/IfMatchHeader'
       requestBody:
@@ -2598,6 +2600,8 @@ paths:
         '422':
           $ref: '#/components/responses/ErrorReply'
         '428':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
           $ref: '#/components/responses/ErrorReply'
   /v1/teams/{team}/gateway-options:
     parameters:
@@ -2851,7 +2855,9 @@ paths:
       - platform:write
       summary: Replace a platform gateway's selection (platform admins); If-Match is the gateway's revision
       description: Platform gateways may select approved, listed tools and prompts of published, enabled servers
-        only, and minRole must be absent. Same 422 codes as the team operation; 403 team_gateway for a team gateway.
+        only, and minRole must be absent. Same error codes and curation semantics as the team operation;
+        403 team_gateway for a team gateway. Automation tokens may change selections but cannot explicitly edit curation
+        (403 session_required).
       parameters:
       - $ref: '#/components/parameters/IfMatchHeader'
       requestBody:
@@ -2886,6 +2892,8 @@ paths:
         '422':
           $ref: '#/components/responses/ErrorReply'
         '428':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
           $ref: '#/components/responses/ErrorReply'
   /v1/admin/gateway-options:
     get:
@@ -8848,7 +8856,8 @@ components:
       - changed
       - gone
       - team_archived
-      description: 'server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved
+      - curation_stale
+      description: 'curation_stale: the curated definition changed and requires owner review. server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved
         / changed: the current definition isn''t approved. gone: the server no longer lists it. team_archived: the
         team that owns its server, or the team gateway''s own team, is archived (unarchiving restores it).'
     GatewayCapability:
@@ -8867,6 +8876,36 @@ components:
       - available
       - requires
       properties:
+        fingerprint:
+          type: string
+        originalDefinition:
+          type: object
+          additionalProperties: true
+          x-go-type: json.RawMessage
+          x-go-type-skip-optional-pointer: true
+        effectiveDefinition:
+          type: object
+          additionalProperties: true
+          x-go-type: json.RawMessage
+          x-go-type-skip-optional-pointer: true
+        curation:
+          allOf:
+          - $ref: '#/components/schemas/GatewayToolCuration'
+          nullable: true
+          x-go-type: json.RawMessage
+          x-go-type-skip-optional-pointer: true
+        stale:
+          type: boolean
+        baseFingerprint:
+          type: string
+        curatedBy:
+          type: string
+          format: uuid
+          nullable: true
+        curatedAt:
+          type: string
+          format: date-time
+          nullable: true
         toolClass:
           allOf:
           - $ref: '#/components/schemas/ToolClass'
@@ -8932,6 +8971,40 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GatewayCapability'
+    GatewayToolConstraint:
+      type: object
+      additionalProperties: false
+      description: Exactly one of fixed (including null) or allowed. Values must satisfy the original property schema.
+      properties:
+        fixed:
+          nullable: true
+          x-go-type: json.RawMessage
+          x-go-type-skip-optional-pointer: true
+        allowed:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: {}
+    GatewayToolCuration:
+      type: object
+      additionalProperties: false
+      properties:
+        nameOverride:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 128
+          pattern: '^[A-Za-z0-9_.-]+$'
+          description: Complete model-facing exposed tool name; null restores the default.
+        descriptionOverride:
+          type: string
+          nullable: true
+          maxLength: 2000
+        constraints:
+          type: object
+          maxProperties: 50
+          additionalProperties:
+            $ref: '#/components/schemas/GatewayToolConstraint'
     GatewayCapabilitySelection:
       type: object
       required:
@@ -8942,6 +9015,16 @@ components:
           format: uuid
         minRole:
           $ref: '#/components/schemas/TeamRole'
+        expectedFingerprint:
+          type: string
+          description: Current capability fingerprint, required for any explicit curation edit including clearing.
+        curation:
+          allOf:
+          - $ref: '#/components/schemas/GatewayToolCuration'
+          nullable: true
+          description: Omit to preserve existing policy; null clears; object replaces. Session only. Mismatch is 409 changed_since_review; exposed-name collision is 409 name_taken.
+          x-go-type: json.RawMessage
+          x-go-type-skip-optional-pointer: true
     GatewayCapabilitiesUpdate:
       type: object
       required:
