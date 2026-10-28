@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -191,6 +192,12 @@ func (s *Service) UpdateServiceConnection(ctx context.Context, a authz.Actor, te
 		if e = serviceOwned(c, t, e); e != nil {
 			return e
 		}
+		// Refuse ineligible destinations before taking ANY destination lock or
+		// waiting behind this connection's refresh. This is metadata-only and
+		// deliberately does not treat pre-wait origin/scope proof as authority.
+		if e = s.validateServiceGrants(ctx, q, a, c.ProviderID, grants, false); e != nil {
+			return e
+		}
 		// Registry changes lock the server before invalidating its connection
 		// configuration. Match that order, sorting destinations across edits.
 		grants = slices.Clone(grants)
@@ -263,17 +270,8 @@ func (s *Service) UpdateServiceConnection(ctx context.Context, a authz.Actor, te
 		if _, e = serviceAccess(ctx, q, a, team, true); e != nil {
 			return e
 		}
-		p, e := q.GetAuthProvider(ctx, c.ProviderID)
-		if e != nil {
+		if e = s.validateServiceGrants(ctx, q, a, c.ProviderID, grants, true); e != nil {
 			return e
-		}
-		if len(grants) > 0 && (!p.Enabled || s.linkUsable(ctx, p) != nil) {
-			return errNoProvider
-		}
-		for _, g := range grants {
-			if e = s.validateServiceGrant(ctx, q, a, p, g); e != nil {
-				return e
-			}
 		}
 		out, e = s.serviceView(ctx, q, c)
 		return e
@@ -281,9 +279,20 @@ func (s *Service) UpdateServiceConnection(ctx context.Context, a authz.Actor, te
 	return out, serviceConflict(err)
 }
 
-// validateServiceGrant is metadata-only. The caller must hold every sorted
-// destination lock and the connection lock before any of these live reads.
-func (s *Service) validateServiceGrant(ctx context.Context, q *dbgen.Queries, a authz.Actor, p dbgen.AuthProvider, g ServiceGrant) error {
+// validateServiceGrants is metadata-only and loads reachability once per pass.
+// Preflight checks eligibility only. The final pass, after every lock/write wait,
+// repeats that eligibility AND validates the exact current origin/scope proof.
+func (s *Service) validateServiceGrants(ctx context.Context, q *dbgen.Queries, a authz.Actor, provider uuid.UUID, grants []ServiceGrant, proof bool) error {
+	if len(grants) == 0 {
+		return nil
+	}
+	p, e := q.GetAuthProvider(ctx, provider)
+	if e != nil {
+		return e
+	}
+	if !p.Enabled || s.linkUsable(ctx, p) != nil {
+		return errNoProvider
+	}
 	if s.Reachable == nil {
 		return apperr.NotFound("server_not_found", "Server not found")
 	}
@@ -295,53 +304,60 @@ func (s *Service) validateServiceGrant(ctx context.Context, q *dbgen.Queries, a 
 	if e != nil {
 		return e
 	}
-	visible := false
-	var required []string
-	for _, r := range reachable {
-		if r.Server.ID == g.ServerID {
-			visible = true
-			for _, n := range r.Needs {
-				if n.Provider.ID == p.ID {
-					required = union(required, n.Scopes)
+	for _, g := range grants {
+		visible := false
+		var required []string
+		for _, r := range reachable {
+			if r.Server.ID == g.ServerID {
+				visible = true
+				for _, n := range r.Needs {
+					if n.Provider.ID == p.ID {
+						required = union(required, n.Scopes)
+					}
 				}
 			}
 		}
-	}
-	if !visible {
-		return apperr.NotFound("server_not_found", "Server not found")
-	}
-	sv, e := q.GetMCPServer(ctx, g.ServerID)
-	if e != nil {
-		return e
-	}
-	if p.Kind == KindMCPServer {
-		if !p.ServerID.Valid || p.ServerID.UUID != sv.ID {
+		if !visible {
 			return apperr.NotFound("server_not_found", "Server not found")
 		}
-		required = p.DefaultScopes
-	} else {
-		ok, e := allowsServer(ctx, q, p.ID, sv.ID)
+		sv, e := q.GetMCPServer(ctx, g.ServerID)
 		if e != nil {
 			return e
 		}
-		if !ok {
-			return apperr.New(http.StatusUnprocessableEntity, "provider_not_allowed", "The destination server is not on the provider's access list")
+		if p.Kind == KindMCPServer {
+			if !p.ServerID.Valid || p.ServerID.UUID != sv.ID {
+				return apperr.NotFound("server_not_found", "Server not found")
+			}
+			required = p.DefaultScopes
+		} else {
+			ok, e := allowsServer(ctx, q, p.ID, sv.ID)
+			if e != nil {
+				return e
+			}
+			if !ok {
+				return apperr.New(http.StatusUnprocessableEntity, "provider_not_allowed", "The destination server is not on the provider's access list")
+			}
+			if !sv.AuthProviderID.Valid || sv.AuthProviderID.UUID != p.ID {
+				return apperr.Conflict("server_changed", "The server no longer requires this provider")
+			}
 		}
-		if !sv.AuthProviderID.Valid || sv.AuthProviderID.UUID != p.ID {
-			return apperr.Conflict("server_changed", "The server no longer requires this provider")
+		if proof {
+			scopes, e := normalizeScopes(g.Scopes)
+			if e != nil {
+				return e
+			}
+			if g.Origin != registry.OriginOf(sv.URL) || !Covers(scopes, required) || !Covers(required, scopes) {
+				return apperr.Conflict("server_changed", "Review the current server origin and scopes")
+			}
 		}
-	}
-	scopes, e := normalizeScopes(g.Scopes)
-	if e != nil {
-		return e
-	}
-	if g.Origin != registry.OriginOf(sv.URL) || !Covers(scopes, required) || !Covers(required, scopes) {
-		return apperr.Conflict("server_changed", "Review the current server origin and scopes")
 	}
 	return nil
 }
 func (s *Service) RevokeServiceConnection(ctx context.Context, a authz.Actor, team string, id uuid.UUID) error {
-	return store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
+	var p dbgen.AuthProvider
+	var token, hint string
+	var teamID uuid.UUID
+	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
 		t, e := serviceAccess(ctx, q, a, team, true)
 		if e != nil {
 			return e
@@ -356,29 +372,46 @@ func (s *Service) RevokeServiceConnection(ctx context.Context, a authz.Actor, te
 		if e = q.DeleteServiceConnection(ctx, id); e != nil {
 			return e
 		}
-		p, e := q.GetAuthProvider(ctx, c.ProviderID)
+		p, e = q.GetAuthProvider(ctx, c.ProviderID)
 		if e != nil {
 			return e
 		}
-		result := any(revokeNotSupported)
+		teamID = c.TeamID
+		// Capture only what the best-effort post-commit request needs. Never
+		// send an irreversible request inside a rollback-able transaction.
 		if p.RevocationUrl != nil {
-			token, _ := s.serviceOpen(c.ID, "refresh", c.RefreshTokenCipher)
-			hint := "refresh_token"
+			token, _ = s.serviceOpen(c.ID, "refresh", c.RefreshTokenCipher)
+			hint = "refresh_token"
 			if token == "" {
 				token, _ = s.serviceOpen(c.ID, "access", c.AccessTokenCipher)
 				hint = "access_token"
 			}
-			result = token != "" && s.revoke(ctx, p, token, hint)
 		}
-		if _, e = serviceAccess(ctx, q, a, team, true); e != nil {
-			return e
-		}
-		if e = serviceAudit(ctx, q, a, c, "revoke", map[string]any{"name": c.Name, "providerRevoked": result}); e != nil {
+		if e = serviceAudit(ctx, q, a, c, "revoke", map[string]any{"name": c.Name, "providerRevocation": "best_effort_after_commit"}); e != nil {
 			return e
 		}
 		_, e = serviceAccess(ctx, q, a, team, true)
 		return e
 	})
+	if err != nil {
+		return err
+	}
+	// Local deletion and audit have committed. Demotion, logout, cancellation
+	// or remote failure cannot undo them or turn success into a false 403.
+	result := any(revokeNotSupported)
+	if p.RevocationUrl != nil {
+		result = token != "" && s.revoke(ctx, p, token, hint)
+	}
+	// Separate bounded system event: the initiator may be deleted during HTTP.
+	// No raw provider errors, credentials, or initiator FK are retained.
+	outcomeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+	defer cancel()
+	if err := audit.Record(outcomeCtx, s.q, audit.Entry{ActorKind: audit.ActorSystem, TeamID: teamID,
+		Action: "service_connection.revocation_result", TargetType: "service_connection", TargetID: id.String(),
+		Metadata: map[string]any{"providerRevoked": result}}); err != nil {
+		s.Log.Error("service connection revocation outcome audit failed", "connection_id", id)
+	}
+	return nil
 }
 func serviceName(name string) (string, error) {
 	name = strings.TrimSpace(name)

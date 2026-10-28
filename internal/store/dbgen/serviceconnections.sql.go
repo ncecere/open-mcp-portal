@@ -505,6 +505,17 @@ func (q *Queries) LockServiceConsentSession(ctx context.Context, arg LockService
 	return id, err
 }
 
+const lockServiceConsentUser = `-- name: LockServiceConsentUser :one
+SELECT status FROM users WHERE id = $1 FOR KEY SHARE
+`
+
+func (q *Queries) LockServiceConsentUser(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, lockServiceConsentUser, id)
+	var status string
+	err := row.Scan(&status)
+	return status, err
+}
+
 const markServiceConnectionReconsent = `-- name: MarkServiceConnectionReconsent :exec
 UPDATE service_connections SET status = 'needs_reconsent', access_token_cipher = NULL, refresh_token_cipher = NULL,
 last_error_class = $1, generation = generation + 1, revision = revision + 1, updated_at = now()

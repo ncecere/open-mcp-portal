@@ -1,3 +1,6 @@
+-- name: LockServiceConsentUser :one
+SELECT status FROM users WHERE id = $1 FOR KEY SHARE;
+
 -- name: LockServiceConsentSession :one
 SELECT id FROM sessions WHERE id = @id AND user_id = @user_id
 AND expires_at > @as_of::timestamptz AND last_seen_at > @idle_since::timestamptz FOR UPDATE;

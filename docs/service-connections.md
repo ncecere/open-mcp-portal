@@ -32,7 +32,9 @@ and consequently cannot write a personal connection. The callback dispatches by
 state ownership; the personal flow remains unchanged. States are single-use,
 10 minutes, bound to the initiating person and SHA-256 digest of the browser
 session row UUID, connection ID/revision/generation, provider configuration,
-scopes and exact resource. Session-first locking agrees with session revocation.
+scopes and exact resource. Consent locks the initiating user (`KEY SHARE`) before
+session, connection and state, agreeing with administrative suspension's user-first
+session deletion. Live suspension and session status are checked after waiting.
 The callback checks live session, membership and configuration both before code
 exchange and before committing tokens. Revoke/reconnect/configuration races must
 never resurrect or overwrite newer consent. Logout and session revocation remove
@@ -68,6 +70,14 @@ without platform bypass. Updates use `If-Match`, replace bounded account/grant
 lists atomically, revalidate reachable/visible destinations and the origin/scopes
 the admin saw, return 404 for foreign IDs and 409/412 for conflicts/staleness.
 All mutations and grants are audited in the same transaction, without secrets.
+Grant updates first reject ineligible destinations using metadata only, before
+locking any destination; authoritative live authority, provider, origin and scope
+checks run again after lock/write waits. Revocation commits local deletion and its
+audit before attempting upstream revocation, with no database row locks held during
+HTTP. Upstream revocation is best effort: failure never restores the connection or
+changes a committed local success to forbidden. A separate bounded system audit
+records only the remote outcome; if that audit fails, a safe connection-ID-only
+error is logged. No credential is persisted for remote retries.
 A team may have at most 200 connections; account and destination lists each have a
 500-entry bound. `GET /v1/auth-providers?serviceTeam={team}` supplies the shared
 picker with platform providers and reachable server-bound providers. Session

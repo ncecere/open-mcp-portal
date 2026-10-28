@@ -8,6 +8,8 @@ breaking changes; the entry says how to adapt.
 
 ## Unreleased
 
+- Shared connection review hardening (#26): metadata-only destination preflight, committed local revocation before best-effort upstream HTTP, and user-first consent locking compatible with administrative suspension.
+
 - **Breaking retirement in progress** (#68, decision 81): remove external agent-platform trust and person impersonation, including Pi Durable Platform. Existing relay credentials must be disabled/revoked rather than silently becoming ordinary service-account access. Historical records remain; normal MCP OAuth, API keys, service accounts, provider connections and outbound identity remain supported. #62/#63 were withdrawn, not verified.
 - **Staged, not released:** credential scopes (#29), per-selection tool curation (#30), shared service connections (#26) and migration/runtime database roles (#44). Independent review, combined-tree fixes, browser checks and release gates are still in progress; see [status](docs/status.md).
 

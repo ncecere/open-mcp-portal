@@ -14,12 +14,21 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 )
 
-// lockServiceSession always precedes connection/state locks, matching logout
-// and session revocation. SessionID is the session row UUID, not its cookie.
+// lockServiceSession takes USER KEY SHARE before SESSION -> CONNECTION -> STATE.
+// Suspension takes USER FOR UPDATE before deleting sessions; acquiring this user
+// lock before any session lock also prevents later user audit/FK checks forming
+// a cycle. SessionID is the session row UUID, not its cookie.
 func (s *Service) lockServiceSession(ctx context.Context, q *dbgen.Queries, user uuid.UUID, session string) error {
 	id, e := uuid.Parse(session)
 	if e != nil {
 		return apperr.Forbidden("Use a live browser session")
+	}
+	status, e := q.LockServiceConsentUser(ctx, user)
+	if errors.Is(e, pgx.ErrNoRows) || e == nil && status != auth.StatusActive {
+		return apperr.Forbidden("Use a live browser session")
+	}
+	if e != nil {
+		return e
 	}
 	since := time.Time{}
 	if s.SessionIdleTimeout > 0 {
@@ -233,11 +242,11 @@ func (s *Service) validateServiceCallback(ctx context.Context, q *dbgen.Queries,
 }
 
 // serviceCallback consumes its own state before exchange and revalidates under
-// session-first locks before committing; never calls the personal store adapter.
+// user/session-first locks before committing; never calls the personal store adapter.
 func (s *Service) serviceCallback(ctx context.Context, st dbgen.ServiceConnectionAuthState, in CallbackInput) (string, error) {
 	var p dbgen.AuthProvider
 	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
-		// Lock the browser first even for one-time state consumption.
+		// Lock user then browser even for one-time state consumption.
 		if e := s.lockServiceSession(ctx, q, st.UserID, in.SessionID); e != nil {
 			return e
 		}
