@@ -35,7 +35,7 @@ export const eventDescriptions: Record<NotificationEvent, string> = {
   "capability.changed": "A published server's tools, resources or prompts changed or grew. The changes are held back from the catalog until a platform admin approves them.",
   "publish.requested": "A server was sent for review: a first request, or sent back after its URL, sign-in or requirement changed.",
   "publish.decided": "A platform admin approved or rejected one of your team's servers.",
-  "connection.needs_reconsent": "An account you connected (GitHub, Google…) stopped working and needs you to connect it again.",
+  "connection.needs_reconsent": "A personal or team-shared account (GitHub, Google…) stopped working and needs reconnecting.",
   "upstream_signin.lapsed": "The sign-in that discovers an OAuth server's tools expired and needs someone to sign in again.",
   "key.expiring": "A key or token will expire in 7 days: your own API key, a service account key, a publisher token or a platform token.",
 };
@@ -47,7 +47,7 @@ export const eventRecipients: Record<NotificationEvent, string> = {
   "capability.changed": "Team owners, admins and editors",
   "publish.requested": "Platform admins",
   "publish.decided": "Team owners and admins",
-  "connection.needs_reconsent": "The person whose account it is",
+  "connection.needs_reconsent": "The person whose account it is, or the owning team's owners and admins for a shared connection",
   "upstream_signin.lapsed": "Team owners, admins and editors",
   "key.expiring": "Your own keys: you. Service account keys and publisher tokens: team owners and admins. Platform tokens: platform admins",
 };

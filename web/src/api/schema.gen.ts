@@ -1910,7 +1910,7 @@ export interface paths {
         };
         /**
          * Auth providers a server's team can require (any active signed-in person)
-         * @description Enabled providers only, ordered by name, with the fields needed to pick one. Never a client ID, secret or endpoint. With team (a team the caller can see; 404 team_not_found otherwise) only the providers a server of that team may require are listed (open ones, and restricted ones that list the team or, with serverId (a server of that team), that server). That is a convenience for the picker; saving a requirement and every call check the provider's access list again. Without team every enabled provider is listed (connecting an account is not limited by it).
+         * @description Enabled providers only, ordered by name, with the fields needed to pick one. Never a client ID, secret or endpoint. With team (a team the caller can see; 404 team_not_found otherwise) only the providers a server of that team may require are listed (open ones, and restricted ones that list the team or, with serverId (a server of that team), that server). That is a convenience for the picker; saving a requirement and every call check the provider's access list again. Without team every enabled provider is listed (connecting an account is not limited by it). With serviceTeam (browser only, genuine team membership required), also includes enabled server-bound providers for servers reachable through a gateway by the caller, for the shared-connection picker. serviceTeam cannot be combined with team or serverId.
          */
         get: operations["listAuthProviders"];
         put?: never;
@@ -2186,6 +2186,108 @@ export interface paths {
          * @description Includes sign-ins to MCP servers in oauth mode (provider.kind mcp_server, provider.server names the server; provider.name is the server's name). Disconnecting one works the same way.
          */
         get: operations["listMyConnections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teams/{team}/service-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+            };
+            cookie?: never;
+        };
+        /** List shared upstream accounts owned by this team (browser only) */
+        get: operations["listTeamServiceConnections"];
+        put?: never;
+        /** Create a tokenless shared connection and begin consent (team owners/admins only) */
+        post: operations["startTeamServiceConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teams/{team}/service-connections/{connectionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                connectionId: components["parameters"]["ConnectionIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Atomically replace account assignments and destination grants (browser owners/admins only) */
+        put: operations["updateTeamServiceConnection"];
+        post?: never;
+        /** Erase a shared connection and its pending consent (browser owners/admins only) */
+        delete: operations["revokeTeamServiceConnection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teams/{team}/service-connections/{connectionId}/allowable-servers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                connectionId: components["parameters"]["ConnectionIdParam"];
+            };
+            cookie?: never;
+        };
+        /** List reachable destinations and exact scopes an administrator may grant (browser only) */
+        get: operations["listServiceConnectionAllowableServers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teams/{team}/service-connections/{connectionId}/reconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                connectionId: components["parameters"]["ConnectionIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Begin new consent for a shared connection (browser owners/admins only) */
+        post: operations["reconnectTeamServiceConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/service-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Paginated shared connection metadata for browser admins and auditors */
+        get: operations["adminListServiceConnections"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3226,6 +3328,48 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ServiceConnectionGrant: {
+            /** Format: uuid */
+            serverId: string;
+            origin: string;
+            scopes: string[];
+        };
+        ServiceConnectionStart: {
+            /** Format: uuid */
+            providerId: string;
+            name: string;
+            scopes?: string[];
+        };
+        ServiceConnectionUpdate: {
+            accounts: string[];
+            servers: components["schemas"]["ServiceConnectionGrant"][];
+        };
+        ServiceConnection: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            teamId: string;
+            /** Format: uuid */
+            providerId: string;
+            providerName: string;
+            name: string;
+            accountLabel?: string | null;
+            /** @enum {string} */
+            status: "active" | "needs_reconsent" | "lapsed";
+            scopes: string[];
+            /** Format: int64 */
+            revision: number;
+            accounts: string[];
+            servers: components["schemas"]["ServiceConnectionGrant"][];
+        };
+        ServiceConnectionPage: {
+            items: components["schemas"]["ServiceConnection"][];
+            nextCursor: string | null;
+        };
+        ServiceConnectionList: {
+            data: components["schemas"]["ServiceConnection"][];
+            nextCursor?: string;
+        };
         BrowserSession: {
             /** Format: uuid */
             id: string;
@@ -4293,7 +4437,7 @@ export interface components {
             /** Format: date-time */
             curatedAt?: string | null;
             toolClass?: components["schemas"]["ToolClass"] | null;
-            /** @description The account a person must connect to use it (null; none). Service accounts can't call capabilities that require one. In MyGatewayDetail, connected says whether the caller's connection covers it now */
+            /** @description The account a person must connect to use it (null; none). Service accounts need an explicitly assigned active team connection and a destination origin/scope grant. In MyGatewayDetail, connected says whether the caller's connection covers it now */
             requires: components["schemas"]["CapabilityRequirement"] | null;
             /** Format: uuid */
             capabilityId: string;
@@ -4442,7 +4586,7 @@ export interface components {
             capturesPayloads?: boolean;
             /**
              * Format: int64
-             * @description Service-account views (listServiceAccountGateways) only. Capabilities it would offer that require a person's account (a provider requirement); service accounts are refused them, so capabilityCount leaves them out
+             * @description Service-account views (listServiceAccountGateways) only. Capabilities currently refused because the service account lacks an active, explicitly assigned and allowed shared OAuth connection, or because they require a person-only secret. capabilityCount leaves these out
              */
             needsPersonCount?: number;
         };
@@ -5946,10 +6090,10 @@ export interface components {
             slug: string;
             name: string;
         };
-        /** @description Where the web app goes for an item (docs/admin-overview.md, Link targets). server: the server page (team page for members, Admin > Servers for platform staff); servers: the team's server list; review_queue: Admin > Publishing; gateways: Admin > Gateways; service_account / service_accounts: the team's service accounts; automation_tokens: Admin > Automation tokens; team_automation_tokens: the team's Settings > Automation tokens; auth_providers: Admin > Auth providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team's Settings > Notifications; account_connections: Account > Connections; account_api_keys: Account > API keys. */
+        /** @description Where the web app goes for an item (docs/admin-overview.md, Link targets). server: the server page (team page for members, Admin > Servers for platform staff); servers: the team's server list; review_queue: Admin > Publishing; gateways: Admin > Gateways; service_account / service_accounts: the team's service accounts; automation_tokens: Admin > Automation tokens; team_automation_tokens: the team's Settings > Automation tokens; auth_providers: Admin > Auth providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team's Settings > Notifications; service_connections: the team's Service accounts > Connections tab; account_connections: Account > Connections; account_api_keys: Account > API keys. */
         LinkTarget: {
             /** @enum {string} */
-            type: "server" | "servers" | "review_queue" | "gateways" | "service_account" | "service_accounts" | "automation_tokens" | "team_automation_tokens" | "auth_providers" | "usage" | "notification_settings" | "team_notification_settings" | "account_connections" | "account_api_keys";
+            type: "server" | "servers" | "review_queue" | "gateways" | "service_account" | "service_accounts" | "automation_tokens" | "team_automation_tokens" | "auth_providers" | "usage" | "notification_settings" | "team_notification_settings" | "service_connections" | "account_connections" | "account_api_keys";
             /** @description The object's ID for singular types (server, service_account) */
             id?: string;
             /** @description The team's slug, for team pages and for the team's server or service account */
@@ -10157,6 +10301,7 @@ export interface operations {
     listAuthProviders: {
         parameters: {
             query?: {
+                serviceTeam?: string;
                 /** @description A team slug or ID; limits the list to providers servers of this team may require */
                 team?: string;
                 /** @description With team, a server of that team; also counts providers that list this server */
@@ -10618,6 +10763,193 @@ export interface operations {
                 };
             };
             401: components["responses"]["ErrorReply"];
+        };
+    };
+    listTeamServiceConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Connection metadata, never tokens */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceConnectionList"];
+                };
+            };
+            403: components["responses"]["ErrorReply"];
+        };
+    };
+    startTeamServiceConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServiceConnectionStart"];
+            };
+        };
+        responses: {
+            /** @description Browser authorization destination */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ConnectStarted"];
+                    };
+                };
+            };
+            409: components["responses"]["ErrorReply"];
+        };
+    };
+    updateTeamServiceConnection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                connectionId: components["parameters"]["ConnectionIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServiceConnectionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ServiceConnection"];
+                    };
+                };
+            };
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            412: components["responses"]["ErrorReply"];
+        };
+    };
+    revokeTeamServiceConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                connectionId: components["parameters"]["ConnectionIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkReply"];
+        };
+    };
+    listServiceConnectionAllowableServers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                connectionId: components["parameters"]["ConnectionIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Live destinations, origins and required scopes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AllowableServer"][];
+                    };
+                };
+            };
+        };
+    };
+    reconnectTeamServiceConnection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                connectionId: components["parameters"]["ConnectionIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Browser authorization destination */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ConnectStarted"];
+                    };
+                };
+            };
+        };
+    };
+    adminListServiceConnections: {
+        parameters: {
+            query?: {
+                /** @description nextCursor from the previous page */
+                cursor?: components["parameters"]["CursorParam"];
+                limit?: components["parameters"]["LimitParam"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Connection metadata, never tokens */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ServiceConnectionPage"];
+                    };
+                };
+            };
         };
     };
     startMyConnection: {

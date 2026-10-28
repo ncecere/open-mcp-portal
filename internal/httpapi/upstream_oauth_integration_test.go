@@ -492,8 +492,8 @@ func TestUpstreamOAuthEndToEnd(t *testing.T) {
 	// Service accounts are refused.
 	sa := createSA(t, e.owner, map[string]any{"name": "ci-bot", "role": "member"})
 	saKey := createSAKey(t, e.owner, sa.Id.String(), map[string]any{"name": "ci"}).Secret
-	if c, msg, data := rpcErr(e.call(saKey, "ghgw", "gh__whoami", nil)); c != -32010 || data["reason"] != "service_account" ||
-		!strings.Contains(msg, "sign in to GH") {
+	if c, msg, data := rpcErr(e.call(saKey, "ghgw", "gh__whoami", nil)); c != -32010 || data["reason"] != "service_connection_missing" ||
+		!strings.Contains(msg, "shared GH connection") {
 		t.Fatalf("service account = %v %q", c, msg)
 	}
 

@@ -114,7 +114,11 @@ func (s *Service) recipients(ctx context.Context, q *dbgen.Queries, ev dbgen.Not
 	case PublishRequested:
 		err = platform()
 	case ConnectionNeedsReconsent:
-		err = person()
+		if ev.SubjectType == "service_connection" {
+			err = team(adminsUp)
+		} else {
+			err = person()
+		}
 	case KeyExpiring:
 		switch keyKindOf(ev) {
 		case KeyPersonal:

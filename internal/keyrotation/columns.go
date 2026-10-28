@@ -96,6 +96,12 @@ var Columns = []Column{
 		AAD: uuidAAD(func(id uuid.UUID) []byte { return providers.TokenAAD(id, "access") })},
 	{Table: "provider_connections", Column: "refresh_token_cipher", Key: "id", KeyType: "uuid",
 		AAD: uuidAAD(func(id uuid.UUID) []byte { return providers.TokenAAD(id, "refresh") })},
+	{Table: "service_connections", Column: "access_token_cipher", Key: "id", KeyType: "uuid",
+		AAD: uuidAAD(func(id uuid.UUID) []byte { return providers.ServiceTokenAAD(id, "access") })},
+	{Table: "service_connections", Column: "refresh_token_cipher", Key: "id", KeyType: "uuid",
+		AAD: uuidAAD(func(id uuid.UUID) []byte { return providers.ServiceTokenAAD(id, "refresh") })},
+	{Table: "service_connection_auth_states", Column: "code_verifier_cipher", Key: "state_digest", KeyType: "text",
+		AAD: providers.ServiceStateAAD},
 	// providers.stateAAD
 	{Table: "provider_auth_states", Column: "code_verifier_cipher", Key: "state_digest", KeyType: "text",
 		AAD: func(k string) []byte { return []byte("provider_auth_state:" + k) }},

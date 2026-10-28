@@ -5,6 +5,16 @@ accepted under the instruction "continue until both are done". The contract is i
 (tags `auth-providers` and `connections`). Builds on decisions 7–8, 12, 19 and 21–24. Inspired by Arcade's tool-level
 authorization (`requires_auth=GitHub(scopes=[…])`) and MCP 2025-11-25 URL-mode elicitation (`URLElicitationRequiredError`, `-32042`).
 
+## Team-owned shared accounts
+
+[Service connections](service-connections.md) lift the original service-account
+restriction described below. An explicitly assigned service account may use a
+team-owned OAuth connection only for explicitly granted server origins/scopes,
+while the connecting person remains an active team owner/admin. This applies to
+platform providers and server-bound OAuth; personal secrets remain person-only.
+Relayed people never fall back to shared credentials. The personal flow and its
+consent links below are unchanged.
+
 ## Goal
 
 A tool can act **as the person** on a third-party service. Examples: create a GitHub issue as them, or read their

@@ -33,6 +33,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/audit"
 	"github.com/ncecere/open-mcp-portal/internal/authz"
 	"github.com/ncecere/open-mcp-portal/internal/limits"
+	"github.com/ncecere/open-mcp-portal/internal/registry"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 	"github.com/ncecere/open-mcp-portal/internal/teams"
@@ -65,6 +66,9 @@ type Service struct {
 	// Limits checks a gateway's own rate limit against the ceiling (nil: no
 	// check).
 	Limits *limits.Service
+	// ServiceConnectionReady checks live shared-credential policy without
+	// decrypting or refreshing tokens, for accurate service-account views.
+	ServiceConnectionReady func(context.Context, *registry.Requirement, uuid.UUID, uuid.UUID, uuid.UUID, string) (bool, error)
 }
 
 // New returns a Service; appURL (APP_URL) makes the gateways' endpoint URLs.

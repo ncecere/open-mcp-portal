@@ -189,18 +189,19 @@ func (q *Queries) DeleteProviderServerGrant(ctx context.Context, arg DeleteProvi
 	return result.RowsAffected(), nil
 }
 
-const deleteProviderServerGrantsForServer = `-- name: DeleteProviderServerGrantsForServer :execrows
-DELETE FROM provider_server_grants WHERE server_id = $1
+const deleteProviderServerGrantsForServer = `-- name: DeleteProviderServerGrantsForServer :one
+WITH personal AS (DELETE FROM provider_server_grants p WHERE p.server_id = $1 RETURNING 1),
+shared AS (DELETE FROM service_connection_server_grants s WHERE s.server_id = $1 RETURNING 1)
+SELECT ((SELECT count(*) FROM personal) + (SELECT count(*) FROM shared))::bigint AS deleted
 `
 
-// A server's URL origin or provider changed, or it was deleted: nobody's
-// consent counts for what it is now.
+// A server's URL origin or provider changed, or it was deleted: neither
+// personal nor explicitly shared consent counts for what it is now.
 func (q *Queries) DeleteProviderServerGrantsForServer(ctx context.Context, serverID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteProviderServerGrantsForServer, serverID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	row := q.db.QueryRow(ctx, deleteProviderServerGrantsForServer, serverID)
+	var deleted int64
+	err := row.Scan(&deleted)
+	return deleted, err
 }
 
 const deleteServerProvider = `-- name: DeleteServerProvider :exec

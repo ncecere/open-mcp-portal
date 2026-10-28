@@ -74,7 +74,8 @@ func (q *Queries) DeleteExpiredSessions(ctx context.Context, arg DeleteExpiredSe
 }
 
 const deleteSessionAuthStates = `-- name: DeleteSessionAuthStates :exec
-DELETE FROM provider_auth_states WHERE session_digest = $1
+WITH service_states AS (DELETE FROM service_connection_auth_states sc WHERE sc.session_digest = $1)
+DELETE FROM provider_auth_states pa WHERE pa.session_digest = $1
 `
 
 func (q *Queries) DeleteSessionAuthStates(ctx context.Context, sessionDigest string) error {

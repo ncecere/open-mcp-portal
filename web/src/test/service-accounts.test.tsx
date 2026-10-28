@@ -125,7 +125,7 @@ describe("Service account › Overview", () => {
     expect(within(access).getByRole("link", { name: "Company search" })).toHaveAttribute("href", `/admin/gateways/${platformGatewayId}`);
   });
 
-  it("says how many capabilities need a person's account, which service accounts can't use", async () => {
+  it("says how many capabilities need an explicitly allowed shared connection", async () => {
     mockApi(
       routes("member", serviceAccount(), [], {
         [`GET ${base}/${serviceAccountId}/gateways`]: () => [myGateway({ capabilityCount: 1, needsPersonCount: 2 }), { ...accountGateways[1]!, needsPersonCount: 0 }],
@@ -135,9 +135,9 @@ describe("Service account › Overview", () => {
     const access = await screen.findByRole("table", { name: "Gateways ci-release-bot can use" });
     const own = within(access).getByRole("link", { name: "Support tools" }).closest("tr")!;
     expect(own).toHaveTextContent("1 capability");
-    expect(own).toHaveTextContent("2 more need a person's account");
+    expect(own).toHaveTextContent("2 more need credentials");
     expect(within(access).getByText("Company search").closest("tr")).not.toHaveTextContent(/person's account/);
-    expect(screen.getByText(/2 capabilities on these gateways need a person's account/)).toHaveTextContent("Service accounts can't use capabilities that need a person's account.");
+    expect(screen.getByText(/2 capabilities on these gateways need credentials not available to this service account/)).toHaveTextContent("Service accounts need an active team service connection assigned to them and explicitly allowed for this server and its scopes.");
     expect(await axe(container)).toHaveNoViolations();
   });
 

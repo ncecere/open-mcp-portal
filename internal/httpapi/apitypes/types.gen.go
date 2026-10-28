@@ -1017,6 +1017,7 @@ const (
 	LinkTargetTypeServers                  LinkTargetType = "servers"
 	LinkTargetTypeServiceAccount           LinkTargetType = "service_account"
 	LinkTargetTypeServiceAccounts          LinkTargetType = "service_accounts"
+	LinkTargetTypeServiceConnections       LinkTargetType = "service_connections"
 	LinkTargetTypeTeamAutomationTokens     LinkTargetType = "team_automation_tokens"
 	LinkTargetTypeTeamNotificationSettings LinkTargetType = "team_notification_settings"
 	LinkTargetTypeUsage                    LinkTargetType = "usage"
@@ -1046,6 +1047,8 @@ func (e LinkTargetType) Valid() bool {
 	case LinkTargetTypeServiceAccount:
 		return true
 	case LinkTargetTypeServiceAccounts:
+		return true
+	case LinkTargetTypeServiceConnections:
 		return true
 	case LinkTargetTypeTeamAutomationTokens:
 		return true
@@ -2186,6 +2189,27 @@ func (e ServiceAccountRole) Valid() bool {
 	case ServiceAccountRoleEditor:
 		return true
 	case ServiceAccountRoleMember:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ServiceConnectionStatus.
+const (
+	ServiceConnectionStatusActive         ServiceConnectionStatus = "active"
+	ServiceConnectionStatusLapsed         ServiceConnectionStatus = "lapsed"
+	ServiceConnectionStatusNeedsReconsent ServiceConnectionStatus = "needs_reconsent"
+)
+
+// Valid indicates whether the value is a known member of the ServiceConnectionStatus enum.
+func (e ServiceConnectionStatus) Valid() bool {
+	switch e {
+	case ServiceConnectionStatusActive:
+		return true
+	case ServiceConnectionStatusLapsed:
+		return true
+	case ServiceConnectionStatusNeedsReconsent:
 		return true
 	default:
 		return false
@@ -3831,7 +3855,7 @@ type GatewayCapability struct {
 	Name               string          `json:"name"`
 	OriginalDefinition json.RawMessage `json:"originalDefinition,omitempty"`
 
-	// Requires The account a person must connect to use it (null; none). Service accounts can't call capabilities that require one. In MyGatewayDetail, connected says whether the caller's connection covers it now
+	// Requires The account a person must connect to use it (null; none). Service accounts need an explicitly assigned active team connection and a destination origin/scope grant. In MyGatewayDetail, connected says whether the caller's connection covers it now
 	Requires *CapabilityRequirement `json:"requires"`
 
 	// ServerCapturesPayloads The capability's server records call arguments and results, whatever the gateway's setting. Absent from servers before Phase 6.
@@ -4094,7 +4118,7 @@ type LimitSettingsUpdate struct {
 	Items []PlatformRateLimitSetting `json:"items"`
 }
 
-// LinkTarget Where the web app goes for an item (docs/admin-overview.md, Link targets). server: the server page (team page for members, Admin > Servers for platform staff); servers: the team's server list; review_queue: Admin > Publishing; gateways: Admin > Gateways; service_account / service_accounts: the team's service accounts; automation_tokens: Admin > Automation tokens; team_automation_tokens: the team's Settings > Automation tokens; auth_providers: Admin > Auth providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team's Settings > Notifications; account_connections: Account > Connections; account_api_keys: Account > API keys.
+// LinkTarget Where the web app goes for an item (docs/admin-overview.md, Link targets). server: the server page (team page for members, Admin > Servers for platform staff); servers: the team's server list; review_queue: Admin > Publishing; gateways: Admin > Gateways; service_account / service_accounts: the team's service accounts; automation_tokens: Admin > Automation tokens; team_automation_tokens: the team's Settings > Automation tokens; auth_providers: Admin > Auth providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team's Settings > Notifications; service_connections: the team's Service accounts > Connections tab; account_connections: Account > Connections; account_api_keys: Account > API keys.
 type LinkTarget struct {
 	// Id The object's ID for singular types (server, service_account)
 	Id *string `json:"id,omitempty"`
@@ -4870,7 +4894,7 @@ type MyGateway struct {
 	Id     openapi_types.UUID `json:"id"`
 	Name   string             `json:"name"`
 
-	// NeedsPersonCount Service-account views (listServiceAccountGateways) only. Capabilities it would offer that require a person's account (a provider requirement); service accounts are refused them, so capabilityCount leaves them out
+	// NeedsPersonCount Service-account views (listServiceAccountGateways) only. Capabilities currently refused because the service account lacks an active, explicitly assigned and allowed shared OAuth connection, or because they require a person-only secret. capabilityCount leaves these out
 	NeedsPersonCount *int64           `json:"needsPersonCount,omitempty"`
 	OwnerKind        GatewayOwnerKind `json:"ownerKind"`
 	Slug             string           `json:"slug"`
@@ -5943,6 +5967,56 @@ type ServiceAccountUpdate struct {
 	ToolScope *ToolScope `json:"toolScope,omitempty"`
 }
 
+// ServiceConnection defines model for ServiceConnection.
+type ServiceConnection struct {
+	AccountLabel *string                  `json:"accountLabel,omitempty"`
+	Accounts     []openapi_types.UUID     `json:"accounts"`
+	Id           openapi_types.UUID       `json:"id"`
+	Name         string                   `json:"name"`
+	ProviderId   openapi_types.UUID       `json:"providerId"`
+	ProviderName string                   `json:"providerName"`
+	Revision     int64                    `json:"revision"`
+	Scopes       []string                 `json:"scopes"`
+	Servers      []ServiceConnectionGrant `json:"servers"`
+	Status       ServiceConnectionStatus  `json:"status"`
+	TeamId       openapi_types.UUID       `json:"teamId"`
+}
+
+// ServiceConnectionStatus defines model for ServiceConnection.Status.
+type ServiceConnectionStatus string
+
+// ServiceConnectionGrant defines model for ServiceConnectionGrant.
+type ServiceConnectionGrant struct {
+	Origin   string             `json:"origin"`
+	Scopes   []string           `json:"scopes"`
+	ServerId openapi_types.UUID `json:"serverId"`
+}
+
+// ServiceConnectionList defines model for ServiceConnectionList.
+type ServiceConnectionList struct {
+	Data       []ServiceConnection `json:"data"`
+	NextCursor *string             `json:"nextCursor,omitempty"`
+}
+
+// ServiceConnectionPage defines model for ServiceConnectionPage.
+type ServiceConnectionPage struct {
+	Items      []ServiceConnection `json:"items"`
+	NextCursor *string             `json:"nextCursor"`
+}
+
+// ServiceConnectionStart defines model for ServiceConnectionStart.
+type ServiceConnectionStart struct {
+	Name       string             `json:"name"`
+	ProviderId openapi_types.UUID `json:"providerId"`
+	Scopes     *[]string          `json:"scopes,omitempty"`
+}
+
+// ServiceConnectionUpdate defines model for ServiceConnectionUpdate.
+type ServiceConnectionUpdate struct {
+	Accounts []openapi_types.UUID     `json:"accounts"`
+	Servers  []ServiceConnectionGrant `json:"servers"`
+}
+
 // SetServerSecret A key, or a change to the caller's entry for one server
 type SetServerSecret struct {
 	// AllowAgents Omit to keep (false for a new entry)
@@ -6704,6 +6778,13 @@ type AdminListServiceAccountsParams struct {
 	Limit  *LimitParam  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// AdminListServiceConnectionsParams defines parameters for AdminListServiceConnections.
+type AdminListServiceConnectionsParams struct {
+	// Cursor nextCursor from the previous page
+	Cursor *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *LimitParam  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // AdminUpdateCaptureSettingsParams defines parameters for AdminUpdateCaptureSettings.
 type AdminUpdateCaptureSettingsParams struct {
 	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
@@ -6828,6 +6909,8 @@ type AdminUpdateUserParams struct {
 
 // ListAuthProvidersParams defines parameters for ListAuthProviders.
 type ListAuthProvidersParams struct {
+	ServiceTeam *string `form:"serviceTeam,omitempty" json:"serviceTeam,omitempty"`
+
 	// Team A team slug or ID; limits the list to providers servers of this team may require
 	Team *string `form:"team,omitempty" json:"team,omitempty"`
 
@@ -7026,6 +7109,18 @@ type UpdateTeamNotificationDestinationParams struct {
 
 // UpdateServiceAccountParams defines parameters for UpdateServiceAccount.
 type UpdateServiceAccountParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
+// UpdateTeamServiceConnectionParams defines parameters for UpdateTeamServiceConnection.
+type UpdateTeamServiceConnectionParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
+// ReconnectTeamServiceConnectionParams defines parameters for ReconnectTeamServiceConnection.
+type ReconnectTeamServiceConnectionParams struct {
 	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
 	IfMatch IfMatchHeader `json:"If-Match"`
 }
@@ -7242,6 +7337,12 @@ type UpdateServiceAccountJSONRequestBody = ServiceAccountUpdate
 
 // CreateServiceAccountKeyJSONRequestBody defines body for CreateServiceAccountKey for application/json ContentType.
 type CreateServiceAccountKeyJSONRequestBody = ServiceAccountKeyCreate
+
+// StartTeamServiceConnectionJSONRequestBody defines body for StartTeamServiceConnection for application/json ContentType.
+type StartTeamServiceConnectionJSONRequestBody = ServiceConnectionStart
+
+// UpdateTeamServiceConnectionJSONRequestBody defines body for UpdateTeamServiceConnection for application/json ContentType.
+type UpdateTeamServiceConnectionJSONRequestBody = ServiceConnectionUpdate
 
 // AsServerUnhealthyData returns the union data inside the NotificationPayload_Data as a ServerUnhealthyData
 func (t NotificationPayload_Data) AsServerUnhealthyData() (ServerUnhealthyData, error) {

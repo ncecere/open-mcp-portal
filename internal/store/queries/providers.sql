@@ -371,10 +371,12 @@ ON CONFLICT (connection_id, server_id)
 DO UPDATE SET origin = EXCLUDED.origin, scopes = EXCLUDED.scopes, consented_at = now()
 RETURNING *;
 
--- name: DeleteProviderServerGrantsForServer :execrows
--- A server's URL origin or provider changed, or it was deleted: nobody's
--- consent counts for what it is now.
-DELETE FROM provider_server_grants WHERE server_id = @server_id;
+-- name: DeleteProviderServerGrantsForServer :one
+-- A server's URL origin or provider changed, or it was deleted: neither
+-- personal nor explicitly shared consent counts for what it is now.
+WITH personal AS (DELETE FROM provider_server_grants p WHERE p.server_id = @server_id RETURNING 1),
+shared AS (DELETE FROM service_connection_server_grants s WHERE s.server_id = @server_id RETURNING 1)
+SELECT ((SELECT count(*) FROM personal) + (SELECT count(*) FROM shared))::bigint AS deleted;
 
 -- name: DeleteProviderServerGrant :execrows
 -- The person takes back one server's allowance of one connection.

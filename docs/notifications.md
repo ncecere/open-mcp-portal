@@ -5,6 +5,15 @@ schemas `NotificationPayload` and `*Data`). Migration `00014_notifications.sql`.
 `docs/alerts.md` (visibility follows live authority, per-person read state, outcome categories, at-most-one-sender locking). The difference: OMG evaluates
 rules; here the portal's own changes and loops *emit events*, and a leader-elected dispatcher delivers them.
 
+## Shared connection re-consent
+
+`connection.needs_reconsent` with subject type `service_connection` is team-owned:
+its team ID is the connection's owning team and there is no personal recipient.
+Fan-out resolves that team's live active owners/admins; removed, demoted or
+suspended people receive nothing. This does not change personal connection
+notifications and does not send shared-account details to personal recipients or
+webhooks. See [service connections](service-connections.md).
+
 ## Goal
 
 Tell the right people, in the portal or elsewhere, when something needs them: a server is down or changed, a review is waiting or decided, a sign-in lapsed, a key is about to expire.

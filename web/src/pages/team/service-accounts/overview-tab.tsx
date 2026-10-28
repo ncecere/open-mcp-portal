@@ -97,7 +97,7 @@ function AccessCard({ account }: { account: ServiceAccount }) {
               <Td>{accountAccessText(g, team.name)}</Td>
               <Td>
                 {capabilityCount(g.capabilityCount)}
-                {(g.needsPersonCount ?? 0) > 0 && <span className={s.secondary}>{`${plural(g.needsPersonCount!, "more needs", "more need")} a person's account`}</span>}
+                {(g.needsPersonCount ?? 0) > 0 && <span className={s.secondary}>{`${plural(g.needsPersonCount!, "more needs", "more need")} credentials`}</span>}
               </Td>
             </Tr>
           ))}
@@ -105,7 +105,7 @@ function AccessCard({ account }: { account: ServiceAccount }) {
       )}
       {needsPerson > 0 && (
         <p className={items.length > 0 ? `${s.muted} ${s.pad}` : s.muted}>
-          {`${plural(needsPerson, "capability", "capabilities")} on these gateways ${needsPerson === 1 ? "needs" : "need"} a person's account, such as their GitHub account. ${serviceAccountsCant} Its keys get an error for them; people call them with their own keys or connected apps.`}
+          {`${plural(needsPerson, "capability", "capabilities")} on these gateways ${needsPerson === 1 ? "needs" : "need"} credentials not available to this service account. ${serviceAccountsCant} Review the Connections tab. Personal secrets remain person-only; relayed people still use their own accounts.`}
         </p>
       )}
       <p className={items.length > 0 ? `${s.muted} ${s.pad}` : s.muted}>

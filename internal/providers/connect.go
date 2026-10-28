@@ -483,6 +483,13 @@ func (s *Service) Callback(ctx context.Context, in CallbackInput) (string, error
 	if in.State == "" || len(in.State) > 200 {
 		return done("", ResultExpired, nil), nil
 	}
+	// Service states live in a separate namespace. An older replica sees an
+	// unknown personal state and refuses; it can never store personal tokens.
+	if serviceState, err := s.q.GetServiceConnectionAuthState(ctx, auth.Digest(in.State)); err == nil {
+		return s.serviceCallback(ctx, serviceState, in)
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return "", err
+	}
 	st, err := s.q.TakeProviderAuthState(ctx, auth.Digest(in.State))
 	if errors.Is(store.NotFound(err), store.ErrNotFound) {
 		return done("", ResultExpired, nil), nil
@@ -706,6 +713,11 @@ func (s *Service) Cleanup(ctx context.Context) (int64, error) {
 	if err != nil {
 		return n, err
 	}
+	serviceN, err := s.q.DeleteExpiredServiceConnectionAuthStates(ctx)
+	if err != nil {
+		return n, err
+	}
+	n += serviceN
 	m, err := s.q.DeleteStaleConnectRequests(ctx, s.now().Add(-requestKeep))
 	return n + m, err
 }

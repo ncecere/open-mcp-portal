@@ -6,6 +6,16 @@ The caller is either a **person** (with a personal API key, or through an MCP cl
 
 Lists (`tools/list`, `prompts/list`, `resources/list`, `resources/templates/list`) are served from the definitions approved in the portal, so your server only receives calls (`tools/call`, `prompts/get`, `resources/read`), plus the handshake and lists of an editor's **Test connection** (below). A read arrives with your own URI (the portal strips its `omp://{server-slug}/` prefix). Each call also performs the MCP handshake again, because the portal is stateless.
 
+## Shared OAuth accounts
+
+A [team service connection](service-connections.md) does not impersonate the
+administrator who connected it. Calls retain `principal_type: service_account`
+and the service account's identity; the provider token acts as the clearly
+labelled shared upstream account. Platform-provider tokens use
+`MCP-Gateway-Provider-Token`; server-bound OAuth uses `Authorization: Bearer` and
+moves identity to `MCP-Gateway-Identity`. Relayed people keep their personal
+identity and credentials, with no fallback to a team's connection.
+
 ## Where the token arrives
 
 | Your server's upstream auth (set when it was registered) | The token arrives as |

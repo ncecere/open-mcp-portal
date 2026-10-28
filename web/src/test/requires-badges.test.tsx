@@ -33,7 +33,7 @@ describe("Requires badges", () => {
     });
     const { container } = renderApp(`/teams/${team.slug}/gateways/${gatewayId}?tab=capabilities`);
     const row = await screen.findByRole("listitem", { name: "tool: service-status__get_status" });
-    expect(within(row).getByText("Needs GitHub (repo)")).toHaveAttribute("title", "Service accounts can't use capabilities that need a person's account.");
+    expect(within(row).getByText("Needs GitHub (repo)")).toHaveAttribute("title", "Service accounts need an active team service connection assigned to them and explicitly allowed for this server and its scopes.");
     expect(within(screen.getByRole("listitem", { name: "tool: service-status__restart" })).queryByText(/Needs/)).toBeNull();
     expect(screen.getByText(/Each person connects the accounts marked Needs once/)).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();

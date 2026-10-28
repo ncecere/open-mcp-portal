@@ -19,7 +19,7 @@ export const gatewayTabs = ["overview", "capabilities", "access", "activity", "s
 export type GatewayTab = (typeof gatewayTabs)[number];
 
 /** A team's service account: Overview (role and access) · Keys · Settings. */
-export const serviceAccountTabs = ["overview", "keys", "settings"] as const;
+export const serviceAccountTabs = ["overview", "keys", "connections", "settings"] as const;
 export type ServiceAccountTab = (typeof serviceAccountTabs)[number];
 
 /** Admin → Auth providers › one provider: Overview (redirect URI, endpoints, use) · Access (who may use it) · Settings. */

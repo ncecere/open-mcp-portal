@@ -105,6 +105,8 @@ type Service struct {
 	Reachable func(ctx context.Context, u dbgen.User) ([]gateways.ReachableServer, error)
 	// narrow holds the short-lived narrowed tokens in memory (narrow.go).
 	narrow narrowCache
+	// SessionIdleTimeout mirrors browser authentication for service callbacks.
+	SessionIdleTimeout time.Duration
 }
 
 // New returns the service. up supplies the address guard (the development

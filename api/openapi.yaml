@@ -3814,8 +3814,16 @@ paths:
         server of that team may require are listed (open ones, and restricted ones that list the team or, with serverId
         (a server of that team), that server). That is a convenience for the picker; saving a requirement and every call
         check the provider's access list again. Without team every enabled provider is listed (connecting an account is
-        not limited by it).
+        not limited by it). With serviceTeam (browser only, genuine team membership required), also includes enabled
+        server-bound providers for servers reachable through a gateway by the caller, for the shared-connection picker.
+        serviceTeam cannot be combined with team or serverId.
       parameters:
+      - name: serviceTeam
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 100
       - name: team
         in: query
         required: false
@@ -4371,6 +4379,146 @@ paths:
                       $ref: '#/components/schemas/ProviderConnection'
         '401':
           $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/service-connections:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    get:
+      tags: [service-accounts]
+      operationId: listTeamServiceConnections
+      summary: List shared upstream accounts owned by this team (browser only)
+      responses:
+        '200':
+          description: Connection metadata, never tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceConnectionList'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags: [service-accounts]
+      operationId: startTeamServiceConnection
+      summary: Create a tokenless shared connection and begin consent (team owners/admins only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceConnectionStart'
+      responses:
+        '200':
+          description: Browser authorization destination
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ConnectStarted'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/service-connections/{connectionId}:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/ConnectionIdParam'
+    put:
+      tags: [service-accounts]
+      operationId: updateTeamServiceConnection
+      summary: Atomically replace account assignments and destination grants (browser owners/admins only)
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceConnectionUpdate'
+      responses:
+        '200':
+          description: Updated metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ServiceConnection'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+    delete:
+      tags: [service-accounts]
+      operationId: revokeTeamServiceConnection
+      summary: Erase a shared connection and its pending consent (browser owners/admins only)
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+  /v1/teams/{team}/service-connections/{connectionId}/allowable-servers:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/ConnectionIdParam'
+    get:
+      tags: [service-accounts]
+      operationId: listServiceConnectionAllowableServers
+      summary: List reachable destinations and exact scopes an administrator may grant (browser only)
+      responses:
+        '200':
+          description: Live destinations, origins and required scopes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AllowableServer'
+  /v1/teams/{team}/service-connections/{connectionId}/reconnect:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/ConnectionIdParam'
+    post:
+      tags: [service-accounts]
+      operationId: reconnectTeamServiceConnection
+      summary: Begin new consent for a shared connection (browser owners/admins only)
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      responses:
+        '200':
+          description: Browser authorization destination
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ConnectStarted'
+  /v1/admin/service-connections:
+    get:
+      tags: [service-accounts]
+      operationId: adminListServiceConnections
+      summary: Paginated shared connection metadata for browser admins and auditors
+      parameters:
+      - $ref: '#/components/parameters/CursorParam'
+      - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Connection metadata, never tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ServiceConnectionPage'
   /v1/me/connections/start:
     post:
       tags:
@@ -6582,6 +6730,114 @@ components:
               data:
                 $ref: '#/components/schemas/UsageReport'
   schemas:
+    ServiceConnectionGrant:
+      type: object
+      additionalProperties: false
+      required: [serverId, origin, scopes]
+      properties:
+        serverId:
+          type: string
+          format: uuid
+        origin:
+          type: string
+        scopes:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+    ServiceConnectionStart:
+      type: object
+      additionalProperties: false
+      required: [providerId, name]
+      properties:
+        providerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        scopes:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+    ServiceConnectionUpdate:
+      type: object
+      additionalProperties: false
+      required: [accounts, servers]
+      properties:
+        accounts:
+          type: array
+          maxItems: 500
+          items:
+            type: string
+            format: uuid
+        servers:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/ServiceConnectionGrant'
+    ServiceConnection:
+      type: object
+      required: [id, teamId, providerId, providerName, name, status, scopes, revision, accounts, servers]
+      properties:
+        id:
+          type: string
+          format: uuid
+        teamId:
+          type: string
+          format: uuid
+        providerId:
+          type: string
+          format: uuid
+        providerName:
+          type: string
+        name:
+          type: string
+        accountLabel:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, needs_reconsent, lapsed]
+        scopes:
+          type: array
+          items:
+            type: string
+        revision:
+          type: integer
+          format: int64
+        accounts:
+          type: array
+          items:
+            type: string
+            format: uuid
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceConnectionGrant'
+    ServiceConnectionPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceConnection'
+        nextCursor:
+          type: string
+          nullable: true
+    ServiceConnectionList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceConnection'
+        nextCursor:
+          type: string
     BrowserSession:
       type: object
       required: [id, createdAt, lastSeenAt, expiresAt, userAgent, clientIp, current]
@@ -8914,8 +9170,8 @@ components:
           allOf:
           - $ref: '#/components/schemas/CapabilityRequirement'
           nullable: true
-          description: The account a person must connect to use it (null; none). Service accounts can't call
-            capabilities that require one. In MyGatewayDetail, connected says whether the caller's connection covers
+          description: The account a person must connect to use it (null; none). Service accounts need an explicitly
+            assigned active team connection and a destination origin/scope grant. In MyGatewayDetail, connected says whether the caller's connection covers
             it now
         capabilityId:
           type: string
@@ -9260,9 +9516,9 @@ components:
         needsPersonCount:
           type: integer
           format: int64
-          description: Service-account views (listServiceAccountGateways) only. Capabilities it would offer that require
-            a person's account (a provider requirement); service accounts are refused them, so capabilityCount leaves
-            them out
+          description: Service-account views (listServiceAccountGateways) only. Capabilities currently refused because
+            the service account lacks an active, explicitly assigned and allowed shared OAuth connection, or because
+            they require a person-only secret. capabilityCount leaves these out
     MyGatewayDetail:
       type: object
       required:
@@ -12482,7 +12738,8 @@ components:
         gateways: Admin > Gateways; service_account / service_accounts: the team''s service accounts; automation_tokens: Admin
         > Automation tokens; team_automation_tokens: the team''s Settings > Automation tokens; auth_providers: Admin > Auth
         providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team''s
-        Settings > Notifications; account_connections: Account > Connections; account_api_keys: Account > API keys.'
+        Settings > Notifications; service_connections: the team''s Service accounts > Connections tab;
+        account_connections: Account > Connections; account_api_keys: Account > API keys.'
       required:
       - type
       properties:
@@ -12501,6 +12758,7 @@ components:
           - usage
           - notification_settings
           - team_notification_settings
+          - service_connections
           - account_connections
           - account_api_keys
         id:

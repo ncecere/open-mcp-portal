@@ -16,6 +16,11 @@ import { Badge } from "@/components/ui/badge/badge";
 import { Button } from "@/components/ui/button/button";
 import { CellText, type DataTableColumn } from "@/components/ui/data-table/data-table";
 import { TextLink } from "@/components/ui/text-link/text-link";
+import { Stack } from "@/components/ui/layout/layout";
+import { PageHeader } from "@/components/ui/page-header/page-header";
+import { Tabs, TabsList, TabsPanel, Tab } from "@/components/ui/tabs/tabs";
+import { useSearchParams } from "@/lib/url-search";
+import { TeamConnectionsTab } from "./connections-tab";
 import s from "../../shared.module.css";
 import { ReadOnlyNotice } from "../access";
 import { useTeam } from "../common";
@@ -72,6 +77,8 @@ function columns(team: string): DataTableColumn<ServiceAccount>[] {
 export function ServiceAccountsPage() {
   const { slug, team, isManager, archived } = useTeam();
   const form = useFormParam();
+  const [params, setParams] = useSearchParams();
+  const section = params.get("tab") === "connections" ? "connections" : "accounts";
   const canCreate = isManager && !archived;
   const accounts = useQuery(serviceAccountsQuery(slug));
   const create = canCreate && (
@@ -83,18 +90,15 @@ export function ServiceAccountsPage() {
     <Link to="/teams/$team/service-accounts/$serviceAccountId" params={{ team: slug, serviceAccountId: a.id }} search={tab ? { tab } : {}} />
   );
   return (
-    <>
+    <Stack gap={6} className={s.page}>
+      <PageHeader title={terms.serviceAccounts} description={`Identities ${team.name} owns for CI, scripts and headless agents. Their keys reach the team's gateways and the platform gateways granted to the team.`} actions={section === "accounts" ? create : undefined} />
+      <ArchivedNotice>Its service accounts can be viewed but not changed, and their keys don&apos;t work while the team is archived.</ArchivedNotice>
+      <ReadOnlyNotice what="the team's service accounts" managers change="create and manage them and their keys" />
+      <Tabs value={section} onValueChange={(value) => setParams((old) => { const next = new URLSearchParams(old); if (value === "connections") next.set("tab", "connections"); else next.delete("tab"); return next; })}>
+        <TabsList aria-label="Service accounts sections"><Tab value="accounts">Accounts</Tab><Tab value="connections">Connections</Tab></TabsList>
+        <TabsPanel value="accounts">
       <ListPage<ServiceAccount>
         id="team-service-accounts"
-        title={terms.serviceAccounts}
-        description={`Identities ${team.name} owns for CI, scripts and headless agents. Their keys reach the team's gateways and the platform gateways granted to the team.`}
-        primaryAction={create}
-        notices={
-          <>
-            <ArchivedNotice>Its service accounts can be viewed but not changed, and their keys don&apos;t work while the team is archived.</ArchivedNotice>
-            <ReadOnlyNotice what="the team's service accounts" managers change="create and manage them and their keys" />
-          </>
-        }
         caption={terms.serviceAccounts}
         columns={columns(slug)}
         data={accounts.data ?? []}
@@ -112,7 +116,10 @@ export function ServiceAccountsPage() {
         empty={{ icon: <Bot />, title: "No service accounts yet.", description: whatIsAServiceAccount, action: create || undefined }}
         tableProps={{ columnsMenuMin: 6 }}
       />
+        </TabsPanel>
+        <TabsPanel value="connections"><TeamConnectionsTab team={slug} canManage={canCreate} /></TabsPanel>
+      </Tabs>
       {canCreate && form.id === "new" && <CreateServiceAccountForm team={slug} onClose={form.close} />}
-    </>
+    </Stack>
   );
 }

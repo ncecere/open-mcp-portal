@@ -8,7 +8,7 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
-import { Activity, KeyRound, LayoutDashboard, Settings2 } from "lucide-react";
+import { Activity, KeyRound, LayoutDashboard, Link2, Settings2 } from "lucide-react";
 import { serviceAccountQuery } from "../../../api/queries";
 import { EnabledBadge } from "../../../components/servers/badges";
 import { isNotFound, NotFoundState } from "../../../components/not-found";
@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge/badge";
 import s from "../../shared.module.css";
 import { useTeam } from "../common";
 import { KeysTab } from "./keys-tab";
+import { ConnectionsTab } from "./connections-tab";
 import { activeKeysText, roleLabel, type ServiceAccount, type ServiceAccountAbilities, serviceAccountAbilities } from "./labels";
 import { OverviewTab } from "./overview-tab";
 import { SettingsTab } from "./settings-tab";
@@ -107,6 +108,7 @@ function Record({ account, abilities, staff }: { account: ServiceAccount; abilit
       tabs={[
         { value: "overview", label: "Overview", icon: <LayoutDashboard aria-hidden />, content: <OverviewTab {...props} /> },
         { value: "keys", label: "Keys", icon: <KeyRound aria-hidden />, count: account.activeKeyCount, content: <KeysTab {...props} /> },
+        { value: "connections", label: "Connections", icon: <Link2 aria-hidden />, content: <ConnectionsTab {...props} /> },
         { value: "settings", label: "Settings", icon: <Settings2 aria-hidden />, content: <SettingsTab {...props} /> },
       ]}
     />

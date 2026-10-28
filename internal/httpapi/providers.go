@@ -91,7 +91,7 @@ func presetName(p *string) *apitypes.AuthProviderPresetName {
 }
 
 func toAPIProviderSummary(p registry.Provider) apitypes.AuthProviderSummary {
-	return apitypes.AuthProviderSummary{Id: p.ID, Slug: p.Slug, Name: p.Name, Kind: apitypes.AuthProviderKindOauth2, Preset: presetName(p.Preset),
+	return apitypes.AuthProviderSummary{Id: p.ID, Slug: p.Slug, Name: p.Name, Kind: apitypes.AuthProviderKind(p.Kind), Preset: presetName(p.Preset),
 		DefaultScopes: p.DefaultScopes, LogoUrl: p.LogoURL}
 }
 
@@ -210,6 +210,18 @@ func fromAPIRequirement(in *apitypes.McpServerRequirementInput) *registry.Requir
 }
 
 func (a *api) listAuthProviders(w http.ResponseWriter, r *http.Request) {
+	if serviceTeam := r.URL.Query().Get("serviceTeam"); serviceTeam != "" {
+		if !a.browserOnly(w, r) {
+			return
+		}
+		if r.URL.Query().Get("team") != "" || r.URL.Query().Get("serverId") != "" {
+			httpx.Error(w, 400, "invalid_filter", "serviceTeam cannot be combined with team or serverId")
+			return
+		}
+		ps, err := a.Providers.ServicePickable(r.Context(), a.actor(r), serviceTeam)
+		writeList(w, r, ps, err, toAPIProviderSummary)
+		return
+	}
 	team := r.URL.Query().Get("team")
 	if team == "" {
 		ps, err := a.Providers.List(r.Context())

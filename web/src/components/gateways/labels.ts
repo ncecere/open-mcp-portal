@@ -160,6 +160,10 @@ export const callErrorLabels: Record<string, string> = {
   missing_scopes: "Account lacks the scopes needed",
   needs_reconsent: "Account needs reconnecting",
   service_account: "Service accounts can't use it",
+  service_connection_missing: "No shared connection assigned",
+  service_connection_not_allowed: "Shared connection not allowed for this server",
+  service_connection_needs_reconsent: "Shared connection needs reconnecting",
+  service_connection_lapsed: "Shared connection's administrator is no longer eligible",
   provider_disabled: "Auth provider turned off",
   provider_unavailable: "Auth provider unavailable",
   // Calls an agent platform relayed for a person (decision 66): refused, with a tool error and never a link.

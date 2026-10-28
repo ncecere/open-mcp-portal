@@ -331,6 +331,8 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 	// A person allows a server from My connections (decision 68): the servers
 	// they may use through a gateway are the ones offered.
 	provs.Reachable = gws.ReachableServers
+	gws.ServiceConnectionReady = provs.ServiceConnectionReady
+	provs.SessionIdleTimeout = cfg.SessionIdleTimeout
 	// Per-person secrets (decision 72): people enter their own key for servers
 	// in person_secret mode; the setup person's key reads the server's
 	// capabilities through the registry.

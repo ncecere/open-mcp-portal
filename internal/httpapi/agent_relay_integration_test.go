@@ -50,7 +50,7 @@ func TestRelayKeyAloneBehavesAsBefore(t *testing.T) {
 		}
 		// A capability that needs a person's account: refused as ever.
 		_, out = fx.callTool("", "status__provider_token", nil)
-		if c, _, data := rpcErr(out); c != -32010 || data["reason"] != "service_account" {
+		if c, _, data := rpcErr(out); c != -32010 || data["reason"] != "service_connection_missing" {
 			t.Fatalf("%s provider tool = %v", name, out)
 		}
 	}

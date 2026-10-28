@@ -84,7 +84,7 @@ export function OverrideDialog({ cap, server, scope, onClose }: Props) {
           {
             value: "inherit",
             label: "Same as the server",
-            description: `${needsText({ providerName: req.providerName, scopes: serverScopes })}. Callers connect with the server's scopes, and each call sends their token to ${server.name}. Service accounts can't use it.`,
+            description: `${needsText({ providerName: req.providerName, scopes: serverScopes })}. Callers connect with the server's scopes, and each call sends their token to ${server.name}. Service accounts require an explicitly allowed team service connection.`,
           },
           {
             value: "none",
@@ -94,7 +94,7 @@ export function OverrideDialog({ cap, server, scope, onClose }: Props) {
           {
             value: "scopes",
             label: `Other ${req.providerName} scopes`,
-            description: `Callers connect with only the scopes below, and each call sends that token to ${server.name}. Service accounts can't use it.`,
+            description: `Callers connect with only the scopes below, and each call sends that token to ${server.name}. Service accounts require an explicitly allowed team service connection.`,
           },
         ]}
       />

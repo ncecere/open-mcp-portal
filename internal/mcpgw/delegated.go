@@ -19,8 +19,9 @@ import (
 // "Runtime", decisions 27-29). After every other check passed, a call of a
 // capability with an effective requirement:
 //
-//  1. from a service account is refused (-32010, data.reason
-//     service_account; recorded denied);
+//  1. from a genuine service account uses only an explicitly assigned team
+//     connection and origin/scope grant; missing or lapsed access is refused
+//     (-32010, no consent link; recorded denied);
 //  2. of a turned-off provider is refused (-32010 provider_disabled;
 //     recorded denied), and so is one of a restricted provider whose access
 //     list excludes the server's team and the server (-32010
@@ -83,29 +84,25 @@ func (rc *request) delegated(o gateways.Offer, rec *calls.Call) (cred *providers
 		return nil, true
 	}
 	rec.ProviderSlug = req.Provider.Slug
-	noun := kindNoun(o.Capability.Kind)
-	if rc.principal.isServiceAccount() {
-		msg := fmt.Sprintf("This %s needs a person's %s account; service accounts can't use it", noun, req.Provider.Name)
-		if req.Provider.ServerBound() {
-			msg = fmt.Sprintf("This %s needs a person to sign in to %s; service accounts can't use it", noun, req.Provider.Name)
-		}
-		n := rc.failData(codeDenied, msg, map[string]any{"reason": DeniedServiceAccount, "provider": req.Provider.Slug})
-		rec.Outcome, rec.ErrorClass = calls.OutcomeDenied, DeniedServiceAccount
-		rc.record(*rec, n)
-		return nil, false
-	}
 	if rc.h.Providers == nil {
 		rc.providerDisabled(req, rec)
 		return nil, false
 	}
 	sp := rc.span("mcp.provider_credential", trace.SpanKindInternal, observability.AttrProvider.String(req.Provider.Slug))
-	c, err := rc.h.Providers.Credential(rc.r.Context(), req, rc.callContext(o))
+	var c providers.Credential
+	var err error
+	if rc.principal.isServiceAccount() {
+		c, err = rc.h.Providers.ServiceCredential(rc.r.Context(), req, rc.serviceCallContext(o))
+	} else {
+		c, err = rc.h.Providers.Credential(rc.r.Context(), req, rc.callContext(o))
+	}
 	if err != nil {
 		observability.Fail(sp, "unavailable")
 	}
 	sp.End()
 	var consent *providers.ConsentNeeded
 	var down *providers.UnavailableError
+	var serviceErr *providers.ServiceCredentialError
 	switch {
 	case err == nil:
 		return &c, true
@@ -113,6 +110,8 @@ func (rc *request) delegated(o gateways.Offer, rec *calls.Call) (cred *providers
 		rc.providerDisabled(req, rec)
 	case errors.Is(err, providers.ErrProviderNotAllowed):
 		rc.providerNotAllowed(req, rec)
+	case errors.As(err, &serviceErr):
+		rc.serviceConnectionDenied(o, serviceErr, rec)
 	case errors.As(err, &consent):
 		rc.needsAuthorization(o, consent, rec, "")
 	case errors.As(err, &down):

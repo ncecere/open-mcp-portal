@@ -56,7 +56,8 @@ DELETE FROM sessions WHERE user_id = @user_id
 RETURNING id;
 
 -- name: DeleteSessionAuthStates :exec
-DELETE FROM provider_auth_states WHERE session_digest = @session_digest;
+WITH service_states AS (DELETE FROM service_connection_auth_states sc WHERE sc.session_digest = @session_digest)
+DELETE FROM provider_auth_states pa WHERE pa.session_digest = @session_digest;
 
 -- name: DeleteSessionByDigest :exec
 DELETE FROM sessions WHERE token_digest = @token_digest;

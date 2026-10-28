@@ -63,6 +63,7 @@ CROSS JOIN LATERAL (
                                  WHERE og.id = ids.target_uuid)
         WHEN 'automation_token' THEN (SELECT at.name FROM automation_tokens at WHERE at.id = ids.target_uuid)
         WHEN 'notification_destination' THEN (SELECT nd.name FROM notification_destinations nd WHERE nd.id = ids.target_uuid)
+        WHEN 'service_connection' THEN (SELECT sc.name FROM service_connections sc WHERE sc.id = ids.target_uuid)
         WHEN 'service_account' THEN (SELECT sa.name FROM service_accounts sa WHERE sa.id = ids.target_uuid)
         WHEN 'service_account_key' THEN (SELECT sa.name || ' · ' || k.name FROM service_account_keys k
                                          JOIN service_accounts sa ON sa.id = k.service_account_id WHERE k.id = ids.target_uuid)

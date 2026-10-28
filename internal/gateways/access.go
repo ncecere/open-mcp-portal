@@ -453,7 +453,7 @@ func (s *Service) ReachableServers(ctx context.Context, u dbgen.User) ([]Reachab
 // (AccessTeamGrant). Offered counts what the account reaches now. It doesn't
 // look at whether the account is enabled; an archived team gets none (its
 // accounts' keys are refused).
-func (s *Service) ListForServiceAccount(ctx context.Context, teamID uuid.UUID, role string, scopes ...[]byte) ([]Mine, error) {
+func (s *Service) ListForServiceAccount(ctx context.Context, teamID uuid.UUID, role string, accountID uuid.UUID, scope []byte) ([]Mine, error) {
 	t, err := s.q.GetTeamByID(ctx, teamID)
 	if err != nil {
 		return nil, err
@@ -479,9 +479,7 @@ func (s *Service) ListForServiceAccount(ctx context.Context, teamID uuid.UUID, r
 		if r.Gateway.OwnerKind == OwnerTeam {
 			c.Access = []string{AccessTeamMember}
 		}
-		for _, raw := range scopes {
-			c.ToolPolicy = toolscope.Intersect(c.ToolPolicy, toolscope.Union(toolscope.Stored(raw)))
-		}
+		c.ToolPolicy = toolscope.Intersect(c.ToolPolicy, toolscope.Union(toolscope.Stored(scope)))
 		offers, err := s.Offers(ctx, r.Gateway, c)
 		if err != nil {
 			return nil, err
@@ -492,8 +490,22 @@ func (s *Service) ListForServiceAccount(ctx context.Context, teamID uuid.UUID, r
 		for _, o := range offers {
 			switch {
 			case !o.Allowed:
-			case o.Requires != nil: // decision 29: people only
-				needsPerson++
+			case o.Server.AuthMode == registry.AuthPersonSecret:
+				needsPerson++ // personal secrets are never shared
+			case o.Requires != nil:
+				ready := false
+				if s.ServiceConnectionReady != nil && accountID != uuid.Nil {
+					var err error
+					ready, err = s.ServiceConnectionReady(ctx, o.Requires, accountID, teamID, o.Server.ID, o.Server.URL)
+					if err != nil {
+						return nil, err
+					}
+				}
+				if ready {
+					m.Offered++
+				} else {
+					needsPerson++
+				}
 			default:
 				m.Offered++
 			}

@@ -7,6 +7,17 @@ the user asked to implement now. The contract is in [`../api/openapi.yaml`](../a
 RFC 8414/OIDC discovery, PKCE S256, RFC 8707 `resource`, CIMD, RFC 7591). First real target: GitHub's remote server
 `https://api.githubcopilot.com/mcp/`.
 
+## Shared service-account sign-ins
+
+[Team service connections](service-connections.md) also support server-bound
+providers. A genuine service account uses its explicitly assigned connection and
+server origin/scope grant; it does not borrow the setup person's account. A 401
+retries once, pinned to that connection's consent generation; a second rejection
+requires a team admin to reconnect. A 403 scope challenge never opens personal
+consent or widens the shared account automatically. Relayed people continue to
+use only their own sign-in. This supersedes the original service-account refusal
+in the historical design below.
+
 ## Goal
 
 Some MCP servers are OAuth resource servers themselves. GitHub's remote server is one example: it accepts only a

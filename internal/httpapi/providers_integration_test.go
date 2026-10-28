@@ -593,11 +593,11 @@ func TestDelegatedCredentialRefusals(t *testing.T) {
 		t.Fatalf("service account tools/list = %d %v", code, names)
 	}
 	out := e.callTool(saKey, "status__provider_token")
-	if c, msg, data := rpcErr(out); c != -32010 || data["reason"] != "service_account" ||
-		msg != "This tool needs a person's Github account; service accounts can't use it" {
+	if c, msg, data := rpcErr(out); c != -32010 || data["reason"] != "service_connection_missing" ||
+		!strings.Contains(msg, "shared Github connection") {
 		t.Fatalf("service account = %v", out)
 	}
-	if last := e.scalar(`SELECT outcome || ' ' || error_class || ' ' || provider_slug FROM mcp_calls ORDER BY id DESC LIMIT 1`); last != "denied service_account github" {
+	if last := e.scalar(`SELECT outcome || ' ' || error_class || ' ' || provider_slug FROM mcp_calls ORDER BY id DESC LIMIT 1`); last != "denied service_connection_missing github" {
 		t.Fatalf("recorded %q", last)
 	}
 	// What it reaches leaves out what needs a person's account, and says

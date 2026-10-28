@@ -44,7 +44,8 @@ const (
 )
 
 type narrowKey struct {
-	conn uuid.UUID
+	owner string // empty: personal; service: team-owned consent generation
+	conn  uuid.UUID
 	// connected is the connection's connected_at: a reconnect (the same
 	// row, new consent) never finds the old consent's tokens.
 	connected int64

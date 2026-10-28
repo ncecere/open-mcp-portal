@@ -15,7 +15,7 @@ import { type CapabilityRequirement, needsText, redirectTo, safeAuthorizeUrl } f
 
 /**
  * "Needs GitHub (repo)", or "Needs sign-in to GitHub MCP" when the capability's server is in oauth mode (each
- * person signs in to the server itself). `note` adds a sentence to its tooltip (such as "Service accounts can't use this.").
+ * person signs in to the server itself). `note` explains any additional credential policy, including shared connections.
  */
 export function RequiresBadge({ req, note }: { req: Pick<CapabilityRequirement, "providerName" | "scopes" | "providerKind">; note?: string }) {
   const scopes = req.providerKind === "mcp_server" && req.scopes.length ? `Each person signs in to ${req.providerName} and allows ${req.scopes.join(", ")}.` : undefined;

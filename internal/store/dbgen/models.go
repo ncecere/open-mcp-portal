@@ -731,6 +731,61 @@ type ServiceAccountKeyGateway struct {
 	AddedAt     time.Time
 }
 
+type ServiceConnection struct {
+	ID                 uuid.UUID
+	TeamID             uuid.UUID
+	ProviderID         uuid.UUID
+	Name               string
+	Status             string
+	Scopes             []string
+	AccountLabel       *string
+	AccessTokenCipher  []byte
+	RefreshTokenCipher []byte
+	ExpiresAt          *time.Time
+	ConnectedBy        uuid.NullUUID
+	ConnectedAt        *time.Time
+	RefreshedAt        *time.Time
+	LastUsedAt         *time.Time
+	LastErrorClass     *string
+	Revision           int64
+	Generation         int64
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+type ServiceConnectionAccount struct {
+	ConnectionID     uuid.UUID
+	TeamID           uuid.UUID
+	ProviderID       uuid.UUID
+	ServiceAccountID uuid.UUID
+}
+
+type ServiceConnectionAuthState struct {
+	StateDigest        string
+	UserID             uuid.UUID
+	SessionDigest      string
+	ConnectionID       uuid.UUID
+	Revision           int64
+	Generation         int64
+	ProviderID         uuid.UUID
+	ProviderRevision   int64
+	ClientRevision     int64
+	Scopes             []string
+	CodeVerifierCipher []byte
+	Resource           *string
+	CreatedAt          time.Time
+	ExpiresAt          time.Time
+}
+
+type ServiceConnectionServerGrant struct {
+	ConnectionID uuid.UUID
+	ServerID     uuid.UUID
+	Origin       string
+	Scopes       []string
+	GrantedBy    uuid.NullUUID
+	GrantedAt    time.Time
+}
+
 type Session struct {
 	ID          uuid.UUID
 	UserID      uuid.UUID

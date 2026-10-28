@@ -72,6 +72,9 @@ type Credential struct {
 	// Narrowed: the token was refreshed for this call's scopes alone
 	// (decision 69), not the connection's stored token.
 	Narrowed bool
+	// Service retries are pinned to this owner and consent generation.
+	ServiceConnectionID uuid.UUID
+	ServiceGeneration   int64
 }
 
 // ConsentNeeded: the person must connect (or reconnect) an account; URL is

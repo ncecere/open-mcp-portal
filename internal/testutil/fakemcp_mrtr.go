@@ -123,12 +123,13 @@ func (f *FakeMCP) addMRTRPromptAndResource(s *mcp.Server) {
 
 func (f *FakeMCP) addStreamTools(s *mcp.Server) {
 	s.AddTool(&mcp.Tool{Name: "progress", Title: "Progress", Description: "Reports progress count times, delay_ms apart, then answers.",
-		InputSchema: objectSchemaOf(map[string]any{"count": map[string]any{"type": "integer"}, "delay_ms": map[string]any{"type": "integer"}})},
+		InputSchema: objectSchemaOf(map[string]any{"count": map[string]any{"type": "integer"}, "delay_ms": map[string]any{"type": "integer"}, "echo_credentials": map[string]any{"type": "boolean"}})},
 		func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			f.sawFull("progress", req)
 			args := struct {
-				Count   int `json:"count"`
-				DelayMS int `json:"delay_ms"`
+				Count           int  `json:"count"`
+				DelayMS         int  `json:"delay_ms"`
+				EchoCredentials bool `json:"echo_credentials"`
 			}{Count: 3, DelayMS: 10}
 			_ = json.Unmarshal(req.Params.Arguments, &args)
 			token := req.Params.GetProgressToken()
@@ -138,8 +139,13 @@ func (f *FakeMCP) addStreamTools(s *mcp.Server) {
 				case <-ctx.Done():
 					return nil, ctx.Err()
 				}
+				message := fmt.Sprintf("step %d", i)
+				if args.EchoCredentials {
+					h := headerOf(req)
+					message = fmt.Sprintf("provider=%s authorization=%s", h.Get("MCP-Gateway-Provider-Token"), h.Get("Authorization"))
+				}
 				if err := req.Session.NotifyProgress(ctx, &mcp.ProgressNotificationParams{ProgressToken: token, Progress: float64(i),
-					Total: float64(args.Count), Message: fmt.Sprintf("step %d", i)}); err != nil {
+					Total: float64(args.Count), Message: message}); err != nil {
 					return nil, err
 				}
 			}

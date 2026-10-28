@@ -53,6 +53,10 @@ type FakeOAuth struct {
 	OmitScope   bool
 	// FailRefresh: "" (work), "invalid_grant" (400) or "unavailable" (503).
 	FailRefresh string
+	// RefreshGrantedScopes simulates an authorization server shrinking consent.
+	RefreshGrantedScopes []string
+	// BeforeCodeExchange coordinates callback races without timing sleeps.
+	BeforeCodeExchange func()
 	// FormEncoded answers the token endpoint form-encoded (like GitHub
 	// without Accept: application/json); Slack answers like Slack's
 	// oauth.v2.access with the user token under authed_user.
@@ -593,6 +597,12 @@ func (f *FakeOAuth) token(w http.ResponseWriter, r *http.Request) {
 	switch r.PostForm.Get("grant_type") {
 	case "authorization_code":
 		f.mu.Lock()
+		hook := f.BeforeCodeExchange
+		f.mu.Unlock()
+		if hook != nil {
+			hook()
+		}
+		f.mu.Lock()
 		c, ok := f.codes[r.PostForm.Get("code")]
 		delete(f.codes, r.PostForm.Get("code"))
 		f.mu.Unlock()
@@ -620,8 +630,8 @@ func (f *FakeOAuth) token(w http.ResponseWriter, r *http.Request) {
 		f.mu.Unlock()
 		time.Sleep(delay)
 		switch failMode {
-		case "invalid_grant":
-			f.fail(w, http.StatusBadRequest, "invalid_grant")
+		case "invalid_grant", "invalid_scope":
+			f.fail(w, http.StatusBadRequest, failMode)
 			return
 		case "unavailable":
 			http.Error(w, "upstream down", http.StatusServiceUnavailable)
@@ -644,6 +654,9 @@ func (f *FakeOAuth) token(w http.ResponseWriter, r *http.Request) {
 		}
 		f.mu.Lock()
 		honour := f.HonourRefreshScope
+		if f.RefreshGrantedScopes != nil {
+			scopes = slices.Clone(f.RefreshGrantedScopes)
+		}
 		f.mu.Unlock()
 		if want := strings.FieldsFunc(r.PostForm.Get("scope"), func(r rune) bool { return r == ' ' || r == ',' }); honour && len(want) > 0 {
 			for _, sc := range want {

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/ncecere/open-mcp-portal/internal/calls"
 	"github.com/ncecere/open-mcp-portal/internal/gateways"
 	"github.com/ncecere/open-mcp-portal/internal/identity"
@@ -95,8 +97,15 @@ func (rc *request) prepareTarget(t *upstream.Target, who identityFor, o gateways
 	sent := token != ""
 	rec.IdentitySent = &sent
 	withCredential(t, cred)
-	if serverBound(cred) {
+	// A shared credential belongs to the team, not the calling client: scrub
+	// both provider-header and server-bound tokens, including progress. Keep
+	// the existing personal provider-header live-result behavior unchanged.
+	shared := cred != nil && cred.ServiceConnectionID != uuid.Nil
+	if serverBound(cred) || shared {
 		rc.scrub = append(rc.scrub, cred.AccessToken)
+	}
+	if shared && token != "" {
+		rc.scrub = append(rc.scrub, token)
 	}
 	if t.BearerToken != "" && !serverBound(cred) {
 		// A machine token (registry.Target): the server may echo it.
@@ -167,7 +176,14 @@ func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.C
 		case ue.HTTPStatus == 401 && ch != nil && ch.Error() != "insufficient_scope":
 			// invalid_token, none, or (GitHub) invalid_request: the token
 			// wasn't accepted, and a 401 means nothing was executed.
-			next, err := rc.h.Providers.UpstreamRejected(ctx, o.Requires, cc, *cred, attempt == 0 && cred.Refreshable)
+			var next providers.Credential
+			var err error
+			if rc.principal.isServiceAccount() {
+				next, err = rc.h.Providers.ServiceUpstreamRejected(ctx, o.Requires, rc.serviceCallContext(o), *cred, attempt == 0 && cred.Refreshable)
+			} else {
+				next, err = rc.h.Providers.UpstreamRejected(ctx, o.Requires, cc, *cred, attempt == 0 && cred.Refreshable)
+			}
+			var serviceErr *providers.ServiceCredentialError
 			var consent *providers.ConsentNeeded
 			var down *providers.UnavailableError
 			switch {
@@ -180,6 +196,10 @@ func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.C
 					rc.capture.Secrets = append(rc.capture.Secrets, next.AccessToken)
 				}
 				continue
+			case errors.As(err, &serviceErr):
+				rc.serviceConnectionDenied(o, serviceErr, rec)
+			case errors.Is(err, providers.ErrProviderNotAllowed):
+				rc.providerNotAllowed(o.Requires, rec)
 			case errors.As(err, &consent):
 				rc.needsAuthorization(o, consent, rec, ClassUpstreamUnauthorized)
 			case errors.As(err, &down):
@@ -191,7 +211,10 @@ func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.C
 			}
 			return nil, false, false
 		case ue.HTTPStatus == 403 && ch != nil && ch.Error() == "insufficient_scope":
-			err := rc.h.Providers.StepUp(ctx, o.Requires, cc, ch.Scopes())
+			var err error = providers.ErrInsufficientScope
+			if !rc.principal.isServiceAccount() {
+				err = rc.h.Providers.StepUp(ctx, o.Requires, cc, ch.Scopes())
+			}
 			var consent *providers.ConsentNeeded
 			switch {
 			case errors.As(err, &consent):

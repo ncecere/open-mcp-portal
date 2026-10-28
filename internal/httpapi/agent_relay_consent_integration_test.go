@@ -168,7 +168,7 @@ func TestRelayedCallUsesThePersonsDelegatedCredential(t *testing.T) {
 	}
 	// The relay account's own call (no person) can't use a provider's tool.
 	_, out = fx.callTool("", tool, nil)
-	if c, _, data := rpcErr(out); c != -32010 || data["reason"] != "service_account" {
+	if c, _, data := rpcErr(out); c != -32010 || data["reason"] != "service_connection_missing" {
 		t.Fatalf("relay without a person = %v", out)
 	}
 	// An agent call that is not for a present person still uses the person's credential.

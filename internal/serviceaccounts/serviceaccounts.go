@@ -87,7 +87,7 @@ var (
 // (internal/gateways).
 type Gateways interface {
 	UsableByServiceAccount(ctx context.Context, teamID uuid.UUID, role string, ids []uuid.UUID) ([]dbgen.Gateway, []uuid.UUID, error)
-	ListForServiceAccount(ctx context.Context, teamID uuid.UUID, role string, scopes ...[]byte) ([]gateways.Mine, error)
+	ListForServiceAccount(ctx context.Context, teamID uuid.UUID, role string, accountID uuid.UUID, scope []byte) ([]gateways.Mine, error)
 }
 
 // Service manages service accounts.
@@ -237,7 +237,7 @@ func (s *Service) Gateways(ctx context.Context, a authz.Actor, ref string, id uu
 	if err != nil {
 		return nil, err
 	}
-	return s.gateways.ListForServiceAccount(ctx, ta.team.ID, sa.Role, sa.ToolScope)
+	return s.gateways.ListForServiceAccount(ctx, ta.team.ID, sa.Role, sa.ID, sa.ToolScope)
 }
 
 // AdminListParams narrows and pages the list of every team's accounts.

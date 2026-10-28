@@ -115,7 +115,7 @@ describe("Capabilities › account overrides", () => {
     const dialog = await screen.findByRole("dialog", { name: "Account for get_status" });
     // Each option says what it does to callers, to the token and to service accounts.
     expect(dialog).not.toHaveTextContent(/either way/);
-    expect(dialog).toHaveTextContent(/Callers connect with the server's scopes, and each call sends their token to .*Service accounts can't use it\./);
+    expect(dialog).toHaveTextContent(/Callers connect with the server's scopes, and each call sends their token to .*Service accounts require an explicitly allowed team service connection\./);
     expect(dialog).toHaveTextContent(/Callers are never asked to connect, and calls send no token to .*Service accounts can use it\./);
     expect(dialog).toHaveTextContent(/Callers connect with only the scopes below, and each call sends that token to/);
     await u.click(within(dialog).getByRole("radio", { name: /Other GitHub scopes/ }));

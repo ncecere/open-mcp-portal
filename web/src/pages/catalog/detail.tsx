@@ -76,7 +76,7 @@ export function CatalogServerPage() {
       )}
       {server.authMode === "person_secret" && (
         <Alert tone="info" title={`Each person enters their own key for ${server.name}`}>
-          {`The first time someone calls it, their AI client shows a link to paste their own API key for ${server.name}, once. The portal keeps it encrypted, sends it only to this server, and never shows it again. ${serviceAccountsCant}`}
+          {`The first time someone calls it, their AI client shows a link to paste their own API key for ${server.name}, once. The portal keeps it encrypted, sends it only to this server, and never shows it again. Personal secrets cannot be shared with service accounts.`}
         </Alert>
       )}
       {server.capturePayloads && (

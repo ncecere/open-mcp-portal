@@ -21,6 +21,7 @@ const (
 	LinkServers              = "servers"
 	LinkReviewQueue          = "review_queue"
 	LinkServiceAccount       = "service_account"
+	LinkServiceConnections   = "service_connections"
 	LinkAutomationTokens     = "automation_tokens"
 	LinkTeamAutomationTokens = "team_automation_tokens"
 	LinkAccountConnections   = "account_connections"
@@ -185,6 +186,12 @@ func compose(ev dbgen.NotificationEvent, team *teamInfo) Message {
 		if json.Unmarshal(ev.Payload, &d) != nil {
 			break
 		}
+		if ev.SubjectType == "service_connection" {
+			m.Link = &Link{Type: LinkServiceConnections, TeamSlug: slug}
+			m.Title = fmt.Sprintf("Reconnect the shared %s account", nm(d.Provider.Name))
+			m.Body = "A shared connection owned by " + nm(teamName) + " needs re-consent. A team owner or admin must reconnect it under Service accounts > Connections so its assigned service accounts can use it again."
+			break
+		}
 		m.Link = &Link{Type: LinkAccountConnections}
 		m.Title = fmt.Sprintf("Reconnect %s", nm(d.Provider.Name))
 		m.Body = "Your connection to " + nm(d.Provider.Name) + " lapsed. Connect again so tools that use it keep working."
@@ -259,6 +266,8 @@ func (l *Link) path() string {
 		return "/admin/automation-tokens"
 	case LinkTeamAutomationTokens:
 		return team + "/settings?tab=automation-tokens"
+	case LinkServiceConnections:
+		return team + "/service-accounts?tab=connections"
 	case LinkAccountConnections:
 		return "/settings/connections"
 	case LinkAccountAPIKeys:

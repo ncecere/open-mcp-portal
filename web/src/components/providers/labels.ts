@@ -84,8 +84,8 @@ export function needsText(r: Pick<CapabilityRequirement, "providerName" | "scope
 export const requirementHelp =
   "Each person who calls these capabilities connects their own account with the provider once, in their browser. The portal then sends their token to this server with each call that needs it, and refreshes it. Clients, models and service accounts never get it.";
 
-/** Service accounts can't call capabilities that need a person's account (decision 29). */
-export const serviceAccountsCant = "Service accounts can't use capabilities that need a person's account.";
+/** Shared OAuth credentials require explicit team-managed assignments and destination grants. */
+export const serviceAccountsCant = "Service accounts need an active team service connection assigned to them and explicitly allowed for this server and its scopes.";
 
 /** A scope list typed by a person: trimmed, spaces split, no duplicates (scopes keep their case). */
 export const normalizeScope = (tag: string) => tag.trim();

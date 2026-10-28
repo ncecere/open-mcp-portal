@@ -50,6 +50,10 @@ export const linkTargets: Record<LinkType, Resolver> = {
     route: "/teams/$team/service-accounts",
     element: ({ teamSlug }) => (teamSlug ? <Link to="/teams/$team/service-accounts" params={{ team: teamSlug }} /> : null),
   },
+  service_connections: {
+    route: "/teams/$team/service-accounts",
+    element: ({ teamSlug }) => (teamSlug ? <Link to="/teams/$team/service-accounts" params={{ team: teamSlug }} search={{ tab: "connections" }} /> : null),
+  },
   automation_tokens: { route: "/admin/automation-tokens", element: () => <Link to="/admin/automation-tokens" /> },
   team_automation_tokens: {
     route: "/teams/$team/settings",

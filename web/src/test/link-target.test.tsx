@@ -34,6 +34,7 @@ describe("link targets", () => {
       [{ type: "gateways" }, "/admin/gateways"],
       [{ type: "service_account", id: "sa1", teamSlug: t }, `/teams/${t}/service-accounts/sa1`],
       [{ type: "service_accounts", teamSlug: t }, `/teams/${t}/service-accounts`],
+      [{ type: "service_connections", teamSlug: t }, `/teams/${t}/service-accounts?tab=connections`],
       [{ type: "automation_tokens" }, "/admin/automation-tokens"],
       [{ type: "team_automation_tokens", teamSlug: t }, `/teams/${t}/settings?tab=automation-tokens`],
       [{ type: "auth_providers" }, "/admin/auth-providers"],
