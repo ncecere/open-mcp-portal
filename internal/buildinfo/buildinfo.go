@@ -5,7 +5,7 @@ import "fmt"
 
 // Set with -ldflags "-X github.com/ncecere/open-mcp-portal/internal/buildinfo.Version=..."
 var (
-	Version = "0.3.3"
+	Version = "0.4.0"
 	Commit  = "unknown"
 )
 

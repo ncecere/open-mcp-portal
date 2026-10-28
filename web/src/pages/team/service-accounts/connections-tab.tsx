@@ -46,7 +46,7 @@ export function TeamConnectionsTab({ team, canManage, account }: { team: string;
   });
   return <div className={s.stack}>
     <Alert tone="info" title="Shared upstream accounts">
-      Only explicitly assigned service accounts and allowed servers can use these connections. Calls act as the shared upstream account, which may be an administrator's own account. The connecting person must remain an active owner or admin of this team. Relayed people still use their own connections.
+      Only explicitly assigned service accounts and allowed servers can use these connections. Calls act as the shared upstream account, which may be an administrator's own account. The connecting person must remain an active owner or admin of this team. People still use their own connections.
     </Alert>
     {!canManage && <Alert tone="info">Only this team's owners and admins can connect accounts or change access.</Alert>}
     <ErrorAlert error={list.error} title="Couldn't load shared connections" onRetry={() => void list.refetch()} />

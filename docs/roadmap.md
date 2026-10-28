@@ -43,10 +43,11 @@ the pilot (#20). [status.md](status.md) records what each release verified.
 ## How the next work is ordered
 
 The [implementation order](implementation-order.md) reconciles the open GitHub issues with what has already
-shipped. **#28 classification** and **#37 session hardening** shipped in v0.3.3. The next batch integrates
-**#29 scopes**, **#30 curation**, **#26 service connections** and **#44 database roles**, subject to independent
-review and merged-tree gates. **#68 external-platform retirement** is now a release prerequisite; #62 and
-#63 are withdrawn as not planned, not completed verification.
+shipped. **#28 classification** and **#37 session hardening** shipped in v0.3.3. The **v0.4.0 candidate**
+integrates implemented **#29 scopes**, **#30 curation**, **#26 service connections**, **#44 database roles** and
+**#68 external-platform retirement**, with independent review corrections and browser checks; final full-tree
+and release/deployment gates still precede publication. #62/#63 are withdrawn as not planned, not completed
+verification. Historical milestone headings below are planning buckets, not a promise of release numbering.
 
 1. **Verify and pilot alongside implementation.** Decisions #5, #6 and #7 shipped in v0.2.2. The
    real-client checks (#14–#17), provider/channel checks (#18–#19), independent review (#13) and

@@ -103,7 +103,7 @@ function AccessCard({ account }: { account: ServiceAccount }) {
       )}
       {needsPerson > 0 && (
         <p className={items.length > 0 ? `${s.muted} ${s.pad}` : s.muted}>
-          {`${plural(needsPerson, "capability", "capabilities")} on these gateways ${needsPerson === 1 ? "needs" : "need"} credentials not available to this service account. ${serviceAccountsCant} Review the Connections tab. Personal secrets remain person-only; relayed people still use their own accounts.`}
+          {`${plural(needsPerson, "capability", "capabilities")} on these gateways ${needsPerson === 1 ? "needs" : "need"} credentials not available to this service account. ${serviceAccountsCant} Review the Connections tab. Personal secrets remain person-only. People use their own connected accounts, never these shared connections.`}
         </p>
       )}
       <p className={items.length > 0 ? `${s.muted} ${s.pad}` : s.muted}>

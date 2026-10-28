@@ -37,7 +37,8 @@ describe("Service account shared connections", () => {
     expect(await screen.findByRole("tab", { name: "Connections" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByText("GitHub · Shared account: release-bot")).toBeInTheDocument();
     expect(screen.getByText("Not assigned to ci-release-bot")).toBeInTheDocument();
-    expect(screen.getByText(/Relayed people still use their own connections/)).toBeInTheDocument();
+    expect(screen.getByText(/People still use their own connections/)).toBeInTheDocument();
+    expect(screen.queryByText(/relayed people/i)).toBeNull();
     expect(screen.queryByRole("button", { name: "Connect shared account" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Manage access to Release account" })).toBeNull();
     expect(await axe(container)).toHaveNoViolations();

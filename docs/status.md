@@ -3,19 +3,43 @@
 Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46), version 0.3.3, **released on 2026-10-28**
 (release notes: [releases/v0.3.3.md](releases/v0.3.3.md); earlier: [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
-## Unreleased: MCP-only scope and staged governance
+## v0.4.0 release candidate: MCP-only governance
 
-The owner removed Pi Durable Platform/external-platform impersonation from scope on 2026-10-28
-([decision 81](decisions.md)). #62 and #63 are closed as **not planned**, not as completed remediation or
-verification. **#68** tracks actual removal and a fail-closed upgrade: retire relay credentials without
-silently turning them into ordinary service accounts; keep historical records and normal MCP authentication.
-No development data or running deployment has been changed by this decision.
+Scopes (#29), curation (#30), shared service connections (#26), database-role separation (#44) and
+external-platform retirement (#68) are implemented together on `integration/credential-policy`.
+[Release/upgrade notes](releases/v0.4.0.md) cover migrations `00029`–`00034` and mixed-version policy limits.
+The owner withdrew Pi Durable Platform/external-platform impersonation ([decision 81](decisions.md));
+#62/#63 are closed as **not planned**, not completed remediation or verification. Retirement disables
+issuers/marked accounts, revokes their keys and fences authority restoration while preserving marks/history.
+Normal MCP clients, OAuth, keys, service accounts, personal connections and outbound identity remain.
+Existing development services/data have not been changed; verification uses owned disposable fixtures.
 
-Scopes (#29), curation (#30), shared service connections (#26) and database-role separation (#44) are staged
-on `integration/credential-policy`, not published on `main`. Initial combined legacy race tests passed;
-split-role testing found a migration-fixture ownership error, now corrected. Review follow-ups and final
-combined legacy/split-role, web, browser and deployment checks remain. External-platform retirement is a
-prerequisite for the next release. The current published release remains v0.3.3.
+Independent reviews and combined regressions corrected scope/OAuth serialization, curation numeric
+persistence/retry records, UTC retention arithmetic, shared-connection transaction ordering and retired-account
+preservation. A final narrow review approved the five shared transaction fixes and callback guidance without
+confirmed findings. Local deletion/audit commits before upstream revocation HTTP; consent uses user
+`KEY SHARE` → session → connection → state ordering, with final live authorization checks after waits.
+
+**Passed:** a combined full normal Go suite and full race suites in legacy and genuinely authenticated
+split-role modes before the final shared-transaction corrections; those corrections subsequently passed
+three race-enabled repetitions of the service-connection/consent/retirement suites in both modes. Final
+version-preparation generation, lint, Go build and all web gates pass (**796 tests**). Owner-only fixture DDL
+uses `OwnerPool`; application writes still use authenticated runtime. Split-role role changes were tested
+only in an owned disposable PostgreSQL container, never against the development database.
+
+**Browser/wire evidence:** literal-name scope entry preserves commas; fixed-argument `demo_echo` accepts
+injected values and rejects conflicting values/old names. Shared consent through the fake OAuth server,
+explicit service-account assignment and destination grants succeed. Actual legacy and modern MCP calls
+receive the shared credential with verified portal identity and matching provider claim; a normal personal
+caller still needs its own consent and has no personal connection. A 390px shared-connections screen has no
+horizontal overflow and zero axe violations/incomplete checks. Browser checks found and corrected a shared
+completion page that wrongly linked personal connections, and stale relay wording. Full final-tree
+Go/race suites and release CI/deployment/signature gates remain pending.
+Rebuilt mobile completion now shows shared guidance and a safe portal link, never personal-connection
+instructions. Revoking the shared connection in the UI stops the same service key's next call (`-32010`);
+all temporary wire-test keys were revoked. The completion screen has zero axe violations and one gradient
+contrast item: manual conservative calculation gives **6.49:1**, above the 4.5:1 normal-text minimum.
+These fake-server checks are not real-provider/IDE/pilot acceptance. The published release remains v0.3.3.
 
 ## v0.3.3 (2026-10-28)
 
@@ -78,10 +102,9 @@ transparency-log inclusion. The arm64 image ran read-only with no network and re
 `sha256:021672961ead3bc78de0e2383373e780ce1035b34b25d676e433199dcf8c5ed8`; the example overlay is pinned to it.
 GitHub reported zero open Dependabot alerts after publication.
 
-**Next batch, not shipped:** #29, #30, #26 and #44 are now staged together. #44's follow-up passed full
-legacy and authenticated split-role race suites; other review corrections and combined-tree checks are
-ongoing. Earlier staging web checks passed 790 tests, but that is not the final combined feature tree.
-See the unreleased section for the new MCP-only retirement prerequisite. No production deployment is implied.
+At v0.3.3 publication, #29/#30/#26/#44 remained staged rather than shipped. See the current release-candidate
+section above for their combined verification and the subsequent MCP-only retirement. No production
+deployment is implied by either publication or scratch-environment checks.
 
 ## v0.3.2 (2026-10-20)
 
@@ -361,38 +384,36 @@ server allow-list).
 
 ## Resume checklist
 
-```sh
-cd ~/projects/golang/open-mcp-portal
-make deps-up                  # Postgres on 127.0.0.1:55442 (Compose project open-mcp-portal, user omp)
-cp -n .env.example .env       # DEV_AUTH=true, APP_URL=http://localhost:8088, ENCRYPTION_KEY, API_KEY_PEPPER
-make fake-mcp                 # fake MCP server on http://127.0.0.1:8091/mcp (separate terminal)
-make fake-oauth               # fake OAuth provider on http://127.0.0.1:8092 (delegated credentials; separate terminal)
-make web                      # build the UI into web/dist (embedded by make run / make build)
-make run                      # http://localhost:8088, sign in as admin@localhost (separate terminal)
-make dev-seed                 # after make run: team demo, published server, gateways demo + company
-make example-mail-fake        # Gmail example with a fake Gmail on http://127.0.0.1:8093/mcp (provider google-dev)
-make test && make web-test
-```
+1. Read `AGENTS.md`, this release-candidate section and [implementation order](implementation-order.md).
+   Check the branch, worktree changes, main CI and published tag before assuming a release is complete.
+2. Preserve existing services and the real development database. Do not reseed/reset it, run migrations
+   against it, overwrite a running `bin/` executable or start duplicate servers on development ports.
+3. Use scratch binaries and owned disposable browser/database fixtures. Database role changes and genuine
+   split-role tests require an owned PostgreSQL container, not the development cluster.
+4. Run the [contribution gates](../CONTRIBUTING.md#tests) with `OMP_TEST_REQUIRE_DB=1`; exercise both
+   `OMP_TEST_SPLIT_ROLES=0` and `1`. Regenerate contracts/SQL, inspect actual diffs, and record unrun checks.
+5. Follow [release steps](../CONTRIBUTING.md#releasing): passing local tests is not publication. Wait for
+   main CI, both deployment smoke jobs, image scans/signing and verification of the published digest.
 
-An old `open-mcp-gateway` dev database moves with `scripts/migrate-dev-db.sh`.
+For a **new** development instance, use [development setup](../CONTRIBUTING.md#development-setup), not a
+blind restart/seed of an existing one. The historical dev-database migration helper remains
+`scripts/migrate-dev-db.sh`; running it is an explicit operator task, not part of resuming feature work.
 
 ## Next steps
 
-The plan after v0.1.0 is [roadmap.md](roadmap.md): v0.2 is MCP 2026-07-28 support and the team pilot. The list below is what v0.1.0 left open.
-
-1. A real Google or Microsoft auth provider for delegated credentials (`make example-mail` against real Gmail). (The
-   end-to-end test that a provider token echoed by a server is redacted from a captured payload exists since v0.2.2.)
-2. Check the v0.1.0 release on GitHub: `ci.yml` on `main`, then `image.yml` on the tag (digest, signature with
-   `cosign verify`, SBOM assets); fix what only GitHub's runners show.
-3. Deployment follow-ups: an upgrade test from the previous release's image on kind (the kind smoke test, `make k8s-smoke`, exists since
-   2026-10-18; run `k8s-smoke.yml` on GitHub once); see [deploy.md](deploy.md) "Not covered yet".
-4. Browser re-checks: the Phase 4 QA follow-ups (390px service account header, Admin › Calls filter, dark error
-   page), the Phase 6 QA fixes (call page as auditor and as an editor, custom usage dates, pattern dialog), and the
-   Phase 5 and 7 screens.
-5. Other real clients: VS Code and Cursor over OAuth against a reachable deployment.
-6. Known product gaps for later releases (see the release notes; the plan is in [roadmap.md](roadmap.md), and stdio hosting is decided against, decision 47): a streaming (SSE) relay
-   and server-pushed notifications, sampling/elicitation passthrough, resource subscriptions, background token
-   refresh, a Helm chart.
+1. Finish final-tree v0.4.0 gates and main CI/kindnet/Calico smoke;
+   publish only after image scans/signing succeed, then verify digest/signature/SBOMs and update release status.
+   Close #26/#29/#30/#44/#68 only with their actual acceptance evidence.
+2. Implement #31 sensitive-call approvals on the combined scopes/curation path. The next reserved migration
+   is **`00035`**, with proposed decision **82**; earlier plan numbers were superseded by retirement.
+3. Continue #32/#33 and the ordered operations/lifecycle/audit lanes in
+   [implementation order](implementation-order.md). #43 must prove upgrades, ingress, restore and load before
+   Helm packaging; existing kindnet/Calico smoke does not establish those broader requirements.
+4. Keep #13–#20's real review/client/provider/channel/pilot evidence separate. VS Code planning and fake OAuth
+   browser checks do not close compatibility or real-provider issues. Use authorized throwaway accounts and
+   dedicated client profiles; do not contact external recipients or use personal profiles implicitly.
+5. Record remaining browser/accessibility/load and wall-clock expiry/refresh gaps honestly. Sampling, roots,
+   logging and deprecated transports are not reintroduced; external-platform impersonation stays retired.
 
 ## Phase 1 UI
 

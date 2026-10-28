@@ -11,11 +11,11 @@ numbers and file paths are suggestions, not instructions to overwrite existing c
 (migration `00028`, idle expiry off by default). Both issues are closed. See [classification](tool-classification.md),
 [browser sessions](phase4-client-auth.md#browser-sessions-37-decision-76) and [validation](status.md).
 
-**In staged integration/review:** #29 credential scopes, #30 tool curation, #26 service connections
-and #44 database roles. **#68 external-platform retirement is now a release prerequisite**, per the owner's
-MCP-only scope decision. Integrate scopes before curation; approvals (#31) follow their combined enforcement.
-No release or issue closure is implied by a branch's completion; review, merged-tree gates and browser checks
-remain required. No production deployment is implied by publication.
+**Implemented together for the v0.4.0 candidate:** #29 credential scopes, #30 tool curation, #26 service
+connections, #44 database roles and #68 external-platform retirement. Independent review corrections and
+browser checks are integrated; final-tree Go/race and release CI/deployment gates precede publication and
+issue closure. The current published release remains v0.3.3. Approvals (#31) follow combined scope/curation
+enforcement, using reserved migration `00035` and proposed decision 82. No production deployment is implied.
 
 ## Ordered backlog
 
