@@ -31,8 +31,11 @@ attempt. A used approval never authorizes a second dispatch: a repeat asks for a
 Bind requester kind/ID, gateway/server/capability IDs, curated exposed name, actual class, exact merged
 argument digest, approved capability fingerprint, canonical server origin, selected rule/revision and a
 monotonic authorization-context epoch. Normalize absent/null arguments to the `{}` actually forwarded.
-Changing a policy and changing it back does not resurrect approval. Argument digests use a derived-key
-HMAC-SHA-256, not a public dictionary oracle for redacted low-entropy values; governed arguments reject
+Changing a policy and changing it back does not resurrect approval. Argument and binding digests use a
+stable installation-specific HMAC root, sealed in its own immutable storage slot—not a public dictionary
+oracle for redacted low-entropy values. Encryption-key rotation rewraps that root without changing it;
+retiring the previous encryption key preserves deduplication, denial memory, renewal and consumption.
+Migration `00041` invalidates the earlier derived-key implementation once. Governed arguments reject
 duplicate object keys and excessive nesting. Tool arguments are merged by curation
 before either retry-state or approval digests are calculated.
 
@@ -44,6 +47,11 @@ All transitions and their audits commit atomically. Links and client input respo
 
 Obtain credentials, build/validate the immutable target and request before spending approval. Recheck live
 policy before every outbound MCP transport, including negotiation. Negotiation does not spend approval.
+Non-spending context checks and calls with no matching rule use a consistent read-only snapshot, not the
+installation-wide writer fence. Their authorization point is that snapshot: prior committed rule/authority
+changes invalidate the originally captured epoch; later commits cannot retroactively revoke an admitted
+check. Each following transport checks again. Governed tool dispatch still requires the exclusive consume
+fence and atomic audited spend. Unrelated refreshes and concurrent calls must retain normal availability.
 Immediately before the underlying transport sends `tools/call`, atomically compare the complete binding,
 live authority/approver eligibility and expiry, mark approved authorization used and insert its audit. Only
 a confirmed successful commit yields an in-memory single-dispatch permit. Release locks before networking.
@@ -100,16 +108,21 @@ oversight; being an auditor/platform admin alone never reveals a preview. Servic
 can manage its request receipt/cancellation/renewal, but the separation-of-duties rule still controls review.
 
 Redact previews independently of capture enablement: built-ins, platform patterns and known credential
-values; then UTF-8-safe truncate to at most 16 KiB and seal with request-specific AAD. Redaction/sealing
+values, including short values and member names. Conservatively mask JSON-looking strings in full so
+nested decoding cannot materialize escaped credentials after redaction. Then UTF-8-safe truncate to at most 16 KiB and seal with request-specific AAD. Redaction/sealing
 failure refuses creation. Display escaped text with redaction/truncation warnings. No raw arguments,
 previews or free-text notes in audit/notifications. Register the ciphertext for key rotation. Terminal
 previews become inaccessible immediately and are physically cleared within 24 hours; metadata is retained
-90 days independently of audit retention. Expiry is enforced synchronously, not dependent on cleanup.
+90 days independently of audit retention. Retained terminal ciphertext can be rewrapped, but a cleared
+terminal preview cannot be restored and terminal projections never disclose it. Expiry is enforced
+synchronously, including after commit acknowledgement, not dependent on cleanup.
 
 The authoritative queue survives notification failure; the current notification outbox is best effort.
 Requested events go to currently eligible reviewers, decisions to the user requester or service account's
 owning-team authorized humans. Notification bodies contain metadata, never previews. Attention and list
-queries apply the same visibility rules. URL-capable modern clients receive `input_required`; other modern
+queries apply the same visibility rules. Metadata queues use read-only snapshot transactions, real keyset
+cursors, a five-second deadline and at most 200 SQL-filtered candidates per page. They never hold the
+authority writer fence; empty pages may carry a cursor when further candidates remain. URL-capable modern clients receive `input_required`; other modern
 tool callers receive `isError` with a link; legacy callers receive `-32042` with a link. Browserless service
 accounts can create requests and notify humans; no retired impersonation behavior is reintroduced.
 

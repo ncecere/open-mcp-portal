@@ -51,6 +51,16 @@ describe("Admin › Overview", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
+  it("links eligible exact-call attention to the private receipt, not to publishing review", async () => {
+    const item = attentionItem({ kind: "approval_pending", severity: "info", subject: null, detail: "delete_message", count: 1, at: ago(1), link: { type: "approval", id: "approval1" } });
+    mockApi(adminRoutes(overview({ attention: [item], totals: { approval_pending: 1 } })));
+    renderApp("/admin");
+    expect(await screen.findByText("delete_message needs your approval")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Review exact call/ })).toHaveAttribute("href", "/approvals/approval1");
+    expect(screen.queryByRole("link", { name: /Open review queue/ })).toBeNull();
+    expect(screen.queryByText("Redacted argument preview")).toBeNull();
+  });
+
   it("says Nothing needs attention when there is nothing, and No calls without calls", async () => {
     mockApi(adminRoutes(overview({ last24h: { calls: 0, errors: 0, errorRate: null, rateLimited: 0, rolledUpTo: null } })));
     renderApp("/admin");

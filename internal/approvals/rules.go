@@ -65,8 +65,10 @@ func ruleScope(ctx context.Context, q *dbgen.Queries, a authz.Actor, ref string,
 func (s *Service) ListRules(ctx context.Context, a authz.Actor, ref string, offset, limit int32) ([]Rule, error) {
 	out := []Rule{}
 	err := s.transaction(ctx, &a, false, func(q *dbgen.Queries, _ int64) error {
-		if e := pagination(offset, limit); e != nil {
-			return e
+		// Browser pages cap at 200; the HTTP adapter requests one extra row
+		// solely for continuation detection. Queue/Attention budgets stay 200.
+		if offset < 0 || limit < 1 || limit > 201 {
+			return apperr.Invalid("invalid_pagination", "Invalid rule pagination")
 		}
 		team, e := ruleScope(ctx, q, a, ref, false)
 		if e != nil {

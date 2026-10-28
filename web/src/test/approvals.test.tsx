@@ -58,6 +58,8 @@ describe("Approval receipt", () => {
     const pre = await waitFor(() => { const node = container.querySelector("pre"); expect(node).not.toBeNull(); return node!; });
     expect(pre.textContent).toContain("<img src=x onerror=alert(1)>");
     expect(pre.querySelector("img")).toBeNull();
+    expect(pre).toHaveAttribute("tabindex", "0");
+    expect(pre).toHaveAttribute("aria-label", "Redacted argument preview text");
     expect(screen.getByText("Credential or sensitive values were redacted.")).toBeInTheDocument();
     expect(screen.getByText(/Preview truncated/)).toBeInTheDocument();
     expect(screen.getByText(/Unclassified \(matches destructive rules for approval only\)/)).toBeInTheDocument();

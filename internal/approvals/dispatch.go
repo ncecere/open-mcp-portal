@@ -124,6 +124,9 @@ func (s *Service) Begin(ctx context.Context, in BeginInput) (Plan, error) {
 	if err != nil {
 		return Plan{}, safeError(err)
 	}
+	if preliminary == nil {
+		return s.beginUnrestricted(ctx, in)
+	}
 	var canonical, cipher []byte
 	var truncated, redacted bool
 	id := uuid.New()
@@ -275,6 +278,10 @@ func (s *Service) insertRequest(ctx context.Context, q *dbgen.Queries, a *authz.
 	return r, nil
 }
 func (s *Service) Consume(ctx context.Context, plan Plan) error {
+	if !plan.Required {
+		_, err := s.beginUnrestricted(ctx, BeginInput{Binding: plan.Binding, CredentialExpiresAt: plan.CredentialExpiresAt})
+		return err
+	}
 	err := s.transaction(ctx, nil, false, func(q *dbgen.Queries, epoch int64) error {
 		// Context and credential deadline precede every other guard, including
 		// already-spent detection. Never bless a freshly read current epoch.
@@ -284,16 +291,6 @@ func (s *Service) Consume(ctx context.Context, plan Plan) error {
 		at := s.clock()
 		if !credentialLive(at, plan.CredentialExpiresAt) {
 			return ErrUnavailable
-		}
-		if !plan.Required {
-			rule, e := s.selectedRule(ctx, q, plan.Binding)
-			if e != nil {
-				return e
-			}
-			if rule != nil || !credentialLive(s.clock(), plan.CredentialExpiresAt) {
-				return ErrUnavailable
-			}
-			return nil
 		}
 		if e := q.LockApprovalRequester(ctx, dbgen.LockApprovalRequesterParams{RequesterKind: plan.Binding.RequesterKind, RequesterID: plan.Binding.RequesterID}); e != nil {
 			return e

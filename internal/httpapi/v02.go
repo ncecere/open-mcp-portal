@@ -77,7 +77,7 @@ func toAPIItems(items []overview.Item) []apitypes.AttentionItem {
 	out := make([]apitypes.AttentionItem, len(items))
 	for i, it := range items {
 		o := apitypes.AttentionItem{Kind: apitypes.AttentionKind(it.Kind), Severity: apitypes.AttentionSeverity(it.Severity), Summary: it.Summary,
-			Count: it.Count, At: it.At}
+			Count: it.Count, At: it.At, Detail: nonEmpty(it.Detail)}
 		if it.Subject != nil {
 			o.Subject = &apitypes.AttentionSubject{Id: it.Subject.ID, Name: it.Subject.Name, Slug: nonEmpty(it.Subject.Slug)}
 		}

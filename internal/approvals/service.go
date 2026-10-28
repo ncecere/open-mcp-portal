@@ -181,21 +181,7 @@ func (s *Service) transaction(ctx context.Context, a *authz.Actor, exclusive boo
 	}))
 }
 func (s *Service) CheckContext(ctx context.Context, epoch int64, expires time.Time) error {
-	err := s.transaction(ctx, nil, false, func(_ *dbgen.Queries, current int64) error {
-		if current != epoch {
-			return ErrContextChanged
-		}
-		if !credentialLive(s.clock(), expires) {
-			return ErrUnavailable
-		}
-		return nil
-	})
-	// Commit acknowledgement can itself wait. Do not return a transport
-	// permit whose credential expired while the transaction was finishing.
-	if err == nil && !credentialLive(s.clock(), expires) {
-		return ErrUnavailable
-	}
-	return err
+	return s.readContext(ctx, epoch, expires, nil)
 }
 func bindingDigest(key []byte, b Binding, rule uuid.UUID, revision int64, args string) string {
 	data, _ := json.Marshal(struct {

@@ -387,6 +387,8 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 			observability.UsageRollupLastSuccess.Set(float64(success.Unix()))
 		}
 	}
+	overviewSvc := overview.New(pool)
+	overviewSvc.Approvals = approvalSvc.Attention
 	authSvc := auth.NewService(cfg, pool, log)
 	authSvc.SetRateStore(rates)
 	return httpapi.Deps{
@@ -413,7 +415,7 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 		Automation:      autoSvc,
 		Notify:          notifier,
 		Approvals:       approvalSvc,
-		Overview:        overview.New(pool),
+		Overview:        overviewSvc,
 		MCP: &mcpgw.Handler{Approvals: approvalSvc, Gateways: gws, Keys: keys, OAuth: as, ServiceAccounts: sas, Identity: ids, Registry: reg, Providers: provs, PersonSecrets: pers, Secrets: box,
 			Limits: lims, RateStore: rates, Capture: capt, Pool: pool, AppURL: cfg.AppURL, Log: log},
 	}, nil

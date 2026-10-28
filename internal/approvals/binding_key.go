@@ -3,6 +3,7 @@ package approvals
 import (
 	"context"
 	"crypto/rand"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ncecere/open-mcp-portal/internal/secrets"
@@ -15,6 +16,7 @@ func BindingKeyAAD() []byte { return []byte("approval_binding_key:v1") }
 
 func loadBindingKey(pool *pgxpool.Pool, box *secrets.Box) ([]byte, error) {
 	candidate := make([]byte, 32)
+	defer clear(candidate)
 	if _, err := rand.Read(candidate); err != nil {
 		return nil, ErrUnavailable
 	}
@@ -24,7 +26,9 @@ func loadBindingKey(pool *pgxpool.Pool, box *secrets.Box) ([]byte, error) {
 	}
 	// Startup-only I/O, never part of an approval transaction. The helper does
 	// not overwrite an existing root and returns the concurrently stored winner.
-	stored, err := dbgen.New(pool).EnsureApprovalBindingKey(context.Background(), cipher)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	stored, err := dbgen.New(pool).EnsureApprovalBindingKey(ctx, cipher)
 	if err != nil {
 		return nil, ErrUnavailable
 	}

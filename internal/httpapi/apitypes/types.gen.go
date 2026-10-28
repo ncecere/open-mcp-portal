@@ -136,6 +136,7 @@ func (e ApprovalTargetKind) Valid() bool {
 
 // Defines values for AttentionKind.
 const (
+	AttentionKindApprovalPending            AttentionKind = "approval_pending"
 	AttentionKindAutomationTokensExpiring   AttentionKind = "automation_tokens_expiring"
 	AttentionKindCapabilitiesChanged        AttentionKind = "capabilities_changed"
 	AttentionKindConnectionsReconsent       AttentionKind = "connections_reconsent"
@@ -153,6 +154,8 @@ const (
 // Valid indicates whether the value is a known member of the AttentionKind enum.
 func (e AttentionKind) Valid() bool {
 	switch e {
+	case AttentionKindApprovalPending:
+		return true
 	case AttentionKindAutomationTokensExpiring:
 		return true
 	case AttentionKindCapabilitiesChanged:
@@ -2904,7 +2907,10 @@ type AttentionItem struct {
 	// Count How many, for kinds that count
 	Count *int64 `json:"count,omitempty"`
 
-	// Kind server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within 14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
+	// Detail Optional non-sensitive context; for approval_pending, the exposed tool name, never arguments or previews
+	Detail *string `json:"detail,omitempty"`
+
+	// Kind approval_pending: one private receipt per exact call the current human can review; excludes self-approval, stale or expired requests, ineligible service-account admins and automation tokens. Totals count only that human's eligible receipts. server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within 14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
 	Kind AttentionKind `json:"kind"`
 
 	// Link Where to go; null when there is nowhere useful (personal keys)
@@ -2917,7 +2923,7 @@ type AttentionItem struct {
 	Team    *TeamRef `json:"team,omitempty"`
 }
 
-// AttentionKind server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within 14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
+// AttentionKind approval_pending: one private receipt per exact call the current human can review; excludes self-approval, stale or expired requests, ineligible service-account admins and automation tokens. Totals count only that human's eligible receipts. server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within 14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
 type AttentionKind string
 
 // AttentionSeverity defines model for AttentionSeverity.

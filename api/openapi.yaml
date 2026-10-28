@@ -13008,6 +13008,7 @@ components:
       - server_failing
       - upstream_signin_lapsed
       - review_pending
+      - approval_pending
       - capabilities_changed
       - personal_keys_expiring
       - service_account_keys_expiring
@@ -13017,7 +13018,9 @@ components:
       - rate_limited
       - notification_failures
       - server_certificate_expiring
-      description: 'server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within
+      description: 'approval_pending: one private receipt per exact call the current human can review; excludes self-approval,
+        stale or expired requests, ineligible service-account admins and automation tokens. Totals count only that human''s
+        eligible receipts. server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within
         14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed:
         one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers
         waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed
@@ -13062,6 +13065,10 @@ components:
         summary:
           type: string
           description: One line in English, for scripts and logs; the web app builds its own wording from the fields
+        detail:
+          type: string
+          maxLength: 1100
+          description: Optional non-sensitive context; for approval_pending, the exposed tool name, never arguments or previews
         count:
           type: integer
           format: int64
