@@ -20,6 +20,16 @@ import (
 func TestApprovalBindingKeyRuntimeBoundary(t *testing.T) {
 	runtime, owner, role := splitFixture(t)
 	ctx := context.Background()
+	if n := roleCount(t, runtime, `SELECT count(*) FROM pg_catalog.pg_proc p
+ JOIN pg_catalog.pg_class c ON c.oid='public.approval_binding_keys'::regclass
+ WHERE p.oid='public.omp_ensure_approval_binding_key(bytea)'::regprocedure
+ AND p.prosecdef AND p.proconfig=ARRAY['search_path=pg_catalog, pg_temp'] AND p.proowner=c.relowner`); n != 1 {
+		t.Fatal("bootstrap helper lacks the fixed-path owner-definer boundary")
+	}
+	if n := roleCount(t, runtime, `SELECT count(*) FROM pg_catalog.pg_trigger
+ WHERE tgrelid='public.approval_binding_keys'::regclass AND tgfoid='public.approval_authority_changed()'::regprocedure`); n != 0 {
+		t.Fatal("ciphertext rewrapping must not be an authority mutation")
+	}
 	candidate := bytes.Repeat([]byte{0x42}, 69)
 	stored, err := dbgen.New(runtime).EnsureApprovalBindingKey(ctx, candidate)
 	if err != nil || !bytes.Equal(stored, candidate) {
@@ -94,7 +104,10 @@ func TestApprovalBindingKeyMigrationInvalidatesLegacyBindings(t *testing.T) {
 			return err
 		}
 		roleExec(t, owner, `INSERT INTO approval_requests(rule_id,rule_revision,context_epoch,requester_kind,requester_id,gateway_id,server_id,capability_id,exposed_name,args_digest,binding_digest,capability_fingerprint,server_origin,expires_at,preview_cipher)
-			VALUES(gen_random_uuid(),1,$1,'user',gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),'legacy',repeat('a',64),repeat('b',64),repeat('c',64),'https://test.invalid',now()+interval '1 hour','legacy'::bytea)`, before)
+			SELECT gen_random_uuid(),1,$1,'user',gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),name,repeat('a',64),digest,repeat('c',64),'https://test.invalid',now()+interval '1 hour','legacy'::bytea
+			FROM (VALUES ('pending',repeat('1',64)),('approved',repeat('2',64)),('denied',repeat('3',64))) AS legacy(name,digest)`, before)
+		roleExec(t, owner, `UPDATE approval_requests SET status='approved',review_revision=2,decided_by=gen_random_uuid(),decided_at=now(),valid_until=now()+interval '15 minutes' WHERE exposed_name='approved'`)
+		roleExec(t, owner, `UPDATE approval_requests SET status='denied',review_revision=2,decided_by=gen_random_uuid(),decided_at=now(),terminal_at=now() WHERE exposed_name='denied'`)
 		return store.Migrate(ctx, owner, testutil.Logger(), role)
 	})
 	owner := testutil.OwnerPool(t, runtime)

@@ -239,7 +239,7 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
 			var exec, consistent, publicExec bool
 			err := db.QueryRow(ctx, `SELECT has_function_privilege($1,$2,'EXECUTE'),
     (SELECT proowner FROM pg_catalog.pg_proc WHERE oid=$2::regprocedure) = ALL(
-      SELECT relowner FROM pg_catalog.pg_class WHERE oid IN ('public.audit_log'::regclass,'public.mcp_calls'::regclass)),
+      SELECT relowner FROM pg_catalog.pg_class WHERE oid IN ('public.audit_log'::regclass,'public.mcp_calls'::regclass,'public.approval_binding_keys'::regclass)),
     EXISTS (SELECT 1 FROM pg_catalog.pg_proc p, LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
       WHERE p.oid=$2::regprocedure AND a.grantee=0 AND a.privilege_type='EXECUTE')`, name, fn).Scan(&exec, &consistent, &publicExec)
 			if err != nil {

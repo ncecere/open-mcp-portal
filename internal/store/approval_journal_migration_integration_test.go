@@ -41,6 +41,14 @@ func TestApprovalJournalMigrationInvalidatesEveryOldSnapshot(t *testing.T) {
 		if _, err := provider.UpTo(ctx, 36); err != nil {
 			t.Fatal(err)
 		}
+		// Assert migration 36 itself before later migrations can deliberately
+		// invalidate context again (41 installs the stable binding root).
+		if got := approvalEpoch(t, owner); got != 1000001 {
+			t.Fatalf("journal upgrade epoch=%d want 1000001", got)
+		}
+		if n := roleCount(t, owner, `SELECT count(*) FROM approval_context_events`); n != 0 {
+			t.Fatal("journal upgrade fabricated an authority mutation")
+		}
 		role := ""
 		if runtime != owner {
 			role = runtime.Config().ConnConfig.User
@@ -48,11 +56,9 @@ func TestApprovalJournalMigrationInvalidatesEveryOldSnapshot(t *testing.T) {
 		if err := store.Migrate(ctx, owner, testutil.Logger(), role); err != nil {
 			t.Fatal(err)
 		}
-		if got := approvalEpoch(t, runtime); got != 1000001 {
-			t.Fatalf("upgrade epoch=%d want 1000001", got)
-		}
-		if n := roleCount(t, runtime, `SELECT count(*) FROM approval_context_events`); n != 0 {
-			t.Fatal("upgrade fabricated an authority mutation")
+		upgraded := approvalEpoch(t, runtime)
+		if upgraded < 1000001 {
+			t.Fatalf("later upgrade regressed epoch=%d", upgraded)
 		}
 		var staleID uuid.UUID
 		if err := runtime.QueryRow(ctx, `SELECT id FROM approval_requests`).Scan(&staleID); err != nil {
@@ -67,8 +73,8 @@ func TestApprovalJournalMigrationInvalidatesEveryOldSnapshot(t *testing.T) {
 			t.Fatal("pre-journal request survived upgrade")
 		}
 		roleExec(t, runtime, `UPDATE teams SET status='archived'`)
-		if got := approvalEpoch(t, runtime); got != 1000002 {
-			t.Fatalf("first journal allocation epoch=%d want 1000002", got)
+		if got := approvalEpoch(t, runtime); got <= upgraded {
+			t.Fatalf("first writer did not advance journal epoch: before=%d after=%d", upgraded, got)
 		}
 	})
 }

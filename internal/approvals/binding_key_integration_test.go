@@ -14,6 +14,10 @@ import (
 
 func TestConcurrentNewUsesWinningBindingRoot(t *testing.T) {
 	db, _ := testutil.NewDB(t)
+	before, err := dbgen.New(db).GetApprovalContext(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
 	box, err := secrets.New(bytes.Repeat([]byte{0x61}, 32))
 	if err != nil {
 		t.Fatal(err)
@@ -58,6 +62,9 @@ func TestConcurrentNewUsesWinningBindingRoot(t *testing.T) {
 	}
 	if _, err := box.Open(cipher, []byte("approval_binding_key:v2")); err == nil {
 		t.Fatal("root is not AAD-bound")
+	}
+	if after, err := dbgen.New(db).GetApprovalContext(context.Background()); err != nil || after != before {
+		t.Fatal("root bootstrap changed semantic context", err)
 	}
 }
 
