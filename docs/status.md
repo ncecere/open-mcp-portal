@@ -429,8 +429,8 @@ blind restart/seed of an existing one. The historical dev-database migration hel
    enforcement. Real browser review→dispatch→spent and metadata-only auditor checks have run on a disposable
    split-role instance, including consuming a request created before the private-schema relocation afterward.
    At 390px, receipt/queue/rules/editor pages have no horizontal overflow and axe reports zero violations
-   and zero incomplete checks; the scrollable preview was keyboard-tested. The desktop header shortcut still
-   needs a manual contrast check; this is not a whole-product accessibility audit. Final merged-tree
+   and zero incomplete checks; the scrollable preview was keyboard-tested. The desktop header shortcut's
+   axe-incomplete contrast was manually checked at **7.30:1**; this is not a whole-product accessibility audit. Final merged-tree
    normal/race matrices and release gates are still pending. Nothing from this feature branch is published;
    #31 remains open.
 3. Continue #32/#33 and the ordered operations/lifecycle/audit lanes in
