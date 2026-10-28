@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ncecere/open-mcp-portal/internal/apperr"
+	"github.com/ncecere/open-mcp-portal/internal/approvals"
 	"github.com/ncecere/open-mcp-portal/internal/authz"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 	"github.com/ncecere/open-mcp-portal/internal/teams"
@@ -29,6 +30,7 @@ const (
 	ServerFailing              = "server_failing"
 	UpstreamSigninLapsed       = "upstream_signin_lapsed"
 	ReviewPending              = "review_pending"
+	ApprovalPending            = "approval_pending"
 	CapabilitiesChanged        = "capabilities_changed"
 	PersonalKeysExpiring       = "personal_keys_expiring"
 	ServiceAccountKeysExpiring = "service_account_keys_expiring"
@@ -60,6 +62,7 @@ const (
 // Link targets (docs/admin-overview.md, "Link targets").
 const (
 	LinkServer                   = "server"
+	LinkApproval                 = "approval"
 	LinkServers                  = "servers"
 	LinkReviewQueue              = "review_queue"
 	LinkGateways                 = "gateways"
@@ -93,6 +96,7 @@ type Item struct {
 	Kind     string
 	Severity string
 	Summary  string
+	Detail   string
 	Count    *int64
 	At       *time.Time
 	Subject  *Subject
@@ -133,8 +137,11 @@ type Team struct {
 
 // Service computes overviews.
 type Service struct {
-	q   *dbgen.Queries
-	now func() time.Time
+	// Approvals is optional for legacy compositions. It must return only the
+	// current human's eligible metadata and an exact total, never platform totals.
+	Approvals func(context.Context, authz.Actor, *uuid.UUID, int32) ([]approvals.AttentionItem, int64, error)
+	q         *dbgen.Queries
+	now       func() time.Time
 }
 
 // New returns a Service.
@@ -420,6 +427,26 @@ func (s *Service) notificationKind(ctx context.Context, c *collector, team uuid.
 	return nil
 }
 
+// approvalKind adds private, human-only pending approval hints.
+func (s *Service) approvalKind(ctx context.Context, c *collector, a authz.Actor, team *uuid.UUID) error {
+	if s.Approvals == nil || a.IsToken() || (a.Kind != "" && a.Kind != authz.KindUser) {
+		return nil
+	}
+	rows, total, err := s.Approvals(ctx, a, team, PerKind)
+	if err != nil {
+		return err
+	}
+	items := make([]Item, 0, len(rows))
+	for _, r := range rows {
+		at := r.CreatedAt
+		items = append(items, Item{Kind: ApprovalPending, Severity: Info,
+			Summary: "Tool call needs your approval", Detail: r.ExposedName, At: &at,
+			Link: &Link{Type: LinkApproval, ID: r.ID.String()}})
+	}
+	c.add(ApprovalPending, total, len(items), items...)
+	return nil
+}
+
 // Admin is the platform overview (platform admins and auditors).
 func (s *Service) Admin(ctx context.Context, a authz.Actor) (Admin, error) {
 	if !a.CanReadPlatform() {
@@ -486,6 +513,9 @@ func (s *Service) Admin(ctx context.Context, a authz.Actor) (Admin, error) {
 	if err := s.notificationKind(ctx, c, uuid.NullUUID{}, "", "", uuid.Nil); err != nil {
 		return out, err
 	}
+	if err := s.approvalKind(ctx, c, a, nil); err != nil {
+		return out, err
+	}
 	out.Attention, out.Totals, out.Truncated = c.sorted(), c.totals, c.truncated
 	return out, nil
 }
@@ -529,6 +559,9 @@ func (s *Service) Team(ctx context.Context, a authz.Actor, ref string) (Team, er
 		if err := s.notificationKind(ctx, c, team, t.Slug, t.Name, t.ID); err != nil {
 			return out, err
 		}
+	}
+	if err := s.approvalKind(ctx, c, a, &t.ID); err != nil {
+		return out, err
 	}
 	out.Attention, out.Totals, out.Truncated = c.sorted(), c.totals, c.truncated
 	return out, nil
