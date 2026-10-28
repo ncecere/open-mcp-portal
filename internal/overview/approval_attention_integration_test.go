@@ -22,8 +22,9 @@ func TestApprovalAttentionRealServiceOverview(t *testing.T) {
 			ctx := context.Background()
 			requester, reviewer, auditor := f.user(authz.PlatformNone), f.user(authz.PlatformNone), f.user(authz.PlatformAuditor)
 			secondRequester := f.user(authz.PlatformNone)
+			manager := f.user(authz.PlatformNone)
 			team, other := f.team("approval-team"), f.team("other-team")
-			f.run(`INSERT INTO team_members(team_id,user_id,role) VALUES ($1,$2,'owner'),($1,$3,'member'),($4,$2,'member')`, team, reviewer, auditor, other)
+			f.run(`INSERT INTO team_members(team_id,user_id,role) VALUES ($1,$2,'member'),($1,$3,'member'),($4,$2,'member'),($1,$5,'owner')`, team, reviewer, auditor, other, manager)
 			server := f.server(team, "published", true)
 			cap, gateway := uuid.New(), uuid.New()
 			f.run(`INSERT INTO mcp_capabilities(id,server_id,kind,name,definition,fingerprint,approved_fingerprint,tool_class) VALUES ($1,$2,'tool','delete','{}',repeat('a',64),repeat('a',64),'destructive')`, cap, server)
@@ -39,7 +40,7 @@ func TestApprovalAttentionRealServiceOverview(t *testing.T) {
 				t.Fatal(err)
 			}
 			a := authz.Actor{UserID: reviewer, PlatformRole: authz.PlatformNone}
-			_, err = svc.CreateRule(ctx, a, team.String(), approvals.RuleInput{Name: "Real approval", TargetKind: "server", TargetID: server, Classes: []string{"destructive"}, Enabled: true,
+			_, err = svc.CreateRule(ctx, authz.Actor{UserID: manager}, team.String(), approvals.RuleInput{Name: "Real approval", TargetKind: "server", TargetID: server, Classes: []string{"destructive"}, Enabled: true,
 				Approvers: []approvals.Selector{{Kind: "user", UserID: &reviewer}, {Kind: "user", UserID: &auditor}}})
 			if err != nil {
 				t.Fatal(err)

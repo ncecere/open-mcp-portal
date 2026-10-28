@@ -79,11 +79,13 @@ func assertAttentionQueue(t *testing.T, f *serviceFixture, a authz.Actor, want .
 
 func TestAttentionEligibilityMatchesQueue(t *testing.T) {
 	for _, split := range []bool{false, true} {
-		for _, scenario := range []string{"default", "named", "group", "fallback", "inactive-primary", "self-primary", "sa-exclusion", "sa-opt-in", "named-auditor", "gateway-owner"} {
+		for _, scenario := range []string{"default", "server-admin", "named", "group", "fallback", "inactive-primary", "self-primary", "sa-exclusion", "sa-opt-in", "named-auditor", "gateway-owner"} {
 			t.Run(fmt.Sprintf("split=%v/%s", split, scenario), func(t *testing.T) {
 				f := newAttentionFixture(t, split)
 				in := f.rule.RuleInput
 				switch scenario {
+				case "server-admin":
+					execFixture(t, f.db, `UPDATE team_members SET role='admin' WHERE team_id=$1 AND user_id=$2`, f.team, f.reviewer.UserID)
 				case "named":
 					in.Approvers = []Selector{{Kind: "user", UserID: &f.outsider.UserID}}
 				case "group":
@@ -182,9 +184,11 @@ func TestAttentionExactTotalHistoryTeamExpiryAndEpoch(t *testing.T) {
 					}
 				}
 			}
-			items, total, err = f.s.Attention(context.Background(), f.reviewer, &f.saTeam, 20)
-			if err != nil || len(items) != 0 || total != 0 {
-				t.Fatalf("wrong server team: %d %d %v", len(items), total, err)
+			for _, teamID := range []uuid.UUID{f.saTeam, uuid.Nil} {
+				items, total, err = f.s.Attention(context.Background(), f.reviewer, &teamID, 20)
+				if err != nil || len(items) != 0 || total != 0 {
+					t.Fatalf("wrong server team: %d %d %v", len(items), total, err)
+				}
 			}
 			// Request expiry is independent of context; no mutation is required.
 			f.s.SetClock(func() time.Time { return p.Receipt.ExpiresAt.Add(time.Hour) })

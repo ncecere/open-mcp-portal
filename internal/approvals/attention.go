@@ -49,8 +49,12 @@ func (s *Service) Attention(ctx context.Context, a authz.Actor, team *uuid.UUID,
 	if err != nil {
 		return nil, 0, safeError(err)
 	}
+	teamID := uuid.NullUUID{}
+	if team != nil {
+		teamID = uuid.NullUUID{UUID: *team, Valid: true}
+	}
 	rows, err := q.ApprovalAttention(ctx, dbgen.ApprovalAttentionParams{
-		ActorID: a.UserID, TeamID: optional(team), AtTime: s.clock(), ContextEpoch: epoch,
+		ActorID: a.UserID, TeamID: teamID, AtTime: s.clock(), ContextEpoch: epoch,
 		PlatformAdmin: u.PlatformRole == authz.PlatformAdmin, PageLimit: limit,
 	})
 	if err != nil {
