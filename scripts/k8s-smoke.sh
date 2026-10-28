@@ -204,7 +204,9 @@ pf_stop() {
 # that pod may be gone.
 pf_start() {
   pf_stop
-  kn port-forward "svc/open-mcp-portal" "${PORT}:80" >"$TMP/port-forward.log" 2>&1 &
+  [ "$CLUSTER_UP" = 1 ] || fail "internal error: kubectl called before the cluster exists"
+  # Launch kubectl directly so PF_PID owns the listener, not a shell wrapper.
+  kubectl --kubeconfig "$KUBECONFIG_FILE" --context "$CONTEXT" -n "$NS" port-forward "svc/open-mcp-portal" "${PORT}:80" >"$TMP/port-forward.log" 2>&1 &
   PF_PID=$!
   wait_until "kubectl port-forward to answer /healthz on localhost:${PORT}" 30 curl -fsS --max-time 2 "http://localhost:${PORT}/healthz"
 }
@@ -722,6 +724,8 @@ out1="$(evict "$p1")" || fail "the first eviction was refused though the budget 
 out2="$(evict "$p2" || true)"
 echo "$out2" | grep -q -i "disruption budget" || fail "a second eviction right after the first was not refused by the budget: $out2"
 ok "PDB: one eviction allowed, the second refused ('Cannot evict pod as it would violate the pod's disruption budget')"
+# A terminating pod can still count as Ready while it drains.
+wait_until "evicted pod $p1 to be gone" 160 gone "$NS" "pod/$p1"
 kn rollout status deploy/open-mcp-portal --timeout=180s >/dev/null || fail "the Deployment did not recover after the eviction"
 wait_until "the Deployment to have 2 ready replicas" 120 has_value "$NS" deploy/open-mcp-portal '{.status.readyReplicas}' 2
 pf_start

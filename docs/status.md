@@ -47,8 +47,11 @@ current credentials, so current upstream fixes/claims could not be verified. Nex
 
 The first release-candidate CI passed the full Go race suite, Docker builds, generated-code and deployment
 checks, and kindnet/Calico smoke tests, but failed dependency gates: Go 1.26.9's x509 advisory and Undici 8.12.1.
-The toolchain/builder are updated to Go 1.26.10 and the web lockfile to Undici 8.12.3; release gates are being
-rerun. No tag is published while CI is failing.
+The toolchain/builder are updated to Go 1.26.10 and the web lockfile to Undici 8.12.3; patched application CI
+passed. Calico smoke then exposed an orphaned port-forward into a draining pod after eviction: the wrapper
+PID, not `kubectl`, had been stopped. The helper now launches/reaps the real process and waits for the evicted
+pod to disappear. Four deterministic lifecycle tests reproduce the old failure and pass the fix; smoke CI is
+being rerun. No tag is published while required release checks are failing.
 
 ## v0.3.2 (2026-10-20)
 

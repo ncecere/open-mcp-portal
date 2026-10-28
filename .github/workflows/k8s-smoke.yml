@@ -24,6 +24,7 @@ on:
       - "deploy/**"
       - "Dockerfile"
       - "scripts/k8s-smoke.sh"
+      - "scripts/tests/test_k8s_smoke_port_forward.py"
       - ".github/workflows/k8s-smoke.yml"
 permissions:
   contents: read
@@ -45,6 +46,9 @@ jobs:
       SMOKE_ARTIFACTS: ${{ github.workspace }}/k8s-smoke-artifacts
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Smoke helper lifecycle regressions
+        run: python3 scripts/tests/test_k8s_smoke_port_forward.py
 
       # Downloaded to a directory that goes first on PATH, so the runner's own
       # copies (whatever version the image carries) are not used. The sums

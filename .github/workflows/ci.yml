@@ -121,6 +121,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      - name: Smoke helper lifecycle regressions
+        run: python3 scripts/tests/test_k8s_smoke_port_forward.py
       - name: Render and validate the Kustomize base and overlays
         run: make k8s-validate
       - name: Prometheus alert rules (promtool check and unit tests)
