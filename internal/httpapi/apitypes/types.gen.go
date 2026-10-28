@@ -2719,7 +2719,7 @@ type ApprovalApproverKind string
 type ApprovalDecisionInput struct {
 	Decision ApprovalDecisionInputDecision `json:"decision"`
 
-	// ExpectedArgsDigest Lowercase hexadecimal SHA-256 digest
+	// ExpectedArgsDigest Lowercase hexadecimal 256-bit digest; argument receipts use a keyed HMAC-SHA-256 so redacted low-entropy values cannot be guessed offline
 	ExpectedArgsDigest     ApprovalDigest `json:"expectedArgsDigest"`
 	ExpectedReviewRevision int64          `json:"expectedReviewRevision"`
 }
@@ -2727,7 +2727,7 @@ type ApprovalDecisionInput struct {
 // ApprovalDecisionInputDecision defines model for ApprovalDecisionInput.Decision.
 type ApprovalDecisionInputDecision string
 
-// ApprovalDigest Lowercase hexadecimal SHA-256 digest
+// ApprovalDigest Lowercase hexadecimal 256-bit digest; argument receipts use a keyed HMAC-SHA-256 so redacted low-entropy values cannot be guessed offline
 type ApprovalDigest = string
 
 // ApprovalPage Metadata-only page; items NEVER contain preview

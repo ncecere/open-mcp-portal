@@ -6887,6 +6887,7 @@ components:
         groupName:
           type: string
           minLength: 1
+          maxLength: 256
           nullable: true
     ApprovalRuleInput:
       type: object
@@ -7027,7 +7028,7 @@ components:
     ApprovalDigest:
       type: string
       pattern: '^[0-9a-f]{64}$'
-      description: Lowercase hexadecimal SHA-256 digest
+      description: Lowercase hexadecimal 256-bit digest; argument receipts use a keyed HMAC-SHA-256 so redacted low-entropy values cannot be guessed offline
     ApprovalRequesterKind:
       type: string
       enum: [user, service_account]

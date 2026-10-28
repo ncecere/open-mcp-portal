@@ -3472,7 +3472,7 @@ export interface components {
             items: components["schemas"]["ApprovalRule"][];
             nextCursor: string | null;
         };
-        /** @description Lowercase hexadecimal SHA-256 digest */
+        /** @description Lowercase hexadecimal 256-bit digest; argument receipts use a keyed HMAC-SHA-256 so redacted low-entropy values cannot be guessed offline */
         ApprovalDigest: string;
         /** @enum {string} */
         ApprovalRequesterKind: "user" | "service_account";

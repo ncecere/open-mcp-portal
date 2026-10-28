@@ -65,7 +65,7 @@ func NormalizeRule(in RuleInput) (RuleInput, error) {
 			}
 			key = "user:" + a.UserID.String()
 		case "group":
-			if a.UserID != nil || a.GroupName == nil || strings.TrimSpace(*a.GroupName) == "" || len(*a.GroupName) > 500 || !safeText(*a.GroupName) {
+			if a.UserID != nil || a.GroupName == nil || strings.TrimSpace(*a.GroupName) == "" || len(*a.GroupName) > 1024 || utf8.RuneCountInString(*a.GroupName) > 256 || !safeText(*a.GroupName) {
 				return bad()
 			}
 			key = "group:" + *a.GroupName

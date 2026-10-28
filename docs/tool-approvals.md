@@ -31,7 +31,9 @@ attempt. A used approval never authorizes a second dispatch: a repeat asks for a
 Bind requester kind/ID, gateway/server/capability IDs, curated exposed name, actual class, exact merged
 argument digest, approved capability fingerprint, canonical server origin, selected rule/revision and a
 monotonic authorization-context epoch. Normalize absent/null arguments to the `{}` actually forwarded.
-Changing a policy and changing it back does not resurrect approval. Tool arguments are merged by curation
+Changing a policy and changing it back does not resurrect approval. Argument digests use a derived-key
+HMAC-SHA-256, not a public dictionary oracle for redacted low-entropy values; governed arguments reject
+duplicate object keys and excessive nesting. Tool arguments are merged by curation
 before either retry-state or approval digests are calculated.
 
 States: `pending → approved|denied|expired|cancelled`; `approved → used|expired|cancelled`.
@@ -64,18 +66,30 @@ new approval, but change-and-revert cannot recover an old grant. Database trigge
 changes in users/groups, teams/memberships, MCP credentials/scopes, gateways/grants/selections, server
 configuration/definitions/class/review, providers/access, personal grants/secrets and shared connections.
 Usage touches, probe timestamps and unchanged-authority token refreshes do not advance it. Rule mutations
-do advance it. Old replicas' ordinary authority writes pass through these triggers too.
+and same-scope authorization-code reconnects do advance it. Old replicas' ordinary writes pass through the
+same triggers.
 
-Existing authority writers may lock users/servers/connections before the epoch trigger. Therefore approval
-transactions must not acquire those rows after the epoch lock. For human audit attribution, take the actor
-user's `KEY SHARE` **before** the epoch fence, then the epoch (shared for request transitions/consume,
-exclusive for rule changes), then requester advisory/request/rule locks. Validation under the fence uses
-non-locking reads. Request/rule historical target/requester/decider UUIDs are snapshots without foreign keys
-to authority tables, avoiding hidden FK lock inversions. Team audit attribution already has no team FK.
-Runtime consumption uses a system audit actor with requester/decider IDs in metadata; browser decisions
-retain the human actor whose FK is protected before the fence. No locks survive into network I/O.
-All new approval code follows this order; test actual administrative suspension, revocation and rule-change
-races, not only synthetic readers. Audit failure rolls back the state transition.
+Migration `00035` initially used a singleton writer mutex. Independent review found writer–writer lock
+inversions in existing provider/disconnect and user/team-audit sequences. Forward-only `00036` replaces it:
+semantic writes append positive event IDs without a central transaction-row lock. Current context is a
+protected base plus the **SUM of MVCC-visible committed events**, not MAX or sequence last-value, so an
+older allocated event committing last still invalidates context. An initial epoch read before authentication
+never blesses an uncommitted mutation. Atomic compaction above 1,000 events preserves the exact total.
+Runtime can neither mutate/prune the journal nor advance/reset its sequence or base.
+
+Final approval transactions acquire an owner-definer **EXCLUSIVE NOWAIT table fence** over all authority
+tables, including row-locking readers, before validation/consumption. Both legacy shared/exclusive helper
+interfaces use this conservative fence. A busy/partial fence aborts with `55P03`; roll back and refuse/retry,
+never wait or spend authorization. This avoids existing-writer cycles without rewriting their lock order.
+It intentionally trades availability under concurrent authority writes for fail-closed safety; load/latency
+behavior still needs measurement. The initial context read is unfenced and committed-snapshot-only.
+
+For browser audit attribution, take the actor user's `KEY SHARE` **before** the fence, then requester
+advisory/request/rule locks. Validation under the fence uses non-locking reads. Request/rule historical
+UUIDs have no foreign keys to authority tables, avoiding hidden FK inversions. Team audit attribution has
+no team FK. Runtime consumption uses a system audit actor with requester/decider IDs in metadata;
+browser decisions retain the protected human actor. No locks survive into network I/O. Audit failure rolls
+back the transition. Test real suspension/revocation/rule races and out-of-order writer commits.
 
 ## Browser API and privacy
 
@@ -101,7 +115,7 @@ accounts can create requests and notify humans; no retired impersonation behavio
 
 ## Implementation/verification sequence
 
-1. Add migration `00035`, context-epoch/fence primitives and focused real split-role/lock-order tests.
+1. Add migrations `00035`/`00036`, context journal/fence primitives and focused real split-role/lock-order tests.
 2. Add transactional rules/requests/review/preview services and OpenAPI-first browser contracts.
 3. Integrate transport-boundary consume/no-replay, live bindings and all three MCP response shapes.
 4. Add notification/attention/retention/rotation integration and browser UI.
