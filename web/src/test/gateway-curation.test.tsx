@@ -147,6 +147,100 @@ describe("Gateway tool curation", () => {
     expect(JSON.stringify(preview)).not.toContain('"owner"');
   });
 
+  it.each(["fixed", "allowed"] as const)("saves and reloads %s dictionary edge keys through the dialog", async (mode) => {
+    const u = userEvent.setup();
+    const keys = ["__proto__", "constructor", "prototype", "normal"];
+    const specialDefinition = { ...definition, inputSchema: { type: "object", properties: Object.fromEntries(keys.map((key) => [key, { type: "string" }])), required: keys } };
+    let cap = capability({ originalDefinition: specialDefinition, effectiveDefinition: specialDefinition });
+    const calls = mockApi(routes(cap, {
+      [`GET ${base}/capabilities`]: () => gatewayCapabilities([cap], 8),
+      [`PUT ${base}/capabilities`]: (body) => {
+        const curation = (body as { items: { curation: Schemas["GatewayToolCuration"] }[] }).items[0]!.curation;
+        cap = { ...cap, curation };
+        return gatewayCapabilities([cap], 8);
+      },
+    }));
+    renderApp(tab);
+    let dialog = await open(u);
+    for (const key of keys) {
+      const select = within(dialog).getByRole("combobox", { name: `Policy for ${key}` });
+      expect(select).toHaveValue("");
+      await u.selectOptions(select, mode);
+      const input = within(dialog).getByRole("textbox", { name: `${mode === "fixed" ? "Fixed value" : "Allowed values"} for ${key}` });
+      await u.clear(input);
+      await u.click(input);
+      await u.paste(mode === "fixed" ? `${key} value` : JSON.stringify([`${key} value`]));
+    }
+    await u.click(within(dialog).getByRole("button", { name: "Save policy" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const expected = Object.fromEntries(keys.map((key) => [key, mode === "fixed" ? { fixed: `${key} value` } : { allowed: [`${key} value`] }]));
+    expect(cap.curation?.constraints).toEqual(expected);
+    dialog = await open(u);
+    for (const key of keys) {
+      expect(within(dialog).getByRole("combobox", { name: `Policy for ${key}` })).toHaveValue(mode);
+      expect(within(dialog).getByRole("textbox", { name: `${mode === "fixed" ? "Fixed value" : "Allowed values"} for ${key}` })).toHaveValue(mode === "fixed" ? `${key} value` : JSON.stringify([`${key} value`]));
+    }
+    await u.type(within(dialog).getByRole("textbox", { name: "Exposed name" }), "renamed");
+    await u.click(within(dialog).getByRole("button", { name: "Save policy" }));
+    await waitFor(() => expect(calls.filter((call) => call.method === "PUT")).toHaveLength(2));
+    expect(cap.curation).toMatchObject({ nameOverride: "renamed", constraints: expected });
+  });
+
+  it.each([
+    ["limit", "fixed", "9007199254740990.5"],
+    ["config", "fixed", '{"enabled":true,"nested":[0.10000000000000001]}'],
+    ["config", "allowed", '[{"nested":[1e-9999]}]'],
+    ["limit", "allowed", "[1e99999]"],
+  ])("rejects raw %s %s numeric input without a request", async (arg, mode, text) => {
+    const u = userEvent.setup();
+    const calls = mockApi(routes());
+    renderApp(tab);
+    const dialog = await open(u);
+    await u.selectOptions(within(dialog).getByRole("combobox", { name: `Policy for ${arg}` }), mode);
+    const input = within(dialog).getByRole("textbox", { name: `${mode === "fixed" ? "Fixed value" : "Allowed values"} for ${arg}` });
+    await u.clear(input);
+    await u.click(input);
+    await u.paste(text);
+    expect(input).toHaveDisplayValue(text);
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Numbers must be finite, use safe integers, and round-trip through JSON without rounding or underflow");
+    const save = within(dialog).getByRole("button", { name: "Save policy" });
+    expect(save).toBeDisabled();
+    await u.click(save);
+    expect(calls.filter((call) => call.method === "PUT" || call.method === "POST")).toHaveLength(0);
+  });
+
+  it("saves safe nested decimals, reloads, and changes only name and description without changing constraints", async () => {
+    const u = userEvent.setup();
+    let cap = capability();
+    const calls = mockApi(routes(cap, {
+      [`GET ${base}/capabilities`]: () => gatewayCapabilities([cap], 8),
+      [`PUT ${base}/capabilities`]: (body) => {
+        cap = { ...cap, curation: (body as { items: { curation: Schemas["GatewayToolCuration"] }[] }).items[0]!.curation };
+        return gatewayCapabilities([cap], 8);
+      },
+    }));
+    renderApp(tab);
+    let dialog = await open(u);
+    await u.selectOptions(within(dialog).getByRole("combobox", { name: "Policy for config" }), "allowed");
+    const input = within(dialog).getByRole("textbox", { name: "Allowed values for config" });
+    await u.clear(input);
+    await u.click(input);
+    await u.paste('[{"values":[0.1,1e-1,1.5],"quoted":"9007199254740990.5"}]');
+    await u.click(within(dialog).getByRole("button", { name: "Save policy" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const expected = { config: { allowed: [{ values: [0.1, 0.1, 1.5], quoted: "9007199254740990.5" }] } };
+    expect(cap.curation?.constraints).toEqual(expected);
+    dialog = await open(u);
+    expect(within(dialog).getByRole("textbox", { name: "Allowed values for config" })).toHaveValue(JSON.stringify(expected.config.allowed));
+    await u.type(within(dialog).getByRole("textbox", { name: "Exposed name" }), "renamed");
+    await u.click(within(dialog).getByRole("checkbox", { name: "Override description for this gateway" }));
+    await u.clear(within(dialog).getByRole("textbox", { name: "Model-facing description" }));
+    await u.type(within(dialog).getByRole("textbox", { name: "Model-facing description" }), "New description");
+    await u.click(within(dialog).getByRole("button", { name: "Save policy" }));
+    await waitFor(() => expect(calls.filter((call) => call.method === "PUT")).toHaveLength(2));
+    expect(cap.curation).toEqual({ nameOverride: "renamed", descriptionOverride: "New description", constraints: expected });
+  });
+
   it("lets read-only platform staff inspect original and model definitions without mutation controls", async () => {
     const u = userEvent.setup();
     mockApi({ ...routes(capability({ curation: { nameOverride: "our_status" } })), ...shellRoutes("platform_auditor", "member") });
