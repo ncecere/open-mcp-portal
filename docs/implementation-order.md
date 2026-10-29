@@ -20,12 +20,17 @@ deployment is implied.
 **Shipped and closed in v0.5.0:** #31 sensitive-call approvals, decision 82, migrations `00035`–`00042`.
 Full tests, browser checks, main CI, both smoke CNIs and native image publication passed; the signed index,
 SPDX assets and published runtime were independently verified. See [design](tool-approvals.md) and
-[release evidence](status.md). The original machine-transfer stop point is complete. The owner has resumed the ordered backlog;
-#32 is implemented and locally validated for v0.6.0; final CI/publication/acceptance is pending.
-Decision 83 and [design](access-requests.md) describe its scope.
+[release evidence](status.md). The original machine-transfer stop point is complete; ordered work has resumed.
 The v0.5.1 provider-refresh reliability patch is also published and verified, with no new migration or API.
-All required work is on main. Resume with [agent-handoff.md](agent-handoff.md); no local patch is needed.
-There are 27 open issues: 19 feature/operations/design and eight real-world verification issues.
+
+**Shipped and closed in v0.6.0:** #32 gateway access requests, decision83, migrations43–45. Private requests,
+narrow stewards, atomic grants, expiry and private notices passed full normal/race suites in both role modes,
+844 web tests, main/tag CI, both smoke CNIs, signed-image/SPDX/provenance verification and actual-published
+strict-runtime browser/MCP/forced-expiry checks. Incomplete modal/mobile-settings accessibility checks and
+real-world evidence remain explicitly separate. See [design](access-requests.md) and [status](status.md).
+All required source is on main; confirm the publication-evidence/image-pin follow-up checks before #33.
+Resume with [agent-handoff.md](agent-handoff.md); no local patch is needed.
+There are 26 open issues: 18 feature/operations/design and eight real-world verification issues.
 The owner authorized ready pre-1.0 releases; v1.0.0 remains their explicit decision. Follow the order below
 without closing evidence-gated issues on fixture results or claiming unfinished branch work is released.
 
@@ -41,7 +46,7 @@ security boundary before building on it; do not start every large issue at once.
 | 2, shipped v0.4.0 | **#29** credential scopes | Needs #28; intersect every credential layer and preserve existing unscoped behavior. |
 | 3, shipped v0.4.0 | **#30** per-gateway curation | Keep approved definitions immutable; validate merged arguments and stale fingerprints before approval digests depend on them. |
 | 4, shipped v0.5.0 | **#31** sensitive-call approvals | Needs #28 and #30; bind approval to the merged arguments, definition, origin and requester, atomically single-use. |
-| 2–4, independent lane | **#26** shipped v0.4.0; next **#32** access requests | Shared token delivery, lapse, grants and refresh are validated foundations for lifecycle integration. #32 is independent, but keep gateway/API edits serialized with scopes and curation. |
+| 2–4, shipped | **#26** v0.4.0; **#32** access requests v0.6.0 | Shared connections, private grant requests/decisions and expiry are validated lifecycle foundations. Preserve scoped refresh and final transport/approval deadline guards. |
 | 5 | **#33** upstream protection | Classification permits safe read retries. Ship quotas/concurrency/breaker before considering failover; credential-origin binding must remain intact for every current auth mode. |
 | 6 | **#35** tasks extension | Confirm the extension specification before design/code; carry approvals and access checks into every task operation. |
 | 2, shipped v0.4.0 | **#44** split database roles | Independent security foundation. Preserve append-only retention through narrowly privileged definer functions; test runtime-role denial and normal operations. |

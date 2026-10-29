@@ -1,6 +1,6 @@
 # Gateway access requests (#32)
 
-Status: **implemented for v0.6.0**; publication/acceptance evidence is in [status](status.md). Decision 83. This is separate from exact-call
+Status: **shipped and verified in v0.6.0; #32 closed**. Publication/acceptance evidence is in [status](status.md). Decision 83. This is separate from exact-call
 [sensitive-call approvals](tool-approvals.md): an access decision grants eligibility to use a
 gateway, never permission to bypass tool scopes, credentials, curation or call approval.
 

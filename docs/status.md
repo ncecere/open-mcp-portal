@@ -1,9 +1,42 @@
 # Status and handoff
 
-Last updated: 2026-10-29. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.5.1 published and independently verified**. The owner resumed ordered backlog development and authorized pre-1.0 releases; **v1.0.0 remains the owner's explicit decision**. #32 gateway access requests is implemented and locally validated for v0.6.0; final CI/publication remains pending. A fresh agent should read [agent-handoff.md](agent-handoff.md).
-(release notes: [releases/v0.5.1.md](releases/v0.5.1.md); earlier: [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+Last updated: 2026-10-29. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.6.0 published and verified; #32 is closed**. The owner resumed ordered backlog development and authorized pre-1.0 releases; **v1.0.0 remains the owner's explicit decision**. #33 upstream protection is next; the publication-evidence/image-pin follow-up has its own final CI checks. A fresh agent should read [agent-handoff.md](agent-handoff.md).
+(release notes: [releases/v0.6.0.md](releases/v0.6.0.md); earlier: [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
-## Resumed development: gateway access requests (#32)
+## v0.6.0 (2026-10-29): gateway access requests
+
+#32 is [closed with acceptance evidence](https://github.com/ncecere/open-mcp-portal/issues/32#issuecomment-6489315403).
+Immutable source: `e613722fceac90de5e17bcf1df19e5c678ca81d9`, [published release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.6.0).
+Verified multiarchitecture image: `ghcr.io/ncecere/open-mcp-portal@sha256:515311b77b6f042367bf7154bcac46f4e7f8a26a5443ca9aff4516fa28a350f7`.
+
+- [Main CI](https://github.com/ncecere/open-mcp-portal/actions/runs/40822321446) and
+  [immutable tag CI](https://github.com/ncecere/open-mcp-portal/actions/runs/40824289252) passed every job,
+  including mandatory PostgreSQL races with actual legacy and authenticated split-role logins.
+- Both [kindnet/Calico smoke jobs](https://github.com/ncecere/open-mcp-portal/actions/runs/40822321606) passed.
+- [Native amd64/arm64 builds, scans, runtime checks, signing and release](https://github.com/ncecere/open-mcp-portal/actions/runs/40824289277) passed.
+  Outside that workflow, verified public tag/digest equality, exactly those two platforms, tag-specific
+  GitHub OIDC identity and workflow SHA, certificate/transparency proof, every asset checksum, canonical
+  SPDX equality to registry attestations and both provenance source/version claims. The published AMD64
+  image reports `open-mcp-portal 0.6.0 (e613722fceac)` as `65532:65532`, read-only without network.
+  Prior v0.5.1 source/image tags remain unchanged. The example overlay uses the verified index above.
+- The actual published image migrated schema 45 as a non-superuser owner. A separate authenticated
+  restricted runtime login, with no owner membership, passed strict doctor and HTTP health/readiness.
+  Its read-only serving container had no owner/migration URL or mounted secrets/data from an old instance.
+- Published-image Chromium156 checks exercised private submission, steward approval/expiry/note,
+  requester history and auditor denial of private details. A normal scoped key obtained modern MCP
+  `tools/list` HTTP200 after approval; owner-only forced-expiry instrumentation in the labelled disposable
+  DB then required management/MCP HTTP404 without cleanup. This is **not** a natural-expiry soak.
+- All seven published browser states had zero axe violations/no horizontal overflow at desktop/390px.
+  Incomplete checks remain: modal `aria-hidden-focus`/`color-contrast`, plus mobile-settings contrast.
+  Forward/reverse keyboard traversal (24 steps) and Escape passed. No whole-product accessibility claim.
+- All owned fixture containers/profiles are removed/closed. Historical keys/data and existing development
+  services were not modified. No production deployment or real IDE/provider/channel/pilot acceptance is implied.
+
+Post-publication evidence/image-pin follow-up CI and both smoke CNIs are tracked separately from the
+already-green release source checks. #33 and the remaining ordered backlog are not implemented by #32.
+There are **26 open issues: 18 feature/operations/design and eight real-world verification**. v1.0.0 is not cut.
+
+### Fresh-machine implementation and local verification
 
 The fresh-machine checkout was clean at handoff commit `4a5e4c4d26b68ef7232a247a53c0c3bb38b3b2bc`;
 fetch confirmed it equals `origin/main`. The local and remote immutable `v0.5.1` tag still resolve to
@@ -44,16 +77,16 @@ with races in both actual role modes. The release-candidate full web rerun found
 API-key date fixture; freezing Date (not timers) preserves its exact seven-day assertion. The focused seven
 API-key tests passed, then all complete v0.6.0 candidate gates passed (490 seconds): all 844 web tests,
 typecheck/build/styling/size/audit, Go vet/format and scratch build/version, actionlint, Kubernetes validation
-and smoke-helper Python tests. Final GitHub checks and publication verification remain pending. CI-pinned govulncheck
+and smoke-helper Python tests. Release-source GitHub checks/publication verification subsequently passed
+as recorded above. CI-pinned govulncheck
 reports zero reachable/package vulnerabilities and two module-only advisories; npm audit reports zero.
 Owned browser, compatibility and final-suite fixtures are stopped/removed; existing development ports and
-any historical database/keys remain untouched. Final GitHub CI/deployment/publication is pending.
+any historical database/keys remain untouched.
 Earlier full-gate failures identified a
 missing access-request audit-label lookup and a stale preference fixture; both were fixed with retained
 regressions. Real-browser testing found/fixed a long-button mobile overflow. The OpenAPI response contract
-also has an explicit regression against a closed-object `allOf` mismatch. This section is **not** release
-acceptance evidence until final CI, deployment smoke and publication verification complete. #33 and the remaining ordered backlog are not implemented
-by this work. Real-client/provider/channel/pilot and independent whole-product review issues remain open.
+also has an explicit regression against a closed-object `allOf` mismatch. Release acceptance is linked above.
+Real-client/provider/channel/pilot and independent whole-product review issues remain open.
 
 ## v0.5.1 (2026-10-28): provider-refresh reliability
 
@@ -558,9 +591,9 @@ server allow-list).
 
 - Clone `git@github.com:ncecere/open-mcp-portal.git`, check out `main` and fetch tags. All required source,
   migrations, generated code and release/handoff documentation are on the remote; no local patch is needed.
-  The immutable shipped source is `v0.5.1`; main also records publication evidence and the verified image pin.
+  The immutable shipped source is `v0.6.0`; main also records publication evidence and the verified image pin.
 - Read this release section, `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md) and
-  [implementation order](implementation-order.md). Complete #32's v0.6.0 publication/acceptance, then #33;
+  [implementation order](implementation-order.md). #32 shipped in v0.6.0; next is #33;
   do not resume old #31 implementation branches.
 - Install Go 1.26.10+, Node 22+, Docker, Python 3 and sqlc 1.31.1; run `npm ci` in `web/`.
   Use owned disposable PostgreSQL for integration tests and actual split-role verification.
@@ -568,9 +601,9 @@ server allow-list).
   database. They were deliberately not exported or committed. Use a fresh development instance, or securely
   transfer a consistent database backup and its required keys separately under explicit operator control.
   Do not regenerate encryption keys for an existing database or migrate/reset the old instance implicitly.
-- Development resumed on 2026-10-29 under owner authorization. There are 27 open issues (19 feature/operations/design,
-  eight real-world verification). #32 is locally validated and prepared for v0.6.0, not yet published;
-  inspect Git, final CI and the current release section before continuing. v1.0.0 requires the owner's explicit decision.
+- Development resumed on 2026-10-29 under owner authorization. There are 26 open issues (18 feature/operations/design,
+  eight real-world verification). #32 is shipped/closed in verified v0.6.0; inspect Git, final follow-up CI
+  and the current release section before beginning #33. v1.0.0 requires the owner's explicit decision.
 
 For a **new** development instance, use [development setup](../CONTRIBUTING.md#development-setup), not a
 blind restart/seed of an existing one. The historical dev-database migration helper remains
@@ -587,7 +620,8 @@ blind restart/seed of an existing one. The historical dev-database migration hel
    Drain older serving images before enabling rules; schema compatibility does not imply enforcement.
    Use the new binary's rotation utility for the new ciphertext columns. Keep production autovacuum enabled;
    governed transitions intentionally fail closed during conflicting writes/reads/maintenance.
-3. **Publish and verify v0.6.0 for #32 access requests**, then proceed with #33 and the ordered operations/lifecycle/audit lanes in
+3. **v0.6.0/#32 is published, verified and closed.** Complete the evidence/image-pin follow-up checks, then
+   proceed with #33 and the ordered operations/lifecycle/audit lanes in
    [implementation order](implementation-order.md). #43 must prove upgrades, ingress, restore and load before
    Helm packaging; existing kindnet/Calico smoke does not establish those broader requirements.
 4. Keep #13–#20's real review/client/provider/channel/pilot evidence separate. VS Code planning and fake OAuth

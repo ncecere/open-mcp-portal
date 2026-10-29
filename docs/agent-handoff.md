@@ -1,8 +1,8 @@
-# Agent handoff: development resumed after v0.5.1
+# Agent handoff: verified v0.6.0, next #33
 
 The original stop point was the verified v0.5.1 machine transfer. On 2026-10-29 the owner resumed ordered
 backlog work, authorized releases when ready and delegated incidental decisions. **Do not cut v1.0.0 without
-the owner's explicit decision.** #32 is implemented and locally validated for v0.6.0; publication is pending. See
+the owner's explicit decision.** #32 shipped in verified v0.6.0 and is closed; #33 is next. See
 [design](access-requests.md) and [status](status.md) for the current validation state. The original release
 tags remain immutable. No old environment, keys or data were transferred implicitly. Use owned fresh fixtures;
 secure restoration of an existing encrypted database still requires its matching keys and operator control.
@@ -14,9 +14,9 @@ secure restoration of an existing encrypted database still requires its matching
 1. Fetch `origin/main` and tags; inspect `git status`, the latest main CI and the published release. Work from
    `main`, not an old approval or refresh-fix branch. No uncommitted patch is needed for the handoff.
 2. Read `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md), [status](status.md) and
-   [implementation order](implementation-order.md). The current feature is **#32 gateway access requests**;
-   Complete v0.6.0 CI/publication/verification, then #33 upstream protection follows. Do not treat a version
-   string or prepared release notes as proof of publication.
+   [implementation order](implementation-order.md). Confirm the v0.6.0 evidence/image-pin follow-up checks,
+   then implement **#33 upstream protection**: quotas/concurrency/read retries/breaker first, failover
+   separately. Do not close #33 before its failover acceptance criteria are actually met.
 3. Git transfers source, migrations, generated contracts, tests and docs—not `.env`, encryption/signing keys,
    provider credentials or the existing development database. Use the documented fresh-instance setup or
    explicitly arrange a secure, consistent database-and-keys transfer. Never reset/reseed the old database,
@@ -32,6 +32,10 @@ secure restoration of an existing encrypted database still requires its matching
 - v0.5.0: sensitive-call approvals #31, decision 82, migrations `00035`–`00042`.
 - v0.5.1: provider-refresh reliability under constrained pools, scoped endpoint dependency reads, complete
   exchange deadlines, and cancellation/drain before transaction SQL resumes. No new migration/API setting.
+- v0.6.0: #32 opt-in gateway access requests, private human stewardship/notifications, atomic user/team
+  grants and optional expiry, decision83/migrations43–45. Main/tag CI, both smoke CNIs, signed native images,
+  SPDX/provenance/checksums and actual-published strict-runtime browser/MCP/forced-expiry checks passed.
+  Browser modal/mobile-settings axe incompletes remain; this is not whole-product accessibility acceptance.
 
 See the release sections in [status](status.md) for actual publication/verification rather than interpreting
 this list or a local version string as evidence. Release tags are immutable. Main may contain unreleased
@@ -69,6 +73,9 @@ backlog work as well as publication evidence and the verified example image dige
   `runtime.go`, `narrow.go`, `service_runtime.go`; `internal/registry/networks.go` and upstream checked policy.
   `internal/httpapi/service_connections_pool_integration_test.go` proves one-connection/two-handler success
   and fail-closed negative controls. Scope-lifetime, SQL-error, linked-client and cache-isolation tests accompany it.
+- Access requests/expiry: `internal/gateways/access_request*.go`, `grant_insert.go`, `grant_expiry.go`,
+  `internal/mcpgw/grant_expiry.go`, `internal/httpapi/access_requests.go`, `internal/notify/access_requests.go`,
+  `web/src/pages/access-requests/`. Keep the response-schema regression and duplicate-email identity test.
 - Follow all contribution gates. Use `GOFLAGS='-p=2'`, mandatory PostgreSQL (`OMP_TEST_REQUIRE_DB=1`) and
   actual legacy/split logins (`OMP_TEST_SPLIT_ROLES=0` and `1`) on an owned disposable PostgreSQL container.
   `make test-ci` keeps every test and the race detector with a bounded 20-minute per-package timeout.
@@ -78,7 +85,7 @@ backlog work as well as publication evidence and the verified example image dige
 
 ## What remains separate
 
-There are 27 open issues after #31: 19 feature/operations/design and eight real-world verification issues.
+There are 26 open issues after #32: 18 feature/operations/design and eight real-world verification issues.
 #13–#20 still require actual independent review/client/provider/channel/pilot evidence. Fake OAuth/MCP fixtures
 and agent reviews do not close those. Broader load, restore/ingress/OIDC deployment validation, wall-clock
 refresh/expiry and whole-product accessibility acceptance remain separate; no production deployment is implied.
