@@ -1,8 +1,9 @@
 # Upstream endpoint failover (#33, separate stage)
 
-Status: **v0.8.0 candidate in development, not released**. Decision85. The quota/concurrency/read-retry/
-breaker stage shipped in verified [v0.7.0](releases/v0.7.0.md). This document governs the remaining failover
-criterion; #33 stays open until implementation, tests and release evidence actually satisfy it.
+Status: **shipped and independently verified in v0.8.0; #33 closed**. See
+[release notes](releases/v0.8.0.md) and [status](status.md) for CI/artifact/runtime evidence and retained caveats. Decision85. The quota/concurrency/read-retry/
+breaker stage shipped in verified [v0.7.0](releases/v0.7.0.md). This document governs the separate failover
+criterion; #33 closed only after implementation, tests and release evidence satisfied it in v0.8.0.
 
 ## Scope and conservative defaults
 
@@ -41,7 +42,8 @@ Store only sealed values and existing-style public kind/name/hints. The endpoint
 sealed credential-list envelope bound by AAD to the endpoint UUID and, inside the envelope, to the server UUID
 and canonical origin, with a matching public credential shape. This isolates endpoints and gives rotation a
 single UUID-keyed ciphertext column. Round-trip, swapped-row/server/origin, shape-consistency, malformed
-format and previous/current-key tests cover the encoding; final whole-product validation remains pending. Never put plaintext or ciphertext in audit,
+format and previous/current-key tests cover the encoding; full local/CI/artifact/runtime gates passed.
+Independent whole-product security/accessibility and real-world acceptance remain separate. Never put plaintext or ciphertext in audit,
 review digests, error text, metric labels or exported views. Retain all existing part validation and scrubbing.
 
 A primary URL/mode/credential edit cannot silently rebind any extra's credential. Primary and extras are
@@ -126,7 +128,8 @@ compatibility does not mean an old image enforces endpoint review or knows how t
   freshness, all web/deployment/advisory gates, owned browser and actual previous/published-image verification
   for any ready pre-1.0 release. Fixtures do not close real-client/provider/pilot/independent-review issues.
 
-This document records conservative delegated defaults and the implemented candidate boundary, not release
-acceptance. Focused guarded-wire, credential/origin/audience, permission/review/token, health and real-role
-races passed; full changed-tree/browser/compatibility/publication gates remain required before acceptance. Publication
+This document records the conservative delegated defaults and shipped boundary. Full changed-tree/real-role
+normal/race, web/deployment/advisory, actual source/published browser, previous-image compatibility and
+main/tag/native publication/independent-artifact gates passed. #33's acceptance is closed; retained browser
+incompletes and real-world/independent review evidence remain separate, as recorded in [status](status.md). Publication
 and acceptance evidence belongs in [status](status.md); v1.0.0 remains the owner's explicit decision.

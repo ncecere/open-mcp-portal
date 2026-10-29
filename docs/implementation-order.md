@@ -33,13 +33,15 @@ The v0.6.0 publication-evidence/image-pin follow-up passed main CI and both smok
 trusted-read retries and circuit breaking (decision84/migration46). All four mandatory PostgreSQL normal/race
 suites, 848 web tests, main/tag CI, both smoke CNIs, independent signed-image/SPDX/provenance verification
 and actual-published strict-runtime browser/MCP-quota checks passed. Owner-mobile contrast remains an axe
-incomplete; there is no whole-product accessibility claim. Failover is separate and #33 stays open. Resume with [agent-handoff.md](agent-handoff.md) and inspect current
-Git/CI rather than assuming an active implementation patch or candidate tag is already released.
-The separate **v0.8.0 failover candidate** now passed four complete mandatory-PostgreSQL normal/race suites
-in actual role modes (3,440s), all853 web tests and final deployment/advisory gates, actual source browser/
-secondary-JWT/quota/health checks and previous-image schema47 compatibility. Follow [status](status.md) to
-finish main/tag CI and independently verified publication/runtime before closing #33 or starting #35.
-There are 26 open issues: 18 feature/operations/design and eight real-world verification issues.
+incomplete; there is no whole-product accessibility claim. The separate **v0.8.0 failover stage is now shipped,
+independently verified and #33 closed**. Four complete mandatory-PostgreSQL normal/race suites in actual role
+modes (3,440s), all853 web tests/deployment/advisories, source/published browser/secondary-JWT/quota/health,
+previous-image schema47 compatibility, main/tag CI, both CNIs and signed native publication/independent
+artifact/runtime checks passed. Published mobile/dialog axe incompletes remain. See [status](status.md),
+[release notes](releases/v0.8.0.md) and [acceptance](https://github.com/ncecere/open-mcp-portal/issues/33#issuecomment-6499585660).
+Finish the current evidence/image-pin follow-up checks, then confirm #35's extension specification before
+implementation. Inspect current Git/CI rather than resuming an old feature branch.
+There are 25 open issues: 17 feature/operations/design and eight real-world verification issues.
 The owner authorized ready pre-1.0 releases; v1.0.0 remains their explicit decision. Follow the order below
 without closing evidence-gated issues on fixture results or claiming unfinished branch work is released.
 
@@ -56,7 +58,7 @@ security boundary before building on it; do not start every large issue at once.
 | 3, shipped v0.4.0 | **#30** per-gateway curation | Keep approved definitions immutable; validate merged arguments and stale fingerprints before approval digests depend on them. |
 | 4, shipped v0.5.0 | **#31** sensitive-call approvals | Needs #28 and #30; bind approval to the merged arguments, definition, origin and requester, atomically single-use. |
 | 2–4, shipped | **#26** v0.4.0; **#32** access requests v0.6.0 | Shared connections, private grant requests/decisions and expiry are validated lifecycle foundations. Preserve scoped refresh and final transport/approval deadline guards. |
-| 5, first stage shipped v0.7.0 | **#33** upstream protection | Quotas/concurrency/read retries/breaker are verified. Failover has a locally validated v0.8.0 candidate; finish CI/publication/runtime verification before closing the parent. Independent origin binding and primary-only exact approvals remain mandatory. |
+| 5, shipped v0.7.0/v0.8.0 | **#33** upstream protection/failover | Both stages are published/verified and the parent is closed. Keep independent origin-bound credentials, fresh actual-URL identity/authority and primary-only exact approvals. |
 | 6 | **#35** tasks extension | Confirm the extension specification before design/code; carry approvals and access checks into every task operation. |
 | 2, shipped v0.4.0 | **#44** split database roles | Independent security foundation. Preserve append-only retention through narrowly privileged definer functions; test runtime-role denial and normal operations. |
 | 3, operations lane | **#43** upgrade/ingress/OIDC/restore/load gates; **#41** envelope encryption | #43 builds on #44. #41 also follows #44; select/test an actual KMS target without changing existing static-key installs by default. |

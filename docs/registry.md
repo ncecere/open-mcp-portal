@@ -99,9 +99,9 @@ Every part is sealed on its own (AAD `mcp_server_credential:<id>`; a Basic passw
 
 Creating a server runs discovery straight away. The server is created even if discovery fails; in that case `refreshError` and `lastRefreshError` say why. Changing the primary URL or its header deletes the stored primary health checks (additional-endpoint history stays identified separately). Changing the URL of a published server under `approval_required` sends it back to `pending` (audited as `mcp_server.publish_request` with reason `url_changed`): it leaves the catalog until a platform admin reviews the new endpoint. Under `self_publish` it stays published. A URL on another **origin** (scheme, host or port) never keeps a stored credential value (of the header, or of any part): `422 auth_value_required` unless the same request sends a new value for every part (or a new `authValue`), or removes the credential (in `oauth` mode it resets every connection and sends the server back to the setup sign-in); the audit entry has `oldOrigin` and `newOrigin`. Any URL change also clears `refreshedAt` and reads the capabilities again from the new endpoint at once (a failure is stored as `lastRefreshError`); a platform admin can't approve a server whose capabilities haven't been read from its current URL (`409 not_refreshed`). Switching a published server to `oauth`, another authorization server, or a scope not asked for before also sends it back (reason `upstream_auth_changed`); narrowing scopes, changing the client or leaving `oauth` doesn't.
 
-## Additional replicas (v0.8.0 candidate)
+## Additional replicas (v0.8.0)
 
-**Candidate, not yet published; final validation is pending.** [Decision85/upstream-failover](upstream-failover.md)
+**Shipped and independently verified in v0.8.0; #33 closed.** [Decision85/upstream-failover](upstream-failover.md)
 adds `endpoints` to owner/admin session-only create/update and Settings. The primary remains `url`; at most
 **two ordered extras** each have a stable UUID, URL, enabled flag and independently entered credential parts.
 Omission retains them; `[]` clears them. Null lists/elements/optional fields are refused rather than interpreted
@@ -134,7 +134,7 @@ including a capability-mismatch failure. Manual identity uses the actual URL; sc
 identity. Primary health/protocol/catalog remains canonical and drives scheduler recency. Endpoint deletion/
 reorder does not relabel old checks; history retains original identity/position and pruning is per endpoint.
 Drain all older serving/workers before relying on the policy: old-image schema47 compatibility is not endpoint
-routing/review/rotation/health enforcement. See the [candidate upgrade notes](releases/v0.8.0.md).
+routing/review/rotation/health enforcement. See the [upgrade notes](releases/v0.8.0.md).
 
 ## Discovery and change detection
 

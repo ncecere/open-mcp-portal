@@ -61,7 +61,7 @@ once per forwarding iteration before negotiation/transport, not for health/disco
 exchange. A server's `rateLimitPerMinute` overrides its owning team, then platform default, always ceiling-
 capped; admin capped counts include servers. `maxConcurrent` has no queue or distributed-lease guarantee.
 
-The **v0.8.0 failover candidate** ([decision85](upstream-failover.md), not yet published) keeps that same
+The **v0.8.0 failover stage** ([decision85](upstream-failover.md), shipped and verified) keeps that same
 server bucket/lease/breaker and original timeout across primary plus at most two ordered extras: three total
 forwarding iterations, not three per destination. Each iteration charges once before its own admission and
 fallback definition discovery, not again for individual discovery/transport exchanges. Standalone health/

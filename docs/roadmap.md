@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **2026-10-29.** v0.7.0 is published and verified; #33's first stage shipped and failover remains open. #32 is closed. This is an order of work, not a schedule, for one maintainer. Every item below is an
+Status: **2026-10-29.** v0.8.0 is published and independently verified; #32 and #33 are closed. Finish the evidence/image-pin follow-up, then confirm #35's tasks-extension specification before design/code. This is an order of work, not a schedule, for one maintainer. Every item below is an
 issue with its implementation plan (data model, API, packages to change, tests, acceptance criteria, open questions):
 [all roadmap issues](https://github.com/ncecere/open-mcp-portal/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap), grouped by
 [milestone](https://github.com/ncecere/open-mcp-portal/milestones). Sizes are relative effort: **S** a few days, **M** a week or two, **L** several weeks. Each item that needs a
@@ -38,7 +38,8 @@ Decided out of scope:
 | [v0.5.0](releases/v0.5.0.md) | 2026-10-28 | Sensitive-call approval rules, private human review, exact merged-argument binding and single-use dispatch; private notices/attention, sealed preview and binding-key rotation. |
 | [v0.5.1](releases/v0.5.1.md) | 2026-10-28 | Provider-refresh reliability under constrained runtime pools; scoped dependency reads, fail-closed address-policy checks and bounded cancellation/drain. No schema/API change. |
 | [v0.6.0](releases/v0.6.0.md) | 2026-10-29 | Opt-in gateway access requests, narrowly delegated human stewardship, private queues/notices, atomic user/team grants and optional expiry. |
-| [v0.7.0](releases/v0.7.0.md) | 2026-10-29 | Shared server quotas, replica-local concurrency, bounded trusted-read retries and circuit breaking. Failover is separate; #33 stays open. |
+| [v0.7.0](releases/v0.7.0.md) | 2026-10-29 | Shared server quotas, replica-local concurrency, bounded trusted-read retries and circuit breaking. The first #33 stage. |
+| [v0.8.0](releases/v0.8.0.md) | 2026-10-29 | Ordered endpoint failover with independently entered origin-bound static credentials, actual-URL identity/definition parity, primary-only exact approvals and endpoint-aware review/health/rotation. #33 is closed. |
 
 Proven on a real deployment (one Talos cluster, Authentik sign-in, CloudNativePG with continuous archiving and daily backups, a restore tested twice):
 Claude Code over OAuth and an API key on the 2026-07-28 revision; per-person OAuth to GitHub's hosted MCP server; DeepWiki through a gateway.
@@ -55,7 +56,7 @@ with independent review corrections, full-tree tests, browser checks and CI/depl
 planning buckets, not a promise of release numbering. #31 approvals shipped in v0.5.0 under decision 82.
 The v0.5.1 reliability follow-up is published and verified. Development resumed after the machine transfer;
 #32 shipped in verified v0.6.0 and is closed. #33 quota/concurrency/read-retry/breaker work shipped and is
-verified in v0.7.0; failover follows separately and the parent stays open. The owner authorized ready pre-1.0 releases but reserves the
+verified in v0.7.0; separate failover shipped in verified v0.8.0 and the parent is closed. The owner authorized ready pre-1.0 releases but reserves the
 v1.0.0 decision. A new agent should read [agent-handoff.md](agent-handoff.md) and current [status](status.md).
 
 1. **Verify and pilot alongside implementation.** Decisions #5, #6 and #7 shipped in v0.2.2. The
@@ -65,8 +66,9 @@ v1.0.0 decision. A new agent should read [agent-handoff.md](agent-handoff.md) an
    connections. External-platform impersonation was retired in #68, not extended or verified.
 3. **Governance foundations shipped.** #31 exact-call approvals shipped in v0.5.0,
    with defaults recorded in decision 82; #32 access requests shipped in v0.6.0 under decision83.
-   #33 quota/concurrency/read-retry/breaker work shipped in v0.7.0; separate failover is next. Keep trusted
-   classification, current authority/deadlines and the ban on replaying spent approvals.
+   #33 quota/concurrency/read-retry/breaker shipped in v0.7.0; separate origin-isolated failover shipped in
+   verified v0.8.0 and #33 is closed. Next confirm #35's extension specification. Keep trusted classification,
+   current authority/deadlines, independent endpoint credentials and the ban on replaying spent approvals.
 4. **Operations before scale.** #44 database roles shipped; next prove upgrades, ingress and restores (#43)
    before releasing the Helm chart (#42). See the implementation order for staged lifecycle/audit dependencies.
 
@@ -113,8 +115,8 @@ Making "all MCP servers" true, then governing what runs. Milestone: [v0.3](https
 
 - **Wave 1, shipped in v0.3.1:** #27 (provider access and narrower tokens), #34 (tracing/observability), and #23 (credential parts and multi-secret redaction).
 - **Wave 2, shipped:** #22, #24 and #25 in v0.3.2; #26 in v0.4.0.
-- **Wave 3, tool policy shipped:** #28 in v0.3.3; #29/#30 in v0.4.0; #31 exact-call approvals in v0.5.0. Independent #32 access requests shipped in v0.6.0; #33 is next.
-- **Wave 4:** #33 (retries of reads need classification; failover is the contentious part and may become its own issue) and #35 last, once its shape is confirmed against the specification and approvals exist.
+- **Wave 3, tool policy shipped:** #28 in v0.3.3; #29/#30 in v0.4.0; #31 exact-call approvals in v0.5.0. Independent #32 access requests shipped in v0.6.0; #33 followed in v0.7.0/v0.8.0.
+- **Wave 4:** #33 shipped/closed in v0.7.0/v0.8.0 (protection then separate origin-isolated failover). #35 is next, only once its extension shape is confirmed against the specification; approvals/access checks remain mandatory.
 - **Historical additive/expand-only candidates** (not a current open-issue list): #34, #27, #23, #25, #32, #28.
 
 | Issue | Item | Size | What it does, and why | Depends on |
@@ -133,7 +135,7 @@ Making "all MCP servers" true, then governing what runs. Milestone: [v0.3](https
 | [#30](https://github.com/ncecere/open-mcp-portal/issues/30) | ~~Constrain, rename and re-describe tools per gateway~~ **done in v0.4.0** | L | Per gateway tool, let owners fix or restrict argument values (pin GitHub's `owner`), show the model a narrowed schema, rename the tool and rewrite its description. Curation is stored beside the approved definition, never replaces it, and fails closed when the upstream definition changes. | decision 49 |
 | [#31](https://github.com/ncecere/open-mcp-portal/issues/31) | ~~Require approval before sensitive tool calls~~ **done in v0.5.0** | L | Add rules (for example 'destructive tools need approval') that stop a call and return a multi-round-trip result with an approval link. Named approvers approve in the portal; the person retries. Approvals are bound to the arguments and the definition, expire, are single use and audited, and the requester can never approve their own call. | #28, decision 48, decision 52, decision 59 |
 | [#32](https://github.com/ncecere/open-mcp-portal/issues/32) | ~~Let people request access to a gateway and owners approve it~~ **done in v0.6.0** | M | Let a signed-in person ask for access to a platform gateway that its owner has made requestable, with a reason. Approvers decide in the portal and approval creates the normal gateway grant, optionally with an expiry. Gateways stay invisible to people who cannot use them unless an owner opts in. | decision 17, decision 23 |
-| [#33](https://github.com/ncecere/open-mcp-portal/issues/33) | Add per-server quotas, concurrency caps, retries, a circuit breaker and failover | L | Protect upstream servers and callers: a quota and a concurrency cap per server, retries only for reads that cannot have run, a circuit breaker, and several upstream URLs per server with failover. Failover is limited to auth modes where a second origin cannot receive a credential nobody entered for it. | #28, decision 31 |
+| [#33](https://github.com/ncecere/open-mcp-portal/issues/33) | ~~Add per-server quotas, concurrency caps, retries, a circuit breaker and failover~~ **done in v0.7.0/v0.8.0** | L | Protect upstream servers and callers: a quota and a concurrency cap per server, retries only for reads that cannot have run, a circuit breaker, and several upstream URLs per server with failover. Failover is limited to auth modes where a second origin cannot receive a credential nobody entered for it. | #28, decision 31 |
 | [#34](https://github.com/ncecere/open-mcp-portal/issues/34) | ~~Add OpenTelemetry tracing, Grafana dashboards and Prometheus alert rules~~ **done in v0.3.1** | M | Trace each `/mcp/{slug}` request through authentication, credential lookup and the upstream call, join traces with the `traceparent` passthrough that exists, and ship Grafana dashboards and Prometheus alert rules for the existing `omp_*` metrics, validated in CI. | decision 35 |
 | [#35](https://github.com/ncecere/open-mcp-portal/issues/35) | Support the io.modelcontextprotocol/tasks extension for long-running tools | L | Relay the 2026-07-28 tasks extension through gateways: when an upstream returns a task handle, the portal gives the client its own handle bound to the person who started it, and `tasks/get`, `tasks/update` and `tasks/cancel` re-run every access check before reaching the upstream. The extension's exact shape must be confirmed against its specification before design. | decision 51 |
 

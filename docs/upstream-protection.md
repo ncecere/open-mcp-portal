@@ -1,9 +1,9 @@
 # Upstream protection (#33)
 
-Status: **quota/concurrency/read-retry/breaker stage shipped and verified in v0.7.0; failover remains open**. Decision84. This is the next ordered boundary after verified
+Status: **quota/concurrency/read-retry/breaker shipped/verified v0.7.0; separate failover shipped/verified v0.8.0 and #33 closed**. Decision84. This is the next ordered boundary after verified
 v0.6.0/#32. The issue was drafted against v0.2.1: its migration29 and credential-mode assumptions are not
 current instructions. Quotas, concurrency, read retries and circuit breaking ship before failover. **#33
-stays open until the separate failover acceptance criteria are met.**
+stayed open until the separate failover acceptance criteria passed in v0.8.0; see [failover](upstream-failover.md).**
 
 ## Policy and defaults
 
@@ -90,8 +90,8 @@ not on an exactly-once claim about the remote server. A misclassified read can s
 
 ## Failover is a separate change
 
-No multiple endpoints or failover is claimed in this stage. Before implementing it, account for **all current
-modes**, not just the old issue's OAuth/static-header pair: multipart header/bearer/basic/query credentials,
+No multiple endpoints or failover was part of the v0.7.0 stage. The separate verified [v0.8.0
+stage](upstream-failover.md) accounts for **all current modes**, not just the old issue's OAuth/static-header pair: multipart header/bearer/basic/query credentials,
 each person's own secret, personal/shared/linked provider grants, upstream OAuth, client credentials and
 mTLS/private CAs. Unsupported modes must refuse extra endpoints explicitly, never fall back to forwarding
 an existing credential elsewhere. A newly trusted origin requires credential re-entry and review; the

@@ -194,13 +194,14 @@ encrypted at rest, refreshed by the portal. See [docs/phase5-delegated-credentia
    Kubernetes manifests are done ([docs/deploy.md](docs/deploy.md)). #33/decision84 adds per-server forwarded-
    attempt quotas, replica-local concurrency/breakers and bounded trusted-read retries, **shipped and verified in
    v0.7.0**; [upstream protection](docs/upstream-protection.md) specifies authorization/spend ordering,
-   rollout and per-server accounting. The separate #33/decision85 **v0.8.0 candidate** adds up to two ordered
+   rollout and per-server accounting. The separate #33/decision85 **verified v0.8.0 release** adds up to two ordered
    endpoint replicas with independently entered origin-bound static credentials, actual-URL identity and exact
    offered-definition parity. One original deadline/three total iterations; governed/NoReplay remains primary-
    only and ordinary writes switch only on positive unsent dial/handshake proof. No provider/OAuth/person/
    machine/TLS configuration may opt into extras. Owner/admin session-only settings participate in review,
-   audit, health identity and key rotation. [Failover](docs/upstream-failover.md) records the boundary; final
-   candidate validation/publication is pending, not acceptance.
+   audit, health identity and key rotation. [Failover](docs/upstream-failover.md) records the shipped boundary;
+   #33 is closed after full local/CI/artifact/actual-runtime verification, with retained caveats in
+   [status](docs/status.md).
 7. **Upstream OAuth** — *Designed* (decisions 39–44): [docs/phase7-upstream-oauth.md](docs/phase7-upstream-oauth.md);
    contract in `api/openapi.yaml` (`McpServer.authMode`/`oauth`, `detectTeamMcpServerAuth`, `authorizeTeamMcpServerSetup`,
    `ProviderRef.kind`/`server`). The portal acts as an MCP client to servers that are OAuth resource servers themselves

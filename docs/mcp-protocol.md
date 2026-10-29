@@ -215,8 +215,8 @@ canonical capabilities or owner classification. The target contains only that en
 with freshly signed full-URL audience and endpoint-specific Authorization placement. Era/session caches are
 server-and-URL-aware and each exchange/dial repeats the current address guard. Extra manual/scheduled health
 checks record stable historical endpoint UUID/position but do not replace canonical primary status/protocol.
-Drain older serving/workers before relying on endpoint policy. Local validation passed; consult [status](status.md)
-for main/tag/publication verification rather than inferring a release from this source document.
+Drain older serving/workers before relying on endpoint policy. v0.8.0 is published and independently
+verified; consult [status](status.md) for main/tag/publication/runtime evidence and retained caveats.
 
 ### Era negotiation
 

@@ -1,9 +1,9 @@
 # Status and handoff
 
-Last updated: 2026-10-29. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.7.0 published and verified; #33 quotas/concurrency/read retries/breaker shipped, failover remains open**. The owner resumed ordered backlog development and authorized pre-1.0 releases; **v1.0.0 remains the owner's explicit decision**. #33 remains open for its separate failover stage. The v0.6.0 publication-evidence/image-pin follow-up passed its final checks. A fresh agent should read [agent-handoff.md](agent-handoff.md).
-(release notes: [releases/v0.7.0.md](releases/v0.7.0.md); earlier: [v0.6.0](releases/v0.6.0.md), [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+Last updated: 2026-10-29. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.8.0 published and verified; #33 upstream protection/failover is closed**. The owner resumed ordered backlog development and authorized pre-1.0 releases; **v1.0.0 remains the owner's explicit decision**. #32 and #33 are closed with release evidence. The current v0.8.0 evidence/image-pin follow-up is being checked; finish it before starting #35's specification-confirmation boundary. A fresh agent should read [agent-handoff.md](agent-handoff.md).
+(release notes: [releases/v0.8.0.md](releases/v0.8.0.md); earlier: [v0.7.0](releases/v0.7.0.md), [v0.6.0](releases/v0.6.0.md), [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
-## v0.8.0 release candidate: remaining #33 failover stage
+## v0.8.0 (2026-10-29): separate #33 failover stage, shipped and closed
 
 Decision85 and [upstream-failover.md](upstream-failover.md) record the conservative design before routing code:
 canonical primary plus two extras, independent origin-bound static credentials, explicit unsupported-mode/
@@ -11,7 +11,7 @@ provider/TLS refusals and primary-only governed/NoReplay calls. A different orig
 approval. The total attempt/deadline budget, current authority/quota, actual-URL identity audiences and
 fallback definition parity remain mandatory.
 
-The development branch now wires draft contracts, revision-checked owner-only endpoint mutations, sealed
+The shipped implementation includes generated contracts, revision-checked owner/admin-only endpoint mutations, sealed
 origin/server/endpoint-bound credentials, endpoint-aware review/audit/health, guarded routing with trusted
 definition parity and fresh actual-URL identities. Focused real-HTTP races passed in both protocol eras and
 both genuine database role modes: read503 fallback, independent credentials/audiences, proven unsent dial/TLS
@@ -20,7 +20,7 @@ and a spent approval remaining primary-only. Foundation store/rotation/registry 
 The historical relocation42 test now isolates its exact-preservation assertion at schema42 and separately
 asserts latest-migration invalidation without changing the root/history.
 
-The source is now a **v0.8.0 candidate, not published**. Focused endpoint UI/type/styling/size checks passed.
+The source/tag is **v0.8.0, published and verified**. Focused endpoint UI/type/styling/size checks passed.
 The initial full 853-test web/deployment/advisory gate passed; real Chromium then exposed a narrow-screen
 health Card/table-scroll region sharing the same accessible name. The product Card was renamed and a
 retained regression distinguishes the names. The corrected actual browser run passed on schema47 with a
@@ -51,16 +51,40 @@ per-package budget. The normal `make test` target now uses that same budget, rem
 assertions. No runtime/generated SQL/API code changed after the fully validated snapshot. Final versioned-
 tree endpoint/relocation/contract races in both role modes plus lint/build/Python checks also passed in103s.
 
-**Local release-candidate gates are complete; main/tag CI and publication/independent artifact/runtime
-verification remain required.** No v0.8.0 tag/image has been published yet. Migration47 has been applied only
-to owned disposable databases and must not be edited. #33 remains open until final release evidence passes.
+**All release gates passed; [#33 is closed](https://github.com/ncecere/open-mcp-portal/issues/33#issuecomment-6499585660).**
+
+- Immutable source/tag: `c36ed3c6bbb8765004d243d1fc0bb37a8f80d106`.
+- Verified image: `ghcr.io/ncecere/open-mcp-portal@sha256:f73129a94cfdc8cc2badc6b2f1e21b74bd0bbc1fd6144afbb50f1986c592c960`.
+- [Main CI40884371482](https://github.com/ncecere/open-mcp-portal/actions/runs/40884371482) and
+  [tag CI40888211908](https://github.com/ncecere/open-mcp-portal/actions/runs/40888211908): all seven jobs passed.
+- [kindnet/Calico smoke40884371510](https://github.com/ncecere/open-mcp-portal/actions/runs/40884371510): both passed at that source.
+- [Native publication40888211919](https://github.com/ncecere/open-mcp-portal/actions/runs/40888211919): native
+  amd64/arm64 builds/scans/runtime checks, index publication/signing and release passed; published14:10:49Z.
+- Independent verification passed in19s: immutable source/registry tag/digest, exactly two architectures,
+  strict tag-specific OIDC workflow identity/issuer/source SHA/transparency proof, checksums, canonical SPDX
+  assets against registry attestations, both SLSAv1 source/ref/version/build claims and read-only UID65532/
+  network-none `open-mcp-portal 0.8.0 (c36ed3c6bbb8)`. Prior v0.7.0/v0.6.0/v0.5.1 tags remain unchanged.
+- The actual published digest passed schema47 doctor/health/readiness and Chromium156 smoke in9s as
+  read-only UID65532, authenticated restricted runtime, no owner/migration URL or mounts. It opened an owned
+  pre-publication endpoint envelope and passed the full UI/review/keyboard/health/secondary-JWT/quota flow
+  described above. Six published desktop/390px states had zero axe violations/overflow. **Published owner-
+  mobile and health-mobile contrast, and review-dialog aria-hidden-focus/contrast remain incompletes**.
+  The source final owner-mobile result had no incomplete; these are distinct results, not a global sign-off.
+
+The example image pin now uses the verified digest. This publication-evidence/pin follow-up's applicable
+local/main-CI/both-CNI checks are still pending; it does not move or recreate the immutable source tag.
+Migration47 is applied/frozen: any DDL correction needs a new migration. All owned source/published/fake/
+browser fixtures were stopped and their labeled tmpfs PostgreSQL destroyed before removing matching keys/
+config; existing development services, databases and keys were untouched. No implicit encrypted-state
+restore, production deployment, real-client/provider/channel/pilot, natural-expiry/load soak or independent
+whole-product security/accessibility acceptance is claimed.
 
 ## v0.7.0 (2026-10-29): first #33 upstream-protection stage
 
 Decision84 and [upstream-protection.md](upstream-protection.md) specify the staged scope. Per-server shared
 quotas, per-replica concurrency, bounded safe-read retries and circuit breaking are **published and verified**
 in [v0.7.0](releases/v0.7.0.md). Migration46 is new and expand-only. Failover
-was not part of that release; the separate candidate above remains unaccepted and the parent issue open.
+was not part of that release; the parent stayed open until the separate verified v0.8.0 stage above.
 
 Focused mandatory-PostgreSQL race tests passed in both actual role modes, including owner/token boundaries,
 ceilings/audit, a quota shared across gateways/replicas, an approval left unspent by quota refusal and read
@@ -83,7 +107,7 @@ After the mechanical v0.7.0 version change, regenerated/freshness checks, both-r
 races/advisory checks (88 seconds) and the complete 848-test web/build/deployment gate (524 seconds) passed
 again. Production logic matches the four-suite validated snapshot apart from version metadata.
 [First-stage acceptance](https://github.com/ncecere/open-mcp-portal/issues/33#issuecomment-6493836494) records the
-evidence: the first three acceptance criteria are checked, failover remains unchecked and #33 stays open.
+first-stage evidence: the first three criteria were checked; failover stayed unchecked and #33 open until v0.8.0.
 Immutable source/tag: `289b5aedad462a1ae37ea3de9a82987eca6829b1`,
 [published release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.7.0).
 Verified image: `ghcr.io/ncecere/open-mcp-portal@sha256:a377ef8d7b8303780eb1ffbd1b11a0358954532c771705dc3e56d94650cc3ed6`.
@@ -112,8 +136,9 @@ The evidence/image-pin follow-up `b22081e9270f002f788b92a385c0f68b041177c2` pass
 [main CI jobs](https://github.com/ncecere/open-mcp-portal/actions/runs/40855403928) and both
 [smoke CNIs](https://github.com/ncecere/open-mcp-portal/actions/runs/40855403905). These are separate from
 the immutable source checks above; [final confirmation](https://github.com/ncecere/open-mcp-portal/issues/33#issuecomment-6494386547)
-records completion. **#33 stays open for failover.** There are still 26 open issues (18 feature/operations/design,
-eight real-world verification); v1.0.0 has not been cut.
+records that follow-up's completion. **At v0.7.0, #33 remained open for failover** with 26 open issues
+(18 feature/operations/design, eight real-world verification); v0.8.0 above subsequently closed it. v1.0.0
+has not been cut.
 
 ## v0.6.0 (2026-10-29): gateway access requests
 
@@ -148,7 +173,8 @@ The publication-evidence/image-pin follow-up `be9719831e787514ca611745258bacfa65
 [main CI](https://github.com/ncecere/open-mcp-portal/actions/runs/40827746482) and both
 [smoke CNIs](https://github.com/ncecere/open-mcp-portal/actions/runs/40827746404); these are separate from
 the already-green immutable release-source checks. #33 and the remaining ordered backlog are not implemented by #32.
-There are **26 open issues: 18 feature/operations/design and eight real-world verification**. v1.0.0 is not cut.
+At v0.6.0 there were **26 open issues: 18 feature/operations/design and eight real-world verification**;
+v0.8.0 subsequently closed #33. v1.0.0 is not cut.
 
 ### Fresh-machine implementation and local verification
 
@@ -705,19 +731,19 @@ server allow-list).
 
 - Clone `git@github.com:ncecere/open-mcp-portal.git`, check out `main` and fetch tags. All required source,
   migrations, generated code and release/handoff documentation are on the remote; no local patch is needed.
-  The immutable shipped source is `v0.7.0`; main also records publication evidence and the verified image pin.
+  The immutable shipped source is `v0.8.0`; main also records publication evidence and the verified image pin.
 - Read this release section, `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md) and
-  [implementation order](implementation-order.md). #33's first stage shipped in v0.7.0; next is its separate failover stage;
-  do not resume old #31 implementation branches.
+  [implementation order](implementation-order.md). #33 shipped in v0.7.0/v0.8.0 and is closed; after the
+  evidence/image-pin follow-up, confirm #35's specification before design/code. Do not resume old feature branches.
 - Install Go 1.26.10+, Node 22+, Docker, Python 3 and sqlc 1.31.1; run `npm ci` in `web/`.
   Use owned disposable PostgreSQL for integration tests and actual split-role verification.
 - Git does **not** transfer `.env`, encryption/signing keys, provider credentials or the existing development
   database. They were deliberately not exported or committed. Use a fresh development instance, or securely
   transfer a consistent database backup and its required keys separately under explicit operator control.
   Do not regenerate encryption keys for an existing database or migrate/reset the old instance implicitly.
-- Development resumed on 2026-10-29 under owner authorization. There are 26 open issues (18 feature/operations/design,
-  eight real-world verification). #32 is shipped/closed in verified v0.6.0; inspect Git, final follow-up CI
-  and the current release section before continuing #33. v1.0.0 requires the owner's explicit decision.
+- Development resumed on 2026-10-29 under owner authorization. There are 25 open issues (17 feature/operations/design,
+  eight real-world verification). #32 shipped in v0.6.0 and #33 in v0.7.0/v0.8.0; both are closed. Inspect
+  current Git/follow-up CI before continuing #35. v1.0.0 requires the owner's explicit decision.
 
 For a **new** development instance, use [development setup](../CONTRIBUTING.md#development-setup), not a
 blind restart/seed of an existing one. The historical dev-database migration helper remains
@@ -735,8 +761,9 @@ blind restart/seed of an existing one. The historical dev-database migration hel
    Use the new binary's rotation utility for the new ciphertext columns. Keep production autovacuum enabled;
    governed transitions intentionally fail closed during conflicting writes/reads/maintenance.
 3. **v0.6.0/#32 is published, verified and closed**, including follow-up checks. The first #33 stage is
-   published and verified in v0.7.0, including follow-up checks; continue separate failover and
-   the ordered operations/lifecycle/audit lanes in
+   published and verified in v0.7.0; its separate failover shipped in verified v0.8.0 and #33 is closed.
+   Finish the current evidence/pin follow-up, then confirm #35's extension specification before design/code.
+   Continue the ordered operations/lifecycle/audit lanes in
    [implementation order](implementation-order.md). #43 must prove upgrades, ingress, restore and load before
    Helm packaging; existing kindnet/Calico smoke does not establish those broader requirements.
 4. Keep #13–#20's real review/client/provider/channel/pilot evidence separate. VS Code planning and fake OAuth

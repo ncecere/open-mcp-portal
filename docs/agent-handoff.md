@@ -1,21 +1,25 @@
-# Agent handoff: verified v0.7.0, next #33 failover
+# Agent handoff: verified v0.8.0, next #35 specification boundary
 
 The original stop point was the verified v0.5.1 machine transfer. On 2026-10-29 the owner resumed ordered
 backlog work, authorized releases when ready and delegated incidental decisions. **Do not cut v1.0.0 without
 the owner's explicit decision.** #33's quota/concurrency/read-retry/breaker stage shipped and is verified
-in v0.7.0; the parent remains open for separate failover. #32 shipped in v0.6.0 and is closed. See
+in v0.7.0; separate failover shipped in verified v0.8.0 and #33 is closed. #32 shipped in v0.6.0 and is closed. See
 [upstream protection](upstream-protection.md) and [status](status.md) for scope and verification.
 The original release tags remain immutable. No old environment, keys or data were transferred implicitly. Use owned fresh fixtures;
 secure restoration of an existing encrypted database still requires its matching keys and operator control.
 
 [Status](status.md) is the source of truth for release SHAs, image digests, CI evidence and remaining blockers.
 
-The separate **v0.8.0 failover candidate** now passed local acceptance: four complete mandatory-PostgreSQL
-normal/race suites in both actual role modes (3,440s), all 853 web tests and final deployment/advisory gates,
-actual source browser/secondary-audience/quota checks and the actual previous v0.7.0 image on schema47.
-See [failover](upstream-failover.md) and [candidate notes](releases/v0.8.0.md). Publication is not implied:
-main/tag CI, signed images, independent artifacts and actual published runtime remain required. Inspect the
-active branch/worktree instead of restarting implementation or moving/reusing a tag; #33 remains open.
+The separate **v0.8.0 failover release is published and independently verified**: four complete mandatory-
+PostgreSQL normal/race suites in both actual role modes (3,440s), all 853 web tests/deployment/advisories,
+actual source/published browser/secondary-audience/quota checks and previous-v0.7.0/schema47 compatibility.
+Main/tag CI, both CNI smokes, signed native images and independent signature/SPDX/provenance/checksum/
+runtime verification passed at immutable source `c36ed3c6bbb8765004d243d1fc0bb37a8f80d106` and digest
+`f73129a94cfdc8cc2badc6b2f1e21b74bd0bbc1fd6144afbb50f1986c592c960`. See [failover](upstream-failover.md),
+[release notes](releases/v0.8.0.md) and [acceptance](https://github.com/ncecere/open-mcp-portal/issues/33#issuecomment-6499585660).
+Keep published owner-mobile/health-mobile contrast and review-dialog aria-hidden-focus/contrast incompletes
+explicit; they are not whole-product accessibility acceptance. Finish the evidence/image-pin follow-up's
+checks, then confirm #35's extension specification before design/code. Never move/reuse an existing tag.
 
 ## Start here
 
@@ -24,10 +28,10 @@ active branch/worktree instead of restarting implementation or moving/reusing a 
    any active work before changing branches; do not discard an in-progress patch.
 2. Read `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md), [status](status.md) and
    [implementation order](implementation-order.md). Verify the v0.7.0 evidence/image-pin follow-up checks
-   against the already-green immutable release-source CI. Continue **#33 failover separately** after its
-   credential-origin design: inventory/refuse every current auth mode, require re-entry/review for a new
-   origin, actual-endpoint identity audiences and origin-aware cache. Do not close #33 before those criteria
-   are actually met.
+   against the already-green immutable release-source CI, then inspect the v0.8.0 evidence/image-pin follow-
+   up's current checks. #33 is complete/closed; next confirm **#35's tasks-extension specification** before
+   design/code, preserving approvals and access checks on every task operation. Do not restart old failover
+   implementation or treat fixture results as real-client/provider/pilot evidence.
 3. Git transfers source, migrations, generated contracts, tests and docs—not `.env`, encryption/signing keys,
    provider credentials or the existing development database. Use the documented fresh-instance setup or
    explicitly arrange a secure, consistent database-and-keys transfer. Never reset/reseed the old database,
@@ -51,7 +55,14 @@ active branch/worktree instead of restarting implementation or moving/reusing a 
   decision84/migration46. Full local normal/race suites in both actual role modes, 848 web tests, main/tag CI,
   both smoke CNIs, independent signature/SPDX/provenance/checksum/runtime verification and actual-published
   strict-runtime browser/MCP quota checks passed. Owner-mobile contrast remains an axe incomplete. No failover,
-  production deployment, broad soak or real-client/provider/pilot acceptance is implied; #33 stays open.
+  production deployment, broad soak or real-client/provider/pilot acceptance is implied; #33 remained open until v0.8.0.
+
+- v0.8.0: #33 ordered endpoint failover with independent origin-bound sealed static credentials, actual-URL
+  identity/definition parity, owner-only review/audit controls and endpoint-aware health/history/rotation;
+  decision85/migration47. Full local/CI/native publication/independent artifacts and actual published strict-
+  runtime smoke passed. Governed/NoReplay remains primary-only; all older serving/workers must drain before
+  relying on endpoint policy. No source/published/browser/data fixture remains live; matching keys/config were
+  removed only after destroying the owned database. Existing development state was untouched.
 
 See the release sections in [status](status.md) for actual publication/verification rather than interpreting
 this list or a local version string as evidence. Release tags are immutable. Main may contain unreleased
@@ -111,7 +122,7 @@ backlog work as well as publication evidence and the verified example image dige
 
 ## What remains separate
 
-There are 26 open issues after #32: 18 feature/operations/design and eight real-world verification issues.
+There are 25 open issues after #32/#33: 17 feature/operations/design and eight real-world verification issues.
 #13–#20 still require actual independent review/client/provider/channel/pilot evidence. Fake OAuth/MCP fixtures
 and agent reviews do not close those. Broader load, restore/ingress/OIDC deployment validation, wall-clock
 refresh/expiry and whole-product accessibility acceptance remain separate; no production deployment is implied.
