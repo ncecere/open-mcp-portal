@@ -8,7 +8,8 @@ breaking changes; the entry says how to adapt.
 
 ## Unreleased
 
-- **In-development task-relay foundations (#35, decision86), not enabled task support.** Confirm released wire shapes, opaque bound handles, sealed state and bounded lifetime; add non-spending policy checks and expand-only task storage/rotation and revision-fence primitives. Negotiation, live-authorized relay/input lifecycle and whole-product acceptance remain unfinished. No task release version is selected.
+- **In-development task-relay foundations (#35, decision86), not enabled task support.** Confirm released wire shapes, opaque bound handles, sealed state and bounded lifetime; add non-spending policy checks and expand-only task storage/rotation and revision-fence primitives. Whole-product acceptance remains unfinished. No task release version is selected.
+- **Task-relay wiring (#35, decision86), in development and unreleased.** Modern `server/discover` advertises the released Tasks extension; a request that declares it can get an opaque portal handle for an ungoverned `tools/call` to a server whose primary advertises it (recorded as read-only `McpServer.supportsTasks`), and polls it with `tasks/get`, `tasks/update` and `tasks/cancel`, each re-authenticating and re-checking live access, the exact offer, the dependency identity and the no-approval-rule condition, with one send, no retry or failover, and the upstream ID and credentials scrubbed from every answer. New settings `TASKS_MAX_TTL` (24h) and `TASKS_MAX_OPEN_PER_PRINCIPAL` (100) are validated at startup; expired rows are pruned by the retention loop. See [docs/mcp-tasks.md](docs/mcp-tasks.md).
 
 ## [0.8.0] - 2026-10-29
 
