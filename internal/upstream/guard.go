@@ -353,13 +353,18 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if len(t.creds) > 0 || t.identity != "" || t.providerToken != "" || t.bearer != "" || len(t.params) > 0 || t.beforeTransport != nil || t.noReplay || t.forwarding {
 		req = req.Clone(req.Context())
 	}
-	toolCall, method := false, ""
+	toolCall, dispatch, method := false, false, ""
 	guarded := len(t.params) > 0 || t.beforeTransport != nil || t.noReplay
 	if guarded || t.forwarding {
 		var err error
 		getBody := req.GetBody
 		method, err = outboundMethod(req)
 		toolCall = method == MethodToolsCall
+		// A task lifecycle request is a single-dispatch operation exactly like a
+		// tool call: it can change upstream state, so it is never replayable and
+		// it consumes the exchange's one attempt. Parameter headers stay tools/call
+		// only (toolCall).
+		dispatch = toolCall || isTaskMethod(method)
 		if !guarded {
 			req.GetBody = getBody
 		} // Inspection alone must not add net/http replay authority.
@@ -393,7 +398,7 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		req.Header.Set("MCP-Gateway-Provider", t.provider)
 		req.Header.Set("MCP-Gateway-Provider-Token", t.providerToken)
 	}
-	if t.noReplay && toolCall {
+	if t.noReplay && dispatch {
 		// Do this after body inspection, which can install GetBody. A tool
 		// POST has a nonempty body: without GetBody net/http cannot replay it,
 		// even with idempotency headers. Preserve configured headers: they may
@@ -401,7 +406,7 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		req.GetBody = nil
 	}
 	if t.beforeTransport != nil {
-		if err := t.beforeTransport(req.Context(), toolCall); err != nil {
+		if err := t.beforeTransport(req.Context(), dispatch); err != nil {
 			if req.Body != nil {
 				_ = req.Body.Close()
 			}
@@ -409,7 +414,7 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}
 	if t.forwarding {
-		operation := method == MethodToolsCall || method == MethodPromptsGet || method == MethodResourcesRead
+		operation := method == MethodToolsCall || method == MethodPromptsGet || method == MethodResourcesRead || isTaskMethod(method)
 		wrote := func() {
 			if operation {
 				t.ex.mu.Lock()
@@ -441,7 +446,7 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// res.Request.URL (the SDK's errors included) can show it.
 	res.Request = orig
 	t.ex.setStatus(res.StatusCode, res.Header)
-	if t.forwarding && (method == MethodToolsCall || method == MethodPromptsGet || method == MethodResourcesRead) && strings.HasPrefix(strings.ToLower(strings.TrimSpace(res.Header.Get("Content-Type"))), "text/event-stream") {
+	if t.forwarding && (method == MethodToolsCall || method == MethodPromptsGet || method == MethodResourcesRead || isTaskMethod(method)) && strings.HasPrefix(strings.ToLower(strings.TrimSpace(res.Header.Get("Content-Type"))), "text/event-stream") {
 		t.ex.mu.Lock()
 		t.ex.streaming = true
 		t.ex.mu.Unlock()

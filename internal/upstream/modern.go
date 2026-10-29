@@ -65,9 +65,18 @@ type reply struct {
 // capabilities (only elicitation, as wide as the caller says), trace context
 // and the progress token.
 func modernMeta(version string, elicitation json.RawMessage, trace Trace, progressToken json.RawMessage) map[string]any {
+	return modernMetaExt(version, elicitation, trace, progressToken, false)
+}
+
+// modernMetaExt is modernMeta that can also declare the Tasks extension (an
+// empty object under clientCapabilities.extensions) for this request only.
+func modernMetaExt(version string, elicitation json.RawMessage, trace Trace, progressToken json.RawMessage, tasks bool) map[string]any {
 	caps := map[string]any{}
 	if len(elicitation) > 0 {
 		caps["elicitation"] = elicitation
+	}
+	if tasks {
+		caps["extensions"] = map[string]any{TasksExtension: map[string]any{}}
 	}
 	m := map[string]any{
 		metaProtocolVersion: version,

@@ -135,7 +135,8 @@ type Target struct {
 	ParamHeaders map[string]string
 	// BeforeTransport runs immediately before each outbound MCP HTTP
 	// exchange, including negotiation and session cleanup. The bool is true
-	// only for a JSON-RPC tools/call POST. An error prevents the exchange;
+	// only for a single-dispatch JSON-RPC POST: tools/call or a task lifecycle
+	// method (tasks/get, tasks/update, tasks/cancel). An error prevents the exchange;
 	// errors.Is/As on the returned error can recover its cause. It may be
 	// called concurrently by the SDK and must be safe for concurrent use.
 	BeforeTransport func(context.Context, bool) error
@@ -273,6 +274,10 @@ type Discovery struct {
 	Protocol     Protocol
 	Capabilities []Capability
 	Latency      time.Duration
+	// SupportsTasks: a MODERN server's discovery advertised the Tasks
+	// extension. A legacy server, or the extension's absence, is false. This is
+	// metadata for the gateway's negotiation decision, never an authorization.
+	SupportsTasks bool
 }
 
 // Discover connects to a server and reads its tools, resources, resource
@@ -292,6 +297,7 @@ func (c *Client) Discover(ctx context.Context, t Target) (Discovery, error) {
 	var caps *mcp.ServerCapabilities
 	if res := sess.cs.InitializeResult(); res != nil {
 		caps = res.Capabilities
+		d.SupportsTasks = proto.Era == EraModern && caps != nil && hasTasksExtension(caps.Extensions)
 		d.ProtocolVersion = clip(res.ProtocolVersion, 100)
 		if res.ServerInfo != nil {
 			d.ServerName, d.ServerVersion = clip(res.ServerInfo.Name, 200), clip(res.ServerInfo.Version, 100)

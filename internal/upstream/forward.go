@@ -77,6 +77,14 @@ type ForwardRequest struct {
 	// OnAdmitted runs once, after local admission and before networking. It
 	// lets a gateway start SSE only after initial quota/cap/breaker refusal.
 	OnAdmitted func()
+	// Tasks declares the released Tasks extension
+	// (clientCapabilities.extensions[TasksExtension] = {}) on this one modern
+	// tools/call, letting the server answer with a task. The caller sets it only
+	// after the downstream client declared the extension on ITS request and the
+	// call is ungoverned. It forces a single attempt: no retry, no failover, no
+	// era-recovery resend and no continuation fields. A task result is parsed
+	// only when this is set; without it resultType "task" stays a bad response.
+	Tasks bool
 }
 
 // InputRequired is a modern server's input_required result: its input
@@ -90,10 +98,13 @@ type InputRequired struct {
 // ForwardResult is a server's answer: one of Tool, Prompt and Read for a
 // complete result, or Input.
 type ForwardResult struct {
-	Tool     *mcp.CallToolResult
-	Prompt   *mcp.GetPromptResult
-	Read     *mcp.ReadResourceResult
-	Input    *InputRequired
+	Tool   *mcp.CallToolResult
+	Prompt *mcp.GetPromptResult
+	Read   *mcp.ReadResourceResult
+	Input  *InputRequired
+	// Task is a validated creation seed (never the raw result) and is only set
+	// when ForwardRequest.Tasks was. Its ID and message are secret-bearing.
+	Task     *TaskState
 	Protocol Protocol
 	Latency  time.Duration
 	Retries  int
@@ -128,6 +139,14 @@ func (c *Client) Forward(ctx context.Context, t Target, req ForwardRequest) (out
 	start, caller := time.Now(), ctx
 	ctx, cancel := context.WithTimeout(ctx, t.Timeout)
 	defer cancel()
+	if req.Tasks {
+		if req.Method != MethodToolsCall || len(bytes.TrimSpace(req.InputResponses)) != 0 || req.RequestState != "" {
+			return nil, &Error{Class: ClassBadRequest, Reason: "task_not_supported", BeforeDispatch: true, Message: "Tasks apply only to an initial tools/call."}
+		}
+		// One attempt on the canonical primary, whatever the caller configured:
+		// a lost response may hide a created task, so nothing may be repeated.
+		t.NoReplay, t.Endpoints, req.Retryable = true, nil, false
+	}
 	if err := validateFailoverTarget(t); err != nil {
 		return nil, err
 	}
@@ -376,7 +395,7 @@ func (c *Client) forwardModern(ctx context.Context, t Target, proto Protocol, re
 	if req.RequestState != "" {
 		params["requestState"] = req.RequestState
 	}
-	params["_meta"] = modernMeta(version, req.Elicitation, req.Trace, req.ProgressToken)
+	params["_meta"] = modernMetaExt(version, req.Elicitation, req.Trace, req.ProgressToken, req.Tasks && req.Method == MethodToolsCall)
 
 	ex := &exchange{}
 	hc, done := c.httpClient(t, ex)
@@ -437,6 +456,17 @@ func (c *Client) modernResult(ctx context.Context, t Target, ex *exchange, req F
 	}
 	out := &ForwardResult{}
 	switch head.ResultType {
+	case "task":
+		if !req.Tasks || req.Method != MethodToolsCall {
+			// The extension was not declared on this request: never a task.
+			return nil, false, &Error{Class: ClassBadResponse, Message: "The server's result has an unsupported resultType."}
+		}
+		state, err := ParseCreateTaskResult(r.msg.Result)
+		if err != nil {
+			return nil, false, err
+		}
+		out.Task = state
+		return out, false, nil
 	case "input_required":
 		requests := bytes.TrimSpace(head.InputRequests)
 		if string(requests) == "null" || string(requests) == "{}" {
