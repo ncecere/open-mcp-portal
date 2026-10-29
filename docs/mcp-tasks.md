@@ -107,7 +107,8 @@ not bypass the cap by count-then-insert without serialization.
 Initial delegated defaults: maximum local lifetime24h (`TASKS_MAX_TTL`, bounded1m–24h),100 active/reserved tasks
 per principal (`TASKS_MAX_OPEN_PER_PRINCIPAL`,1–1000), minimum advertised poll interval1s and maximum60s
 (default5s). These are bounds, not a queue or guaranteed completion time. Null/unlimited or changing upstream
-TTL never extends the original portal ceiling; clamp using authoritative time and upstream creation+TTL.
+TTL never extends the original portal ceiling or a previously shortened local deadline; clamp using
+authoritative time and upstream creation+TTL, without overflowing a duration or using DST calendar days.
 Reject malformed/non-finite/negative durations and invalid/inconsistent timestamps rather than overflow.
 Current authorization is checked independently of retention; expiry denies without waiting for cleanup.
 
@@ -117,7 +118,8 @@ Rebuild permitted form/URL elicitation only at the client's current capability/t
 input keys map to sealed server keys and must not collide with, expose or be confused for the actual task ID.
 Reject a server reusing a key for a different request. Client unknown/already-attempted keys are not forwarded.
 
-An accepted input response is reserved/consumed atomically **before** its single upstream attempt; ambiguous
+After local quota/cap/breaker admission, an accepted input response is reserved/consumed atomically
+**before** its single upstream attempt; ambiguous
 send/ack loss never restores it for replay. A cancellation ack records intent, not confirmed termination.
 Concurrent polls/updates/cancel must be revision-fenced, with tests proving no stale response resurrects a
 consumed input or invalidated handle. Terminal result retrieval still checks current access.
