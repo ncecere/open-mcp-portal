@@ -15,8 +15,13 @@ numbers and file paths are suggestions, not instructions to overwrite existing c
 #44 database roles and #68 external-platform retirement. Independent reviews, final-tree normal/race suites
 in both database-role modes, 796 web tests, browser checks, main CI and both deployment smoke CNIs passed.
 The published multi-architecture image/signature/SBOMs were verified; see [status](status.md). No production
-deployment is implied. Approvals (#31) are now in progress under decision 82 and
-[their implementation design](tool-approvals.md); reserve migration `00035`.
+deployment is implied.
+
+**Shipped and closed in v0.5.0:** #31 sensitive-call approvals, decision 82, migrations `00035`–`00042`.
+Full tests, browser checks, main CI, both smoke CNIs and native image publication passed; the signed index,
+SPDX assets and published runtime were independently verified. See [design](tool-approvals.md) and
+[release evidence](status.md). Work is paused for a machine transfer; #32 is next and has not been started.
+There are 27 open issues: 19 feature/operations/design and eight real-world verification issues.
 
 ## Ordered backlog
 
@@ -29,7 +34,7 @@ security boundary before building on it; do not start every large issue at once.
 | 1, shipped v0.3.3 | **#28**, **#37** | Classification unlocks policy; sessions are independent and prepare identity lifecycle work. |
 | 2, shipped v0.4.0 | **#29** credential scopes | Needs #28; intersect every credential layer and preserve existing unscoped behavior. |
 | 3, shipped v0.4.0 | **#30** per-gateway curation | Keep approved definitions immutable; validate merged arguments and stale fingerprints before approval digests depend on them. |
-| 4, next | **#31** sensitive-call approvals | Needs #28 and #30; bind approval to the merged arguments, definition, origin and requester, atomically single-use. |
+| 4, shipped v0.5.0 | **#31** sensitive-call approvals | Needs #28 and #30; bind approval to the merged arguments, definition, origin and requester, atomically single-use. |
 | 2–4, independent lane | **#26** shipped v0.4.0; next **#32** access requests | Shared token delivery, lapse, grants and refresh are validated foundations for lifecycle integration. #32 is independent, but keep gateway/API edits serialized with scopes and curation. |
 | 5 | **#33** upstream protection | Classification permits safe read retries. Ship quotas/concurrency/breaker before considering failover; credential-origin binding must remain intact for every current auth mode. |
 | 6 | **#35** tasks extension | Confirm the extension specification before design/code; carry approvals and access checks into every task operation. |

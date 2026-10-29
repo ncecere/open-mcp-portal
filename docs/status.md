@@ -1,24 +1,31 @@
 # Status and handoff
 
-Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.5.0 release candidate; not published yet**. The latest published release is v0.4.0.
-(release notes: [releases/v0.4.0.md](releases/v0.4.0.md); earlier: [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.5.0 published and independently verified**. Development is paused for a machine transfer; #32 has not been started.
+(release notes: [releases/v0.5.0.md](releases/v0.5.0.md); earlier: [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
-## v0.5.0 candidate: exact-call approvals
+## v0.5.0 (2026-10-28): exact-call approvals
 
-Implementation of #31 is integrated, independently reviewed and locally validated. Migrations `00035`–`00042`
+#31 is shipped and closed with [acceptance evidence](https://github.com/ncecere/open-mcp-portal/issues/31#issuecomment-6484059268).
+The immutable annotated tag points to `01cd127f888727b5b60897be7a059f2acd4da4f6`; the release is
+[published on GitHub](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.5.0).
+Implementation is integrated, independently reviewed and validated. Migrations `00035`–`00042`
 provide exact-call requests/rules, nonblocking authority journaling, stable binding-key rotation and protected
 private-schema storage. Browser/session APIs, all three MCP client response shapes, single-use dispatch,
 no post-spend replay, private notifications and eligible attention are implemented. See
 [release notes](releases/v0.5.0.md) and [design](tool-approvals.md).
 
-Evidence before publication:
+Verification evidence:
 - Full required-PostgreSQL normal and race suites passed in legacy and genuinely authenticated split-role
   modes (four runs, 1,425 seconds). Subsequent exact-Unicode binding regressions passed in both modes.
 - Generation, lint, build, generated-code freshness and all web gates passed; **836 web tests**. Final
-  release-version/deployment checks, actionlint and the smoke-helper regressions passed. Main CI/smoke
-  remain pending.
+  release-version/deployment checks, actionlint and the smoke-helper regressions passed. CI exposed a
+  minute-boundary assumption in the OAuth rate-limit fixture and an approval-matrix setup failure.
+  Controlled maintenance contention reproduces the latter; historical CI backend logs cannot identify its
+  exact blocker. Deterministic regressions preserve the limits and production fail-closed fence. After these test-only
+  fixes, merged normal suites in both modes and repeated focused races passed (1,447 seconds).
 - CI-pinned govulncheck reports zero reachable vulnerabilities (two module advisories are unreachable);
-  npm audit reports zero vulnerabilities. No dependency manifests were changed except release versions.
+  npm audit reports zero vulnerabilities. The existing transitive Seroval dependency was updated to 1.7.3
+  for newly reported advisories; all 836 web tests/gates were rerun. GitHub reported zero open Dependabot alerts.
 - The parent rebuilt untouched v0.4.0 from its tag and independently ran strict split-role startup, HTTP
   readiness and a journaled HTTP authority write against schema 42. No old-image approval enforcement is implied.
 - Owned disposable browser checks covered rule creation, URL review, redaction, exact MCP dispatch, spent
@@ -26,9 +33,20 @@ Evidence before publication:
   queue/receipt/rules/editor pages have no horizontal overflow and axe reports zero violations/incomplete
   checks. Preview keyboard scrolling works. The desktop shortcut contrast is 7.30:1.
 
-#31 stays open until CI, deployment smoke, signed image publication and artifact verification succeed.
+[Main CI](https://github.com/ncecere/open-mcp-portal/actions/runs/40788841938), both
+[kindnet/Calico smoke jobs](https://github.com/ncecere/open-mcp-portal/actions/runs/40788844565), and
+[native image build/scan/sign/publication](https://github.com/ncecere/open-mcp-portal/actions/runs/40791058998)
+passed at the release commit. Independently verified the exact tag/index digest, amd64+arm64 platforms,
+tag-specific GitHub OIDC cosign identity, trusted certificate and transparency-log inclusion. Asset checksums
+match and both SPDX assets equal the registry attestations. The published arm64 image runs as `65532:65532`,
+read-only with no network, reporting `open-mcp-portal 0.5.0 (01cd127f8887)`. Verified digest, pinned in the
+example overlay:
+`sha256:6ecbdda5ac21cf7257208c878f954d36ac7903ecb1aa0e671a9a2e516f3bdc3a`.
+
 No production deployment or external IDE/provider/pilot acceptance is claimed. Development services/data
-were untouched; browser sessions, private fixture configuration and scratch app/fake servers were cleaned up.
+were untouched; owned scratch PostgreSQL containers, browser sessions, private fixture configuration and
+scratch app/fake servers were cleaned up. The release tag remains immutable; subsequent main commits record
+publication evidence and the verified example digest.
 
 ## v0.4.0 (2026-10-28): MCP-only governance
 
@@ -438,6 +456,22 @@ server allow-list).
 5. Follow [release steps](../CONTRIBUTING.md#releasing): passing local tests is not publication. Wait for
    main CI, both deployment smoke jobs, image scans/signing and verification of the published digest.
 
+### Resume on another machine
+
+- Clone `git@github.com:ncecere/open-mcp-portal.git`, check out `main` and fetch tags. All required source,
+  migrations, generated code and release/handoff documentation are on the remote; no local patch is needed.
+  The immutable shipped source is `v0.5.0`; main also records publication evidence and the verified image pin.
+- Read this release section, `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md) and
+  [implementation order](implementation-order.md). Next is #32; do not resume old #31 implementation branches.
+- Install Go 1.26.10+, Node 22+, Docker, Python 3 and sqlc 1.31.1; run `npm ci` in `web/`.
+  Use owned disposable PostgreSQL for integration tests and actual split-role verification.
+- Git does **not** transfer `.env`, encryption/signing keys, provider credentials or the existing development
+  database. They were deliberately not exported or committed. Use a fresh development instance, or securely
+  transfer a consistent database backup and its required keys separately under explicit operator control.
+  Do not regenerate encryption keys for an existing database or migrate/reset the old instance implicitly.
+- Development is paused after this release. There are 27 open issues (19 feature/operations/design, eight
+  real-world verification); no #32 code or further feature work has been started.
+
 For a **new** development instance, use [development setup](../CONTRIBUTING.md#development-setup), not a
 blind restart/seed of an existing one. The historical dev-database migration helper remains
 `scripts/migrate-dev-db.sh`; running it is an explicit operator task, not part of resuming feature work.
@@ -446,21 +480,12 @@ blind restart/seed of an existing one. The historical dev-database migration hel
 
 1. v0.4.0 is published and verified; #26/#29/#30/#44/#68 are closed with acceptance evidence. Its follow-up
    documentation/image-pin CI and both smoke jobs also passed. Keep the immutable release tag/digest intact.
-2. #31 sensitive-call approvals are now in progress on `feature/31-sensitive-call-approvals`. The owner said
-   to continue after the proposed defaults; decision **82** records them and [design](tool-approvals.md)
-   describes the exact-dispatch boundary, no-replay behavior, live context and preview/retention policy.
-   Migrations **`00035`–`00042`**, browser/session APIs, exact-call transport enforcement, private notices,
-   eligible attention, preview retention/rotation and the browser UI are integrated locally. Independent
-   reviews drove writer-lock, identity, preview, key-retirement and queue fixes. The private-schema relocation
-   has an actual unmodified-v0.4.0 strict-role startup/HTTP-write regression; it does not imply old-image policy
-   enforcement. Real browser review→dispatch→spent and metadata-only auditor checks have run on a disposable
-   split-role instance, including consuming a request created before the private-schema relocation afterward.
-   At 390px, receipt/queue/rules/editor pages have no horizontal overflow and axe reports zero violations
-   and zero incomplete checks; the scrollable preview was keyboard-tested. The desktop header shortcut's
-   axe-incomplete contrast was manually checked at **7.30:1**; this is not a whole-product accessibility audit. Final merged-tree
-   normal/race matrices and local release gates passed. Main CI, deployment smoke, image publication and
-   artifact verification remain pending. Nothing from this feature branch is published; #31 remains open.
-3. Continue #32/#33 and the ordered operations/lifecycle/audit lanes in
+2. **Stop point for machine transfer:** v0.5.0 is published and verified; #31 is closed. Decision **82** and
+   [design](tool-approvals.md) document migrations **`00035`–`00042`**, exact dispatch and private review.
+   Drain older serving images before enabling rules; schema compatibility does not imply enforcement.
+   Use the new binary's rotation utility for the new ciphertext columns. Keep production autovacuum enabled;
+   governed transitions intentionally fail closed during conflicting writes/reads/maintenance.
+3. **Next, not started: #32 access requests**, followed by #33 and the ordered operations/lifecycle/audit lanes in
    [implementation order](implementation-order.md). #43 must prove upgrades, ingress, restore and load before
    Helm packaging; existing kindnet/Calico smoke does not establish those broader requirements.
 4. Keep #13–#20's real review/client/provider/channel/pilot evidence separate. VS Code planning and fake OAuth
