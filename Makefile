@@ -16,7 +16,7 @@ K8S_TOOLS   := $(CURDIR)/bin/k8s-tools
 KUSTOMIZE   := $(K8S_TOOLS)/kustomize-$(KUSTOMIZE_VERSION)/kustomize
 KUBECONFORM := $(K8S_TOOLS)/kubeconform-$(KUBECONFORM_VERSION)/kubeconform
 
-.PHONY: dev-seed help deps-up deps-down generate check-generated build run migrate fake-mcp fake-oauth example-mail example-mail-fake example-mail-smoke test test-integration test-ci lint actionlint fmt web web-test web-dev docker demo demo-down k8s-validate k8s-smoke prom-check
+.PHONY: shellcheck smoke-selftest dev-seed help deps-up deps-down generate check-generated build run migrate fake-mcp fake-oauth example-mail example-mail-fake example-mail-smoke test test-integration test-ci lint actionlint fmt web web-test web-dev docker demo demo-down k8s-validate k8s-smoke prom-check
 
 help: ## Show targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -132,5 +132,15 @@ prom-check: ## promtool check rules and test rules on deploy/prometheus (local p
 			-c 'promtool check rules omp-alerts.yaml && promtool test rules omp-alerts.test.yaml'; \
 	fi
 
-k8s-smoke: ## Apply the Kubernetes base to a throwaway kind cluster and check it (docker, kind, kubectl, jq; SMOKE_CNI=calico enforces NetworkPolicy)
+k8s-smoke: ## Apply the Kubernetes base to a throwaway kind cluster and check it (docker, kind, kubectl, jq; SMOKE_CNI=calico enforces NetworkPolicy; SMOKE_SCENARIO=upgrade|ingress|restore|load)
 	scripts/k8s-smoke.sh
+
+SHELLCHECK_FILES := scripts/*.sh scripts/smoke/*.sh deploy/kubernetes/scripts/validate.sh
+
+shellcheck: ## ShellCheck the deployment and smoke scripts (the pinned release is installed into bin/k8s-tools/bin when shellcheck is not on the PATH)
+	@command -v shellcheck >/dev/null 2>&1 || scripts/install-smoke-tools.sh $(K8S_TOOLS)/bin shellcheck >/dev/null
+	PATH="$(K8S_TOOLS)/bin:$$PATH" shellcheck $(SHELLCHECK_FILES)
+
+smoke-selftest: ## The smoke scripts' assertion helpers against stubs, and the script tests in scripts/tests (no cluster, no Docker)
+	SMOKE_SELFTEST=1 scripts/k8s-smoke.sh
+	python3 -m unittest discover -s scripts/tests -p 'test_*.py'

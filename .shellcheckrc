@@ -1,0 +1,3 @@
+# The smoke scripts source each other by path under scripts/.
+source-path=SCRIPTDIR
+external-sources=true

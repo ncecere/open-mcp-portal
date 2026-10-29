@@ -1,0 +1,89 @@
+# Upgrade between releases (docs/deploy.md, "Smoke test"; issue #43): installs the
+# previous release by digest into a throwaway kind cluster, creates a team,
+# server, gateway, API key, browser session and OAuth grant, rolls to the image
+# built from this checkout under a request loop (not one request may fail),
+# checks that the old credentials still work and `doctor` reports the new
+# schema, then rolls back to the old digest. It is the test of the rule
+# "a release's migrations must work with the previous release's code".
+#
+# The previous release is the newest vX.Y.Z tag reachable from the checkout that
+# does not point at it (scripts/previous-release.sh), so a full clone with tags
+# is needed. On a release tag it runs for the tag being released.
+#
+# `canary` (weekly and by hand) runs the same scenario on a scratch copy of the
+# tree with a throwaway migration that breaks the previous release, and requires
+# it to FAIL (scripts/k8s-upgrade-canary.sh): the check that this gate still
+# catches what it is for. Nothing is added to the repository for it.
+#
+# Every action is pinned by commit SHA (the comment gives the version), the same
+# SHAs as ci.yml and image.yml; kind and kubectl are pinned release binaries
+# checked against a SHA-256 (scripts/install-smoke-tools.sh).
+name: k8s-upgrade
+on:
+  workflow_dispatch:
+    inputs:
+      from_tag:
+        description: "Release tag to upgrade from (default: the previous release), for example v0.7.0 for a real schema change"
+        required: false
+        default: ""
+        type: string
+      canary:
+        description: "Also run the canary (a deliberately breaking migration must fail the scenario)"
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: "41 5 * * 2"
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+concurrency:
+  group: k8s-upgrade-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  upgrade:
+    name: upgrade
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SMOKE_SCENARIO: upgrade
+      SMOKE_FROM_TAG: ${{ inputs.from_tag }}
+      SMOKE_ARTIFACTS: ${{ github.workspace }}/k8s-smoke-artifacts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Install kind and kubectl (pinned, checksum-verified)
+        run: scripts/install-smoke-tools.sh "${RUNNER_TEMP}/k8s-bin" kind kubectl >> "$GITHUB_PATH"
+      - name: Previous release and its digest
+        run: scripts/previous-release.sh
+      - name: Install the previous release, upgrade under load, roll back
+        run: scripts/k8s-smoke.sh
+      - name: Upload the failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: k8s-upgrade
+          path: ${{ github.workspace }}/k8s-smoke-artifacts
+          if-no-files-found: ignore
+          retention-days: 7
+
+  canary:
+    name: canary (a breaking migration must fail)
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.canary)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SMOKE_ARTIFACTS: ${{ github.workspace }}/k8s-smoke-artifacts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Install kind and kubectl (pinned, checksum-verified)
+        run: scripts/install-smoke-tools.sh "${RUNNER_TEMP}/k8s-bin" kind kubectl >> "$GITHUB_PATH"
+      - name: Scratch tree with a throwaway breaking migration
+        run: scripts/k8s-upgrade-canary.sh

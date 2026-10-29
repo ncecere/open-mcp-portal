@@ -5,6 +5,19 @@
 #
 #   make k8s-smoke                      # kindnet, the default CNI (no NetworkPolicy enforcement)
 #   SMOKE_CNI=calico make k8s-smoke     # Calico: the NetworkPolicies are enforced and tested
+#   SMOKE_SCENARIO=upgrade make k8s-smoke   # also: ingress, restore, load (below)
+#   SMOKE_SELFTEST=1 scripts/k8s-smoke.sh   # the assertion helpers against stubs, no cluster
+#
+# Scenarios (SMOKE_SCENARIO; each one is a fresh cluster):
+#   base     the single fresh install, a rolling update, pod deletion, PDB, NetworkPolicy
+#   upgrade  install the previous release by digest, create data, roll to the working
+#            tree under a request loop, then roll back (scripts/smoke/upgrade.sh)
+#   ingress  Envoy Gateway + cert-manager TLS, APP_URL=https://omp.smoke.test, OIDC
+#            through Dex, TRUSTED_PROXIES and SSE streaming (scripts/smoke/ingress.sh)
+#   restore  pg_dump, more data, restore into a second database, repoint the portal
+#            (scripts/smoke/restore.sh)
+#   load     three replicas under a k6 ramp: errors, p95, shared rate limits, leaders,
+#            connections (scripts/smoke/load.sh)
 #
 # What it does: builds the portal and fake MCP server images from the working
 # tree, creates a cluster (1 control plane + 2 workers, node image pinned by
@@ -17,17 +30,31 @@
 # script's kubeconfig and context, and KUBECONFIG points at it too.
 #
 # Settings (environment):
+#   SMOKE_SCENARIO   base, upgrade, ingress, restore or load            (base)
 #   SMOKE_CLUSTER    kind cluster name, must start with "omp-smoke"  (omp-smoke)
 #   SMOKE_CNI        kindnet or calico                                (kindnet)
 #   SMOKE_KEEP       1: keep the cluster, images and temp directory   (0)
 #   SMOKE_ARTIFACTS  where a failed run leaves pods, events, logs     (bin/k8s-smoke-artifacts)
 #   SMOKE_NODE_IMAGE the kind node image                              (pinned below)
-#   SMOKE_TIMEOUT    seconds for the whole run, checked at each wait  (900)
+#   SMOKE_TIMEOUT    seconds for the whole run, checked at each wait  (900; 1500 for
+#                    upgrade, ingress and load)
+#   SMOKE_BUILD_CONTEXT  the directory the portal image is built from (the repository;
+#                    scripts/k8s-upgrade-canary.sh points it at a scratch copy)
+#   SMOKE_FROM_IMAGE upgrade: the image to start from, a digest reference (default: the
+#                    previous release, scripts/previous-release.sh)
+#   SMOKE_FROM_TAG   upgrade: start from this release tag instead of the previous one
+#   SMOKE_SUMMARY    load: where the JSON summary goes (bin/k8s-load-summary.json)
 #
 # Needs docker, kind, kubectl, curl and jq. Bash 3.2 compatible (macOS).
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The assertion helpers against stubs, no cluster, no Docker (scripts/smoke/selftest.sh).
+if [ "${SMOKE_SELFTEST:-0}" = 1 ]; then
+  exec bash "$ROOT/scripts/smoke/selftest.sh"
+fi
+SCENARIO="${SMOKE_SCENARIO:-base}"
+BUILD_CONTEXT="${SMOKE_BUILD_CONTEXT:-$ROOT}"
 CLUSTER="${SMOKE_CLUSTER:-omp-smoke}"
 CNI="${SMOKE_CNI:-kindnet}"
 KEEP="${SMOKE_KEEP:-0}"
@@ -42,7 +69,10 @@ CALICO_MANIFEST_SHA256="2de8f47595fb9c41b3f47d7b767a1f8e72ecf84057af834738ff1268
 # The throwaway PostgreSQL's image (overlays/smoke/postgres.yaml). The probe
 # pods reuse it: it is already on the nodes and has busybox wget.
 PROBE_IMAGE="mirror.gcr.io/library/postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24"
-DEADLINE_SECONDS="${SMOKE_TIMEOUT:-900}"
+case "$SCENARIO" in
+  upgrade | ingress | load) DEADLINE_SECONDS="${SMOKE_TIMEOUT:-1500}" ;;
+  *) DEADLINE_SECONDS="${SMOKE_TIMEOUT:-900}" ;;
+esac
 
 NS=omp-smoke           # the portal, PostgreSQL and the fake MCP server
 NS_CLIENT=omp-smoke-ingress   # stands in for the ingress controller's namespace
@@ -68,8 +98,25 @@ API_CODE=""
 API_KEY=""
 PORT=""
 APP_URL=""
+OVERLAY=smoke           # the overlay under deploy/kubernetes/overlays
+PORTAL_NAME="omp-smoke/portal"      # what the portal image is called in the render
+PORTAL_TAG="$RUN_ID"                # its tag (the working tree's image) ...
+PORTAL_DIGEST=""                    # ... or, when set, the digest of a published release
+OIDC_SECRET="smoke-unused"          # OIDC_CLIENT_SECRET in the runtime secret
+EXTRA_NS=""                         # more namespaces whose pods and logs a failed run collects
+PROBE_TOTAL=""
+PROBE_FAILS=""
+PROBE_READY503=""
+SCHEMA_NOTE=""
+REPLICAS=""                         # the portal Deployment's replica count when the scenario sets it
 
 # ---------------------------------------------------------------- output
+# shellcheck source=smoke/assert.sh
+. "$ROOT/scripts/smoke/assert.sh"
+# shellcheck source=smoke/lib.sh
+. "$ROOT/scripts/smoke/lib.sh"
+# shellcheck source=smoke/data.sh
+. "$ROOT/scripts/smoke/data.sh"
 log() { printf '[%4ss] %s\n' "$SECONDS" "$*"; }
 step() { printf '\n[%4ss] == %s\n' "$SECONDS" "$*"; }
 ok() { PASSED=$((PASSED + 1)); printf '[%4ss]   ok  %s\n' "$SECONDS" "$*"; }
@@ -94,7 +141,7 @@ collect_artifacts() {
   log "collecting pods, events and logs into $ARTIFACTS"
   {
     k get nodes -o wide
-    for ns in "$NS" "$NS_CLIENT" "$NS_OTHER"; do
+    for ns in "$NS" "$NS_CLIENT" "$NS_OTHER" $EXTRA_NS; do
       echo; echo "### namespace $ns"
       k -n "$ns" get pods,events -o wide 2>&1 || true
     done
@@ -111,7 +158,13 @@ collect_artifacts() {
   for pod in $(k -n "$NS_CLIENT" get pods -o name 2>/dev/null | sed 's|^pod/||'); do
     k -n "$NS_CLIENT" logs "$pod" >"$ARTIFACTS/logs-client-$pod.txt" 2>&1 || true
   done
-  [ -d "$TMP" ] && cp "$TMP"/*.log "$TMP"/*.out "$ARTIFACTS"/ 2>/dev/null || true
+  local ns
+  for ns in $EXTRA_NS; do
+    for pod in $(k -n "$ns" get pods -o name 2>/dev/null | sed 's|^pod/||'); do
+      k -n "$ns" logs "$pod" --all-containers --prefix --timestamps >"$ARTIFACTS/logs-$ns-$pod.txt" 2>&1 || true
+    done
+  done
+  [ -d "$TMP" ] && cp "$TMP"/*.log "$TMP"/*.out "$TMP"/*.h "$TMP"/summary-*.json "$TMP"/m-*.txt "$TMP"/sse*.txt "$ARTIFACTS"/ 2>/dev/null || true
 }
 
 cleanup() {
@@ -123,6 +176,7 @@ cleanup() {
   fi
   [ -n "$BUILD_PID" ] && kill "$BUILD_PID" 2>/dev/null
   pf_stop
+  pod_forward_stop
   for p in $LOG_PIDS; do kill "$p" 2>/dev/null; done
   if [ "$KEEP" = 1 ]; then
     log "SMOKE_KEEP=1: leaving cluster $CLUSTER, the images and $TMP"
@@ -211,17 +265,18 @@ pf_start() {
   wait_until "kubectl port-forward to answer /healthz on localhost:${PORT}" 30 curl -fsS --max-time 2 "http://localhost:${PORT}/healthz"
 }
 
-# api METHOD PATH [JSON] [IF-MATCH-REVISION]: the management API with the dev
-# session; HTTP status in API_CODE, body in $TMP/api.out.
+# api METHOD PATH [JSON] [IF-MATCH-REVISION]: the management API with the
+# session in $COOKIES; HTTP status in API_CODE, body in $TMP/api.out.
 api() {
   local method=$1 path=$2 body=${3-} ifmatch=${4-}
   local -a a
-  a=(-sS --max-time 30 -o "$TMP/api.out" -w '%{http_code}' -b "$TMP/cookies" -c "$TMP/cookies"
+  [ -n "$COOKIES" ] || COOKIES="$TMP/cookies"
+  a=(-sS --max-time 30 -b "$COOKIES" -c "$COOKIES"
     -X "$method" -H "Origin: ${APP_URL}" -H 'Content-Type: application/json')
   if [ -n "$CSRF" ]; then a+=(-H "X-CSRF-Token: ${CSRF}"); fi
   if [ -n "$ifmatch" ]; then a+=(-H "If-Match: \"${ifmatch}\""); fi
   if [ -n "$body" ]; then a+=(--data "$body"); fi
-  API_CODE="$(curl "${a[@]}" "${APP_URL}${path}")" || fail "$method $path: curl failed (port-forward down?)"
+  http_do "$TMP/api.out" "${a[@]}" "${APP_URL}${path}" || fail "$method $path: curl failed (port-forward down?)"
 }
 api_ok() {
   api "$@"
@@ -241,7 +296,7 @@ mcp() {
   local era=$1 method=$2 params=${3:-\{\}} name=${4-}
   local body
   local -a h
-  h=(-H "Authorization: Bearer ${API_KEY}" -H 'Content-Type: application/json'
+  h=(-H "Authorization: Bearer ${MCP_BEARER:-$API_KEY}" -H 'Content-Type: application/json'
     -H 'Accept: application/json, text/event-stream')
   if [ "$era" = modern ]; then
     body="$(jq -nc --arg m "$method" --argjson p "$params" \
@@ -252,7 +307,7 @@ mcp() {
     body="$(jq -nc --arg m "$method" --argjson p "$params" '{jsonrpc:"2.0",id:1,method:$m,params:$p}')"
     h+=(-H 'MCP-Protocol-Version: 2025-11-25')
   fi
-  API_CODE="$(curl -sS --max-time 30 -o "$TMP/mcp.out" -w '%{http_code}' -X POST "${h[@]}" --data "$body" "${APP_URL}/mcp/${GW_SLUG}")" ||
+  http_do "$TMP/mcp.out" -sS --max-time 30 -X POST "${h[@]}" --data "$body" "${APP_URL}/mcp/${GW_SLUG}" ||
     fail "POST /mcp/${GW_SLUG} ($era $method): curl failed"
 }
 mcp_ok() {
@@ -276,19 +331,32 @@ portal_nodes() { # the distinct nodes of those pods, one per line
 # ---------------------------------------------------------------- the overlay
 # kustomization in a scratch directory next to the overlays (kustomize refuses
 # paths outside its root): the overlay plus this run's image tags, APP_URL
-# (the port-forward's port) and any extra config literals.
+# (the port-forward's port) and any extra config literals. The portal image is
+# this tree's (PORTAL_TAG) or, with PORTAL_DIGEST, a published release by digest.
 render() { # [KEY=VALUE]...
   {
     cat <<EOF
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - ../overlays/smoke
+  - ../overlays/${OVERLAY}
 images:
   - name: omp-smoke/portal
-    newTag: "${RUN_ID}"
+    newName: "${PORTAL_NAME}"
+EOF
+    if [ -n "$PORTAL_DIGEST" ]; then
+      echo "    digest: \"${PORTAL_DIGEST}\""
+    else
+      echo "    newTag: \"${PORTAL_TAG}\""
+    fi
+    cat <<EOF
   - name: omp-smoke/fakemcp
     newTag: "${RUN_ID}"
+EOF
+    if [ -n "$REPLICAS" ]; then
+      printf 'replicas:\n  - name: open-mcp-portal\n    count: %s\n' "$REPLICAS"
+    fi
+    cat <<EOF
 configMapGenerator:
   - name: open-mcp-portal-config
     behavior: merge
@@ -431,8 +499,8 @@ log "APP_URL $APP_URL, images omp-smoke/{portal,fakemcp}:$RUN_ID, temp dir $TMP"
 # ---------------------------------------------------------------- images
 step "Build the portal and fake MCP server images from the working tree (in the background)"
 (
-  cd "$ROOT"
-  commit="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
+  commit="$(git -C "$ROOT" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
+  cd "$BUILD_CONTEXT"
   docker build --build-arg VERSION="smoke-${commit}" --build-arg COMMIT="$commit" -t "$PORTAL_IMAGE" . >"$TMP/build-portal.log" 2>&1
   docker build --target fakemcp -t "$FAKEMCP_IMAGE" . >"$TMP/build-fakemcp.log" 2>&1
 ) &
@@ -491,47 +559,86 @@ kind load docker-image "$PORTAL_IMAGE" "$FAKEMCP_IMAGE" --name "$CLUSTER" >"$TMP
 ok "images $PORTAL_IMAGE and $FAKEMCP_IMAGE loaded"
 
 # ---------------------------------------------------------------- apply
-step "Namespaces, secrets, overlay"
-k apply -f "$ROOT/deploy/kubernetes/overlays/smoke/namespace.yaml" >/dev/null
-for ns in "$NS_CLIENT" "$NS_OTHER"; do
-  k create namespace "$ns" >/dev/null
-  k label namespace "$ns" pod-security.kubernetes.io/enforce=restricted >/dev/null
-done
+# The pieces every scenario uses; scenario_base (below) and the scenario files
+# call them in their own order.
+create_namespaces() {
+  k apply -f "$ROOT/deploy/kubernetes/overlays/smoke/namespace.yaml" >/dev/null
+  local ns
+  for ns in "$NS_CLIENT" "$NS_OTHER"; do
+    k create namespace "$ns" >/dev/null
+    k label namespace "$ns" pod-security.kubernetes.io/enforce=restricted >/dev/null
+  done
+}
 
 # Random secrets, never in git or in the manifests. ENCRYPTION_KEY and
-# API_KEY_PEPPER differ (the portal refuses equal values).
-umask 077
-PG_PASSWORD="$(openssl rand -hex 16)"
-OWNER_PASSWORD="$(openssl rand -hex 16)"
-RUNTIME_PASSWORD="$(openssl rand -hex 16)"
-ENC_KEY="$(openssl rand -base64 32)"
-PEPPER="$(openssl rand -base64 32)"
-[ "$ENC_KEY" != "$PEPPER" ] || fail "random ENCRYPTION_KEY equals API_KEY_PEPPER"
-printf 'password=%s\nowner_password=%s\nruntime_password=%s\n' "$PG_PASSWORD" "$OWNER_PASSWORD" "$RUNTIME_PASSWORD" >"$TMP/postgres.env"
-printf 'DATABASE_MIGRATE_URL=postgres://omp_owner:%s@postgres.%s.svc.cluster.local:5432/omp?sslmode=disable\n' "$OWNER_PASSWORD" "$NS" >"$TMP/migrate.env"
-{
-  printf 'DATABASE_URL=postgres://omp_app:%s@postgres.%s.svc.cluster.local:5432/omp?sslmode=disable\n' "$RUNTIME_PASSWORD" "$NS"
-  printf 'ENCRYPTION_KEY=%s\nAPI_KEY_PEPPER=%s\n' "$ENC_KEY" "$PEPPER"
-  # The base requires the key; dev sign-in never uses it.
-  printf 'OIDC_CLIENT_SECRET=smoke-unused\n'
-} >"$TMP/runtime.env"
-kn create secret generic omp-smoke-postgres --from-env-file="$TMP/postgres.env" >/dev/null
-kn create secret generic open-mcp-portal-runtime --from-env-file="$TMP/runtime.env" >/dev/null
-kn create secret generic open-mcp-portal-migrate --from-env-file="$TMP/migrate.env" >/dev/null
-rm -f "$TMP/postgres.env" "$TMP/runtime.env" "$TMP/migrate.env"
-ok "secrets created at run time (DATABASE_URL, ENCRYPTION_KEY, API_KEY_PEPPER, OIDC_CLIENT_SECRET)"
+# API_KEY_PEPPER differ (the portal refuses equal values). OIDC_SECRET is the
+# OIDC client secret (a placeholder unless the scenario signs in through Dex).
+create_secrets() {
+  local old_umask
+  old_umask="$(umask)"
+  umask 077
+  PG_PASSWORD="$(openssl rand -hex 16)"
+  OWNER_PASSWORD="$(openssl rand -hex 16)"
+  RUNTIME_PASSWORD="$(openssl rand -hex 16)"
+  ENC_KEY="$(openssl rand -base64 32)"
+  PEPPER="$(openssl rand -base64 32)"
+  [ "$ENC_KEY" != "$PEPPER" ] || fail "random ENCRYPTION_KEY equals API_KEY_PEPPER"
+  printf 'password=%s\nowner_password=%s\nruntime_password=%s\n' "$PG_PASSWORD" "$OWNER_PASSWORD" "$RUNTIME_PASSWORD" >"$TMP/postgres.env"
+  printf 'DATABASE_MIGRATE_URL=postgres://omp_owner:%s@postgres.%s.svc.cluster.local:5432/omp?sslmode=disable\n' "$OWNER_PASSWORD" "$NS" >"$TMP/migrate.env"
+  {
+    printf 'DATABASE_URL=postgres://omp_app:%s@postgres.%s.svc.cluster.local:5432/omp?sslmode=disable\n' "$RUNTIME_PASSWORD" "$NS"
+    printf 'ENCRYPTION_KEY=%s\nAPI_KEY_PEPPER=%s\n' "$ENC_KEY" "$PEPPER"
+    # The base requires the key; dev sign-in never uses it.
+    printf 'OIDC_CLIENT_SECRET=%s\n' "$OIDC_SECRET"
+  } >"$TMP/runtime.env"
+  kn create secret generic omp-smoke-postgres --from-env-file="$TMP/postgres.env" >/dev/null
+  kn create secret generic open-mcp-portal-runtime --from-env-file="$TMP/runtime.env" >/dev/null
+  kn create secret generic open-mcp-portal-migrate --from-env-file="$TMP/migrate.env" >/dev/null
+  rm -f "$TMP/postgres.env" "$TMP/runtime.env" "$TMP/migrate.env"
+  umask "$old_umask"
+  ok "secrets created at run time (DATABASE_URL, ENCRYPTION_KEY, API_KEY_PEPPER, OIDC_CLIENT_SECRET)"
+}
 
-render >"$TMP/rendered.yaml"
-if grep -q '^kind: Secret$' "$TMP/rendered.yaml"; then fail "the rendered overlay contains a Secret"; fi
-k apply -f "$TMP/rendered.yaml" >/dev/null
+# apply_overlay [KEY=VALUE]...: render (extra config literals) and apply.
+# shellcheck disable=SC2120 # most callers pass no literals
+apply_overlay() {
+  render "$@" >"$TMP/rendered.yaml"
+  if grep -q '^kind: Secret$' "$TMP/rendered.yaml"; then fail "the rendered overlay contains a Secret"; fi
+  k apply -f "$TMP/rendered.yaml" >/dev/null
+}
+
+wait_for_stack() {
+  kn rollout status sts/postgres --timeout=180s >/dev/null || fail "PostgreSQL's StatefulSet not ready in 180s (storage class? image pull?)"
+  kn get pvc data-postgres-0 -o jsonpath='{.status.phase}' | grep -qx Bound || fail "PostgreSQL's PVC is not Bound"
+  ok "PostgreSQL 17 is ready on a bound PVC ($(kn get pvc data-postgres-0 -o jsonpath='{.spec.storageClassName}'))"
+  kn rollout status deploy/fakemcp --timeout=120s >/dev/null || fail "fake MCP server not ready in 120s"
+  wait_portal_rollout 240
+}
+wait_portal_rollout() { # [SECONDS]
+  kn rollout status deploy/open-mcp-portal --timeout="${1:-300}s" >/dev/null ||
+    fail "portal Deployment not rolled out in ${1:-300}s (see artifacts; startup probe allows 4 minutes)"
+}
+
+
+# ---------------------------------------------------------------- scenarios
+# Every scenario but base lives in scripts/smoke/<name>.sh as scenario_<name>.
+if [ "$SCENARIO" != base ]; then
+  [ -f "$ROOT/scripts/smoke/${SCENARIO}.sh" ] || fail "no such scenario: ${SCENARIO}"
+  # shellcheck disable=SC1090 # the file is named by SMOKE_SCENARIO (checked above)
+  . "$ROOT/scripts/smoke/${SCENARIO}.sh"
+  "scenario_${SCENARIO}"
+  step "Done"
+  exit 0
+fi
+
+step "Namespaces, secrets, overlay"
+create_namespaces
+create_secrets
+apply_overlay
 ok "overlay applied"
 
 step "Wait for PostgreSQL, the fake MCP server and the portal"
-kn rollout status sts/postgres --timeout=180s >/dev/null || fail "PostgreSQL's StatefulSet not ready in 180s (storage class? image pull?)"
-kn get pvc data-postgres-0 -o jsonpath='{.status.phase}' | grep -qx Bound || fail "PostgreSQL's PVC is not Bound"
-ok "PostgreSQL 17 is ready on a bound PVC ($(kn get pvc data-postgres-0 -o jsonpath='{.spec.storageClassName}'))"
-kn rollout status deploy/fakemcp --timeout=120s >/dev/null || fail "fake MCP server not ready in 120s"
-kn rollout status deploy/open-mcp-portal --timeout=240s >/dev/null || fail "portal Deployment not rolled out in 240s (see artifacts; startup probe allows 4 minutes)"
+wait_for_stack
 
 # ---------------------------------------------------------------- deployment assertions
 step "Deployment"
@@ -568,6 +675,7 @@ ok "doctor passes in the pod"
 # Authenticate over TCP as runtime, never SET ROLE from the bootstrap superuser.
 for sql in 'UPDATE audit_log SET action=action' 'DELETE FROM audit_log' 'TRUNCATE audit_log' \
   'UPDATE mcp_calls SET method=method' 'DELETE FROM mcp_calls' 'TRUNCATE mcp_calls' 'TRUNCATE teams CASCADE'; do
+  # shellcheck disable=SC2016 # $RUNTIME_PASSWORD and $1 expand in the pod's shell, on purpose
   if kn exec postgres-0 -- sh -c 'PGPASSWORD="$RUNTIME_PASSWORD" psql -h 127.0.0.1 -U omp_app -d omp -v ON_ERROR_STOP=1 -c "$1"' sh "$sql" >"$TMP/denial.out" 2>&1; then
     fail "runtime SQL unexpectedly allowed: $sql"
   fi
@@ -590,36 +698,9 @@ done
 ok "/healthz and /readyz answer ok on $APP_URL"
 
 step "The real API: sign in, team, server, gateway, key"
-api POST /auth/dev '{"account":"admin"}'
-[ "$API_CODE" = 200 ] || fail "POST /auth/dev: HTTP $API_CODE: $(head -c 400 "$TMP/api.out") (DEV_AUTH on, APP_URL loopback?)"
-api_ok GET /v1/me
-CSRF="$(data .data.csrfToken)"
+dev_signin
 ok "dev sign-in works (POST /auth/dev as admin)"
-
-api_ok POST /v1/admin/teams '{"slug":"smoke","name":"Smoke","ownerEmail":"admin@localhost"}'
-ok "team smoke created"
-
-FAKE_URL="http://fakemcp.${NS}.svc.cluster.local:8091/mcp"
-api_ok POST /v1/teams/smoke/mcp-servers "$(jq -nc --arg u "$FAKE_URL" '{slug:"fake",name:"Fake",url:$u,description:"cmd/fakemcp in the cluster"}')"
-if jq -e '.data.refreshError // empty' "$TMP/api.out" >/dev/null; then
-  fail "the portal could not read the in-cluster fake MCP server at $FAKE_URL: $(data .data.refreshError)"
-fi
-SERVER_ID="$(data .data.server.id)"
-ok "the in-cluster fake MCP server is registered ($FAKE_URL: $(jq -c '.data.server.counts' "$TMP/api.out"))"
-
-api_ok GET "/v1/teams/smoke/gateway-options?limit=500"
-CAPS="$(jq -c --arg s "$SERVER_ID" '[.data.items[] | select(.serverId==$s and .kind=="tool" and (.name=="echo" or .name=="check_outage")) | {capabilityId}]' "$TMP/api.out")"
-[ "$(echo "$CAPS" | jq length)" = 2 ] || fail "the fake server's echo and check_outage tools are not offered: $(head -c 600 "$TMP/api.out")"
-api_ok POST /v1/teams/smoke/gateways "$(jq -nc --arg s "$GW_SLUG" '{slug:$s,name:"Smoke",description:"echo and check_outage"}')"
-GW_ID="$(data .data.id)"
-GW_REV="$(data .data.revision)"
-api_ok PUT "/v1/teams/smoke/gateways/${GW_ID}/capabilities" "$(jq -nc --argjson c "$CAPS" '{items:$c}')" "$GW_REV"
-ok "gateway /mcp/${GW_SLUG} selects the fake's echo and check_outage"
-
-api_ok POST /v1/me/api-keys '{"name":"k8s smoke","expiresInDays":1}'
-API_KEY="$(data .data.secret)"
-[ -n "$API_KEY" ] || fail "no API key secret in the answer"
-ok "API key created"
+seed_data
 
 step "MCP through /mcp/${GW_SLUG}, legacy era (MCP-Protocol-Version 2025-11-25)"
 mcp_ok legacy initialize '{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"omp-smoke","version":"0"}}'
