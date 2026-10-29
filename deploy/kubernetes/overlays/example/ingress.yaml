@@ -1,10 +1,16 @@
 # Ingress for ingress-nginx with cert-manager. The host must match APP_URL;
 # TLS terminates here (APP_URL is https).
 #
+# ingress-nginx was retired by Kubernetes in March 2026 (its repository is
+# archived: no more fixes, security ones included). This file stays for clusters
+# that still run it; for a new install use httproute.yaml (Gateway API), which
+# is what the smoke test's ingress scenario runs (overlays/smoke-ingress, Envoy
+# Gateway). docs/deploy.md, "Ingress".
+#
 # - Timeouts: an MCP call waits up to 120s for its upstream server (the
 #   per-server maximum), so reads must be allowed for longer than nginx's
-#   60s default. Responses are plain JSON today; SSE relays are planned, so
-#   response buffering is already off and the timeout has headroom.
+#   60s default. A tools/call with _meta.progressToken is answered as a
+#   Server-Sent Events stream, so response buffering is off here.
 # - Body size: MCP requests are capped at 1 MiB by the portal.
 # - No sticky sessions: /mcp/{slug} is stateless; any replica serves any
 #   request. Browser sessions live in PostgreSQL.

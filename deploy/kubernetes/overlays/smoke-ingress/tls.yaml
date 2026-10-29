@@ -1,0 +1,50 @@
+# cert-manager's self-signed chain for omp.smoke.test: a self-signed issuer
+# signs a CA certificate, a CA issuer built on it signs the portal's serving
+# certificate. The CA's public certificate (ca.crt of the serving secret) is
+# what the test client trusts. cert-manager is installed by the script (a
+# pinned, checksum-verified release manifest) before this is applied.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: smoke-selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: smoke-ca
+spec:
+  isCA: true
+  commonName: omp-smoke-ca
+  secretName: omp-smoke-ca
+  duration: 24h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: smoke-selfsigned
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: smoke-ca
+spec:
+  ca:
+    secretName: omp-smoke-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: omp-smoke-tls
+spec:
+  secretName: omp-smoke-tls
+  dnsNames: [omp.smoke.test]
+  duration: 24h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: smoke-ca
+    kind: Issuer

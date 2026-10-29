@@ -3,16 +3,23 @@
 # checks it: migrations, doctor, replicas on different nodes, the API and both
 # MCP eras, a rolling update, a pod deletion and the PodDisruptionBudget. With
 # Calico (the second matrix entry) the NetworkPolicies are enforced and tested
-# too.
+# too. Two more jobs run what a single install cannot show, each in its own
+# cluster and its own time limit: `ingress` (Envoy Gateway, cert-manager TLS,
+# TRUSTED_PROXIES, streaming, sign-in through Dex; both CNIs) and `restore`
+# (pg_dump, more data, pg_restore into a second database).
+#
+# The upgrade between releases is k8s-upgrade.yml, the load test k8s-load.yml.
 #
 # Not on every push: ci.yml's `k8s` job renders and validates the manifests
-# for those. This one runs by hand, weekly (a new Kubernetes patch, a moved
-# base image or a changed dependency shows up here), and on pushes to main that
-# touch what it deploys.
+# and runs the scripts' self-test for those. This one runs by hand, weekly (a
+# new Kubernetes patch, a moved base image or a changed dependency shows up
+# here), and on pushes to main that touch what it deploys.
 #
 # Every action is pinned by commit SHA (the comment gives the version), the
 # same SHAs as ci.yml and image.yml. kind and kubectl are pinned release
-# binaries, checked against a SHA-256 before they run.
+# binaries, checked against a SHA-256 before they run
+# (scripts/install-smoke-tools.sh holds the versions and sums). Only image
+# pulls are retried (inside the scripts); an assertion that fails fails the job.
 name: k8s-smoke
 on:
   workflow_dispatch:
@@ -24,7 +31,9 @@ on:
       - "deploy/**"
       - "Dockerfile"
       - "scripts/k8s-smoke.sh"
-      - "scripts/tests/test_k8s_smoke_port_forward.py"
+      - "scripts/smoke/**"
+      - "scripts/install-smoke-tools.sh"
+      - "scripts/tests/**"
       - ".github/workflows/k8s-smoke.yml"
 permissions:
   contents: read
@@ -47,29 +56,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Smoke helper lifecycle regressions
-        run: python3 scripts/tests/test_k8s_smoke_port_forward.py
+      - name: Smoke helper lifecycle regressions and assertion self-test
+        run: |
+          python3 scripts/tests/test_k8s_smoke_port_forward.py
+          SMOKE_SELFTEST=1 scripts/k8s-smoke.sh
 
       # Downloaded to a directory that goes first on PATH, so the runner's own
-      # copies (whatever version the image carries) are not used. The sums
-      # are those of the release assets (kind v0.33.0 publishes
-      # kind-linux-amd64.sha256sum; dl.k8s.io publishes kubectl.sha256).
+      # copies (whatever version the image carries) are not used.
       - name: Install kind and kubectl (pinned, checksum-verified)
-        env:
-          KIND_VERSION: v0.33.0
-          KIND_SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
-          KUBECTL_VERSION: v1.37.0
-          KUBECTL_SHA256: 6129359f4e1f3848a5572ccb0b26cf28b8ca08cef38c95a765b2f64a2c961a2f
-        run: |
-          set -euo pipefail
-          bin="${RUNNER_TEMP}/k8s-bin"
-          mkdir -p "$bin"
-          curl -fsSL -o "$bin/kind" "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64"
-          echo "${KIND_SHA256}  $bin/kind" | sha256sum --check
-          curl -fsSL -o "$bin/kubectl" "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
-          echo "${KUBECTL_SHA256}  $bin/kubectl" | sha256sum --check
-          chmod +x "$bin/kind" "$bin/kubectl"
-          echo "$bin" >> "$GITHUB_PATH"
+        run: scripts/install-smoke-tools.sh "${RUNNER_TEMP}/k8s-bin" kind kubectl >> "$GITHUB_PATH"
 
       - name: Smoke test
         run: scripts/k8s-smoke.sh
@@ -81,6 +76,55 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: k8s-smoke-${{ matrix.cni }}
+          path: ${{ github.workspace }}/k8s-smoke-artifacts
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ingress:
+    name: ingress, TLS and OIDC (${{ matrix.cni }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        cni: [kindnet, calico]
+    env:
+      SMOKE_SCENARIO: ingress
+      SMOKE_CNI: ${{ matrix.cni }}
+      SMOKE_ARTIFACTS: ${{ github.workspace }}/k8s-smoke-artifacts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install kind and kubectl (pinned, checksum-verified)
+        run: scripts/install-smoke-tools.sh "${RUNNER_TEMP}/k8s-bin" kind kubectl >> "$GITHUB_PATH"
+      - name: Ingress, TLS, TRUSTED_PROXIES, streaming and OIDC through Dex
+        run: scripts/k8s-smoke.sh
+      - name: Upload the failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: k8s-ingress-${{ matrix.cni }}
+          path: ${{ github.workspace }}/k8s-smoke-artifacts
+          if-no-files-found: ignore
+          retention-days: 7
+
+  restore:
+    name: restore (pg_dump)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SMOKE_SCENARIO: restore
+      SMOKE_ARTIFACTS: ${{ github.workspace }}/k8s-smoke-artifacts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install kind and kubectl (pinned, checksum-verified)
+        run: scripts/install-smoke-tools.sh "${RUNNER_TEMP}/k8s-bin" kind kubectl >> "$GITHUB_PATH"
+      - name: Dump, change, restore into a second database, repoint
+        run: scripts/k8s-smoke.sh
+      - name: Upload the failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: k8s-restore
           path: ${{ github.workspace }}/k8s-smoke-artifacts
           if-no-files-found: ignore
           retention-days: 7

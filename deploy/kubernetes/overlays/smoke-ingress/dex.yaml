@@ -1,0 +1,133 @@
+# Dex, the OpenID Connect provider the ingress scenario signs in through
+# (scripts/smoke/ingress.sh). A static client for the portal and two
+# password users: alice (verified email, groups omp-admins and smoke-team) and
+# mallory (email NOT verified, to prove OIDC_REQUIRE_VERIFIED_EMAIL). Memory
+# storage, throwaway: nothing here is a real identity.
+#
+# The password hashes and the client secret come from the Secret
+# omp-smoke-dex, which the script creates at run time with random values
+# (never in git): OMP_CLIENT_SECRET, ALICE_PASSWORD_HASH, MALLORY_PASSWORD_HASH.
+#
+# The issuer is the in-cluster URL on plain http: the portal reaches it
+# through its egress policy (networkpolicy-dex.yaml) and the "browser" (a curl
+# pod) through cluster DNS. The portal does not require https for the issuer;
+# only APP_URL must be https. Dex is pinned by tag and index digest.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: omp-smoke-dex-config
+  labels:
+    app.kubernetes.io/name: omp-smoke-dex
+    app.kubernetes.io/part-of: omp-smoke
+data:
+  config.yaml: |
+    issuer: http://dex.omp-smoke.svc.cluster.local:5556/dex
+    storage:
+      type: memory
+    web:
+      http: 0.0.0.0:5556
+    oauth2:
+      skipApprovalScreen: true
+      responseTypes: [code]
+    enablePasswordDB: true
+    staticClients:
+      - id: omp-smoke
+        name: Open MCP Portal (smoke)
+        secretEnv: OMP_CLIENT_SECRET
+        redirectURIs:
+          - https://omp.smoke.test/auth/callback
+    staticPasswords:
+      - email: alice@smoke.test
+        hashFromEnv: ALICE_PASSWORD_HASH
+        username: alice
+        userID: 6a0f3c1e-2b4d-4c8a-9e7f-0d1a2b3c4d5e
+        emailVerified: true
+        groups: [omp-admins, smoke-team]
+      - email: mallory@smoke.test
+        hashFromEnv: MALLORY_PASSWORD_HASH
+        username: mallory
+        userID: 9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d
+        emailVerified: false
+        groups: [smoke-team]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dex
+  labels:
+    app.kubernetes.io/name: omp-smoke-dex
+    app.kubernetes.io/part-of: omp-smoke
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: omp-smoke-dex
+  ports:
+    - name: http
+      port: 5556
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dex
+  labels:
+    app.kubernetes.io/name: omp-smoke-dex
+    app.kubernetes.io/part-of: omp-smoke
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: omp-smoke-dex
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: omp-smoke-dex
+        app.kubernetes.io/part-of: omp-smoke
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: dex
+          image: ghcr.io/dexidp/dex:v2.46.1@sha256:65b72ca0f4b0bf6d4ada84ec21da8851782563404ac7b8f926923d27ceced9ab
+          imagePullPolicy: IfNotPresent
+          command: [/usr/local/bin/dex]
+          args: [serve, /etc/dex/config.yaml]
+          envFrom:
+            - secretRef:
+                name: omp-smoke-dex
+          ports:
+            - name: http
+              containerPort: 5556
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /dex/.well-known/openid-configuration
+              port: http
+            periodSeconds: 3
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/dex
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: omp-smoke-dex-config

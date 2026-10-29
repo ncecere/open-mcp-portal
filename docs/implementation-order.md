@@ -69,7 +69,8 @@ security boundary before building on it; do not start every large issue at once.
 | 9 | **#46**, then **#47** developer tooling | #46 follows #29 and needs a CLI sign-in decision. #47 reuses its public client; new delete scopes need explicit review, not a hidden expansion of publisher authority. |
 | 9, independent DX | **#49**, **#51** | Catalog governance follows #40. Chargeback follows #38 and needs unambiguous calling-team attribution recorded before claiming historic billing accuracy. |
 | 10 | **#48**, **#50** | Console follows classification and approvals; search-mode dispatch follows classification, curation and catalog search. Both must use the normal governed call path. |
-| Later, design only | **#52**, **#53** | Scanning design follows #28/#31; identity research follows #36/#37 and a concrete pilot need. No content scanning or extra IdP support is implied by this batch. |
+| Later, design only | **#52** (designed, decision 87), **#53** | Scanning design follows #28/#31; identity research follows #36/#37 and a concrete pilot need. No content scanning or extra IdP support is implied by this batch. |
+| 11 | **#71**, **#70**, then **#72**, **#73** content-scanning first slice | Shadow-mode definition scanning only (decision 87): shared rule registry (no behaviour change), corpus/benchmark harness, refresh-time findings, then review UI. No call-path scanning, blocking or external service; later slices stay drafts until evidence gates pass. |
 
 ## Real-world verification lane (start coordination now)
 

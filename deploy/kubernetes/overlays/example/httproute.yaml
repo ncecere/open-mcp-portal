@@ -4,8 +4,9 @@
 # open-mcp-portal-ingress to the namespace its data plane runs in.
 #
 # timeouts.request must cover an upstream MCP call (up to 120s), with
-# headroom for SSE responses once the portal relays them. No session persistence is needed: /mcp/{slug}
-# is stateless.
+# headroom for streamed (SSE) responses. This is the shape the smoke test's
+# ingress scenario runs on Envoy Gateway (overlays/smoke-ingress/gateway.yaml).
+# No session persistence is needed: /mcp/{slug} is stateless.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:

@@ -1,0 +1,56 @@
+# Load test (docs/deploy.md, "Smoke test"; issue #43): three replicas on a kind
+# cluster under a k6 ramp of tools/call against the fake MCP server. It fails on
+# any failed request or check, a p95 over a loose bound, rate limit counters that
+# are not shared between replicas, a background loop with no leader
+# (omp_loop_leader over the replicas' own /metrics; the gauge marks the replica
+# that led its latest run, so the sum can exceed 1), a replica leading the
+# notification or retention loop while its advisory lock is held from outside, or
+# database connections at max_connections. It writes a JSON summary and uploads
+# it. A regression gate with loose bounds, not a benchmark.
+#
+# Weekly and by hand; it needs runner time that a deploy/** push should not.
+# Every action is pinned by commit SHA (the comment gives the version), the same
+# SHAs as ci.yml and image.yml; kind, kubectl and k6 are pinned release binaries
+# checked against a SHA-256 (scripts/install-smoke-tools.sh).
+name: k8s-load
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * 3"
+permissions:
+  contents: read
+concurrency:
+  group: k8s-load-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  load:
+    name: load (3 replicas)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SMOKE_SCENARIO: load
+      SMOKE_ARTIFACTS: ${{ github.workspace }}/k8s-smoke-artifacts
+      SMOKE_SUMMARY: ${{ github.workspace }}/k8s-load-summary.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install kind, kubectl and k6 (pinned, checksum-verified)
+        run: scripts/install-smoke-tools.sh "${RUNNER_TEMP}/k8s-bin" kind kubectl k6 >> "$GITHUB_PATH"
+      - name: Ramp tools/call over three replicas
+        run: scripts/k8s-smoke.sh
+      - name: Upload the summary
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: k8s-load-summary
+          path: ${{ github.workspace }}/k8s-load-summary.json
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Upload the failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: k8s-load-failure
+          path: ${{ github.workspace }}/k8s-smoke-artifacts
+          if-no-files-found: ignore
+          retention-days: 7

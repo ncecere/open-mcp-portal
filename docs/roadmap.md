@@ -20,7 +20,7 @@ Decided out of scope:
   server runs a bridge next to it and registers the bridge.
 - **Sampling, roots and logging.** The 2026-07-28 revision deprecates them; new work doesn't add them.
 - **The old HTTP+SSE transport** for upstream servers: deprecated by the same revision.
-- **Content scanning** (prompt-injection and data-loss checks): wanted, **not scheduled** (decision 50); a design comes first (#52).
+- **Content scanning** (prompt-injection and data-loss checks): wanted, **not scheduled** (decision 50). The design is written ([content-scanning.md](content-scanning.md), #52) and proposes a narrow first slice (static checks of tool definitions at refresh, in shadow mode, shown at review); decision 87 records a narrow go; the first-slice follow-ups are #70–#73. **Nothing is built**, and it proposes no hosted model.
 
 ## Where things stand
 
@@ -177,7 +177,7 @@ Not scheduled. Milestone: [Later](https://github.com/ncecere/open-mcp-portal/mil
 
 | Issue | Item | Size | What it does, and why | Depends on |
 | --- | --- | --- | --- | --- |
-| [#52](https://github.com/ncecere/open-mcp-portal/issues/52) | Write the design for content scanning of tool definitions, results and arguments | M | Design, before any code, how the portal could detect prompt injection in tool descriptions and results and data loss in arguments and results. The deliverable is `docs/content-scanning.md` and a decision record, with go or no-go and a list of follow-up build issues. | #31, #28, decision 50 |
+| [#52](https://github.com/ncecere/open-mcp-portal/issues/52) | Write the design for content scanning of tool definitions, results and arguments **designed (decision 87)** | M | Design, before any code, how the portal could detect prompt injection in tool descriptions and results and data loss in arguments and results. [content-scanning.md](content-scanning.md) is drafted with a proposed go (shadow-mode detection first, no hosted model), a test-corpus plan, acceptance tests and follow-up issue drafts; decision 87 records it (owner delegated the defaults; the owner may override them). First-slice follow-ups: #70–#73. Still owner input: OMG's guardrails design and the data-protection review before slice 2. No scanner is built. | #31, #28, decision 50 |
 | [#53](https://github.com/ncecere/open-mcp-portal/issues/53) | Explore multiple IdPs, client mTLS and DPoP-bound tokens | S | Find out whether contractors on a second identity provider, mTLS-bound clients and DPoP-bound tokens are worth building, before building any of them. The issue ends in written go or no-go decisions. | #36, #37 |
 
 ## Resolved questions (2026-10-17)

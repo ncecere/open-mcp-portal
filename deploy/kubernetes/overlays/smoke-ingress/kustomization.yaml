@@ -1,0 +1,55 @@
+# Ingress, TLS and sign-in for the smoke test (scripts/smoke/ingress.sh,
+# SMOKE_SCENARIO=ingress; docs/deploy.md, "Smoke test"): the smoke overlay
+# behind an Envoy Gateway Gateway with a cert-manager certificate for
+# https://omp.smoke.test, signing in through Dex instead of the development
+# persona, with TRUSTED_PROXIES set at run time to the gateway's proxy pod.
+#
+# DEVELOPMENT ONLY, like overlays/smoke. The controllers (Envoy Gateway,
+# cert-manager) are installed by the script from pinned, checksum-verified
+# release manifests; ./controller holds the GatewayClass and EnvoyProxy. Not
+# in this file because it is made at run time: the secrets (the smoke
+# overlay's, plus omp-smoke-dex), the image tags, TRUSTED_PROXIES and
+# BOOTSTRAP_ADMIN_SUBJECT.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: omp-smoke
+
+resources:
+  - ../smoke
+  - dex.yaml
+  - networkpolicy-dex.yaml
+  - tls.yaml
+  - gateway.yaml
+
+configMapGenerator:
+  - name: open-mcp-portal-config
+    behavior: merge
+    literals:
+      - APP_URL=https://omp.smoke.test
+      # Refused on a non-loopback APP_URL anyway (the scenario proves it).
+      - DEV_AUTH=false
+      - OIDC_ISSUER=http://dex.omp-smoke.svc.cluster.local:5556/dex
+      - OIDC_CLIENT_ID=omp-smoke
+      # Dex only returns groups when the groups scope is asked for.
+      - OIDC_SCOPES=openid,profile,email,groups
+      - OIDC_GROUPS_CLAIM=groups
+      - OIDC_REQUIRE_VERIFIED_EMAIL=true
+
+patches:
+  # The "ingress controller" is Envoy Gateway's proxy namespace.
+  - target:
+      kind: NetworkPolicy
+      name: open-mcp-portal-ingress
+    patch: |-
+      - op: replace
+        path: /spec/ingress/0/from/0/namespaceSelector/matchLabels/kubernetes.io~1metadata.name
+        value: envoy-gateway-system
+  # The progress tool (a streamed tools/call) is on with -stream-tools.
+  - target:
+      kind: Deployment
+      name: fakemcp
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: -stream-tools
