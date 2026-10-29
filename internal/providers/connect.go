@@ -374,17 +374,12 @@ func (s *Service) begin(ctx context.Context, a authz.Actor, p dbgen.AuthProvider
 // linkUsable: an oauth server registered with platform_provider can sign in
 // only while the platform provider is on and its endpoints still match.
 func (s *Service) linkUsable(ctx context.Context, p dbgen.AuthProvider) error {
-	if !p.LinkProviderID.Valid {
-		return nil
-	}
-	l, err := s.q.GetAuthProvider(ctx, p.LinkProviderID.UUID)
-	if err != nil {
-		return err
-	}
-	if !l.Enabled || l.AuthorizationUrl != p.AuthorizationUrl || l.TokenUrl != p.TokenUrl {
-		return errLinkMismatch
-	}
-	return nil
+	return linkUsableWith(ctx, s.q, p)
+}
+
+func linkUsableWith(ctx context.Context, q store.EndpointReader, p dbgen.AuthProvider) error {
+	_, err := clientOfWith(ctx, q, p)
+	return err
 }
 
 var errLinkMismatch = apperr.New(http.StatusUnprocessableEntity, "provider_mismatch",

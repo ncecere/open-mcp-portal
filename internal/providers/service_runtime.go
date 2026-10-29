@@ -46,8 +46,11 @@ func (s *Service) serviceAuthorized(ctx context.Context, q *dbgen.Queries, req *
 	if e != nil {
 		return p, e
 	}
-	if s.linkUsable(ctx, p) != nil {
-		return p, ErrProviderDisabled
+	if e := linkUsableWith(ctx, q, p); e != nil {
+		if errors.Is(e, errLinkMismatch) || errors.Is(e, pgx.ErrNoRows) {
+			return p, ErrProviderDisabled
+		}
+		return p, e
 	}
 	sv, e := q.GetMCPServer(ctx, cc.ServerID)
 	if errors.Is(e, pgx.ErrNoRows) {
@@ -133,6 +136,14 @@ func (s *Service) serviceAuthorized(ctx context.Context, q *dbgen.Queries, req *
 	}
 	return p, nil
 }
+
+// Policy refusals may commit a completed refresh rotation while withholding
+// the credential. Database failures must instead abort the transaction.
+func servicePolicyRefusal(err error) bool {
+	var refused *ServiceCredentialError
+	return errors.Is(err, ErrProviderDisabled) || errors.Is(err, ErrProviderNotAllowed) || errors.As(err, &refused)
+}
+
 func serviceNarrowKey(c dbgen.ServiceConnection, scopes []string) narrowKey {
 	sorted := slices.Clone(scopes)
 	slices.Sort(sorted)
@@ -211,6 +222,9 @@ func (s *Service) serviceCredential(ctx context.Context, req *registry.Requireme
 		}
 		p, e = s.serviceAuthorized(ctx, q, req, cc, c)
 		if e != nil {
+			if !servicePolicyRefusal(e) {
+				return e
+			}
 			outcome = e
 			return nil
 		}
@@ -243,12 +257,13 @@ func (s *Service) serviceCredential(ctx context.Context, req *registry.Requireme
 				outcome = serviceRefused(ServiceConnectionNeedsReconsent)
 				return s.serviceReconsent(ctx, q, p, c, "expired")
 			}
-			var tok tokenSet
-			var ee *endpointError
+			var scopes []string
 			if narrowed {
-				tok, ee = s.refreshScoped(ctx, p, rt, req.Scopes)
-			} else {
-				tok, ee = s.refresh(ctx, p, rt)
+				scopes = req.Scopes
+			}
+			tok, ee, e := s.refreshInTransaction(ctx, q, p, rt, scopes)
+			if e != nil {
+				return e
 			}
 			observeRefresh(p.Slug, endpointOutcome(ee))
 			if ee != nil {
@@ -305,6 +320,9 @@ func (s *Service) serviceCredential(ctx context.Context, req *registry.Requireme
 			// credential can escape and even when this request waited for a lock.
 			if _, e = s.serviceAuthorized(ctx, q, req, cc, c); e != nil {
 				pending = nil
+				if !servicePolicyRefusal(e) {
+					return e
+				}
 				outcome = e
 				return nil
 			}

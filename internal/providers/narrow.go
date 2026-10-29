@@ -131,6 +131,8 @@ func (s *Service) narrowedToken(ctx context.Context, p dbgen.AuthProvider, c dbg
 	var token string
 	var outcome error
 	asked := false
+	var pending *narrowEntry
+	var pendingKey narrowKey
 	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
 		lc, err := q.LockProviderConnectionByID(ctx, c.ID)
 		if errors.Is(store.NotFound(err), store.ErrNotFound) {
@@ -154,7 +156,10 @@ func (s *Service) narrowedToken(ctx context.Context, p dbgen.AuthProvider, c dbg
 			return s.markReconsent(ctx, q, p, lc, "expired")
 		}
 		asked = true
-		tok, ee := s.refreshScoped(ctx, p, rt, scopes)
+		tok, ee, err := s.refreshInTransaction(ctx, q, p, rt, scopes)
+		if err != nil {
+			return err
+		}
 		if ee != nil {
 			switch {
 			case ee.Unavailable:
@@ -202,7 +207,8 @@ func (s *Service) narrowedToken(ctx context.Context, p dbgen.AuthProvider, c dbg
 			ttl = time.Duration(tok.ExpiresIn)*time.Second - RefreshAhead
 		}
 		if ttl > 0 {
-			s.narrow.put(key, token, now.Add(ttl), now)
+			pendingKey = key
+			pending = &narrowEntry{token: token, expires: now.Add(ttl)}
 		}
 		return nil
 	})
@@ -211,6 +217,9 @@ func (s *Service) narrowedToken(ctx context.Context, p dbgen.AuthProvider, c dbg
 	}
 	if err != nil {
 		return "", err
+	}
+	if pending != nil {
+		s.narrow.put(pendingKey, pending.token, pending.expires, s.now())
 	}
 	return token, outcome
 }

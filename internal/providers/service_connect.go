@@ -161,11 +161,14 @@ func (s *Service) ReconnectServiceConnection(ctx context.Context, a authz.Actor,
 	return out, err
 }
 func (s *Service) beginService(ctx context.Context, q *dbgen.Queries, a authz.Actor, p dbgen.AuthProvider, c dbgen.ServiceConnection, session string) (Started, error) {
-	client, e := s.clientOf(ctx, p)
+	client, e := clientOfWith(ctx, q, p)
+	if errors.Is(e, errLinkMismatch) || errors.Is(e, pgx.ErrNoRows) {
+		return Started{}, errNoProvider
+	}
 	if e != nil {
 		return Started{}, e
 	}
-	if !p.Enabled || s.linkUsable(ctx, p) != nil {
+	if !p.Enabled {
 		return Started{}, errNoProvider
 	}
 	state := randomID()
@@ -222,11 +225,14 @@ func (s *Service) validateServiceCallback(ctx context.Context, q *dbgen.Queries,
 	if e != nil {
 		return c, p, e
 	}
-	client, e := s.clientOf(ctx, p)
+	client, e := clientOfWith(ctx, q, p)
+	if errors.Is(e, errLinkMismatch) || errors.Is(e, pgx.ErrNoRows) {
+		return c, p, errNoServiceConnection
+	}
 	if e != nil {
 		return c, p, e
 	}
-	if !p.Enabled || p.Revision != st.ProviderRevision || client.Revision != st.ClientRevision || deref(p.Resource) != deref(st.Resource) || s.linkUsable(ctx, p) != nil {
+	if !p.Enabled || p.Revision != st.ProviderRevision || client.Revision != st.ClientRevision || deref(p.Resource) != deref(st.Resource) {
 		return c, p, errNoServiceConnection
 	}
 	if p.Kind == KindMCPServer {

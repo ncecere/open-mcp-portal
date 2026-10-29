@@ -97,6 +97,20 @@ func (n *Networks) Current(ctx context.Context) *netpolicy.Policy {
 	return n.set(decodeEntries(row.Entries))
 }
 
+// CurrentChecked uses only the exchange's serialized transaction reads when
+// present. Transaction-local settings must never refresh or replace the shared
+// cache, and failures must not fall back to a cached/deployment-only policy.
+func (n *Networks) CurrentChecked(ctx context.Context) (*netpolicy.Policy, error) {
+	if q, ok := store.EndpointReads(ctx); ok {
+		row, err := q.GetNetworkSettings(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return netpolicy.New(n.deployment, decodeEntries(row.Entries)), nil
+	}
+	return n.Current(ctx), nil
+}
+
 // set installs the admin entries (the replica that saved them applies them
 // at once).
 func (n *Networks) set(admin []netpolicy.Entry) *netpolicy.Policy {

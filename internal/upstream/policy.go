@@ -17,6 +17,19 @@ type NetworkPolicy interface {
 	Current(ctx context.Context) *netpolicy.Policy
 }
 
+// CheckedNetworkPolicy can fail closed when obtaining the live policy fails.
+// NetworkPolicy remains compatible with static policies and existing callers.
+type CheckedNetworkPolicy interface {
+	CurrentChecked(context.Context) (*netpolicy.Policy, error)
+}
+
+func (c *Client) policyChecked(ctx context.Context) (*netpolicy.Policy, error) {
+	if p, ok := c.Networks.(CheckedNetworkPolicy); ok {
+		return p.CurrentChecked(ctx)
+	}
+	return c.policy(ctx), nil
+}
+
 const messageNotAllowed = "The server's address is not allowed: it is loopback, link-local or another blocked range, " +
 	"an internal address no platform admin has allowed, or the server redirected."
 
@@ -30,7 +43,11 @@ func (c *Client) policy(ctx context.Context) *netpolicy.Policy {
 // NormalizeURL checks a server URL against the rule with the allowlist in
 // force (NormalizeURLWith).
 func (c *Client) NormalizeURL(ctx context.Context, raw string) (string, error) {
-	return NormalizeURLWith(raw, c.AllowPrivate, c.policy(ctx))
+	p, err := c.policyChecked(ctx)
+	if err != nil {
+		return "", err
+	}
+	return NormalizeURLWith(raw, c.AllowPrivate, p)
 }
 
 // notAllowed turns a refused URL into the not_allowed error class.
@@ -47,6 +64,9 @@ const CheckTimeout = 3 * time.Second
 
 // Check reasons beyond the URL problems and address verdicts.
 const ReasonDNSFailed = "dns_failed"
+
+// ReasonPolicyFailed means the live address policy could not be read.
+const ReasonPolicyFailed = "policy_failed"
 
 // AddressCheck is one address of a checked URL.
 type AddressCheck struct {
@@ -71,7 +91,10 @@ type CheckResult struct {
 // host (at most CheckTimeout) without connecting. Every resolved address
 // must be allowed, as when dialling.
 func (c *Client) Check(ctx context.Context, raw string) CheckResult {
-	p := c.policy(ctx)
+	p, err := c.policyChecked(ctx)
+	if err != nil {
+		return CheckResult{Reason: ReasonPolicyFailed, Message: "The address policy couldn't be read."}
+	}
 	if _, err := NormalizeURLWith(raw, c.AllowPrivate, p); err != nil {
 		res := CheckResult{Reason: ReasonInvalid, Message: err.Error()}
 		if e, ok := apperr.As(err); ok {

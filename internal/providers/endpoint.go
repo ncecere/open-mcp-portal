@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ncecere/open-mcp-portal/internal/registry"
+	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 	"github.com/ncecere/open-mcp-portal/internal/upstream"
 )
@@ -72,12 +74,12 @@ func safeCode(c string) string {
 
 // do sends a request to a provider endpoint and reads its bounded body.
 func (s *Service) do(ctx context.Context, req *http.Request, timeout time.Duration) (int, string, []byte, *endpointError) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	// The allowlist may have changed since the URL was saved.
 	if _, err := s.up.NormalizeURL(ctx, req.URL.String()); err != nil {
 		return 0, "", nil, unavailable("not_allowed", 0)
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 	res, err := s.http.Do(req.WithContext(ctx))
 	if err != nil {
 		switch {
@@ -136,11 +138,31 @@ func (s *Service) clientOf(ctx context.Context, p dbgen.AuthProvider) (dbgen.Aut
 	if !p.LinkProviderID.Valid {
 		return p, nil
 	}
-	return s.q.GetAuthProvider(ctx, p.LinkProviderID.UUID)
+	var q store.EndpointReader = s.q
+	if scoped, ok := store.EndpointReads(ctx); ok {
+		q = scoped
+	}
+	return clientOfWith(ctx, q, p)
+}
+
+func clientOfWith(ctx context.Context, q store.EndpointReader, p dbgen.AuthProvider) (dbgen.AuthProvider, error) {
+	if !p.LinkProviderID.Valid {
+		return p, nil
+	}
+	l, err := q.GetAuthProvider(ctx, p.LinkProviderID.UUID)
+	if err != nil {
+		return l, err
+	}
+	if !l.Enabled || l.AuthorizationUrl != p.AuthorizationUrl || l.TokenUrl != p.TokenUrl {
+		return l, errLinkMismatch
+	}
+	return l, nil
 }
 
 // postForm posts a form to a provider endpoint with client authentication.
 func (s *Service) postForm(ctx context.Context, p dbgen.AuthProvider, endpoint string, form url.Values) (int, string, []byte, *endpointError) {
+	ctx, cancel := context.WithTimeout(ctx, endpointTimeout)
+	defer cancel()
 	p, err := s.clientOf(ctx, p)
 	if err != nil {
 		return 0, "", nil, unavailable("config", 0)
@@ -340,6 +362,25 @@ func (s *Service) refreshScoped(ctx context.Context, p dbgen.AuthProvider, refre
 		return tokenSet{}, ee
 	}
 	return parseToken(p.TokenResponseFormat, status, mt, body)
+}
+
+// refreshInTransaction bounds the whole exchange and lends only serialized
+// endpoint reads to asynchronous transport dials. The scope is closed/drained
+// before any caller resumes transaction SQL. A failed SQL read must abort the
+// transaction, never be mistaken for a provider's credential refusal.
+func (s *Service) refreshInTransaction(ctx context.Context, q *dbgen.Queries, p dbgen.AuthProvider, rt string, scopes []string) (tok tokenSet, ee *endpointError, err error) {
+	ctx, cancel := context.WithTimeout(ctx, endpointTimeout)
+	defer cancel()
+	ctx, scope := store.WithEndpointReads(ctx, q)
+	defer func() {
+		scope.Close()
+		if readErr := scope.Err(); readErr != nil {
+			tok, ee = tokenSet{}, nil
+			err = &UnavailableError{Provider: registry.ProviderOf(p), Code: "config", cause: readErr}
+		}
+	}()
+	tok, ee = s.refreshScoped(ctx, p, rt, scopes)
+	return tok, ee, nil
 }
 
 // revoke revokes a token at the provider's RFC 7009 endpoint: true when it

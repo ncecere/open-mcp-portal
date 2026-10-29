@@ -90,9 +90,11 @@ var ErrProviderDisabled = errors.New("providers: the auth provider is turned off
 type UnavailableError struct {
 	Provider registry.Provider
 	Code     string
+	cause    error // local endpoint-read failure; never included in the public message
 }
 
 func (e *UnavailableError) Error() string { return "providers: provider unavailable (" + e.Code + ")" }
+func (e *UnavailableError) Unwrap() error { return e.cause }
 
 // errReconsent is a refresh that ended the connection's tokens.
 var errReconsent = errors.New("providers: reconsent")
@@ -245,7 +247,10 @@ func (s *Service) UpstreamRejected(ctx context.Context, req *registry.Requiremen
 			outcome = errReconsent
 			return s.markReconsent(ctx, q, p, c, "upstream_rejected")
 		}
-		tok, ee := s.refresh(ctx, p, rt)
+		tok, ee, err := s.refreshInTransaction(ctx, q, p, rt, nil)
+		if err != nil {
+			return err
+		}
 		observeRefresh(p.Slug, endpointOutcome(ee))
 		if ee != nil {
 			if ee.Unavailable {
@@ -446,7 +451,10 @@ func (s *Service) refreshConnectionAhead(ctx context.Context, p dbgen.AuthProvid
 			outcome = errReconsent
 			return s.markReconsent(ctx, q, p, c, "expired")
 		}
-		tok, ee := s.refresh(ctx, p, rt)
+		tok, ee, err := s.refreshInTransaction(ctx, q, p, rt, nil)
+		if err != nil {
+			return err
+		}
 		if ee != nil {
 			if ee.Unavailable {
 				s.Log.InfoContext(ctx, "auth provider refresh failed", "provider", p.Slug, "error", ee.Code, "status", ee.Status)

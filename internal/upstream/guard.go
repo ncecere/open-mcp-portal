@@ -168,8 +168,9 @@ func defaultResolver(ctx context.Context, host string) ([]netip.Addr, error) {
 type dialer struct {
 	allowPrivate bool
 	// policy is the allowlist in force (read at every dial; nil: none).
-	policy func(ctx context.Context) *netpolicy.Policy
-	lookup resolver
+	policy        func(ctx context.Context) *netpolicy.Policy
+	policyChecked func(context.Context) (*netpolicy.Policy, error)
+	lookup        resolver
 	// connect dials an approved address (nil: net.Dialer with a 10s timeout).
 	connect func(ctx context.Context, network, address string) (net.Conn, error)
 }
@@ -188,11 +189,16 @@ func (d *dialer) dial(ctx context.Context, network, address string) (net.Conn, e
 	if len(ips) == 0 {
 		return nil, fmt.Errorf("upstream: %s has no addresses", host)
 	}
-	if !d.allowPrivate {
-		var p *netpolicy.Policy
-		if d.policy != nil {
-			p = d.policy(ctx)
+	var p *netpolicy.Policy
+	if d.policyChecked != nil {
+		p, err = d.policyChecked(ctx)
+		if err != nil {
+			return nil, err
 		}
+	} else if d.policy != nil {
+		p = d.policy(ctx)
+	}
+	if !d.allowPrivate {
 		for _, ip := range ips {
 			if v := p.CheckAddr(host, ip); !v.Allowed {
 				return nil, fmt.Errorf("%w: %s resolved to %s (%s)", ErrBlockedAddress, host, ip, v.Reason)
@@ -224,7 +230,7 @@ func (d *dialer) dial(ctx context.Context, network, address string) (net.Conn, e
 // refused address fails with ErrBlockedAddress. Other fetches of URLs
 // chosen by someone else (OAuth client metadata documents) use it.
 func (c *Client) GuardedDial() func(ctx context.Context, network, address string) (net.Conn, error) {
-	d := &dialer{allowPrivate: c.AllowPrivate, policy: c.policy, lookup: c.resolve(), connect: c.Dial}
+	d := &dialer{allowPrivate: c.AllowPrivate, policyChecked: c.policyChecked, lookup: c.resolve(), connect: c.Dial}
 	return d.dial
 }
 
@@ -470,7 +476,7 @@ func (b *cappedBody) Read(p []byte) (int, error) {
 // dialer, no proxy from the environment, no redirects, the header and the
 // body cap. done closes its idle connections.
 func (c *Client) httpClient(t Target, ex *exchange) (client *http.Client, done func()) {
-	d := &dialer{allowPrivate: c.AllowPrivate, policy: c.policy, lookup: c.resolve(), connect: c.Dial}
+	d := &dialer{allowPrivate: c.AllowPrivate, policyChecked: c.policyChecked, lookup: c.resolve(), connect: c.Dial}
 	tr := &http.Transport{
 		Proxy:                 nil, // never HTTP(S)_PROXY: the dialer must see the real destination
 		DialContext:           d.dial,
