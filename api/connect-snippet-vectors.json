@@ -1,0 +1,319 @@
+{
+  "comment": "Shared test vectors for the connect snippets: web/src/components/gateways/connect-snippets.ts and internal/ompcli/snippets.go must both produce exactly these outputs (web/src/test/gateway-helpers.test.ts, internal/ompcli/snippets_test.go). Generated from the TypeScript implementation; change both implementations and this file together.",
+  "keyPlaceholder": "<YOUR_API_KEY>",
+  "vscodeInputId": "omp-key",
+  "clients": [
+    {
+      "id": "claude",
+      "label": "Claude Code",
+      "language": "bash",
+      "oauth": true
+    },
+    {
+      "id": "vscode",
+      "label": "VS Code",
+      "language": "json",
+      "file": ".vscode/mcp.json",
+      "oauth": true
+    },
+    {
+      "id": "cursor",
+      "label": "Cursor",
+      "language": "json",
+      "file": "~/.cursor/mcp.json",
+      "oauth": true
+    },
+    {
+      "id": "curl",
+      "label": "curl",
+      "language": "bash",
+      "oauth": false
+    }
+  ],
+  "snippets": [
+    {
+      "client": "claude",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "want": "claude mcp add --transport http support-tools https://mcp.example.com/mcp/support-tools"
+    },
+    {
+      "client": "claude",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "secret": "omp_secret",
+      "want": "claude mcp add --transport http support-tools https://mcp.example.com/mcp/support-tools"
+    },
+    {
+      "client": "claude",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "auth": "oauth",
+      "want": "claude mcp add --transport http support-tools https://mcp.example.com/mcp/support-tools"
+    },
+    {
+      "client": "claude",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "auth": "oauth",
+      "secret": "omp_secret",
+      "want": "claude mcp add --transport http support-tools https://mcp.example.com/mcp/support-tools"
+    },
+    {
+      "client": "claude",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "auth": "key",
+      "want": "claude mcp add --transport http support-tools https://mcp.example.com/mcp/support-tools --header \"Authorization: Bearer <YOUR_API_KEY>\""
+    },
+    {
+      "client": "claude",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "auth": "key",
+      "secret": "omp_secret",
+      "want": "claude mcp add --transport http support-tools https://mcp.example.com/mcp/support-tools --header \"Authorization: Bearer omp_secret\""
+    },
+    {
+      "client": "vscode",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "want": "{\n  \"servers\": {\n    \"support-tools\": {\n      \"type\": \"http\",\n      \"url\": \"https://mcp.example.com/mcp/support-tools\"\n    }\n  }\n}"
+    },
+    {
+      "client": "vscode",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "secret": "omp_secret",
+      "want": "{\n  \"servers\": {\n    \"support-tools\": {\n      \"type\": \"http\",\n      \"url\": \"https://mcp.example.com/mcp/support-tools\"\n    }\n  }\n}"
+    },
+    {
+      "client": "vscode",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "auth": "oauth",
+      "want": "{\n  \"servers\": {\n    \"support-tools\": {\n      \"type\": \"http\",\n      \"url\": \"https://mcp.example.com/mcp/support-tools\"\n    }\n  }\n}"
+    },
+    {
+      "client": "vscode",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "auth": "oauth",
+      "secret": "omp_secret",
+      "want": "{\n  \"servers\": {\n    \"support-tools\": {\n      \"type\": \"http\",\n      \"url\": \"https://mcp.example.com/mcp/support-tools\"\n    }\n  }\n}"
+    },
+    {
+      "client": "vscode",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "auth": "key",
+      "want": "{\n  \"inputs\": [\n    {\n      \"type\": \"promptString\",\n      \"id\": \"omp-key\",\n      \"description\": \"Open MCP Portal API key\",\n      \"password\": true\n    }\n  ],\n  \"servers\": {\n    \"support-tools\": {\n      \"type\": \"http\",\n      \"url\": \"https://mcp.example.com/mcp/support-tools\",\n      \"headers\": {\n        \"Authorization\": \"Bearer ${input:omp-key}\"\n      }\n    }\n  }\n}"
+    },
+    {
+      "client": "vscode",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "auth": "key",
+      "secret": "omp_secret",
+      "want": "{\n  \"inputs\": [\n    {\n      \"type\": \"promptString\",\n      \"id\": \"omp-key\",\n      \"description\": \"Open MCP Portal API key\",\n      \"password\": true\n    }\n  ],\n  \"servers\": {\n    \"support-tools\": {\n      \"type\": \"http\",\n      \"url\": \"https://mcp.example.com/mcp/support-tools\",\n      \"headers\": {\n        \"Authorization\": \"Bearer ${input:omp-key}\"\n      }\n    }\n  }\n}"
+    },
+    {
+      "client": "cursor",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "want": "{\n  \"mcpServers\": {\n    \"support-tools\": {\n      \"url\": \"https://mcp.example.com/mcp/support-tools\"\n    }\n  }\n}"
+    },
+    {
+      "client": "cursor",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "secret": "omp_secret",
+      "want": "{\n  \"mcpServers\": {\n    \"support-tools\": {\n      \"url\": \"https://mcp.example.com/mcp/support-tools\"\n    }\n  }\n}"
+    },
+    {
+      "client": "cursor",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "auth": "oauth",
+      "want": "{\n  \"mcpServers\": {\n    \"support-tools\": {\n      \"url\": \"https://mcp.example.com/mcp/support-tools\"\n    }\n  }\n}"
+    },
+    {
+      "client": "cursor",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "auth": "oauth",
+      "secret": "omp_secret",
+      "want": "{\n  \"mcpServers\": {\n    \"support-tools\": {\n      \"url\": \"https://mcp.example.com/mcp/support-tools\"\n    }\n  }\n}"
+    },
+    {
+      "client": "cursor",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "auth": "key",
+      "want": "{\n  \"mcpServers\": {\n    \"support-tools\": {\n      \"url\": \"https://mcp.example.com/mcp/support-tools\",\n      \"headers\": {\n        \"Authorization\": \"Bearer <YOUR_API_KEY>\"\n      }\n    }\n  }\n}"
+    },
+    {
+      "client": "cursor",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "auth": "key",
+      "secret": "omp_secret",
+      "want": "{\n  \"mcpServers\": {\n    \"support-tools\": {\n      \"url\": \"https://mcp.example.com/mcp/support-tools\",\n      \"headers\": {\n        \"Authorization\": \"Bearer omp_secret\"\n      }\n    }\n  }\n}"
+    },
+    {
+      "client": "curl",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "want": "curl -X POST https://mcp.example.com/mcp/support-tools \\\n  -H \"Authorization: Bearer <YOUR_API_KEY>\" \\\n  -H \"Content-Type: application/json\" \\\n  -H \"Accept: application/json, text/event-stream\" \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}'"
+    },
+    {
+      "client": "curl",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "secret": "omp_secret",
+      "want": "curl -X POST https://mcp.example.com/mcp/support-tools \\\n  -H \"Authorization: Bearer omp_secret\" \\\n  -H \"Content-Type: application/json\" \\\n  -H \"Accept: application/json, text/event-stream\" \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}'"
+    },
+    {
+      "client": "curl",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "auth": "oauth",
+      "want": "curl -X POST https://mcp.example.com/mcp/support-tools \\\n  -H \"Authorization: Bearer <YOUR_API_KEY>\" \\\n  -H \"Content-Type: application/json\" \\\n  -H \"Accept: application/json, text/event-stream\" \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}'"
+    },
+    {
+      "client": "curl",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "auth": "oauth",
+      "secret": "omp_secret",
+      "want": "curl -X POST https://mcp.example.com/mcp/support-tools \\\n  -H \"Authorization: Bearer omp_secret\" \\\n  -H \"Content-Type: application/json\" \\\n  -H \"Accept: application/json, text/event-stream\" \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}'"
+    },
+    {
+      "client": "curl",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "auth": "key",
+      "want": "curl -X POST https://mcp.example.com/mcp/support-tools \\\n  -H \"Authorization: Bearer <YOUR_API_KEY>\" \\\n  -H \"Content-Type: application/json\" \\\n  -H \"Accept: application/json, text/event-stream\" \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}'"
+    },
+    {
+      "client": "curl",
+      "name": "support-tools",
+      "url": "https://mcp.example.com/mcp/support-tools",
+      "auth": "key",
+      "secret": "omp_secret",
+      "want": "curl -X POST https://mcp.example.com/mcp/support-tools \\\n  -H \"Authorization: Bearer omp_secret\" \\\n  -H \"Content-Type: application/json\" \\\n  -H \"Accept: application/json, text/event-stream\" \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}'"
+    },
+    {
+      "client": "claude",
+      "name": "Support-tools",
+      "url": "https://portal.example.com/omp/mcp/support-tools",
+      "auth": "key",
+      "want": "claude mcp add --transport http Support-tools https://portal.example.com/omp/mcp/support-tools --header \"Authorization: Bearer <YOUR_API_KEY>\""
+    },
+    {
+      "client": "vscode",
+      "name": "Support-tools",
+      "url": "https://portal.example.com/omp/mcp/support-tools",
+      "auth": "key",
+      "want": "{\n  \"inputs\": [\n    {\n      \"type\": \"promptString\",\n      \"id\": \"omp-key\",\n      \"description\": \"Open MCP Portal API key\",\n      \"password\": true\n    }\n  ],\n  \"servers\": {\n    \"Support-tools\": {\n      \"type\": \"http\",\n      \"url\": \"https://portal.example.com/omp/mcp/support-tools\",\n      \"headers\": {\n        \"Authorization\": \"Bearer ${input:omp-key}\"\n      }\n    }\n  }\n}"
+    },
+    {
+      "client": "cursor",
+      "name": "Support-tools",
+      "url": "https://portal.example.com/omp/mcp/support-tools",
+      "auth": "key",
+      "want": "{\n  \"mcpServers\": {\n    \"Support-tools\": {\n      \"url\": \"https://portal.example.com/omp/mcp/support-tools\",\n      \"headers\": {\n        \"Authorization\": \"Bearer <YOUR_API_KEY>\"\n      }\n    }\n  }\n}"
+    },
+    {
+      "client": "curl",
+      "name": "Support-tools",
+      "url": "https://portal.example.com/omp/mcp/support-tools",
+      "auth": "key",
+      "want": "curl -X POST https://portal.example.com/omp/mcp/support-tools \\\n  -H \"Authorization: Bearer <YOUR_API_KEY>\" \\\n  -H \"Content-Type: application/json\" \\\n  -H \"Accept: application/json, text/event-stream\" \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}'"
+    }
+  ],
+  "clientNames": [
+    {
+      "input": "Support tools!",
+      "fallback": "fallback",
+      "want": "Support-tools"
+    },
+    {
+      "input": "  ;rm -rf /  ",
+      "fallback": "fallback",
+      "want": "rm--rf"
+    },
+    {
+      "input": "",
+      "fallback": "support-tools",
+      "want": "support-tools"
+    },
+    {
+      "input": "---",
+      "fallback": "x",
+      "want": "x"
+    },
+    {
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "fallback": "x",
+      "want": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "input": "Ünïcode name",
+      "fallback": "fb",
+      "want": "n-code-name"
+    },
+    {
+      "input": "under_score-ok",
+      "fallback": "fb",
+      "want": "under_score-ok"
+    },
+    {
+      "input": "a  b\tc",
+      "fallback": "fb",
+      "want": "a-b-c"
+    }
+  ],
+  "authFor": [
+    {
+      "client": "claude",
+      "auth": "oauth",
+      "want": "oauth"
+    },
+    {
+      "client": "claude",
+      "auth": "key",
+      "want": "key"
+    },
+    {
+      "client": "vscode",
+      "auth": "oauth",
+      "want": "oauth"
+    },
+    {
+      "client": "vscode",
+      "auth": "key",
+      "want": "key"
+    },
+    {
+      "client": "cursor",
+      "auth": "oauth",
+      "want": "oauth"
+    },
+    {
+      "client": "cursor",
+      "auth": "key",
+      "want": "key"
+    },
+    {
+      "client": "curl",
+      "auth": "oauth",
+      "want": "key"
+    },
+    {
+      "client": "curl",
+      "auth": "key",
+      "want": "key"
+    }
+  ]
+}

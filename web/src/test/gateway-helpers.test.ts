@@ -1,7 +1,9 @@
 /* Pure gateway helpers: the clients' snippets, the refused-selection mapping (422) and the audit words. */
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { ApiError } from "../api/client";
 import { actionLabel, areaOf, areaOptions, targetTypeLabel } from "../components/audit/labels";
-import { authFor, clientName, keyPlaceholder, snippet, snippetClients } from "../components/gateways/connect-snippets";
+import { authFor, clientName, keyPlaceholder, snippet, snippetClients, vscodeInputId } from "../components/gateways/connect-snippets";
 import { selectionProblem } from "../components/gateways/picker-errors";
 import { callErrorLabel, callErrorLabels, grantCountLabel } from "../components/gateways/labels";
 import { grantSummary } from "../components/gateways/overview-tab";
@@ -51,6 +53,42 @@ describe("connect snippets", () => {
     expect(clientName("Support tools!", "fallback")).toBe("Support-tools");
     expect(clientName("  ;rm -rf /  ", "fallback")).toBe("rm--rf");
     expect(clientName("", "support-tools")).toBe("support-tools");
+  });
+});
+
+/*
+ * The vectors in api/connect-snippet-vectors.json are shared with the Go CLI
+ * (internal/ompcli/snippets_test.go): `omp connect` must print exactly what
+ * this UI shows, so a change to one side without the other fails a test here
+ * or there.
+ */
+type Vectors = {
+  keyPlaceholder: string;
+  vscodeInputId: string;
+  clients: { id: string; label: string; language: string; file?: string; oauth: boolean }[];
+  snippets: { client: "claude" | "vscode" | "cursor" | "curl"; name: string; url: string; auth?: "oauth" | "key"; secret?: string; want: string }[];
+  clientNames: { input: string; fallback: string; want: string }[];
+  authFor: { client: "claude" | "vscode" | "cursor" | "curl"; auth: "oauth" | "key"; want: string }[];
+};
+const vectors = JSON.parse(readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), "../../../api/connect-snippet-vectors.json"), "utf8")) as Vectors;
+
+describe("connect snippets: vectors shared with the omp CLI", () => {
+  it("has the same constants and clients", () => {
+    expect(keyPlaceholder).toBe(vectors.keyPlaceholder);
+    expect(vscodeInputId).toBe(vectors.vscodeInputId);
+    expect(snippetClients.map(({ id, label, language, file, oauth }) => ({ id, label, language, ...(file ? { file } : {}), oauth }))).toEqual(vectors.clients);
+  });
+
+  it("produce each snippet byte for byte", () => {
+    expect(vectors.snippets.length).toBeGreaterThan(20);
+    for (const v of vectors.snippets) {
+      expect(snippet(v.client, { name: v.name, url: v.url, auth: v.auth, secret: v.secret }), JSON.stringify({ ...v, want: undefined })).toBe(v.want);
+    }
+  });
+
+  it("clean names and pick the way to connect the same way", () => {
+    for (const v of vectors.clientNames) expect(clientName(v.input, v.fallback), v.input).toBe(v.want);
+    for (const v of vectors.authFor) expect(authFor(v.client, v.auth), `${v.client} ${v.auth}`).toBe(v.want);
   });
 });
 
