@@ -442,6 +442,8 @@ type McpServer struct {
 	SecretHelp            string
 	SecretSetupUserID     uuid.NullUUID
 	SecretSetupAt         *time.Time
+	RateLimitPerMinute    *int64
+	MaxConcurrent         *int32
 }
 
 type McpServerCredential struct {

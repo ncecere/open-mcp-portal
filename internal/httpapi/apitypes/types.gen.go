@@ -1243,10 +1243,12 @@ const (
 	McpErrorClassAuth        McpErrorClass = "auth"
 	McpErrorClassBadRequest  McpErrorClass = "bad_request"
 	McpErrorClassBadResponse McpErrorClass = "bad_response"
+	McpErrorClassCircuitOpen McpErrorClass = "circuit_open"
 	McpErrorClassConfig      McpErrorClass = "config"
 	McpErrorClassNotAllowed  McpErrorClass = "not_allowed"
 	McpErrorClassNotFound    McpErrorClass = "not_found"
 	McpErrorClassRateLimited McpErrorClass = "rate_limited"
+	McpErrorClassServerBusy  McpErrorClass = "server_busy"
 	McpErrorClassTimeout     McpErrorClass = "timeout"
 	McpErrorClassTls         McpErrorClass = "tls"
 	McpErrorClassTooLarge    McpErrorClass = "too_large"
@@ -1262,6 +1264,8 @@ func (e McpErrorClass) Valid() bool {
 		return true
 	case McpErrorClassBadResponse:
 		return true
+	case McpErrorClassCircuitOpen:
+		return true
 	case McpErrorClassConfig:
 		return true
 	case McpErrorClassNotAllowed:
@@ -1269,6 +1273,8 @@ func (e McpErrorClass) Valid() bool {
 	case McpErrorClassNotFound:
 		return true
 	case McpErrorClassRateLimited:
+		return true
+	case McpErrorClassServerBusy:
 		return true
 	case McpErrorClassTimeout:
 		return true
@@ -2200,6 +2206,7 @@ const (
 	CredentialPerMinute     RateLimitKey = "credential_per_minute"
 	GatewayPerMinute        RateLimitKey = "gateway_per_minute"
 	PersonPerMinute         RateLimitKey = "person_per_minute"
+	ServerPerMinute         RateLimitKey = "server_per_minute"
 	ServiceAccountPerMinute RateLimitKey = "service_account_per_minute"
 )
 
@@ -2211,6 +2218,8 @@ func (e RateLimitKey) Valid() bool {
 	case GatewayPerMinute:
 		return true
 	case PersonPerMinute:
+		return true
+	case ServerPerMinute:
 		return true
 	case ServiceAccountPerMinute:
 		return true
@@ -4668,6 +4677,9 @@ type McpServer struct {
 	// MachineOAuth The portal's own OAuth client for this server when authMode is machine_oauth, else null. The client secret is never returned. Absent from servers before v0.3.2
 	MachineOAuth *McpServerMachineOAuth `json:"machineOAuth,omitempty"`
 
+	// MaxConcurrent Fail-fast concurrent forwarded operations per server and replica; null is unlimited. This is not a cluster-wide lease.
+	MaxConcurrent *int32 `json:"maxConcurrent,omitempty"`
+
 	// Name Example: Service status
 	Name string `json:"name"`
 
@@ -4688,6 +4700,9 @@ type McpServer struct {
 	PublishReviewedAt     *time.Time         `json:"publishReviewedAt,omitempty"`
 	PublishReviewedByName *string            `json:"publishReviewedByName,omitempty"`
 	PublishState          PublishState       `json:"publishState"`
+
+	// RateLimitPerMinute Own forwarded-operation attempts per minute; null inherits the owning team/platform default, capped by the platform ceiling. Retries count again.
+	RateLimitPerMinute *int64 `json:"rateLimitPerMinute,omitempty"`
 
 	// RefreshedAt When capabilities were last read (null; never)
 	RefreshedAt *time.Time `json:"refreshedAt,omitempty"`
@@ -4749,11 +4764,17 @@ type McpServerCreate struct {
 
 	// MachineOAuth Required with authMode machine_oauth (tokenUrl, clientId and clientSecret); refused (400 invalid_machine_oauth) with any other mode, because it carries a secret
 	MachineOAuth *McpServerMachineOAuthInput `json:"machineOAuth,omitempty"`
-	Name         string                      `json:"name"`
-	Oauth        *McpServerOAuthInput        `json:"oauth,omitempty"`
+
+	// MaxConcurrent Per-replica concurrent forwards, null unlimited; server team owners/admins only, never publisher tokens.
+	MaxConcurrent *int32               `json:"maxConcurrent,omitempty"`
+	Name          string               `json:"name"`
+	Oauth         *McpServerOAuthInput `json:"oauth,omitempty"`
 
 	// PersonSecret Required with authMode person_secret (400 invalid_person_secret otherwise); ignored for other modes. How each person's own secret is sent. Nobody has entered a key yet, so capabilities are not read (McpServerCreated.setupRequired); an editor enters theirs under Account > My connections, choosing to read the server with it
 	PersonSecret *PersonSecretInput `json:"personSecret,omitempty"`
+
+	// RateLimitPerMinute Absent/null inherits; server team owners/admins only, never publisher tokens. Must not exceed the server_per_minute ceiling.
+	RateLimitPerMinute *int64 `json:"rateLimitPerMinute,omitempty"`
 
 	// Requirement Absent or null; no user authorization
 	Requirement *McpServerRequirementInput `json:"requirement,omitempty"`
@@ -5115,13 +5136,19 @@ type McpServerUpdate struct {
 
 	// MachineOAuth Only with authMode machine_oauth (sent now or stored; 400 invalid_machine_oauth otherwise). Omitted fields keep their stored values; the first time (switching to the mode) tokenUrl, clientId and clientSecret are required. A new tokenUrl, a new clientId or a URL with another origin needs clientSecret in the same request (422 client_secret_required, details.reason token_url_changed, client_id_changed or origin_changed; nothing is stored and nothing is sent to the new endpoint)
 	MachineOAuth *McpServerMachineOAuthInput `json:"machineOAuth,omitempty"`
-	Name         *string                     `json:"name,omitempty"`
+
+	// MaxConcurrent Omit to keep, null unlimited. Per-replica fail-fast cap; server team owners/admins only, never publisher tokens.
+	MaxConcurrent *int32  `json:"maxConcurrent,omitempty"`
+	Name          *string `json:"name,omitempty"`
 
 	// Oauth Only with authMode oauth (sent now or stored). Omitted fields keep their stored values
 	Oauth *McpServerOAuthInput `json:"oauth,omitempty"`
 
 	// PersonSecret Only with authMode person_secret (sent now or stored; required when switching to it). Omit to keep. A URL on another origin, another mode or another placement deletes every person's secret for the server (audited as mcp_server.person_secrets_reset); a path-only edit, or another name, prefix, label or help, keeps them. A new mode, placement, name or prefix sends a published server back to review under approval_required. A publisher automation token can't send it, nor switch a server to this mode (403 token_not_allowed)
 	PersonSecret *PersonSecretInput `json:"personSecret,omitempty"`
+
+	// RateLimitPerMinute Omit to keep, null inherits. Server team owners/admins only; not a catalog review trigger. Must not exceed the server_per_minute ceiling.
+	RateLimitPerMinute *int64 `json:"rateLimitPerMinute,omitempty"`
 
 	// Requirement Omit to keep; null removes it. A widening change sends a published server back to review under approval_required
 	Requirement *McpServerRequirementInput `json:"requirement,omitempty"`
@@ -5795,6 +5822,9 @@ type PlatformRateLimit struct {
 	// CappedGateways Gateways whose own value is above the ceiling (the ceiling applies)
 	CappedGateways int64 `json:"cappedGateways"`
 
+	// CappedServers Servers whose own override is above the ceiling; absent from older versions.
+	CappedServers *int64 `json:"cappedServers,omitempty"`
+
 	// CappedTeams Active teams whose override is above the ceiling (the ceiling applies)
 	CappedTeams int64 `json:"cappedTeams"`
 
@@ -5805,7 +5835,7 @@ type PlatformRateLimit struct {
 	Default     *RateLimitValue `json:"default"`
 	Description string          `json:"description"`
 
-	// Key person_per_minute: every /mcp request by one person, any credential and gateway. credential_per_minute: per personal API key or OAuth connection. service_account_per_minute: per service account, all its keys (team override). gateway_per_minute: per gateway, all callers together (team override as the default of the team's gateways; each gateway can set its own).
+	// Key person_per_minute: every /mcp request by one person, any credential and gateway. credential_per_minute: per personal API key or OAuth connection. service_account_per_minute: per service account, all its keys (team override). gateway_per_minute: per gateway, all callers together (team override as the default of the team's gateways; each gateway can set its own). server_per_minute: forwarded attempts to one upstream server across callers/gateways, including retries; team/server overrides respect the ceiling.
 	Key   RateLimitKey `json:"key"`
 	Label string       `json:"label"`
 
@@ -5824,7 +5854,7 @@ type PlatformRateLimitSetting struct {
 	// Default null = unlimited; at most the ceiling
 	Default *RateLimitValue `json:"default"`
 
-	// Key person_per_minute: every /mcp request by one person, any credential and gateway. credential_per_minute: per personal API key or OAuth connection. service_account_per_minute: per service account, all its keys (team override). gateway_per_minute: per gateway, all callers together (team override as the default of the team's gateways; each gateway can set its own).
+	// Key person_per_minute: every /mcp request by one person, any credential and gateway. credential_per_minute: per personal API key or OAuth connection. service_account_per_minute: per service account, all its keys (team override). gateway_per_minute: per gateway, all callers together (team override as the default of the team's gateways; each gateway can set its own). server_per_minute: forwarded attempts to one upstream server across callers/gateways, including retries; team/server overrides respect the ceiling.
 	Key RateLimitKey `json:"key"`
 }
 
@@ -5954,7 +5984,7 @@ type PublishingSettingsUpdate struct {
 	DefaultPolicy PublishPolicy `json:"defaultPolicy"`
 }
 
-// RateLimitKey person_per_minute: every /mcp request by one person, any credential and gateway. credential_per_minute: per personal API key or OAuth connection. service_account_per_minute: per service account, all its keys (team override). gateway_per_minute: per gateway, all callers together (team override as the default of the team's gateways; each gateway can set its own).
+// RateLimitKey person_per_minute: every /mcp request by one person, any credential and gateway. credential_per_minute: per personal API key or OAuth connection. service_account_per_minute: per service account, all its keys (team override). gateway_per_minute: per gateway, all callers together (team override as the default of the team's gateways; each gateway can set its own). server_per_minute: forwarded attempts to one upstream server across callers/gateways, including retries; team/server overrides respect the ceiling.
 type RateLimitKey string
 
 // RateLimitValue Requests per minute; null means unlimited (or, for a ceiling, no ceiling)
@@ -6411,7 +6441,7 @@ type TeamCreated struct {
 
 // TeamLimitChange defines model for TeamLimitChange.
 type TeamLimitChange struct {
-	// Key person_per_minute: every /mcp request by one person, any credential and gateway. credential_per_minute: per personal API key or OAuth connection. service_account_per_minute: per service account, all its keys (team override). gateway_per_minute: per gateway, all callers together (team override as the default of the team's gateways; each gateway can set its own).
+	// Key person_per_minute: every /mcp request by one person, any credential and gateway. credential_per_minute: per personal API key or OAuth connection. service_account_per_minute: per service account, all its keys (team override). gateway_per_minute: per gateway, all callers together (team override as the default of the team's gateways; each gateway can set its own). server_per_minute: forwarded attempts to one upstream server across callers/gateways, including retries; team/server overrides respect the ceiling.
 	Key RateLimitKey `json:"key"`
 
 	// Value A value up to the ceiling, or null to inherit the platform default
@@ -6471,7 +6501,7 @@ type TeamRateLimit struct {
 	// Effective What applies: override, else default, capped at the ceiling (null: unlimited). For gateway_per_minute, what the team's gateways without their own value get.
 	Effective *RateLimitValue `json:"effective"`
 
-	// Key person_per_minute: every /mcp request by one person, any credential and gateway. credential_per_minute: per personal API key or OAuth connection. service_account_per_minute: per service account, all its keys (team override). gateway_per_minute: per gateway, all callers together (team override as the default of the team's gateways; each gateway can set its own).
+	// Key person_per_minute: every /mcp request by one person, any credential and gateway. credential_per_minute: per personal API key or OAuth connection. service_account_per_minute: per service account, all its keys (team override). gateway_per_minute: per gateway, all callers together (team override as the default of the team's gateways; each gateway can set its own). server_per_minute: forwarded attempts to one upstream server across callers/gateways, including retries; team/server overrides respect the ceiling.
 	Key   RateLimitKey `json:"key"`
 	Label string       `json:"label"`
 

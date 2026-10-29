@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -61,6 +62,14 @@ type Client struct {
 	// Eras remembers the protocol era learned for each server (era.go; nil:
 	// every call probes).
 	Eras *EraCache
+	// Protection bounds active forwards and circuit state per registered server
+	// in this replica. Nil initializes the standard bounded controller once.
+	Protection *Protection
+	// OnCircuitState receives only a registered target's bounded metric facts.
+	// Configure before use; callbacks run outside the controller's mutex.
+	OnCircuitState func(Target, float64)
+	protectionOnce sync.Once
+	retryPause     func(context.Context, time.Duration) error // deterministic tests; nil uses cancellable timers
 
 	// nextID numbers the JSON-RPC requests of the modern era.
 	nextID atomic.Int64
@@ -121,6 +130,13 @@ type Target struct {
 	// errors.Is/As on the returned error can recover its cause. It may be
 	// called concurrently by the SDK and must be safe for concurrent use.
 	BeforeTransport func(context.Context, bool) error
+	// BeforeAttempt runs before negotiation/transport for each forwarded
+	// operation attempt, so quota/authority refusal precedes approval spend.
+	BeforeAttempt func(context.Context, int) error
+	// MaxConcurrent is a fail-fast replica-local forward cap (0: unlimited).
+	MaxConcurrent int32
+	ServerSlug    string
+	forwarding    bool // inspect only MCP forwards, never OAuth token requests
 	// NoReplay permits at most one tools/call transport attempt per Forward,
 	// even if authorization fails or the response is lost. Negotiation may
 	// still recover before that attempt. This does not provide exactly-once
@@ -459,6 +475,8 @@ const (
 	ClassTimeout     = "timeout"
 	ClassTooLarge    = "too_large"
 	ClassNotAllowed  = "not_allowed"
+	ClassServerBusy  = "server_busy"
+	ClassCircuitOpen = "circuit_open"
 	// ClassTLS is declared in tlsfail.go.
 )
 
@@ -475,9 +493,20 @@ type Error struct {
 	// (an OAuth-protected server's error and scope; never shown).
 	Challenge []string
 	// Reason is the data.reason of the -32010 answer a call gets when the
-	// failure was the portal's own doing rather than the server's (today only
-	// ReasonMachineAuthUnavailable); empty for every other failure.
+	// failure was the portal's own doing rather than the server's, including
+	// local admission and machine authentication; empty for remote failures.
 	Reason string
+	// RetryAfter is a bounded local/upstream delay, never a raw header value.
+	RetryAfter time.Duration
+	// LimitPerMinute is a local configured ceiling, never shared remaining usage.
+	LimitPerMinute int64
+	// PriorAttempts counts completed forward iterations before this refusal;
+	// a local denial on a retry must not erase earlier dispatch metadata.
+	PriorAttempts int
+	// BeforeDispatch proves refusal before any upstream forward/negotiation
+	// in this iteration. It does not undo dispatch in PriorAttempts.
+	BeforeDispatch bool
+	retryable      bool // only explicit bounded transport/HTTP failures, not local guards
 	// cause preserves a local transport guard failure without exposing its
 	// potentially sensitive message.
 	cause error
@@ -490,6 +519,17 @@ func (e *Error) Unwrap() error { return e.cause }
 
 // classify turns a transport or protocol error into an *Error.
 func (c *Client) classify(ctx context.Context, t Target, ex *exchange, err error) error {
+	classified := c.classifyCause(ctx, t, ex, err)
+	var original *Error
+	if !errors.As(classified, &original) {
+		return classified
+	}
+	e := *original // Never mutate a shared sentinel or another exchange's error.
+	e.retryable, e.RetryAfter = retryFacts(&e, ex, err)
+	return &e
+}
+
+func (c *Client) classifyCause(ctx context.Context, t Target, ex *exchange, err error) error {
 	// The SDK sometimes formats a transport error with %v, losing its chain.
 	// Keep the original guard failure on the exchange, not in that string.
 	if guardErr := ex.guardFailure(); guardErr != nil {

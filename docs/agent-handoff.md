@@ -1,9 +1,10 @@
-# Agent handoff: verified v0.6.0, next #33
+# Agent handoff: verified v0.6.0, #33 in development
 
 The original stop point was the verified v0.5.1 machine transfer. On 2026-10-29 the owner resumed ordered
 backlog work, authorized releases when ready and delegated incidental decisions. **Do not cut v1.0.0 without
-the owner's explicit decision.** #32 shipped in verified v0.6.0 and is closed; #33 is next. See
-[design](access-requests.md) and [status](status.md) for the current validation state. The original release
+the owner's explicit decision.** #32 shipped in verified v0.6.0 and is closed; #33 is in development,
+not released. See [upstream protection](upstream-protection.md) and [status](status.md) for the current
+scope and validation state. The original release
 tags remain immutable. No old environment, keys or data were transferred implicitly. Use owned fresh fixtures;
 secure restoration of an existing encrypted database still requires its matching keys and operator control.
 
@@ -12,11 +13,12 @@ secure restoration of an existing encrypted database still requires its matching
 ## Start here
 
 1. Fetch `origin/main` and tags; inspect `git status`, the latest main CI and the published release. Work from
-   `main`, not an old approval or refresh-fix branch. No uncommitted patch is needed for the handoff.
+   `main`, not an old approval or refresh-fix branch, for the released baseline. Inspect any active
+   `feature/upstream-protection` work before changing branches; do not discard an in-progress patch.
 2. Read `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md), [status](status.md) and
-   [implementation order](implementation-order.md). Confirm the v0.6.0 evidence/image-pin follow-up checks,
-   then implement **#33 upstream protection**: quotas/concurrency/read retries/breaker first, failover
-   separately. Do not close #33 before its failover acceptance criteria are actually met.
+   [implementation order](implementation-order.md). The v0.6.0 evidence/image-pin follow-up at `be97198`
+   passed main CI and both smoke CNIs. Continue **#33 upstream protection** under decision84:
+   quotas/concurrency/read retries/breaker first, failover separately. Do not close #33 before its failover acceptance criteria are actually met.
 3. Git transfers source, migrations, generated contracts, tests and docs—not `.env`, encryption/signing keys,
    provider credentials or the existing development database. Use the documented fresh-instance setup or
    explicitly arrange a secure, consistent database-and-keys transfer. Never reset/reseed the old database,
@@ -63,7 +65,9 @@ backlog work as well as publication evidence and the verified example image dige
 - Preserve live linked-provider endpoint matching, requester/reviewer separation, private previews/notices,
   and least-privilege runtime grants. Historical schema compatibility does not imply old-image enforcement;
   drain pre-v0.5 images before enabling approval rules, and pre-v0.6 serving/background-worker replicas
-  before enabling access requests or expiring grants. Use the new rotation utility for new ciphertext fields.
+  before enabling access requests or expiring grants. New server protection also requires draining older
+  serving/background-worker replicas before relying on it; expanded-schema compatibility is not enforcement.
+  Use the new rotation utility for new ciphertext fields.
 
 ## Code and checks
 

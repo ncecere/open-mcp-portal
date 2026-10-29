@@ -35,8 +35,8 @@ configMapGenerator:
 # digest takes precedence over the tag), never `latest`:
 #   images:
 #     - name: ghcr.io/ncecere/open-mcp-portal
-#       newTag: v0.6.0
+#       newTag: v0.7.0
 #       digest: sha256:<digest>
 images:
   - name: ghcr.io/ncecere/open-mcp-portal
-    newTag: v0.6.0
+    newTag: v0.7.0

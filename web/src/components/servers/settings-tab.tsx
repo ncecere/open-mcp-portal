@@ -44,6 +44,7 @@ import { CredentialFields } from "./credential-fields";
 import { credentialsBody, partProblems, type PartForm, partsOf } from "./credentials";
 import { EnabledSwitch, type ServerForm, serverFieldErrors, serverProblems, TimeoutField, UrlField, urlProblem } from "./server-fields";
 import { DeleteServer } from "./delete-server";
+import { type ProtectionForm, protectionFormOf, protectionProblems, protectionBody, ServerProtectionFields } from "./protection-fields";
 import { sameOrigin } from "./origin";
 import { machineProblems } from "./machine-auth";
 import { deletesText, keysDeleted, secretProblems } from "./person-secret";
@@ -52,7 +53,7 @@ import { changesCa, emptyTlsForm, tlsBody, tlsDirty, tlsProblems, tlsRefusal, ty
 import { AuthChangeNotes, settingsAuthBody } from "./settings-auth";
 import { applyDetection, authChange, authModeOf, countedUpstream, type DetectResult, oauthProblems, upstreamFormOf, type UpstreamForm } from "./upstream-auth";
 
-type SettingsForm = ServerForm & { requirement: RequirementForm; capturePayloads: boolean; upstream: UpstreamForm };
+type SettingsForm = ServerForm & { requirement: RequirementForm; capturePayloads: boolean; upstream: UpstreamForm; protection: ProtectionForm };
 
 const formOf = (x: McpServer): SettingsForm => ({
   name: x.name,
@@ -63,6 +64,7 @@ const formOf = (x: McpServer): SettingsForm => ({
   requirement: requirementFormOf(x),
   capturePayloads: x.capturePayloads ?? false,
   upstream: upstreamFormOf(x),
+  protection: protectionFormOf(x),
 });
 const labels = {
   name: "Name",
@@ -73,6 +75,7 @@ const labels = {
   requirement: "User authorization",
   capturePayloads: "Record call contents",
   upstream: "Authentication",
+  protection: "Upstream protection",
 };
 
 /** Why the User authorization section is closed in the modes that already send one credential per call. */
@@ -143,6 +146,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
             url: form.url.trim(),
             timeoutSeconds: form.timeoutSeconds,
             enabled: form.enabled,
+            ...protectionBody(form.protection, saved.protection),
             ...authBody,
             ...(requirement === undefined ? {} : { requirement }),
             ...(tlsBody(tlsForm) ? { tls: tlsBody(tlsForm) } : {}),
@@ -188,6 +192,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   const secretErrors = ownKeys ? secretProblems(form.upstream.secret) : {};
   const tlsErrors = { ...(submitted ? tlsProblems(tlsForm, server) : {}), ...tlsRefusal(save.error) };
   const invalid =
+    Object.keys(protectionProblems(form.protection)).length > 0 ||
     Object.keys(tlsProblems(tlsForm, server)).length > 0 ||
     Object.keys(problems).length > 0 ||
     Object.keys(secretErrors).length > 0 ||
@@ -264,6 +269,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
         <TimeoutField {...fields} />
         <EnabledSwitch {...fields} />
       </SettingsSection>
+      <ServerProtectionFields value={form.protection} onChange={(protection) => set({ protection })} disabled={!canEdit || !abilities.canManage} submitted={submitted} error={save.error} />
       <SettingsSection title="Authentication" description="How the portal proves itself to the server: nothing, a static credential of headers, a token, Basic or a query key (stored encrypted), each person's own key, the portal's own OAuth client, or each person's own OAuth sign-in.">
         <AuthModeFields
           team={server.teamSlug}

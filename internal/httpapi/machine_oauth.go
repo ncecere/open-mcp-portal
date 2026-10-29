@@ -68,6 +68,10 @@ func toAPIMachineDetection(m *registry.MachineDetection) *apitypes.DetectAuthMac
 func (a *api) tokenMayCreateServer(w http.ResponseWriter, r *http.Request, in registry.CreateInput) bool {
 	field := ""
 	switch {
+	case in.RateLimitPerMinute != nil:
+		field = "rateLimitPerMinute"
+	case in.MaxConcurrent != nil:
+		field = "maxConcurrent"
 	case in.TLS != nil:
 		field = "tls"
 	case in.MachineOAuth != nil:

@@ -28,8 +28,12 @@ narrow stewards, atomic grants, expiry and private notices passed full normal/ra
 844 web tests, main/tag CI, both smoke CNIs, signed-image/SPDX/provenance verification and actual-published
 strict-runtime browser/MCP/forced-expiry checks. Incomplete modal/mobile-settings accessibility checks and
 real-world evidence remain explicitly separate. See [design](access-requests.md) and [status](status.md).
-All required source is on main; confirm the publication-evidence/image-pin follow-up checks before #33.
-Resume with [agent-handoff.md](agent-handoff.md); no local patch is needed.
+The v0.6.0 publication-evidence/image-pin follow-up passed main CI and both smoke CNIs.
+**#33 stage(a)–(d) is a locally validated v0.7.0 candidate, not yet published:** shared server quota,
+replica-local concurrency, trusted-read retries and circuit breaking (decision84/migration46). All four
+mandatory PostgreSQL normal/race suites and 848 web tests passed; final CI/publication evidence is pending.
+Failover is separate and #33 stays open. Resume with [agent-handoff.md](agent-handoff.md) and inspect current
+Git/CI rather than assuming an active implementation patch or candidate tag is already released.
 There are 26 open issues: 18 feature/operations/design and eight real-world verification issues.
 The owner authorized ready pre-1.0 releases; v1.0.0 remains their explicit decision. Follow the order below
 without closing evidence-gated issues on fixture results or claiming unfinished branch work is released.

@@ -162,7 +162,8 @@ func (a *api) createTeamMcpServer(w http.ResponseWriter, r *http.Request) {
 	if !httpx.Decode(w, r, &in) {
 		return
 	}
-	ci := registry.CreateInput{Slug: in.Slug, Name: in.Name, URL: in.Url, Enabled: true}
+	ci := registry.CreateInput{Slug: in.Slug, Name: in.Name, URL: in.Url, Enabled: true,
+		RateLimitPerMinute: in.RateLimitPerMinute, MaxConcurrent: in.MaxConcurrent}
 	setIf(&ci.Description, in.Description)
 	setIf(&ci.AuthHeaderName, in.AuthHeaderName)
 	setIf(&ci.AuthValue, in.AuthValue)
@@ -261,9 +262,13 @@ func (a *api) updateTeamMcpServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, setRequirement := keys["requirement"]
+	_, setRate := keys["rateLimitPerMinute"]
+	_, setConcurrent := keys["maxConcurrent"]
 	v, err := a.Registry.Update(r.Context(), a.actor(r), r.PathValue("team"), id, registry.UpdateInput{
 		Name: in.Name, Description: in.Description, URL: in.Url, AuthHeaderName: in.AuthHeaderName, AuthValue: in.AuthValue,
-		Credentials:    fromAPICredentialsPtr(in.Credentials),
+		Credentials:        fromAPICredentialsPtr(in.Credentials),
+		RateLimitPerMinute: in.RateLimitPerMinute, MaxConcurrent: in.MaxConcurrent,
+		SetRateLimit: setRate, SetMaxConcurrent: setConcurrent,
 		TimeoutSeconds: in.TimeoutSeconds, Enabled: in.Enabled, SetRequirement: setRequirement, Requirement: fromAPIRequirement(in.Requirement),
 		CapturePayloads: in.CapturePayloads, AuthMode: strPtr(in.AuthMode), OAuth: fromAPIOAuthInput(in.Oauth), SendIdentity: in.SendIdentity,
 		PersonSecret: fromAPIPersonSecretInput(in.PersonSecret),

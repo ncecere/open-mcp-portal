@@ -34,10 +34,10 @@ RETURNING *;
 -- name: InsertMCPServer :one
 INSERT INTO mcp_servers (
     id, team_id, slug, name, description, url, auth_header_name, auth_value_cipher, auth_value_hint,
-    timeout_seconds, enabled, auth_provider_id, auth_scopes, auth_mode, send_identity, created_by, updated_by
+    timeout_seconds, enabled, auth_provider_id, auth_scopes, auth_mode, send_identity, rate_limit_per_minute, max_concurrent, created_by, updated_by
 ) VALUES (
     @id, @team_id, @slug, @name, @description, @url, @auth_header_name, @auth_value_cipher, @auth_value_hint,
-    @timeout_seconds, @enabled, @auth_provider_id, @auth_scopes, @auth_mode, @send_identity, @created_by, @created_by
+    @timeout_seconds, @enabled, @auth_provider_id, @auth_scopes, @auth_mode, @send_identity, sqlc.narg(rate_limit_per_minute)::bigint, sqlc.narg(max_concurrent)::integer, @created_by, @created_by
 )
 RETURNING *;
 
@@ -53,6 +53,7 @@ SET name = @name, description = @description, url = @url, auth_header_name = @au
     auth_value_cipher = @auth_value_cipher, auth_value_hint = @auth_value_hint,
     timeout_seconds = @timeout_seconds, enabled = @enabled, auth_provider_id = @auth_provider_id, auth_scopes = @auth_scopes,
     auth_mode = @auth_mode, send_identity = @send_identity,
+    rate_limit_per_minute = sqlc.narg(rate_limit_per_minute)::bigint, max_concurrent = sqlc.narg(max_concurrent)::integer,
     oauth_setup_user_id = CASE WHEN @auth_mode::text = 'oauth' THEN oauth_setup_user_id END,
     oauth_setup_at = CASE WHEN @auth_mode::text = 'oauth' THEN oauth_setup_at END,
     revision = revision + 1, updated_by = @updated_by, updated_at = now()

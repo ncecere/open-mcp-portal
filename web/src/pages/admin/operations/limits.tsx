@@ -76,7 +76,7 @@ function LimitsSettings({ items, revision: saved }: { items: PlatformLimit[]; re
       // Teams' and gateways' effective limits follow.
       void qc.invalidateQueries({ queryKey: ["admin"] });
       void qc.invalidateQueries({ queryKey: ["team"] });
-      const capped = st.items.filter((it) => it.cappedTeams + it.cappedGateways > 0);
+      const capped = st.items.filter((it) => it.cappedTeams + it.cappedGateways + (it.cappedServers ?? 0) > 0);
       toast.success("Limits saved", capped.length ? `Capped by a ceiling: ${capped.map((it) => cappedText(it)).join("; ")}.` : "Every replica applies them within 30 seconds.");
     },
   });
@@ -111,7 +111,7 @@ function LimitsSettings({ items, revision: saved }: { items: PlatformLimit[]; re
           description={
             <>
               Empty means unlimited (or, for a ceiling, none). A team&apos;s own values are set on its page in <TextLink render={<Link to="/admin/teams" />}>Teams</TextLink>; a
-              gateway&apos;s in its settings. Windows are whole minutes, so a burst across a minute&apos;s end can briefly reach twice a limit.
+              gateway&apos;s or upstream server&apos;s in its settings. Windows are whole minutes, so a burst across a minute&apos;s end can briefly reach twice a limit.
             </>
           }
         >
@@ -159,7 +159,7 @@ function LimitsSettings({ items, revision: saved }: { items: PlatformLimit[]; re
 
 /** "2 teams and 1 gateway above Per gateway's ceiling". */
 const cappedText = (it: PlatformLimit) =>
-  `${[it.cappedTeams ? plural(it.cappedTeams, "team") : "", it.cappedGateways ? plural(it.cappedGateways, "gateway") : ""].filter(Boolean).join(" and ")} for ${it.label}`;
+  `${[it.cappedTeams ? plural(it.cappedTeams, "team") : "", it.cappedGateways ? plural(it.cappedGateways, "gateway") : "", it.cappedServers ? plural(it.cappedServers, "server") : ""].filter(Boolean).join(" and ")} for ${it.label}`;
 
 /** A ceiling typed lower than the saved one (or a first ceiling). */
 const lowered = (next: number | null, prev: number | null) => next !== null && Number.isInteger(next) && (prev === null || next < prev);
@@ -171,7 +171,7 @@ function LimitRowView({ it, f, isAdmin, shown, refused, onChange }: RowProps) {
   const errs = shown || f.def.trim() || f.ceil.trim() ? rowErrors(it, f) : {};
   const builtIn = rateInput(it.builtInDefault);
   const differs = isAdmin ? f.def.trim() !== builtIn : it.default !== it.builtInDefault;
-  const capped = it.cappedTeams + it.cappedGateways > 0;
+  const capped = it.cappedTeams + it.cappedGateways + (it.cappedServers ?? 0) > 0;
   return (
     <Tr>
       <Td>

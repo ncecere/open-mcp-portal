@@ -13,7 +13,7 @@ body:
     attributes:
       label: Version
       description: "Output of `open-mcp-portal version`, or the image tag and digest."
-      placeholder: "open-mcp-portal 0.6.0 (abcdef123456)"
+      placeholder: "open-mcp-portal 0.7.0 (abcdef123456)"
     validations: { required: true }
   - type: dropdown
     id: where

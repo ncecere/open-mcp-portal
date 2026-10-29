@@ -570,6 +570,11 @@ func (a *api) tokenMayUpdateServer(w http.ResponseWriter, r *http.Request, actor
 		a.refuseToken(w, r, field)
 		return false
 	}
+	for _, field := range []string{"rateLimitPerMinute", "maxConcurrent"} {
+		if _, ok := keys[field]; ok {
+			return refuse(field)
+		}
+	}
 	// A client key and a CA are credentials and trust settings: a token never
 	// sends them, whatever the server holds (decision 74).
 	if _, ok := keys["tls"]; ok {

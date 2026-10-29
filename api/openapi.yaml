@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Open MCP Portal API
-  version: 0.6.0
+  version: 0.7.0
   description: 'Management API. Browser sessions authenticate with a cookie; writes need the session''s `X-CSRF-Token`
     (from `GET /v1/me`) and a same-origin `Origin`. Success responses are `{"data": ...}` and errors `{"error":
     {"code": "...", "message": "..."}}`.
@@ -4667,7 +4667,7 @@ paths:
       - platform:write
       summary: Set or clear a team's rate limit overrides (platform admins); If-Match is the team's revision
       description: Each listed key is replaced (value null inherits the platform default); keys not listed are kept.
-        Only service_account_per_minute and gateway_per_minute can be overridden. 422 invalid_limit with details.key
+        Only service_account_per_minute, gateway_per_minute and server_per_minute can be overridden. 422 invalid_limit with details.key
         and details.reason (not_overridable, above_ceiling, duplicate). Audited as team.limits_update.
       parameters:
       - $ref: '#/components/parameters/IfMatchHeader'
@@ -8148,6 +8148,8 @@ components:
       - too_large
       - not_allowed
       - tls
+      - server_busy
+      - circuit_open
       description: 'not_allowed: the URL or an address it resolves to is refused (blocked, or internal and not allowlisted),
         or the server redirected. tls: the TLS handshake failed (the server''s certificate isn''t trusted or isn''t valid
         for the host name, or the server refused the portal''s client certificate); the message says which and what to
@@ -8286,6 +8288,20 @@ components:
           format: int32
           minimum: 1
           maximum: 120
+        rateLimitPerMinute:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 1
+          maximum: 1000000
+          description: Own forwarded-operation attempts per minute; null inherits the owning team/platform default, capped by the platform ceiling. Retries count again.
+        maxConcurrent:
+          type: integer
+          format: int32
+          nullable: true
+          minimum: 1
+          maximum: 10000
+          description: Fail-fast concurrent forwarded operations per server and replica; null is unlimited. This is not a cluster-wide lease.
         enabled:
           type: boolean
         publishState:
@@ -8632,6 +8648,20 @@ components:
           minimum: 1
           maximum: 120
           default: 30
+        rateLimitPerMinute:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 1
+          maximum: 1000000
+          description: Absent/null inherits; server team owners/admins only, never publisher tokens. Must not exceed the server_per_minute ceiling.
+        maxConcurrent:
+          type: integer
+          format: int32
+          nullable: true
+          minimum: 1
+          maximum: 10000
+          description: Per-replica concurrent forwards, null unlimited; server team owners/admins only, never publisher tokens.
         enabled:
           type: boolean
           default: true
@@ -8713,6 +8743,20 @@ components:
           format: int32
           minimum: 1
           maximum: 120
+        rateLimitPerMinute:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 1
+          maximum: 1000000
+          description: Omit to keep, null inherits. Server team owners/admins only; not a catalog review trigger. Must not exceed the server_per_minute ceiling.
+        maxConcurrent:
+          type: integer
+          format: int32
+          nullable: true
+          minimum: 1
+          maximum: 10000
+          description: Omit to keep, null unlimited. Per-replica fail-fast cap; server team owners/admins only, never publisher tokens.
         enabled:
           type: boolean
         requirement:
@@ -12512,10 +12556,11 @@ components:
       - credential_per_minute
       - service_account_per_minute
       - gateway_per_minute
+      - server_per_minute
       description: 'person_per_minute: every /mcp request by one person, any credential and gateway.
         credential_per_minute: per personal API key or OAuth connection. service_account_per_minute: per service
         account, all its keys (team override). gateway_per_minute: per gateway, all callers together (team override as
-        the default of the team''s gateways; each gateway can set its own).'
+        the default of the team''s gateways; each gateway can set its own). server_per_minute: forwarded attempts to one upstream server across callers/gateways, including retries; team/server overrides respect the ceiling.'
     RateLimitValue:
       type: integer
       format: int64
@@ -12571,6 +12616,10 @@ components:
           type: integer
           format: int64
           description: Gateways whose own value is above the ceiling (the ceiling applies)
+        cappedServers:
+          type: integer
+          format: int64
+          description: Servers whose own override is above the ceiling; absent from older versions.
     LimitSettings:
       type: object
       required:

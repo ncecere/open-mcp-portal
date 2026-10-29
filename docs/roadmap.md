@@ -53,7 +53,8 @@ with independent review corrections, full-tree tests, browser checks and CI/depl
 #62/#63 are withdrawn as not planned, not completed verification. Historical milestone headings below are
 planning buckets, not a promise of release numbering. #31 approvals shipped in v0.5.0 under decision 82.
 The v0.5.1 reliability follow-up is published and verified. Development resumed after the machine transfer;
-#32 shipped in verified v0.6.0 and is closed. #33 upstream protection is next. The owner authorized ready pre-1.0 releases but reserves the
+#32 shipped in verified v0.6.0 and is closed. #33 quota/concurrency/read-retry/breaker work is a locally
+validated v0.7.0 candidate, not yet published; failover follows separately and the parent stays open. The owner authorized ready pre-1.0 releases but reserves the
 v1.0.0 decision. A new agent should read [agent-handoff.md](agent-handoff.md) and current [status](status.md).
 
 1. **Verify and pilot alongside implementation.** Decisions #5, #6 and #7 shipped in v0.2.2. The

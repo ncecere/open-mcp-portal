@@ -27,6 +27,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/apperr"
 	"github.com/ncecere/open-mcp-portal/internal/audit"
 	"github.com/ncecere/open-mcp-portal/internal/authz"
+	"github.com/ncecere/open-mcp-portal/internal/limits"
 	"github.com/ncecere/open-mcp-portal/internal/secrets"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
@@ -80,6 +81,7 @@ type Service struct {
 	// machine fetches and caches the bearer tokens of servers in
 	// machine_oauth mode (machine.go).
 	machine *upstream.MachineTokens
+	limits  *limits.Service
 }
 
 // New returns a Service. client reaches the servers (its AllowPrivate is the
@@ -97,7 +99,7 @@ func New(pool *pgxpool.Pool, box *secrets.Box, client *upstream.Client, log *slo
 			client.Networks = nets
 		}
 	}
-	return &Service{pool: pool, q: dbgen.New(pool), box: box, client: client, nets: nets, log: log, machine: upstream.NewMachineTokens(client)}
+	return &Service{pool: pool, q: dbgen.New(pool), box: box, client: client, nets: nets, log: log, machine: upstream.NewMachineTokens(client), limits: limits.New(pool, log)}
 }
 
 // ServerAAD binds a server's sealed header value to its row.
@@ -432,6 +434,8 @@ type CreateInput struct {
 	AuthHeaderName, AuthValue    string
 	Credentials                  []CredentialInput
 	TimeoutSeconds               int32 // 0: the default (30)
+	RateLimitPerMinute           *int64
+	MaxConcurrent                *int32
 	Enabled                      bool
 	// Requirement is the user-authorization requirement (nil: none).
 	Requirement *RequirementInput
@@ -461,11 +465,14 @@ type CreateInput struct {
 // single header, and a server that has several parts can't be changed with
 // AuthHeaderName and AuthValue.
 type UpdateInput struct {
-	Name, Description, URL    *string
-	AuthHeaderName, AuthValue *string
-	Credentials               *[]CredentialInput
-	TimeoutSeconds            *int32
-	Enabled                   *bool
+	Name, Description, URL         *string
+	AuthHeaderName, AuthValue      *string
+	Credentials                    *[]CredentialInput
+	TimeoutSeconds                 *int32
+	SetRateLimit, SetMaxConcurrent bool
+	RateLimitPerMinute             *int64
+	MaxConcurrent                  *int32
+	Enabled                        *bool
 	// SetRequirement changes the requirement to Requirement (nil removes
 	// it); false keeps it.
 	SetRequirement bool
@@ -548,6 +555,7 @@ func valueHint(v string) string {
 func snapshot(s dbgen.McpServer, parts ...CredentialView) map[string]any {
 	out := map[string]any{"slug": s.Slug, "name": s.Name, "description": s.Description, "url": s.URL,
 		"timeoutSeconds": s.TimeoutSeconds, "enabled": s.Enabled, "hasAuth": s.AuthValueCipher != nil,
+		"rateLimitPerMinute": s.RateLimitPerMinute, "maxConcurrent": s.MaxConcurrent,
 		"publishState": s.PublishState, "requirement": requirementSnapshot(s), "capturePayloads": s.CapturePayloads,
 		"authMode": AuthModeOf(s), "sendIdentity": s.SendIdentity}
 	if s.AuthHeaderName != nil {
@@ -582,6 +590,18 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 	in.Name = strings.TrimSpace(in.Name)
 	if in.TimeoutSeconds == 0 {
 		in.TimeoutSeconds = defaultTimeoutSec
+	}
+	if in.RateLimitPerMinute != nil || in.MaxConcurrent != nil {
+		ta, err := access(ctx, s.q, a, ref)
+		if err != nil {
+			return Created{}, err
+		}
+		if err := ta.writable(authz.CheckServerEdit); err != nil {
+			return Created{}, err
+		}
+		if err := s.checkProtection(ctx, s.q, ta.role, in.RateLimitPerMinute, in.MaxConcurrent, true); err != nil {
+			return Created{}, err
+		}
 	}
 	if err := checkCreateCredentials(in); err != nil {
 		return Created{}, err
@@ -646,6 +666,9 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 			return err
 		}
 		if err := ta.writable(authz.CheckServerEdit); err != nil {
+			return err
+		}
+		if err := s.checkProtection(ctx, q, ta.role, in.RateLimitPerMinute, in.MaxConcurrent, in.RateLimitPerMinute != nil || in.MaxConcurrent != nil); err != nil {
 			return err
 		}
 		p, err := s.insertParams(ctx, id, ta.team.ID, a, in)
@@ -767,7 +790,8 @@ func (s *Service) insertParams(ctx context.Context, id, teamID uuid.UUID, a auth
 		return dbgen.InsertMCPServerParams{}, err
 	}
 	p := dbgen.InsertMCPServerParams{ID: id, TeamID: teamID, Slug: in.Slug, Name: in.Name, Description: in.Description, URL: u,
-		TimeoutSeconds: in.TimeoutSeconds, Enabled: in.Enabled, CreatedBy: by(a), AuthScopes: []string{}}
+		TimeoutSeconds: in.TimeoutSeconds, Enabled: in.Enabled, CreatedBy: by(a), AuthScopes: []string{},
+		RateLimitPerMinute: in.RateLimitPerMinute, MaxConcurrent: in.MaxConcurrent}
 	if len(in.Credentials) == 0 && (in.AuthHeaderName != "" || in.AuthValue != "") {
 		if err := checkHeader(in.AuthHeaderName, in.AuthValue); err != nil {
 			return p, err
@@ -815,6 +839,9 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 		}
 		if cur.Revision != expectedRevision {
 			return apperr.Stale()
+		}
+		if err := s.checkProtection(ctx, q, ta.role, in.RateLimitPerMinute, in.MaxConcurrent, in.SetRateLimit || in.SetMaxConcurrent); err != nil {
+			return err
 		}
 		ap, err := s.applyUpdate(ctx, q, cur, in, pre.mode)
 		if err != nil {
@@ -1029,6 +1056,9 @@ func (s *Service) prepareUpdate(ctx context.Context, a authz.Actor, ref string, 
 		return updatePrep{}, err
 	}
 	if err := ta.writable(authz.CheckServerEdit); err != nil {
+		return updatePrep{}, err
+	}
+	if err := s.checkProtection(ctx, s.q, ta.role, in.RateLimitPerMinute, in.MaxConcurrent, in.SetRateLimit || in.SetMaxConcurrent); err != nil {
 		return updatePrep{}, err
 	}
 	cur, err := teamServer(ctx, s.q, ta.team.ID, id, false)
@@ -1247,7 +1277,13 @@ func (s *Service) applyUpdate(ctx context.Context, q *dbgen.Queries, cur dbgen.M
 	p := dbgen.UpdateMCPServerParams{ID: cur.ID, Name: cur.Name, Description: cur.Description, URL: cur.URL,
 		AuthHeaderName: cur.AuthHeaderName, AuthValueCipher: cur.AuthValueCipher, AuthValueHint: cur.AuthValueHint,
 		TimeoutSeconds: cur.TimeoutSeconds, Enabled: cur.Enabled, AuthProviderID: cur.AuthProviderID, AuthScopes: nonNil(cur.AuthScopes),
-		AuthMode: mode, SendIdentity: cur.SendIdentity}
+		AuthMode: mode, SendIdentity: cur.SendIdentity, RateLimitPerMinute: cur.RateLimitPerMinute, MaxConcurrent: cur.MaxConcurrent}
+	if in.SetRateLimit {
+		p.RateLimitPerMinute = in.RateLimitPerMinute
+	}
+	if in.SetMaxConcurrent {
+		p.MaxConcurrent = in.MaxConcurrent
+	}
 	out := applied{p: p, before: stored.views(), views: stored.views()}
 	setIf(&p.Name, in.Name)
 	p.Name = strings.TrimSpace(p.Name)
@@ -1363,7 +1399,7 @@ func unchanged(cur dbgen.McpServer, p dbgen.UpdateMCPServerParams, valueChanged 
 	return !valueChanged && p.Name == cur.Name && p.Description == cur.Description && p.URL == cur.URL &&
 		p.TimeoutSeconds == cur.TimeoutSeconds && p.Enabled == cur.Enabled && equalPtr(p.AuthHeaderName, cur.AuthHeaderName) &&
 		p.AuthProviderID == cur.AuthProviderID && slices.Equal(p.AuthScopes, cur.AuthScopes) && p.SendIdentity == cur.SendIdentity &&
-		p.AuthMode == AuthModeOf(cur) &&
+		p.AuthMode == AuthModeOf(cur) && equalPtr(p.RateLimitPerMinute, cur.RateLimitPerMinute) && equalPtr(p.MaxConcurrent, cur.MaxConcurrent) &&
 		(capture == nil || *capture == cur.CapturePayloads)
 }
 
@@ -1386,7 +1422,7 @@ func setIf[T any](dst *T, v *T) {
 	}
 }
 
-func equalPtr(a, b *string) bool { return (a == nil) == (b == nil) && (a == nil || *a == *b) }
+func equalPtr[T comparable](a, b *T) bool { return (a == nil) == (b == nil) && (a == nil || *a == *b) }
 
 // Delete removes a server with its capabilities and health (team owners and
 // admins). A server in oauth mode first has its connections revoked at the
@@ -1461,7 +1497,10 @@ func (s *Service) Client() *upstream.Client { return s.client }
 // is checked against the address rule again (it may have been saved under
 // the development allowance, or the allowlist may have changed since).
 func (s *Service) target(ctx context.Context, sv dbgen.McpServer) (upstream.Target, error) {
-	t := upstream.Target{URL: sv.URL, Timeout: timeout(sv), ServerID: sv.ID.String()}
+	t := upstream.Target{URL: sv.URL, Timeout: timeout(sv), ServerID: sv.ID.String(), ServerSlug: sv.Slug}
+	if sv.MaxConcurrent != nil {
+		t.MaxConcurrent = *sv.MaxConcurrent
+	}
 	if _, err := s.client.NormalizeURL(ctx, sv.URL); err != nil {
 		msg := errNotAllowedNow.Message
 		if e, ok := apperr.As(err); ok {

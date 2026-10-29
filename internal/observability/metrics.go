@@ -52,6 +52,10 @@ var (
 		Help:    "Latency of forwarded calls by gateway and server slug (bounded by METRICS_MAX_OBJECTS, else other).",
 		Buckets: callBuckets,
 	}, []string{"gateway", "server"})
+	ServerCircuitState = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "omp_server_circuit_state",
+		Help: "Replica-local circuit state at last forwarding admission/completion: 0 closed, 0.5 probe, 1 open (bounded server labels; overflow omitted).",
+	}, []string{"server"})
 	MCPRateLimited = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "omp_mcp_rate_limited_total",
 		Help: "Requests to /mcp/{slug} refused by a rate limit, by limit.",
@@ -116,7 +120,7 @@ var (
 )
 
 func appCollectors() []prometheus.Collector {
-	return append([]prometheus.Collector{BuildInfo, MCPRequests, MCPRequestDuration, MCPCallDuration, MCPRateLimited, PayloadCaptures,
+	return append([]prometheus.Collector{BuildInfo, MCPRequests, MCPRequestDuration, MCPCallDuration, MCPRateLimited, ServerCircuitState, PayloadCaptures,
 		PayloadRedactions, PayloadCaptureErrors, ProviderTokenRefresh, MachineTokenRequests, ServerHealthChecks, HTTPRequests, HTTPRequestDuration,
 		RetentionDeleted, RetentionLastSuccess, UsageRollupLastSuccess, LoopLeader}, v02Collectors()...)
 }
@@ -224,19 +228,28 @@ func (b *BoundedLabels) SetMax(n int) {
 
 // Label is v when it is known or there is room for it, else Other.
 func (b *BoundedLabels) Label(v string) string {
+	if label, ok := b.Specific(v); ok {
+		return label
+	}
+	return Other
+}
+
+// Specific distinguishes a real object literally named "other" from overflow.
+// State gauges must omit overflow rather than merge incompatible states.
+func (b *BoundedLabels) Specific(v string) (string, bool) {
 	if v == "" {
-		return Other
+		return "", false
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.known[v] {
-		return v
+		return v, true
 	}
 	if len(b.known) < b.max {
 		b.known[v] = true
-		return v
+		return v, true
 	}
-	return Other
+	return "", false
 }
 
 // Sync keeps the values of existing objects (the first max of them) and
@@ -273,11 +286,20 @@ var (
 	})
 	Servers = NewBoundedLabels(200, func(v string) {
 		MCPCallDuration.DeletePartialMatch(prometheus.Labels{"server": v})
+		ServerCircuitState.DeleteLabelValues(v)
 	})
 	Providers = NewBoundedLabels(200, func(v string) {
 		ProviderTokenRefresh.DeletePartialMatch(prometheus.Labels{"provider": v})
 	})
 )
+
+// ObserveServerCircuit omits overflow instead of mixing incompatible state
+// gauges under one "other" server. No caller, credential or URL labels.
+func ObserveServerCircuit(slug string, state float64) {
+	if label, ok := Servers.Specific(slug); ok {
+		ServerCircuitState.WithLabelValues(label).Set(state)
+	}
+}
 
 // SetMaxObjects applies METRICS_MAX_OBJECTS.
 func SetMaxObjects(n int) {

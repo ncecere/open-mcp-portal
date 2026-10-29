@@ -51,6 +51,15 @@ Platform roles never read payloads through team routes (SPEC §4); they use the 
 | `credential_per_minute` | per personal API key or OAuth connection | 300 | no |
 | `service_account_per_minute` | per service account, all its keys | 1200 | yes |
 | `gateway_per_minute` | per gateway, all callers | unlimited | yes (default for the team's gateways) |
+| `server_per_minute` | forwarded operation attempts per registered server, including retries | unlimited | yes (default for the team's servers) |
+
+The fifth key, nullable server settings, replica-local concurrency, safe-read retries and circuit breaking
+are the first #33/decision84 stage, a **locally validated v0.7.0 candidate, not yet published**. See [upstream protection](upstream-protection.md) for
+admission ordering, trusted read classification, rollout requirements and the separate failover scope.
+Server quota is a PostgreSQL bucket `v:<server UUID>` shared across gateways and replicas. It is charged
+once per forwarding iteration before negotiation/transport, not for health/discovery or each transport
+exchange. A server's `rateLimitPerMinute` overrides its owning team, then platform default, always ceiling-
+capped; admin capped counts include servers. `maxConcurrent` has no queue or distributed-lease guarantee.
 
 - Values are 1–1,000,000 per minute, or null (unlimited). Overridable keys have a **ceiling** (null: none). A team
   override may be above or below the default, but not above the ceiling. A per-gateway value is set on the gateway.
@@ -171,7 +180,8 @@ key, service account or request IDs.
 | `omp_build_info` | version, commit |
 | `omp_mcp_requests_total`, `omp_mcp_request_duration_seconds` | method (fixed list, else `other`), outcome |
 | `omp_mcp_call_duration_seconds` (histogram, buckets as rollups) | gateway, server (slugs of existing objects, at most `METRICS_MAX_OBJECTS` = 200 each, else `other`; removed when deleted) |
-| `omp_mcp_rate_limited_total` | limit (the four keys) |
+| `omp_mcp_rate_limited_total` | limit (five quota keys and `server_busy`; bounded constants) |
+| `omp_server_circuit_state` | server slug, bounded; 0 closed, 1 open, 0.5 probing; overflow omitted and deleted series retired (#33 first stage) |
 | `omp_payload_captures_total`, `omp_payload_redactions_total`, `omp_payload_capture_errors_total` | rule (redactions only) |
 | `omp_provider_token_refresh_total` | provider (slug), result (`ok`, `refused`, `unavailable`) |
 | `omp_machine_token_requests_total` | result (`ok`, `refused`, `unavailable`): token endpoint requests for servers in `machine_oauth` mode ([machine-oauth.md](machine-oauth.md)), not cache hits |
@@ -328,7 +338,7 @@ Images are published by a separate workflow, `.github/workflows/image.yml`, for 
 
 ## UI
 
-- **Admin › Limits** (`/admin/limits`): the four keys with default and ceiling, capped counts; staged edit, Save with
+- **Admin › Limits** (`/admin/limits`): the quota keys with default and ceiling, capped team/gateway/server counts; staged edit, Save with
   If-Match. **Admin › Retention** (`/admin/retention`): periods and the last run. **Admin › Payload capture**
   (`/admin/capture`): built-in rules, the pattern list and a tester.
 - **Admin › Teams › team › Settings:** "Limits" and "Retention" sections (override or inherit, effective value).

@@ -292,7 +292,8 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 	// loopback APP_URL); in production internal networks are allowed only by
 	// the allowlist (the deployment's entries plus the platform admins').
 	nets := registry.NewNetworks(pool, cfg.UpstreamAllowedNetworks, log)
-	client := &upstream.Client{AllowPrivate: cfg.AllowPrivateUpstreams(), Networks: nets, Log: log, Eras: upstream.NewEraCache()}
+	client := &upstream.Client{AllowPrivate: cfg.AllowPrivateUpstreams(), Networks: nets, Log: log, Eras: upstream.NewEraCache(),
+		OnCircuitState: func(t upstream.Target, state float64) { observability.ObserveServerCircuit(t.ServerSlug, state) }}
 	pep, err := peppers(cfg)
 	if err != nil {
 		return httpapi.Deps{}, err

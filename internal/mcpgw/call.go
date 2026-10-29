@@ -176,8 +176,17 @@ func (rc *request) forward(kind string, o gateways.Offer, args json.RawMessage, 
 		return
 	}
 	if progress, ok := rc.wantsStream(); ok && kind == upstream.KindTool {
-		st := rc.startStream(progress)
-		defer st.close()
+		var st *stream
+		fwd.OnAdmitted = func() {
+			if st == nil {
+				st = rc.startStream(progress)
+			}
+		}
+		defer func() {
+			if st != nil {
+				st.close()
+			}
+		}()
 		fwd.ProgressToken, fwd.OnProgress = progress, func(p upstream.Progress) {
 			p.Message = rc.scrubText(p.Message)
 			st.progress(p)
@@ -191,6 +200,9 @@ func (rc *request) forward(kind string, o gateways.Offer, args json.RawMessage, 
 func (rc *request) forwardCall(o gateways.Offer, rec calls.Call, cred *providers.Credential, target upstream.Target, fwd upstream.ForwardRequest) {
 	// Outermost guard: cover tools/prompts/resources and check the database
 	// deadline after any approval consumption/commit, not just before it.
+	fwd.Retryable = rc.h.Approvals != nil && !target.NoReplay && (fwd.Method == upstream.MethodPromptsGet || fwd.Method == upstream.MethodResourcesRead ||
+		(o.Capability.ToolClass != nil && *o.Capability.ToolClass == "read"))
+	rc.guardServerAttempt(o, &target)
 	rc.guardGrantExpiry(&target)
 	ctx := rc.r.Context()
 	client := rc.h.Registry.Client()
@@ -346,6 +358,9 @@ func (rc *request) upstreamFailed(rec calls.Call, err error) {
 		return
 	}
 	code := int64(codeInternal)
+	if ue.BeforeDispatch && ue.PriorAttempts == 0 {
+		rec.IdentitySent = nil
+	}
 	rec.Outcome, rec.ErrorClass = calls.OutcomeUpstreamError, ue.Class
 	if rc.r.Context().Err() != nil && ue.Class != upstream.ClassTimeout {
 		rec.ErrorClass = "client_cancelled" // the client went away; the call to the server was cancelled

@@ -60,7 +60,7 @@ func toAPIPlatformLimits(v limits.PlatformView) apitypes.LimitSettings {
 		out.Items[i] = apitypes.PlatformRateLimit{
 			Key: apitypes.RateLimitKey(it.Key), Label: it.Label, Description: it.Description, TeamOverridable: it.Overridable,
 			Default: it.Default, Ceiling: it.Ceiling, BuiltInDefault: it.BuiltIn, Max: limits.Max,
-			CappedTeams: it.CappedTeams, CappedGateways: it.CappedGateways,
+			CappedTeams: it.CappedTeams, CappedGateways: it.CappedGateways, CappedServers: &it.CappedServers,
 		}
 	}
 	return out

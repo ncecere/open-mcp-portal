@@ -120,7 +120,10 @@ func (rc *request) approvalFailed(rec calls.Call, err error) {
 		message = "The approval check was cancelled; retry the original call"
 	}
 	n := rc.failData(codeDenied, message, map[string]any{"reason": "approval_unavailable"})
-	rec.Outcome, rec.ErrorClass, rec.IdentitySent = calls.OutcomeDenied, "approval_unavailable", nil
+	rec.Outcome, rec.ErrorClass = calls.OutcomeDenied, "approval_unavailable"
+	if !hasPriorForward(err) {
+		rec.IdentitySent = nil
+	}
 	rc.record(rec, n)
 }
 
@@ -172,6 +175,9 @@ func (rc *request) approvalTransportFailed(rec calls.Call, err error) bool {
 	}
 	var local *upstream.BeforeTransportError
 	if !rc.approval.spent.Load() {
+		if errors.Is(err, errServerAttemptAuthority) {
+			return false
+		} // Preserve prior retry dispatch facts in the admission handler.
 		if errors.As(err, &local) {
 			rc.approvalFailed(rec, err)
 			return true

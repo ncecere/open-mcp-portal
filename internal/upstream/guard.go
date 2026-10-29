@@ -245,7 +245,11 @@ type exchange struct {
 	// errorPeek bytes, raw: classify redacts it before anyone sees it).
 	detail string
 	// guardErr survives SDK paths that stringify transport failures.
-	guardErr *BeforeTransportError
+	guardErr          *BeforeTransportError
+	retryAfter        time.Duration
+	retryAfterValid   bool
+	retryAfterPresent bool
+	streaming         bool
 }
 
 // errorPeek bounds how much of an error response's body is kept to explain
@@ -269,6 +273,12 @@ func (e *exchange) setStatus(code int, h http.Header) {
 	defer e.mu.Unlock()
 	if code >= 400 {
 		e.status = code
+		values := h.Values("Retry-After")
+		e.retryAfterPresent = len(values) > 0
+		e.retryAfterValid = false
+		if len(values) == 1 {
+			e.retryAfter, e.retryAfterValid = parseRetryAfter(values[0], time.Now())
+		}
 	}
 	if code == http.StatusUnauthorized || code == http.StatusForbidden {
 		e.challenge = append([]string(nil), h.Values("WWW-Authenticate")...)
@@ -330,17 +340,24 @@ type headerTransport struct {
 	ex              *exchange
 	beforeTransport func(context.Context, bool) error
 	noReplay        bool
+	forwarding      bool
 }
 
 func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	orig := req
-	if len(t.creds) > 0 || t.identity != "" || t.providerToken != "" || t.bearer != "" || len(t.params) > 0 || t.beforeTransport != nil || t.noReplay {
+	if len(t.creds) > 0 || t.identity != "" || t.providerToken != "" || t.bearer != "" || len(t.params) > 0 || t.beforeTransport != nil || t.noReplay || t.forwarding {
 		req = req.Clone(req.Context())
 	}
-	toolCall := false
-	if len(t.params) > 0 || t.beforeTransport != nil || t.noReplay {
+	toolCall, method := false, ""
+	guarded := len(t.params) > 0 || t.beforeTransport != nil || t.noReplay
+	if guarded || t.forwarding {
 		var err error
-		toolCall, err = isToolsCall(req)
+		getBody := req.GetBody
+		method, err = outboundMethod(req)
+		toolCall = method == MethodToolsCall
+		if !guarded {
+			req.GetBody = getBody
+		} // Inspection alone must not add net/http replay authority.
 		if err != nil {
 			// An uninspectable POST is not a non-tool request: never let it
 			// bypass the tool authorization or single-dispatch boundary.
@@ -395,6 +412,11 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// res.Request.URL (the SDK's errors included) can show it.
 	res.Request = orig
 	t.ex.setStatus(res.StatusCode, res.Header)
+	if t.forwarding && (method == MethodToolsCall || method == MethodPromptsGet || method == MethodResourcesRead) && strings.HasPrefix(strings.ToLower(strings.TrimSpace(res.Header.Get("Content-Type"))), "text/event-stream") {
+		t.ex.mu.Lock()
+		t.ex.streaming = true
+		t.ex.mu.Unlock()
+	}
 	if res.StatusCode >= 400 && res.Body != nil {
 		// Keep the start of an error body to explain the failure, and hand
 		// the whole body on unchanged.
@@ -425,8 +447,13 @@ func (t *headerTransport) occupied(header string) bool {
 // only request that carries parameter headers). The body is read and put
 // back unchanged.
 func isToolsCall(req *http.Request) (bool, error) {
+	method, err := outboundMethod(req)
+	return method == MethodToolsCall, err
+}
+
+func outboundMethod(req *http.Request) (string, error) {
 	if req.Method != http.MethodPost || req.Body == nil || req.Body == http.NoBody {
-		return false, nil
+		return "", nil
 	}
 	// Inspect the internally constructed JSON-RPC body, not a header that
 	// could disagree with it. Do not truncate a large outgoing arguments
@@ -437,18 +464,18 @@ func isToolsCall(req *http.Request) (bool, error) {
 	req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(body)), nil }
 	req.ContentLength = int64(len(body))
 	if err != nil {
-		return false, fmt.Errorf("cannot inspect outbound MCP body: %w", err)
+		return "", fmt.Errorf("cannot inspect outbound MCP body: %w", err)
 	}
 	var msg struct {
 		Method string `json:"method"`
 	}
 	if err := json.Unmarshal(body, &msg); err != nil {
-		return false, fmt.Errorf("cannot inspect outbound MCP method: %w", err)
+		return "", fmt.Errorf("cannot inspect outbound MCP method: %w", err)
 	}
 	if msg.Method == "" {
-		return false, errors.New("outbound MCP POST has no method")
+		return "", errors.New("outbound MCP POST has no method")
 	}
-	return msg.Method == "tools/call", nil
+	return msg.Method, nil
 }
 
 // cappedBody fails a read past its limit.
@@ -497,7 +524,7 @@ func (c *Client) httpClient(t Target, ex *exchange) (client *http.Client, done f
 		Transport: &headerTransport{next: tr, creds: t.Credentials, identity: t.IdentityHeader,
 			identityValue: t.IdentityValue, provider: t.Provider, providerToken: t.ProviderToken, bearer: t.BearerToken,
 			params: t.ParamHeaders, maxResponse: c.bodyCap(t), ex: ex,
-			beforeTransport: t.BeforeTransport, noReplay: t.NoReplay},
+			beforeTransport: t.BeforeTransport, noReplay: t.NoReplay, forwarding: t.forwarding},
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return fmt.Errorf("%w: MCP servers may not redirect", ErrBlockedAddress)
 		},

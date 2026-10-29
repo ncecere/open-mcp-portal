@@ -63,7 +63,10 @@ func (rc *request) grantExpiryFailed(rec calls.Call, err error) bool {
 		return false
 	}
 	n := rc.fail(codeDenied, "Gateway access changed; retry the original request to recheck access")
-	rec.Outcome, rec.ErrorClass, rec.IdentitySent = calls.OutcomeDenied, "no_access", nil
+	rec.Outcome, rec.ErrorClass = calls.OutcomeDenied, "no_access"
+	if !hasPriorForward(err) {
+		rec.IdentitySent = nil
+	}
 	rc.record(rec, n)
 	return true
 }

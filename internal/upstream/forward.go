@@ -68,6 +68,13 @@ type ForwardRequest struct {
 	ProgressToken json.RawMessage
 	OnProgress    func(Progress)
 	Trace         Trace
+	// Retryable is authoritative caller policy, never upstream annotations.
+	// NoReplay, continuations, partial/progress responses and local failures
+	// still prohibit retry even when this is true.
+	Retryable bool
+	// OnAdmitted runs once, after local admission and before networking. It
+	// lets a gateway start SSE only after initial quota/cap/breaker refusal.
+	OnAdmitted func()
 }
 
 // InputRequired is a modern server's input_required result: its input
@@ -87,6 +94,7 @@ type ForwardResult struct {
 	Input    *InputRequired
 	Protocol Protocol
 	Latency  time.Duration
+	Retries  int
 }
 
 // ErrReplayPrevented means a NoReplay Forward refused a second tools/call
@@ -114,14 +122,80 @@ func (g *forwardTransportGuard) check(ctx context.Context, toolCall bool) error 
 
 // Forward makes the call. Failures to get a result are *Error; a tool's own
 // failure is a Tool result with IsError set.
-func (c *Client) Forward(ctx context.Context, t Target, req ForwardRequest) (*ForwardResult, error) {
-	start := time.Now()
+func (c *Client) Forward(ctx context.Context, t Target, req ForwardRequest) (out *ForwardResult, err error) {
+	start, caller := time.Now(), ctx
 	ctx, cancel := context.WithTimeout(ctx, t.Timeout)
 	defer cancel()
 	guard := &forwardTransportGuard{before: t.BeforeTransport}
 	if t.NoReplay {
 		t.BeforeTransport = guard.check
 	}
+	p := c.protector()
+	lease, denied := p.acquire(t.ServerID, t.MaxConcurrent)
+	if t.ServerID != "" && c.OnCircuitState != nil {
+		c.OnCircuitState(t, p.CircuitState(t.ServerID))
+	}
+	if denied != nil {
+		return nil, denied
+	}
+	priorAttempts := 0
+	defer func() {
+		var classified *Error
+		if errors.As(err, &classified) {
+			copy := *classified
+			copy.PriorAttempts = priorAttempts
+			err = &copy
+		}
+		lease.finish(protectionResult(caller, err))
+		if t.ServerID != "" && c.OnCircuitState != nil {
+			c.OnCircuitState(t, p.CircuitState(t.ServerID))
+		}
+	}()
+	var progress atomic.Bool
+	originalProgress := req.OnProgress
+	req.OnProgress = func(p Progress) {
+		progress.Store(true)
+		if originalProgress != nil {
+			originalProgress(p)
+		}
+	}
+	t.forwarding = true
+	for attempt := 0; ; attempt++ {
+		priorAttempts = attempt
+		if err = forwardCancellation(ctx); err != nil {
+			return nil, err
+		}
+		if t.BeforeAttempt != nil {
+			if err = t.BeforeAttempt(ctx, attempt); err != nil {
+				return nil, forwardAdmissionError(err)
+			}
+		}
+		if attempt == 0 && req.OnAdmitted != nil {
+			req.OnAdmitted()
+		}
+		// SSE flush can synchronously cancel the caller. Do not prepare an
+		// SDK session or record a prepared identity as dispatched afterwards.
+		if err = forwardCancellation(ctx); err != nil {
+			return nil, err
+		}
+		out, err = c.forwardAttempt(ctx, t, req, guard)
+		if err == nil {
+			out.Latency, out.Retries = time.Since(start), attempt
+			return out, nil
+		}
+		e, retry := mayRetry(ctx, t, req, err, progress.Load(), attempt)
+		if !retry {
+			return nil, err
+		}
+		if waitErr := c.pauseRetry(ctx, e.RetryAfter); waitErr != nil {
+			return nil, c.classify(ctx, t, &exchange{}, waitErr)
+		}
+	}
+}
+
+// forwardAttempt retains the original bounded era-recovery rule. The outer
+// Forward owns the shared timeout, admission lease and no-replay guard.
+func (c *Client) forwardAttempt(ctx context.Context, t Target, req ForwardRequest, guard *forwardTransportGuard) (*ForwardResult, error) {
 	proto, cached, err := c.negotiate(ctx, t)
 	if err != nil {
 		return nil, err
@@ -146,7 +220,7 @@ func (c *Client) Forward(ctx context.Context, t Target, req ForwardRequest) (*Fo
 		if err != nil {
 			return nil, err
 		}
-		res.Protocol, res.Latency = proto, time.Since(start)
+		res.Protocol = proto
 		return res, nil
 	}
 }

@@ -2457,7 +2457,7 @@ export interface paths {
         get: operations["adminGetTeamLimits"];
         /**
          * Set or clear a team's rate limit overrides (platform admins); If-Match is the team's revision
-         * @description Each listed key is replaced (value null inherits the platform default); keys not listed are kept. Only service_account_per_minute and gateway_per_minute can be overridden. 422 invalid_limit with details.key and details.reason (not_overridable, above_ceiling, duplicate). Audited as team.limits_update.
+         * @description Each listed key is replaced (value null inherits the platform default); keys not listed are kept. Only service_account_per_minute, gateway_per_minute and server_per_minute can be overridden. 422 invalid_limit with details.key and details.reason (not_overridable, above_ceiling, duplicate). Audited as team.limits_update.
          */
         put: operations["adminUpdateTeamLimits"];
         post?: never;
@@ -4065,7 +4065,7 @@ export interface components {
          * @description not_allowed: the URL or an address it resolves to is refused (blocked, or internal and not allowlisted), or the server redirected. tls: the TLS handshake failed (the server's certificate isn't trusted or isn't valid for the host name, or the server refused the portal's client certificate); the message says which and what to do. See McpServerTls.
          * @enum {string}
          */
-        McpErrorClass: "unavailable" | "auth" | "not_found" | "rate_limited" | "bad_request" | "bad_response" | "config" | "timeout" | "too_large" | "not_allowed" | "tls";
+        McpErrorClass: "unavailable" | "auth" | "not_found" | "rate_limited" | "bad_request" | "bad_response" | "config" | "timeout" | "too_large" | "not_allowed" | "tls" | "server_busy" | "circuit_open";
         CapabilityCounts: {
             /** Format: int64 */
             tools: number;
@@ -4128,6 +4128,16 @@ export interface components {
             tls?: components["schemas"]["McpServerTls"] | null;
             /** Format: int32 */
             timeoutSeconds: number;
+            /**
+             * Format: int64
+             * @description Own forwarded-operation attempts per minute; null inherits the owning team/platform default, capped by the platform ceiling. Retries count again.
+             */
+            rateLimitPerMinute?: number | null;
+            /**
+             * Format: int32
+             * @description Fail-fast concurrent forwarded operations per server and replica; null is unlimited. This is not a cluster-wide lease.
+             */
+            maxConcurrent?: number | null;
             enabled: boolean;
             publishState: components["schemas"]["PublishState"];
             effectivePublishPolicy: components["schemas"]["PublishPolicy"];
@@ -4288,6 +4298,16 @@ export interface components {
              * @default 30
              */
             timeoutSeconds: number;
+            /**
+             * Format: int64
+             * @description Absent/null inherits; server team owners/admins only, never publisher tokens. Must not exceed the server_per_minute ceiling.
+             */
+            rateLimitPerMinute?: number | null;
+            /**
+             * Format: int32
+             * @description Per-replica concurrent forwards, null unlimited; server team owners/admins only, never publisher tokens.
+             */
+            maxConcurrent?: number | null;
             /** @default true */
             enabled: boolean;
             /** @description Absent or null; no user authorization */
@@ -4321,6 +4341,16 @@ export interface components {
             tls?: components["schemas"]["McpServerTlsInput"];
             /** Format: int32 */
             timeoutSeconds?: number;
+            /**
+             * Format: int64
+             * @description Omit to keep, null inherits. Server team owners/admins only; not a catalog review trigger. Must not exceed the server_per_minute ceiling.
+             */
+            rateLimitPerMinute?: number | null;
+            /**
+             * Format: int32
+             * @description Omit to keep, null unlimited. Per-replica fail-fast cap; server team owners/admins only, never publisher tokens.
+             */
+            maxConcurrent?: number | null;
             enabled?: boolean;
             /** @description Omit to keep; null removes it. A widening change sends a published server back to review under approval_required */
             requirement?: components["schemas"]["McpServerRequirementInput"] | null;
@@ -6068,10 +6098,10 @@ export interface components {
          */
         UsagePrincipalKind: "api_key" | "oauth" | "service_account";
         /**
-         * @description person_per_minute: every /mcp request by one person, any credential and gateway. credential_per_minute: per personal API key or OAuth connection. service_account_per_minute: per service account, all its keys (team override). gateway_per_minute: per gateway, all callers together (team override as the default of the team's gateways; each gateway can set its own).
+         * @description person_per_minute: every /mcp request by one person, any credential and gateway. credential_per_minute: per personal API key or OAuth connection. service_account_per_minute: per service account, all its keys (team override). gateway_per_minute: per gateway, all callers together (team override as the default of the team's gateways; each gateway can set its own). server_per_minute: forwarded attempts to one upstream server across callers/gateways, including retries; team/server overrides respect the ceiling.
          * @enum {string}
          */
-        RateLimitKey: "person_per_minute" | "credential_per_minute" | "service_account_per_minute" | "gateway_per_minute";
+        RateLimitKey: "person_per_minute" | "credential_per_minute" | "service_account_per_minute" | "gateway_per_minute" | "server_per_minute";
         /**
          * Format: int64
          * @description Requests per minute; null means unlimited (or, for a ceiling, no ceiling)
@@ -6104,6 +6134,11 @@ export interface components {
              * @description Gateways whose own value is above the ceiling (the ceiling applies)
              */
             cappedGateways: number;
+            /**
+             * Format: int64
+             * @description Servers whose own override is above the ceiling; absent from older versions.
+             */
+            cappedServers?: number;
         };
         LimitSettings: {
             /** @description Every key, in a fixed order */

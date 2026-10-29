@@ -6,6 +6,14 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
+## [0.7.0] - 2026-10-29
+
+### First #33 upstream-protection stage
+
+- Add nullable owner/admin-only server quotas and replica-local concurrency settings, shared PostgreSQL forwarded-attempt accounting, ceiling/capped-server reporting and audited revision-checked settings. Existing quota defaults remain unlimited; migration `00046` is expand-only. Editors and automation tokens gain no operational-limit authority.
+- Bound read retries by trusted stored classification, live authority, per-attempt quota and the original timeout. Never automatically retry governed/NoReplay calls, continuations, progress/partial results or ambiguous post-send failures. Local quota/cap/breaker refusal precedes approval spending and SSE start. Circuit breaking is replica-local, with a single recovery probe and bounded state/metrics.
+- Preserve earlier dispatch metadata when a later retry is locally refused; distinguish cancellation before any dispatch from a prepared identity header. Complete rollout/drain of older replicas is required before relying on enforcement. **Failover is a separate unfinished stage and #33 stays open.**
+
 ## [0.6.0] - 2026-10-29
 
 - **Gateway access requests** (#32, decision 83). Platform gateways explicitly opt into discoverability. Active people request access for themselves or teams they currently own/administer; platform admins and named per-gateway stewards review privately, never their own requests. Approval, the normal user/team grant and audits commit together. Stewardship grants no direct gateway, general administration or grant-management authority.

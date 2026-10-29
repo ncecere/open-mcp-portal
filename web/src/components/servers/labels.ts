@@ -90,6 +90,8 @@ export const errorClassLabels: Record<ErrorClass, string> = {
   too_large: "Response too large",
   not_allowed: "Address not allowed: private, loopback or a redirect",
   tls: "TLS problem: certificate or client certificate",
+  server_busy: "Server concurrency limit reached",
+  circuit_open: "Server circuit open while it recovers",
 };
 
 export const healthLabels: Record<ServerHealth["status"], string> = { healthy: "Healthy", failing: "Failing", unknown: "Not checked yet" };

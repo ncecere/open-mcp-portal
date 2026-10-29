@@ -1,5 +1,5 @@
 /*
- * Rate limits on /mcp/{slug} (docs/phase6-operations.md "Rate limits"): the four keys' words, values as text, and
+ * Rate limits on /mcp/{slug} (docs/phase6-operations.md "Rate limits"): the keys' words, values as text, and
  * the checks the forms run before the server does (whole requests per minute, 1 to 1,000,000; empty means unlimited,
  * or for a ceiling, none).
  */
@@ -12,7 +12,7 @@ export type RateLimitValue = number | null;
 /** The most any limit can be (PlatformRateLimit.max). */
 export const maxRate = 1_000_000;
 
-export const rateKeys: RateLimitKey[] = ["person_per_minute", "credential_per_minute", "service_account_per_minute", "gateway_per_minute"];
+export const rateKeys: RateLimitKey[] = ["person_per_minute", "credential_per_minute", "service_account_per_minute", "gateway_per_minute", "server_per_minute"];
 
 /** Short names, used where the server's label isn't loaded (audit entries, call errors). */
 export const rateKeyLabels: Record<RateLimitKey, string> = {
@@ -20,6 +20,7 @@ export const rateKeyLabels: Record<RateLimitKey, string> = {
   credential_per_minute: "Per API key or connected app",
   service_account_per_minute: "Per service account",
   gateway_per_minute: "Per gateway",
+  server_per_minute: "Per upstream server",
 };
 
 /** "600 per minute", or "Unlimited" (`none` for a ceiling: "No ceiling"). */

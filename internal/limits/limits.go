@@ -46,6 +46,7 @@ const (
 	CredentialPerMinute     = "credential_per_minute"
 	ServiceAccountPerMinute = "service_account_per_minute"
 	GatewayPerMinute        = "gateway_per_minute"
+	ServerPerMinute         = "server_per_minute"
 )
 
 // Max is the most any value may be.
@@ -75,6 +76,8 @@ var Defs = []Def{
 		Description: "Requests by one service account, all its keys together"},
 	{Key: GatewayPerMinute, Label: "Per gateway", Overridable: true,
 		Description: "Requests to one gateway from all callers together"},
+	{Key: ServerPerMinute, Label: "Per upstream server", Overridable: true,
+		Description: "Forwarded tool, prompt and resource attempts to one server from all gateways and callers, including automatic retries"},
 }
 
 // Find returns the definition of key.
@@ -263,7 +266,7 @@ func (s *Service) set(st Settings) Settings {
 type PlatformItem struct {
 	Def
 	Value
-	CappedTeams, CappedGateways int64
+	CappedTeams, CappedGateways, CappedServers int64
 }
 
 // PlatformView is the platform settings with capped counts.
@@ -285,6 +288,10 @@ func platformView(ctx context.Context, q *dbgen.Queries, st Settings) (PlatformV
 			it.CappedTeams = n
 			if d.Key == GatewayPerMinute {
 				if it.CappedGateways, err = q.CountCappedGateways(ctx, *c); err != nil {
+					return out, err
+				}
+			} else if d.Key == ServerPerMinute {
+				if it.CappedServers, err = q.CountCappedServers(ctx, *c); err != nil {
 					return out, err
 				}
 			}

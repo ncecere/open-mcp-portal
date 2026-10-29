@@ -59,6 +59,7 @@ func (a *api) toAPIServer(v registry.ServerView) apitypes.McpServer {
 		Transport:      apitypes.McpServerTransport(s.Transport),
 		AuthHeaderName: s.AuthHeaderName, HasAuth: v.HasAuth(), AuthValueHint: s.AuthValueHint, Credentials: toAPICredentials(v.Credentials),
 		TimeoutSeconds: s.TimeoutSeconds, Enabled: s.Enabled,
+		RateLimitPerMinute: s.RateLimitPerMinute, MaxConcurrent: s.MaxConcurrent,
 		PublishState:           apitypes.PublishState(s.PublishState),
 		EffectivePublishPolicy: apitypes.PublishPolicy(v.EffectivePolicy),
 		PublishRequestedAt:     s.PublishRequestedAt, PublishRequestNote: s.PublishRequestNote,
