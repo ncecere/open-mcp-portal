@@ -1,0 +1,46 @@
+# Exported by omp (schema omp/v1). Secrets are never exported: a server with a static
+# header names an environment variable in authValueEnv, which "omp import" reads.
+# Set it before an import that creates the server or replaces its secret.
+schema: omp/v1
+teams:
+  - slug: bravo
+    name: Bravo
+    description: The B team
+    status: active
+    limits:
+      gateway_per_minute: 50
+  - slug: old
+    name: Old
+    description: ""
+    status: archived
+gateways:
+  - slug: support
+    name: Support tools
+    description: For support
+    enabled: true
+    capabilities:
+      - server: status
+        kind: tool
+        name: check
+    grants:
+      - team: bravo
+      - userEmail: ann@example.com
+        toolScope:
+          classes:
+            - read
+limits:
+  credential_per_minute:
+    default: 600
+    ceiling: null
+  gateway_per_minute:
+    default: 600
+    ceiling: 1200
+  person_per_minute:
+    default: 600
+    ceiling: null
+  server_per_minute:
+    default: 600
+    ceiling: null
+  service_account_per_minute:
+    default: 600
+    ceiling: null
