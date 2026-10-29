@@ -174,6 +174,9 @@ func TestTasksRecheckCurrentAuthorityOnEveryOperation(t *testing.T) {
 			e.patchServer(e.owner, e.srv, map[string]any{"url": other.URL(), "credentials": []any{
 				map[string]any{"kind": "header", "name": "X-Api-Key", "value": tasksStaticKey}}})
 		}},
+		{"server edited (revision only)", "support", 0, func(e *env, _ string) {
+			e.patchServer(e.owner, e.srv, map[string]any{"description": "an unrelated edit"})
+		}},
 		{"server credential kind changed", "support", 0, func(e *env, _ string) {
 			e.patchServer(e.owner, e.srv, map[string]any{"credentials": []any{
 				map[string]any{"kind": "header", "name": "X-Other-Key", "value": "another-static-credential-9921"}}})

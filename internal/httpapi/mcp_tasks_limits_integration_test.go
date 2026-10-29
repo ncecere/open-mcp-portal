@@ -351,3 +351,42 @@ func (e *tasksEnv) getRaw(gateway, key, handle string) (int, map[string]any) {
 	_ = json.Unmarshal(raw, &out)
 	return res.StatusCode, out
 }
+
+// The server's forwarded-operation quota counts every upstream task exchange
+// (creation and each poll that reaches the upstream), and a refused one is
+// neither sent nor retried; an inbound request answered from the snapshot is not
+// an upstream operation.
+func TestTaskOperationsCountAgainstTheServerQuota(t *testing.T) {
+	e := newTasksEnv(t, tasksOptions{})
+	e.patchServer(e.owner, e.srv, map[string]any{"rateLimitPerMinute": 3})
+	handle := e.create("support", e.key.Secret)                                                  // 1
+	if code, out := e.get("support", e.key.Secret, handle); code != 200 || out["error"] != nil { // 2
+		t.Fatalf("get = %d %v", code, out)
+	}
+	// Answered from the snapshot: not an upstream operation.
+	if code, _, out := e.op("support", e.key.Secret, "tasks/get", handle, nil, declared(true)); code != 200 || out["error"] != nil {
+		t.Fatalf("paced get = %d %v", code, out)
+	}
+	if code, out := e.get("support", e.key.Secret, handle); code != 200 || out["error"] != nil { // 3
+		t.Fatalf("third operation = %d %v", code, out)
+	}
+	sent := e.up.Count("tasks/get") + e.up.Count("tasks/update") + e.up.Count("tasks/cancel") + e.up.Count("tools/call")
+	for _, method := range []string{"tasks/get", "tasks/cancel"} {
+		e.allowPoll()
+		code, hdr, out := e.op("support", e.key.Secret, method, handle, nil, declared(true))
+		errObj, _ := out["error"].(map[string]any)
+		data, _ := errObj["data"].(map[string]any)
+		if code != 429 || data["reason"] != "rate_limited" || hdr.Get("Retry-After") == "" {
+			t.Fatalf("%s over the server quota = %d %v", method, code, out)
+		}
+	}
+	if code, _, out := e.tool("support", e.key.Secret, "tasks__slow", declared(true)); code != 429 || out["error"] == nil {
+		t.Fatalf("creation over the server quota = %d %v", code, out)
+	}
+	if got := e.up.Count("tasks/get") + e.up.Count("tasks/update") + e.up.Count("tasks/cancel") + e.up.Count("tools/call"); got != sent {
+		t.Fatalf("a refused operation reached the upstream (%d -> %d)", sent, got)
+	}
+	if e.taskRowCount() != "1" {
+		t.Fatalf("a refused creation left a row: %s", e.taskRowCount())
+	}
+}
