@@ -9,6 +9,7 @@ breaking changes; the entry says how to adapt.
 ## Unreleased
 
 - **Kubernetes release gates** (#43). The kind smoke test gains an `upgrade` scenario (the previous release by digest, data and credentials created on it, the roll to this tree under a request loop with no failed request, then the roll back), an `ingress` scenario (Envoy Gateway with cert-manager TLS, `TRUSTED_PROXIES`, SSE streaming and OIDC through Dex), a `restore` scenario (`pg_dump` and `pg_restore`) and a `load` scenario (three replicas under k6); new `k8s-upgrade` and `k8s-load` workflows, ShellCheck and an assertion self-test in CI, and an honest "What it does not prove". ingress-nginx, retired by Kubernetes in March 2026, is no longer the tested controller.
+- **Content scanning design** (#52). `docs/content-scanning.md` proposes shadow-mode detection (static checks of tool definitions at refresh first), no hosted model, evidence limited to rule ids and counts, decision 87 and first-slice follow-ups #70–#73; threat model 7.5 and the roadmap point to it. Design only: no scanner, migration, API or setting exists.
 
 ## [0.8.0] - 2026-10-29
 
