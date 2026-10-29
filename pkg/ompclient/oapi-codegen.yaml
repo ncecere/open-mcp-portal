@@ -1,0 +1,8 @@
+package: ompclient
+output: ompclient.gen.go
+generate:
+  models: true
+  client: true
+output-options:
+  overlay:
+    path: overlay.yaml

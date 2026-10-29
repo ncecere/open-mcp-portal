@@ -27,15 +27,15 @@ deps-up: ## Start local Postgres (127.0.0.1:55442); it restarts with Docker
 deps-down: ## Stop local Postgres (keeps data)
 	docker compose down
 
-generate: ## Regenerate sqlc queries and OpenAPI types (Go, and TypeScript when web/ exists)
+generate: ## Regenerate sqlc queries, OpenAPI types and the public client pkg/ompclient (Go, and TypeScript when web/ exists)
 	$(SQLC) generate
 	$(GO) generate ./...
 	@if [ -f web/package.json ]; then cd web && npm run gen; else echo "web/package.json not found; skipping TypeScript generation"; fi
 
 check-generated: generate ## Fail if generated code is stale
-	@git diff --exit-code -- internal/store/dbgen internal/httpapi/apitypes web/src/api/schema.gen.ts || \
+	@git diff --exit-code -- internal/store/dbgen internal/httpapi/apitypes pkg/ompclient web/src/api/schema.gen.ts || \
 		(echo "generated code is stale: run 'make generate' and commit" && exit 1)
-	@test -z "$$(git ls-files --others --exclude-standard -- internal/store/dbgen internal/httpapi/apitypes web/src/api)" || \
+	@test -z "$$(git ls-files --others --exclude-standard -- internal/store/dbgen internal/httpapi/apitypes pkg/ompclient web/src/api)" || \
 		(echo "untracked generated files: run 'make generate' and commit" && exit 1)
 
 build: ## Build bin/open-mcp-portal (run `make web` first to include the UI)
@@ -84,7 +84,7 @@ test-ci: ## test-integration without deps-up (CI's Postgres service; OMP_TEST_DA
 
 lint: ## go vet and gofmt check
 	$(GO) vet ./...
-	@test -z "$$(gofmt -l cmd internal examples migrations web/embed.go)" || (gofmt -l cmd internal examples migrations web/embed.go && echo "run 'make fmt'" && exit 1)
+	@test -z "$$(gofmt -l cmd internal pkg examples migrations web/embed.go)" || (gofmt -l cmd internal pkg examples migrations web/embed.go && echo "run 'make fmt'" && exit 1)
 
 ACTIONLINT_VERSION ?= v1.7.12
 
@@ -92,7 +92,7 @@ actionlint: ## Check the GitHub Actions workflows
 	$(GO) run github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
 
 fmt: ## Format Go code
-	gofmt -w cmd internal examples migrations web/embed.go
+	gofmt -w cmd internal pkg examples migrations web/embed.go
 
 web: ## Build the web UI into web/dist (embedded by `make build`)
 	cd web && npm ci --ignore-scripts && npm run build
