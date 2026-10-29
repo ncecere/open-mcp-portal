@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/ncecere/open-mcp-portal/internal/buildinfo"
+	"github.com/ncecere/open-mcp-portal/internal/upstream"
 )
 
 // The modern era's result shape (docs/mcp-protocol.md "Results"):
@@ -118,6 +119,10 @@ func (rc *request) discover() {
 	if err != nil {
 		rc.internal(err)
 		return
+	}
+	if rc.tasksEnabled() {
+		// Modern discovery only: the legacy initialize result never lists it.
+		caps["extensions"] = map[string]any{upstream.TasksExtension: map[string]any{}}
 	}
 	result := map[string]any{"supportedVersions": allVersions(), "capabilities": caps}
 	rc.cacheable(result, listTTLms)

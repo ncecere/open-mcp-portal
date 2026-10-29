@@ -73,6 +73,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/httpx"
 	"github.com/ncecere/open-mcp-portal/internal/identity"
 	"github.com/ncecere/open-mcp-portal/internal/limits"
+	"github.com/ncecere/open-mcp-portal/internal/mcptasks"
 	"github.com/ncecere/open-mcp-portal/internal/oauth"
 	"github.com/ncecere/open-mcp-portal/internal/observability"
 	"github.com/ncecere/open-mcp-portal/internal/personsecrets"
@@ -150,6 +151,10 @@ const (
 	methodResources   = "resources/list"
 	methodTemplates   = "resources/templates/list"
 	methodRead        = "resources/read"
+	// The task lifecycle methods of the Tasks extension (modern era only).
+	methodTasksGet    = upstream.MethodTasksGet
+	methodTasksUpdate = upstream.MethodTasksUpdate
+	methodTasksCancel = upstream.MethodTasksCancel
 )
 
 // DeniedKeyScope is why a request with a key limited to other gateways is
@@ -177,6 +182,12 @@ type Handler struct {
 	// PersonSecrets supplies people's own secrets for servers in person_secret
 	// mode (personsecret.go; nil: such calls are refused).
 	PersonSecrets *personsecrets.Service
+	// Tasks relays the released Tasks extension's durable task handles
+	// (tasks.go; docs/mcp-tasks.md). Nil turns tasks fully off: the extension
+	// is not advertised, never negotiated with a server, and the task methods
+	// are unknown. Tasks also need Approvals (the read-only no-rule check of
+	// every lifecycle operation).
+	Tasks *mcptasks.Store
 	// Limits and RateStore apply the rate limits (nil: none).
 	Limits    *limits.Service
 	RateStore ratelimit.Store
@@ -524,6 +535,14 @@ type request struct {
 	// stream is the SSE response of a streamed call (stream.go; nil: the
 	// answer is one JSON object). Once set, w is the stream.
 	stream *stream
+	// creating is the reserved-but-not-yet-exposed creation of a task for this
+	// tools/call (tasks_create.go); taskOp marks a task lifecycle request
+	// (tasks_ops.go), whose refusals never distinguish one cause from another;
+	// noResend forbids the automatic renew-and-resend of an upstream 401, because
+	// a task creation or lifecycle exchange is sent exactly once.
+	creating *taskInit
+	taskOp   bool
+	noResend bool
 }
 
 // observe records the request's metrics.
@@ -607,7 +626,8 @@ func (rc *request) rateLimit() bool {
 
 func recorded(method string) bool {
 	switch method {
-	case methodToolsList, methodToolsCall, methodPromptsList, methodPromptsGet, methodResources, methodTemplates, methodRead:
+	case methodToolsList, methodToolsCall, methodPromptsList, methodPromptsGet, methodResources, methodTemplates, methodRead,
+		methodTasksGet, methodTasksUpdate, methodTasksCancel:
 		return true
 	}
 	return false
@@ -824,6 +844,14 @@ func (rc *request) dispatch() {
 		rc.list(upstream.KindPrompt, "prompts")
 	case methodToolsCall:
 		rc.call(upstream.KindTool)
+	case methodTasksGet, methodTasksUpdate, methodTasksCancel:
+		if !rc.modern || !rc.tasksEnabled() {
+			// Legacy clients never see tasks, and a portal without the task
+			// store does not know the methods at all.
+			rc.methodNotFound()
+			return
+		}
+		rc.task()
 	case methodPromptsGet:
 		rc.call(upstream.KindPrompt)
 	case methodResources, methodTemplates, methodRead:

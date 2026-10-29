@@ -23,6 +23,10 @@ type ApprovalRuntime interface {
 	Epoch(context.Context) (int64, error)
 	Begin(context.Context, approvals.BeginInput) (approvals.Plan, error)
 	CheckContext(context.Context, int64, time.Time) error
+	// CheckUngoverned is the read-only, non-spending policy check of task
+	// lifecycle operations: a rule that now governs the call refuses with
+	// approvals.ErrContextChanged and never creates a receipt or request.
+	CheckUngoverned(context.Context, approvals.Binding, time.Time) error
 	Consume(context.Context, approvals.Plan) error
 	CancelBound(context.Context, approvals.BeginInput, uuid.UUID, int64) error
 	URL(uuid.UUID) string

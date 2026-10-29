@@ -190,6 +190,12 @@ func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.C
 			if rc.capture != nil {
 				rc.capture.Secrets = append(rc.capture.Secrets, next)
 			}
+			if rc.noResend {
+				// A task creation or lifecycle exchange is sent exactly once. The
+				// fresh token serves the NEXT request; this one reports the refusal.
+				rc.upstreamFailed(*rec, err)
+				return nil, false, false
+			}
 			continue
 		}
 		if !serverBound(cred) || !errors.As(err, &ue) {
@@ -202,6 +208,7 @@ func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.C
 		case ue.HTTPStatus == 401 && ch != nil && ch.Error() != "insufficient_scope":
 			// invalid_token, none, or (GitHub) invalid_request: the token
 			// wasn't accepted, and a 401 means nothing was executed.
+			refused := err
 			var next providers.Credential
 			var err error
 			if rc.principal.account != nil {
@@ -214,6 +221,11 @@ func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.C
 			var down *providers.UnavailableError
 			switch {
 			case err == nil:
+				if rc.noResend {
+					// Refreshed for the next request; never sent twice here.
+					rc.upstreamFailed(*rec, refused)
+					return nil, false, false
+				}
 				// Refreshed: retry once with the new token.
 				cred = &next
 				t.BearerToken = next.AccessToken

@@ -37,6 +37,11 @@ func (rc *request) liveTool(old gateways.Offer, prior *calls.Call) bool {
 			return true
 		}
 	}
+	if rc.taskOp {
+		// A task whose offer changed is indistinguishable from an unknown one.
+		rc.taskNotFound(rec, "task_binding_changed")
+		return false
+	}
 	n := rc.fail(codeInvalidParams, "The tool or its gateway policy changed; retry the original request")
 	rec.Outcome, rec.ErrorClass = calls.OutcomeDenied, "curation_changed"
 	rc.record(rec, n)

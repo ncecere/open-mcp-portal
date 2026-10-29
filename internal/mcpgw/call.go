@@ -175,6 +175,19 @@ func (rc *request) forward(kind string, o gateways.Offer, args json.RawMessage, 
 	if kind == upstream.KindTool && !rc.prepareApproval(o, args, again, &target, &fwd, rec) {
 		return
 	}
+	_, streaming := rc.wantsStream()
+	if kind == upstream.KindTool {
+		// Decided AFTER prepareApproval: a governed (approval-required) call is
+		// never negotiated. A streamed request is out of this first scope.
+		ti, ok := rc.negotiateTask(o, args, again, &target, &fwd, cred, secret, token, streaming, &rec)
+		if !ok {
+			return
+		}
+		if ti != nil {
+			rc.creating = ti
+			defer rc.abandonTask()
+		}
+	}
 	if progress, ok := rc.wantsStream(); ok && kind == upstream.KindTool {
 		var st *stream
 		fwd.OnAdmitted = func() {
@@ -226,6 +239,10 @@ func (rc *request) forwardCall(o gateways.Offer, rec calls.Call, cred *providers
 		return
 	}
 	fr := out.(*upstream.ForwardResult)
+	if fr.Task != nil {
+		rc.relayTaskCreated(o, rec, fr.Task)
+		return
+	}
 	if fr.Input != nil {
 		if rc.approval != nil && rc.approval.spent.Load() {
 			rc.approvalUnknown(rec)
@@ -365,6 +382,13 @@ func (rc *request) upstreamFailed(rec calls.Call, err error) {
 	rec.Outcome, rec.ErrorClass = calls.OutcomeUpstreamError, ue.Class
 	if rc.r.Context().Err() != nil && ue.Class != upstream.ClassTimeout {
 		rec.ErrorClass = "client_cancelled" // the client went away; the call to the server was cancelled
+	}
+	if rc.taskOp && ue.RPCCode == codeInvalidParams {
+		// The upstream no longer knows the task (or refused the request): the
+		// same answer as an unknown handle, never the server's own words.
+		rec.Outcome, rec.ErrorClass = calls.OutcomeDenied, "task_not_found_upstream"
+		rc.record(rec, rc.fail(codeInvalidParams, taskNotFoundMessage))
+		return
 	}
 	switch {
 	case ue.Class == upstream.ClassTimeout:
