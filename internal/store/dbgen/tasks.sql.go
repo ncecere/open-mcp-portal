@@ -479,18 +479,62 @@ func (q *Queries) InsertMCPTaskReservation(ctx context.Context, arg InsertMCPTas
 }
 
 const lockMCPTaskPrincipal = `-- name: LockMCPTaskPrincipal :exec
-
 SELECT pg_advisory_xact_lock($1::bigint)
+`
+
+// Transaction-scoped capacity serialization only; release before any network.
+func (q *Queries) LockMCPTaskPrincipal(ctx context.Context, dollar_1 int64) error {
+	_, err := q.db.Exec(ctx, lockMCPTaskPrincipal, dollar_1)
+	return err
+}
+
+const mCPTaskClock = `-- name: MCPTaskClock :one
+
+SELECT clock_timestamp()::timestamptz AS at_time
 `
 
 // Task handles are private lookup keys, not authority. Callers must re-resolve
 // current principal/credential/offer/no-rule/deadlines before these operations.
 // Positional parameters avoid named-parameter rewrite ambiguity in this file;
 // integration tests exercise each CAS and its generated parameter ordering.
-// Transaction-scoped capacity serialization only; release before any network.
-func (q *Queries) LockMCPTaskPrincipal(ctx context.Context, dollar_1 int64) error {
-	_, err := q.db.Exec(ctx, lockMCPTaskPrincipal, dollar_1)
-	return err
+func (q *Queries) MCPTaskClock(ctx context.Context) (time.Time, error) {
+	row := q.db.QueryRow(ctx, mCPTaskClock)
+	var at_time time.Time
+	err := row.Scan(&at_time)
+	return at_time, err
+}
+
+const mCPTaskRootBelongsToPrincipal = `-- name: MCPTaskRootBelongsToPrincipal :one
+SELECT EXISTS (
+    SELECT 1 FROM api_keys WHERE $1::text = 'user' AND $3::text = 'api_key' AND user_id = $2::uuid AND id = $4::uuid
+    UNION ALL
+    SELECT 1 FROM oauth_grants WHERE $1::text = 'user' AND $3::text = 'oauth' AND user_id = $2::uuid AND id = $4::uuid AND gateway_id = $5::uuid
+    UNION ALL
+    SELECT 1 FROM service_account_keys WHERE $1::text = 'service_account' AND $3::text = 'service_account' AND service_account_id = $2::uuid AND id = $4::uuid
+) AS belongs
+`
+
+type MCPTaskRootBelongsToPrincipalParams struct {
+	Column1 string
+	Column2 uuid.UUID
+	Column3 string
+	Column4 uuid.UUID
+	Column5 uuid.UUID
+}
+
+// Association only, NOT live authorization/scopes/status/expiry. OAuth binds
+// the stable grant and original gateway, never a short-lived token UUID.
+func (q *Queries) MCPTaskRootBelongsToPrincipal(ctx context.Context, arg MCPTaskRootBelongsToPrincipalParams) (bool, error) {
+	row := q.db.QueryRow(ctx, mCPTaskRootBelongsToPrincipal,
+		arg.Column1,
+		arg.Column2,
+		arg.Column3,
+		arg.Column4,
+		arg.Column5,
+	)
+	var belongs bool
+	err := row.Scan(&belongs)
+	return belongs, err
 }
 
 const prepareMCPTaskReservation = `-- name: PrepareMCPTaskReservation :one

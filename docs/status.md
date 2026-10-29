@@ -31,6 +31,10 @@ rotation/approval/task-package races in both actual database-role modes, compila
 and optional discovery-contract races in528s. SQL fixtures are not a sealed relay or single-use input
 implementation; no functional task service is enabled. The initial typecheck failure exposed a required-TS/
 optional-Go discovery field; the corrected optional contract has a retained regression, not padded fixtures.
+A sealed reservation/activation/private-root lookup API passed focused3x and full mcptasks/store/rotation/
+approval/upstream/gateway races in both actual database-role modes (423s), including two-pool capacity
+contention, durable reopening, wrong-key/swapped-row/rebound-binding refusal and forced expiry. It is not
+wired into gateway traffic or input mutations.
 A read-only, non-spending `CheckUngoverned` policy primitive
 passed focused and full approval-package races in both actual role modes in208s, including rule changes,
 expiry/cancellation/suspension and zero receipt/request-audit creation. It is not wired into task traffic.

@@ -3,6 +3,20 @@
 -- Positional parameters avoid named-parameter rewrite ambiguity in this file;
 -- integration tests exercise each CAS and its generated parameter ordering.
 
+-- name: MCPTaskClock :one
+SELECT clock_timestamp()::timestamptz AS at_time;
+
+-- name: MCPTaskRootBelongsToPrincipal :one
+-- Association only, NOT live authorization/scopes/status/expiry. OAuth binds
+-- the stable grant and original gateway, never a short-lived token UUID.
+SELECT EXISTS (
+    SELECT 1 FROM api_keys WHERE $1::text = 'user' AND $3::text = 'api_key' AND user_id = $2::uuid AND id = $4::uuid
+    UNION ALL
+    SELECT 1 FROM oauth_grants WHERE $1::text = 'user' AND $3::text = 'oauth' AND user_id = $2::uuid AND id = $4::uuid AND gateway_id = $5::uuid
+    UNION ALL
+    SELECT 1 FROM service_account_keys WHERE $1::text = 'service_account' AND $3::text = 'service_account' AND service_account_id = $2::uuid AND id = $4::uuid
+) AS belongs;
+
 -- name: LockMCPTaskPrincipal :exec
 -- Transaction-scoped capacity serialization only; release before any network.
 SELECT pg_advisory_xact_lock($1::bigint);
