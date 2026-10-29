@@ -25,8 +25,10 @@ argument/dependency-bound sealed-state, tamper/version/rotation and argument-rep
 repeated races. Monotonic expiry, wire-integer overflow, UTC/DST and bounded polling/configuration units
 also passed20 repeated races plus package races/compilation/lint in14s. These are clock-unit proofs, not a
 natural-expiry soak, and **unwired primitives, not authorization**. No task negotiation/dispatch/store/
-migration or new release version exists yet. #35
-remains open, all acceptance boxes unchecked. Source version0.8.0 is not evidence of task support.
+migration or new release version exists yet. A new read-only, non-spending `CheckUngoverned` policy primitive
+passed focused and full approval-package races in both actual role modes in208s, including rule changes,
+expiry/cancellation/suspension and zero receipt/request-audit creation. It is not wired into task traffic.
+#35 remains open, all acceptance boxes unchecked. Source version0.8.0 is not evidence of task support.
 
 ## v0.8.0 (2026-10-29): separate #33 failover stage, shipped and closed
 

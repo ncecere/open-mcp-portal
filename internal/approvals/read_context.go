@@ -48,6 +48,17 @@ func (s *Service) readContext(ctx context.Context, epoch int64, expires time.Tim
 	return nil
 }
 
+// CheckUngoverned is a non-spending, read-only policy check for lifecycle
+// operations whose original tool dispatch had no approval rule. Unlike Begin,
+// a newly matching rule refuses the operation without creating a receipt,
+// preview, notification or approval request. A successful check does not replace
+// current credential/gateway/offer/deadline checks or authorize arbitrary input.
+// Its captured epoch is per exchange, never frozen for a durable task's lifetime.
+func (s *Service) CheckUngoverned(ctx context.Context, binding Binding, expires time.Time) error {
+	_, err := s.beginUnrestricted(ctx, BeginInput{Binding: binding, CredentialExpiresAt: expires})
+	return err
+}
+
 func (s *Service) beginUnrestricted(ctx context.Context, in BeginInput) (Plan, error) {
 	err := s.readContext(ctx, in.Binding.Epoch, in.CredentialExpiresAt, func(ctx context.Context, q *dbgen.Queries) error {
 		live, err := s.requesterLive(ctx, q, in.Binding)
