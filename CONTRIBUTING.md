@@ -88,7 +88,9 @@ make demo         # optional, instead of all of the above: everything in Docker 
 | `make web-test` | UI type-check and Vitest tests, with axe accessibility checks |
 | `make k8s-validate` | Renders the Kustomize base and overlays and validates them with kubeconform |
 | `make actionlint` | Checks the GitHub Actions workflows |
-| `make k8s-smoke` | Applies the Kubernetes base to a throwaway kind cluster and checks it (about 2 minutes; needs docker, kind, kubectl and jq; `SMOKE_CNI=calico` also tests the NetworkPolicies). See [deploy.md](docs/deploy.md#smoke-test) |
+| `make k8s-smoke` | Applies the Kubernetes base to a throwaway kind cluster and checks it (about 2 minutes; needs docker, kind, kubectl and jq; `SMOKE_CNI=calico` also tests the NetworkPolicies). `SMOKE_SCENARIO=upgrade`, `ingress`, `restore` or `load` run the other scenarios (the previous release to this tree and back; ingress, TLS and OIDC; a `pg_dump` restore; three replicas under k6). See [deploy.md](docs/deploy.md#smoke-test) |
+| `make smoke-selftest` | The smoke scripts' assertion helpers against stubs, and the Python script tests in `scripts/tests`: no cluster, no Docker |
+| `make shellcheck` | ShellCheck on the deployment and smoke scripts (installs the pinned release into `bin/k8s-tools/bin` when it is not on the PATH) |
 
 - Integration tests create one database per test on the server in `OMP_TEST_DATABASE_URL` (default: the compose Postgres, `postgres://omp:omp-dev-only@127.0.0.1:55442/postgres`); `OMP_TEST_REQUIRE_DB=1` makes them fail instead of skip, and `OMP_TEST_LOG=1` shows the server's logs.
 - In `web/`: `npm run typecheck`, `npm test`, `npm run build`, and the policies `npm run check:styling` (Base UI components, CSS Modules and design tokens only) and `npm run check:size` (source files ≤ 400 lines, tests ≤ 700).
@@ -98,7 +100,7 @@ make demo         # optional, instead of all of the above: everything in Docker 
 HTTP integration package can exceed Go's default cumulative 10 minutes even in normal mode; a package
 watchdog is not an individual-test deadline. CI still requires PostgreSQL and the race detector in both roles.
 
-CI (`.github/workflows/ci.yml`) runs `make lint` and `make actionlint`, `make check-generated`, `make test-ci` against a Postgres service, the web checks above, `make k8s-validate` and both Docker targets. `make test-ci` retains every test, required PostgreSQL and the race detector with an explicit 20-minute per-package timeout; the CI job allows 45 minutes for both complete database-role modes. Run the same before opening a pull request. `make k8s-smoke` is not part of it: `.github/workflows/k8s-smoke.yml` runs it on demand, weekly and when `deploy/**`, the `Dockerfile` or the script change on `main`; run it yourself when you change `deploy/`.
+CI (`.github/workflows/ci.yml`) runs `make lint` and `make actionlint`, `make check-generated`, `make test-ci` against a Postgres service, the web checks above, `make k8s-validate`, `make shellcheck`, the smoke self-test (`SMOKE_SELFTEST=1 scripts/k8s-smoke.sh`) with the script tests, and both Docker targets. `make test-ci` retains every test, required PostgreSQL and the race detector with an explicit 20-minute per-package timeout; the CI job allows 45 minutes for both complete database-role modes. Run the same before opening a pull request. The kind scenarios are not part of it: `.github/workflows/k8s-smoke.yml` runs `base`, `ingress` and `restore` on demand, weekly and when `deploy/**`, the `Dockerfile` or the scripts change on `main`; `k8s-upgrade.yml` runs the upgrade from the previous release on every `v*` tag, weekly and on demand (and, weekly or on request, the canary that proves a breaking migration fails it); `k8s-load.yml` runs the load test weekly and on demand. Run the scenario yourself when you change `deploy/` or the scripts.
 
 ## Generated code
 

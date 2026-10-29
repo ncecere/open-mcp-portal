@@ -6,6 +6,10 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
+## Unreleased
+
+- **Kubernetes release gates** (#43). The kind smoke test gains an `upgrade` scenario (the previous release by digest, data and credentials created on it, the roll to this tree under a request loop with no failed request, then the roll back), an `ingress` scenario (Envoy Gateway with cert-manager TLS, `TRUSTED_PROXIES`, SSE streaming and OIDC through Dex), a `restore` scenario (`pg_dump` and `pg_restore`) and a `load` scenario (three replicas under k6); new `k8s-upgrade` and `k8s-load` workflows, ShellCheck and an assertion self-test in CI, and an honest "What it does not prove". ingress-nginx, retired by Kubernetes in March 2026, is no longer the tested controller.
+
 ## [0.8.0] - 2026-10-29
 
 - **Origin-isolated endpoint failover** (#33 remaining stage, decision85). Keep the canonical primary plus at most two ordered extras with independent entered static credentials. New origins require every value again; owner/admin session-only mutations are audited/revision-checked and destination/shape changes require catalog review. Unsupported OAuth/person/provider/machine/TLS combinations refuse extras rather than forwarding an existing credential elsewhere.
