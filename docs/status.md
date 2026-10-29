@@ -48,6 +48,12 @@ were untouched; owned scratch PostgreSQL containers, browser sessions, private f
 scratch app/fake servers were cleaned up. The release tag remains immutable; subsequent main commits record
 publication evidence and the verified example digest.
 
+The redundant tag CI later hit Go's default aggregate 10-minute package timeout while `TestTokenMatrix`
+was still progressing (six seconds into that test), without an assertion failure. Main now gives the expanded
+race suite an explicit 20-minute per-package budget and 45 minutes for both complete role-mode runs.
+Required PostgreSQL, race detection, all tests and authorization/vulnerability/readiness checks are unchanged.
+The release tag is not moved; this is a CI-harness follow-up, not a runtime change.
+
 ## v0.4.0 (2026-10-28): MCP-only governance
 
 Shipped and closed: scopes (#29), curation (#30), shared service connections (#26), database-role separation

@@ -63,7 +63,8 @@ jobs:
 
   go:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Two complete role-mode runs, each with a bounded 20m package timeout.
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:17

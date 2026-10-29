@@ -78,7 +78,8 @@ test: ## All Go tests; integration tests skip when Postgres is unreachable
 test-integration: deps-up test-ci ## All Go tests with Postgres required (fails instead of skipping)
 
 test-ci: ## test-integration without deps-up (CI's Postgres service; OMP_TEST_DATABASE_URL)
-	OMP_TEST_REQUIRE_DB=1 $(GO) test -race -count=1 ./...
+	# The expanded HTTP integration package can exceed Go's default 10m under -race.
+	OMP_TEST_REQUIRE_DB=1 $(GO) test -race -count=1 -timeout=20m ./...
 
 lint: ## go vet and gofmt check
 	$(GO) vet ./...

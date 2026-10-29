@@ -94,7 +94,7 @@ make demo         # optional, instead of all of the above: everything in Docker 
 - In `web/`: `npm run typecheck`, `npm test`, `npm run build`, and the policies `npm run check:styling` (Base UI components, CSS Modules and design tokens only) and `npm run check:size` (source files ≤ 400 lines, tests ≤ 700).
 - Add or update tests with every behaviour change. Bug fixes come with a test that fails without the fix.
 
-CI (`.github/workflows/ci.yml`) runs `make lint` and `make actionlint`, `make check-generated`, `make test-ci` against a Postgres service, the web checks above, `make k8s-validate` and both Docker targets. Run the same before opening a pull request. `make k8s-smoke` is not part of it: `.github/workflows/k8s-smoke.yml` runs it on demand, weekly and when `deploy/**`, the `Dockerfile` or the script change on `main`; run it yourself when you change `deploy/`.
+CI (`.github/workflows/ci.yml`) runs `make lint` and `make actionlint`, `make check-generated`, `make test-ci` against a Postgres service, the web checks above, `make k8s-validate` and both Docker targets. `make test-ci` retains every test, required PostgreSQL and the race detector with an explicit 20-minute per-package timeout; the CI job allows 45 minutes for both complete database-role modes. Run the same before opening a pull request. `make k8s-smoke` is not part of it: `.github/workflows/k8s-smoke.yml` runs it on demand, weekly and when `deploy/**`, the `Dockerfile` or the script change on `main`; run it yourself when you change `deploy/`.
 
 ## Generated code
 
