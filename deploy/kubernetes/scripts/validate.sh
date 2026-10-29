@@ -46,6 +46,11 @@ for overlay in "${root}"/overlays/*/; do
   validate "$name" "$out"
 done
 
+# The cluster-level part of the ingress smoke overlay (GatewayClass, EnvoyProxy):
+# applied by scripts/smoke/ingress.sh, so not one of the overlays above.
+"$KUSTOMIZE" build "${root}/overlays/smoke-ingress/controller" >"${scratch}/smoke-ingress-controller.yaml"
+validate "overlays/smoke-ingress/controller" "${scratch}/smoke-ingress-controller.yaml"
+
 # Files kept beside an overlay as alternatives (not in its resources).
 validate "overlays/example/httproute.yaml" "${root}/overlays/example/httproute.yaml"
 validate "overlays/example/servicemonitor.yaml" "${root}/overlays/example/servicemonitor.yaml"
@@ -68,14 +73,29 @@ check_config_refs() { # name, rendered file
 check_config_refs "base" "${scratch}/base.yaml"
 check_config_refs "overlays/example" "${scratch}/example.yaml"
 check_config_refs "overlays/smoke" "${scratch}/smoke.yaml"
+check_config_refs "overlays/smoke-ingress" "${scratch}/smoke-ingress.yaml"
+# The ingress overlay signs in through OIDC on an https APP_URL: dev sign-in off,
+# the ingress policy allows the gateway's namespace, no image is left unpinned.
+if ! { grep -q "^  DEV_AUTH: \"false\"\$" "${scratch}/smoke-ingress.yaml" && grep -q "^  APP_URL: https://omp.smoke.test\$" "${scratch}/smoke-ingress.yaml"; }; then
+  echo "overlays/smoke-ingress: DEV_AUTH is not false on an https APP_URL" >&2
+  exit 1
+fi
+grep -q "kubernetes.io/metadata.name: envoy-gateway-system" "${scratch}/smoke-ingress.yaml" ||
+  { echo "overlays/smoke-ingress: the ingress policy does not allow the gateway's namespace" >&2; exit 1; }
+if grep -E "^\s+image:" "${scratch}/smoke-ingress.yaml" "${scratch}/smoke-ingress-controller.yaml" | grep -v "omp-smoke/" | grep -v "@sha256:"; then
+  echo "overlays/smoke-ingress: an image is not pinned by digest" >&2
+  exit 1
+fi
 grep -q "^  APP_URL: https://mcp.example.org\$" "${scratch}/example.yaml" ||
   { echo "overlays/example: APP_URL not merged into the config" >&2; exit 1; }
-grep -q "^  METRICS_ADDR: :9090\$" "${scratch}/example.yaml" && grep -q "containerPort: 9090" "${scratch}/example.yaml" ||
-  { echo "overlays/example: the metrics port is not wired" >&2; exit 1; }
+if ! { grep -q "^  METRICS_ADDR: :9090\$" "${scratch}/example.yaml" && grep -q "containerPort: 9090" "${scratch}/example.yaml"; }; then
+  echo "overlays/example: the metrics port is not wired" >&2
+  exit 1
+fi
 
 # No secret values in the manifests: the runtime secret is referenced only
 # (the smoke overlay's secrets are created by scripts/k8s-smoke.sh).
-if grep -q "^kind: Secret\$" "${scratch}/base.yaml" "${scratch}"/example.yaml "${scratch}"/smoke.yaml; then
+if grep -q "^kind: Secret\$" "${scratch}/base.yaml" "${scratch}"/example.yaml "${scratch}"/smoke.yaml "${scratch}"/smoke-ingress.yaml; then
   echo "a rendered manifest contains a Secret; secrets must be created outside the base" >&2
   exit 1
 fi

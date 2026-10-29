@@ -108,6 +108,7 @@ PROBE_TOTAL=""
 PROBE_FAILS=""
 PROBE_READY503=""
 SCHEMA_NOTE=""
+FAKEMCP_MEMORY=""                   # the fake MCP server's memory limit when the scenario raises it (it records every request)
 REPLICAS=""                         # the portal Deployment's replica count when the scenario sets it
 
 # ---------------------------------------------------------------- output
@@ -355,6 +356,18 @@ EOF
 EOF
     if [ -n "$REPLICAS" ]; then
       printf 'replicas:\n  - name: open-mcp-portal\n    count: %s\n' "$REPLICAS"
+    fi
+    if [ -n "$FAKEMCP_MEMORY" ]; then
+      cat <<EOF
+patches:
+  - target:
+      kind: Deployment
+      name: fakemcp
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: ${FAKEMCP_MEMORY}
+EOF
     fi
     cat <<EOF
 configMapGenerator:

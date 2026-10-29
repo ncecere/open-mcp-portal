@@ -139,10 +139,14 @@ leader_file "$SELF_TMP/m-two.txt" 1 0 0
 expect_out "prom_sum metric" 40 prom_sum "$SELF_TMP/m1.txt" omp_http_requests_total
 expect_out "prom_sum label" 1 prom_sum "$SELF_TMP/m1.txt" omp_loop_leader 'loop="retention"'
 expect_out "prom_sum none" 0 prom_sum "$SELF_TMP/m1.txt" omp_nothing
-expect_ok "one leader per loop" check_one_leader_per_loop "retention usage_rollup notifications" "$SELF_TMP/m1.txt" "$SELF_TMP/m2.txt" "$SELF_TMP/m3.txt"
-expect_fail "two leaders" 'loop="retention"\} adds up to 2' check_one_leader_per_loop "retention usage_rollup" "$SELF_TMP/m1.txt" "$SELF_TMP/m2.txt" "$SELF_TMP/m-two.txt"
-expect_fail "no leader" 'loop="notifications"\} adds up to 0' check_one_leader_per_loop "notifications" "$SELF_TMP/m3.txt" "$SELF_TMP/m3.txt"
-expect_fail "loop not reported" 'no replica reports omp_loop_leader\{loop="health"\}' check_one_leader_per_loop "health" "$SELF_TMP/m1.txt"
+expect_out "loop_leaders sums the replicas" 1 loop_leaders retention "$SELF_TMP/m1.txt" "$SELF_TMP/m2.txt" "$SELF_TMP/m3.txt"
+expect_out "loop_leaders missing" missing loop_leaders health "$SELF_TMP/m1.txt"
+expect_ok "every loop has a leader" check_loop_leaders "retention usage_rollup notifications" "$SELF_TMP/m1.txt" "$SELF_TMP/m2.txt" "$SELF_TMP/m3.txt"
+expect_ok "several replicas may report leading" check_loop_leaders "retention" "$SELF_TMP/m1.txt" "$SELF_TMP/m-two.txt"
+expect_fail "no leader" 'loop="notifications"\} adds up to 0' check_loop_leaders "notifications" "$SELF_TMP/m3.txt" "$SELF_TMP/m3.txt"
+expect_fail "loop not reported" 'no replica reports omp_loop_leader\{loop="health"\}' check_loop_leaders "health" "$SELF_TMP/m1.txt"
+expect_ok "no leader while the lock is held elsewhere" check_no_leader_while_locked "retention usage_rollup notifications" "$SELF_TMP/m3.txt" "$SELF_TMP/m3.txt"
+expect_fail "a leader although the lock is held" 'adds up to 1 while its advisory lock was held elsewhere' check_no_leader_while_locked "retention" "$SELF_TMP/m1.txt" "$SELF_TMP/m3.txt"
 
 # ---------------------------------------------------------------- streaming
 cat >"$SELF_TMP/sse-stream.txt" <<'EOF'
@@ -183,6 +187,49 @@ expect_out "query_param" "b" query_param "/oauth/consent?client_id=a&state=b" st
 expect_out "query_param first" "a" query_param "http://x/cb?client_id=a&state=b" client_id
 # RFC 7636 appendix B.
 expect_out "pkce_challenge" "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM" pkce_challenge "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+
+# ---------------------------------------------------------------- k6 summary
+write_k6() { # FILE FAILED_REQUESTS FAILED_CHECKS P95
+  cat >"$1" <<EOF
+{"metrics":{"http_reqs":{"count":900,"rate":30.1},
+"http_req_failed":{"passes":$2,"fails":900,"value":0},
+"checks":{"fails":$3,"passes":1800,"value":1},
+"http_req_duration":{"avg":135.4,"min":19,"med":77,"max":1496,"p(90)":140,"p(95)":$4,"p(99)":1489}}}
+EOF
+}
+write_k6 "$SELF_TMP/k6-ok.json" 0 0 560.4
+write_k6 "$SELF_TMP/k6-failed.json" 3 0 560.4
+write_k6 "$SELF_TMP/k6-checks.json" 0 5 560.4
+write_k6 "$SELF_TMP/k6-slow.json" 0 0 4100.2
+echo '{"metrics":{"http_reqs":{"count":10}}}' >"$SELF_TMP/k6-nop95.json"
+echo 'not json' >"$SELF_TMP/k6-bad.json"
+expect_ok "k6 summary ok" check_k6_summary "$SELF_TMP/k6-ok.json" 3000 500
+expect_fail "k6 failed requests" "saw 3 failed requests" check_k6_summary "$SELF_TMP/k6-failed.json" 3000 500
+expect_fail "k6 failed checks" "saw 5 failed checks" check_k6_summary "$SELF_TMP/k6-checks.json" 3000 500
+expect_fail "k6 slow p95" "p\\(95\\) in ms: 4100.2 is not below 3000" check_k6_summary "$SELF_TMP/k6-slow.json" 3000 500
+expect_fail "k6 too few requests" "k6 requests: 900 is below 5000" check_k6_summary "$SELF_TMP/k6-ok.json" 3000 5000
+expect_fail "k6 without p95" "no http_req_duration" check_k6_summary "$SELF_TMP/k6-nop95.json" 3000 5
+expect_fail "k6 not json" "has no metrics" check_k6_summary "$SELF_TMP/k6-bad.json" 3000 5
+
+# ---------------------------------------------------------------- ingress scenario helpers
+# shellcheck source=ingress.sh
+. "$ROOT/scripts/smoke/ingress.sh"
+expect_out "dex_subject (user 6a0f3c1e..., connector local)" "CiQ2YTBmM2MxZS0yYjRkLTRjOGEtOWU3Zi0wZDFhMmIzYzRkNWUSBWxvY2Fs" dex_subject 6a0f3c1e-2b4d-4c8a-9e7f-0d1a2b3c4d5e local
+cat >"$SELF_TMP/cm.yaml" <<'EOF'
+        image: "quay.io/jetstack/cert-manager-controller:v1.21.3"
+        image: "quay.io/jetstack/cert-manager-cainjector:v1.21.3"
+        image: "quay.io/jetstack/cert-manager-webhook:v1.21.3"
+EOF
+cat >"$SELF_TMP/eg.yaml" <<'EOF'
+          image: envoyproxy/gateway:v1.9.3
+        image: envoyproxy/gateway:v1.9.3
+EOF
+cp "$SELF_TMP/cm.yaml" "$SELF_TMP/cm.orig"
+expect_ok "pin_images" pin_images "$SELF_TMP/cm.yaml" "$SELF_TMP/eg.yaml"
+expect_out "pinned controller" '        image: "quay.io/jetstack/cert-manager-controller:v1.21.3@sha256:9f4f96a33c7774cef24466fcd85031997531a03a8d117f151126baa8d1290dcc"' sed -n 1p "$SELF_TMP/cm.yaml"
+expect_out "pinned gateway (both occurrences)" 2 grep -c 'envoyproxy/gateway:v1.9.3@sha256:192fc9bd' "$SELF_TMP/eg.yaml"
+cp "$SELF_TMP/cm.orig" "$SELF_TMP/cm2.yaml"
+expect_fail "pin_images with a manifest that lacks an image" "no manifest has the image envoyproxy/gateway" pin_images "$SELF_TMP/cm2.yaml"
 
 # ---------------------------------------------------------------- stub kubectl and curl
 # kubectl: prints what STUB_KUBECTL_OUT says (default "42") and exits

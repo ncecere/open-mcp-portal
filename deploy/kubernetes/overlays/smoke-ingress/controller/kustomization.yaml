@@ -1,0 +1,10 @@
+# The cluster-level part of the ingress scenario: the GatewayClass and the
+# EnvoyProxy settings it points at (the proxy's Service stays ClusterIP, as
+# kind has no load balancer, and its image is pinned by digest). Applied by
+# scripts/smoke/ingress.sh after Envoy Gateway is installed. Not part of the
+# overlay because it lives outside the portal's namespace.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gatewayclass.yaml
+  - envoyproxy.yaml

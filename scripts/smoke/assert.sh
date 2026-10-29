@@ -85,16 +85,40 @@ prom_sum() {
     }
     END { printf "%.10g\n", sum + 0 }' "$1"
 }
-# check_one_leader_per_loop "LOOP LOOP ..." FILE...: for every loop the
-# omp_loop_leader gauges of all replicas (one file each) add up to exactly 1.
-check_one_leader_per_loop() {
+# loop_leaders LOOP FILE...: the sum of omp_loop_leader{loop="LOOP"} over the
+# replicas' metrics files, or "missing" when no file reports the loop. The
+# gauge is 1 when a replica led the loop's LATEST run (it got the advisory lock),
+# so the sum is not "1 leader at all times": runs are short, each replica
+# usually finds the lock free at its own tick, and several replicas can show 1
+# at once. What the lock guarantees is that runs never overlap, which
+# check_no_leader_while_locked proves by holding the lock.
+loop_leaders() {
+  local loop=$1
+  shift
+  cat "$@" | awk -v frag="loop=\"$loop\"" '$0 ~ "^omp_loop_leader[{]" && index($0, frag) { s += $NF; n++ } END { if (n == 0) print "missing"; else printf "%d\n", s }'
+}
+# check_loop_leaders "LOOP LOOP ..." FILE...: every loop is led by at least one
+# replica (the "no loop leader" alert's condition would not fire).
+check_loop_leaders() {
   local loops=$1 loop total
   shift
-  [ "$#" -ge 1 ] || fail "check_one_leader_per_loop: no metrics files"
+  [ "$#" -ge 1 ] || fail "check_loop_leaders: no metrics files"
   for loop in $loops; do
-    total="$(cat "$@" | awk -v frag="loop=\"$loop\"" '$0 ~ "^omp_loop_leader[{]" && index($0, frag) { s += $NF; n++ } END { if (n == 0) print "missing"; else printf "%d\n", s }')"
+    total="$(loop_leaders "$loop" "$@")"
     [ "$total" != missing ] || fail "no replica reports omp_loop_leader{loop=\"$loop\"}"
-    [ "$total" = 1 ] || fail "omp_loop_leader{loop=\"$loop\"} adds up to $total over $# replicas, want exactly 1"
+    [ "$total" -ge 1 ] || fail "omp_loop_leader{loop=\"$loop\"} adds up to $total over $# replicas: no replica leads the loop"
+  done
+}
+# check_no_leader_while_locked "LOOP LOOP ..." FILE...: taken while something else
+# holds the loops' advisory locks, no replica may report leading: the lock, not
+# the replica count, decides who runs a loop.
+check_no_leader_while_locked() {
+  local loops=$1 loop total
+  shift
+  for loop in $loops; do
+    total="$(loop_leaders "$loop" "$@")"
+    [ "$total" != missing ] || fail "no replica reports omp_loop_leader{loop=\"$loop\"}"
+    [ "$total" -eq 0 ] || fail "omp_loop_leader{loop=\"$loop\"} adds up to $total while its advisory lock was held elsewhere: a replica ran the loop without the lock"
   done
 }
 
