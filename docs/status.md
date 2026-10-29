@@ -19,7 +19,11 @@ authority and durable bounded sealed mappings. Cancellation acknowledgement is n
 The current branch adds an **unwired released-shape parser foundation** (flat create/get variants, ack-only
 update/cancel, exact upstream ID, bounded lossless integer/time/payload checks). Ten repeated race runs,
 bounded20s fuzzing (89,681 executions), all-package compilation and lint passed in160s. Full upstream/
-gateway package races and generated freshness then passed in19s. **No task negotiation/dispatch/store/migration or new release version exists yet.** #35
+gateway package races and generated freshness then passed in19s. Opaque32-byte handles passed50 repeated
+race runs and20s fuzzing (1,179,125 executions); row/handle/principal/credential/full-URL/definition/curation/
+argument/dependency-bound sealed-state, tamper/version/rotation and argument-representation units passed20
+repeated races. These are **unwired primitives, not authorization**. No task negotiation/dispatch/store/
+migration or new release version exists yet. #35
 remains open, all acceptance boxes unchecked. Source version0.8.0 is not evidence of task support.
 
 ## v0.8.0 (2026-10-29): separate #33 failover stage, shipped and closed
