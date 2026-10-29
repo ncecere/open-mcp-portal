@@ -148,3 +148,12 @@ func (s Snapshot) UpstreamCreatedAt() time.Time {
 }
 func (Snapshot) String() string   { return "private task snapshot" }
 func (Snapshot) GoString() string { return "private task snapshot" }
+
+// UpstreamUpdatedAt is the latest observed upstream update time (never
+// rewinds). Zero before activation.
+func (s Snapshot) UpstreamUpdatedAt() time.Time {
+	if s.row.UpstreamUpdatedAt == nil {
+		return time.Time{}
+	}
+	return *s.row.UpstreamUpdatedAt
+}

@@ -68,7 +68,8 @@ func (a *api) toAPIServer(v registry.ServerView) apitypes.McpServer {
 		RefreshedAt: s.RefreshedAt, LastRefreshError: s.LastRefreshError,
 		Requirement: toAPIServerRequirement(v.Requirement), CapturePayloads: &s.CapturePayloads,
 		AuthMode: authModePtr(s), Oauth: a.toAPIServerOAuth(v), PersonSecret: toAPIPersonSecretSettings(v.PersonSecret), MachineOAuth: toAPIMachineOAuth(v), SendIdentity: &s.SendIdentity, Protocol: toAPIProtocol(s), ReviewDigest: nonEmpty(v.ReviewDigest),
-		Revision: s.Revision, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
+		SupportsTasks: &s.SupportsTasks,
+		Revision:      s.Revision, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
 	}
 }
 

@@ -47,7 +47,10 @@ type TestResult struct {
 	// Protocol is the era and version negotiated with the server (zero when
 	// it wasn't read); a successful check stores it on the server.
 	Protocol upstream.Protocol
-	Err      *upstream.Error // nil when OK
+	// SupportsTasks: the canonical primary's MODERN discovery advertised the
+	// Tasks extension (never set from an additional endpoint or a legacy era).
+	SupportsTasks bool
+	Err           *upstream.Error // nil when OK
 	// ReadAs names the person whose sign-in (the setup connection) an
 	// oauth server was read with; SetupRequired says there was none usable
 	// (SetupStatus is missing or needs_reconsent).
@@ -169,7 +172,7 @@ func (s *Service) probeUntraced(ctx context.Context, sv dbgen.McpServer, trigger
 		}
 	}
 	res.Latency, res.ServerName, res.ServerVersion, res.ProtocolVersion = d.Latency, d.ServerName, d.ServerVersion, d.ProtocolVersion
-	res.Protocol = d.Protocol
+	res.Protocol, res.SupportsTasks = d.Protocol, d.SupportsTasks
 	if err != nil {
 		e, ok := err.(*upstream.Error)
 		if !ok {
@@ -223,6 +226,13 @@ func recordCheck(ctx context.Context, q *dbgen.Queries, serverID uuid.UUID, res 
 	if res.OK && res.Protocol.Era != "" && res.Protocol.Version != "" {
 		if err := q.SetMCPServerProtocol(ctx, dbgen.SetMCPServerProtocolParams{ID: serverID, Era: ptr(string(res.Protocol.Era)),
 			Version: ptr(res.Protocol.Version)}); err != nil {
+			return err
+		}
+		// Task support is only ever true for the modern era's advertisement;
+		// the absence of the extension (or a legacy era) records false, so a
+		// server that stopped advertising it is no longer negotiated with.
+		if err := q.SetMCPServerTaskSupport(ctx, dbgen.SetMCPServerTaskSupportParams{ID: serverID,
+			SupportsTasks: res.SupportsTasks && res.Protocol.Era == upstream.EraModern}); err != nil {
 			return err
 		}
 	}

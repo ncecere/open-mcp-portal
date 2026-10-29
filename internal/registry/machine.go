@@ -2,7 +2,10 @@ package registry
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/url"
 	"slices"
 	"strings"
@@ -414,6 +417,23 @@ func (s *Service) RenewMachineToken(ctx context.Context, sv dbgen.McpServer, rej
 		return "", err
 	}
 	return tok, nil
+}
+
+// MachineIdentity is a digest of a machine_oauth server's NON-secret client
+// identity and configuration (token endpoint, client ID, authentication method,
+// scopes, audience and resource): never the client secret or a token. A task
+// binds to it so a lifecycle operation notices a changed client, while a mere
+// secret rotation or a fresh token does not.
+func (s *Service) MachineIdentity(ctx context.Context, sv dbgen.McpServer) (string, error) {
+	row, err := s.q.GetMachineOAuth(ctx, sv.ID)
+	if err != nil {
+		return "", err
+	}
+	h := sha256.New()
+	for _, part := range append([]string{row.TokenUrl, row.ClientID, row.TokenAuthMethod, deref(row.Audience), deref(row.Resource)}, row.Scopes...) {
+		fmt.Fprintf(h, "%d:%s\n", len(part), part)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // MachineTokens is the token source (tests inspect and drive its clock).

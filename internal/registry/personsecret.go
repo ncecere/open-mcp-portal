@@ -365,7 +365,7 @@ func (s *Service) setupSecret(ctx context.Context, sv dbgen.McpServer) (secret, 
 // personal key"). The server's own static parts, if it has any, are sent.
 func (s *Service) probeSecretRequired(ctx context.Context, sv dbgen.McpServer, t upstream.Target) (TestResult, upstream.Discovery, []string) {
 	d, err := s.client.Discover(ctx, t)
-	res := TestResult{Latency: d.Latency, ServerName: d.ServerName, ServerVersion: d.ServerVersion, ProtocolVersion: d.ProtocolVersion, Protocol: d.Protocol}
+	res := TestResult{Latency: d.Latency, ServerName: d.ServerName, ServerVersion: d.ServerVersion, ProtocolVersion: d.ProtocolVersion, Protocol: d.Protocol, SupportsTasks: d.SupportsTasks}
 	if err == nil {
 		res.OK, res.Counts, res.Note = true, upstream.CountKinds(d.Capabilities), "The server answered without a personal key."
 		return res, d, t.Secrets()
