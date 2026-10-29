@@ -1,7 +1,8 @@
 # MCP task-handle relay (#35)
 
-Status: **design/in development, not implemented or released**. Decision86 records conservative delegated
-scope after specification confirmation. #35 stays open; source version0.8.0 does not mean task support.
+Status: **in development, not released** (the storage, upstream client and gateway wiring exist; the release
+acceptance below is not met). Decision86 records conservative delegated scope after specification confirmation.
+#35 stays open; source version0.8.0 does not mean task support.
 The portal relays a server's durable task; it does not run a worker, queue or workflow engine.
 
 ## Confirmed specification
@@ -167,3 +168,75 @@ upstream operation, with no false termination claim. Normal tasks do not expose 
 
 This is a design boundary, not an implementation or release claim. Resolve/test concrete schema, dependency
 binding and mutation-fencing details before relying on them. #35 remains open and no release version is chosen.
+
+## As built in the gateway and upstream client (unreleased)
+
+What the code does, and where the design left room:
+
+- **Configuration.** `TASKS_MAX_TTL` (default 24h, 1m–24h) and `TASKS_MAX_OPEN_PER_PRINCIPAL` (default 100, 1–1000) are
+  validated at startup (`mcptasks.ValidateLimits`); an invalid value stops the process, never "unlimited". There is no
+  separate on/off switch: the feature is on when the store is built (it needs the encryption key) and a client declares
+  the extension. A handler without the store (or without the approval runtime) advertises nothing, never negotiates and
+  answers the task methods as unknown.
+- **Discovery.** A successful read of the **canonical primary** that negotiated the modern era and advertised the extension
+  (an object under `capabilities.extensions`) stores `mcp_servers.supports_tasks = true`; a legacy era or absence stores
+  `false`, and a changed URL clears it. Additional endpoints never set it. `McpServer.supportsTasks` is read-only.
+- **Negotiation.** A `tools/call` declares the extension upstream (empty object in that request's `_meta`) only when the
+  downstream request declared it, the server supports it, the capability is a tool, the call is **ungoverned**
+  (decided after the approval plan: `plan.Required` or `NoReplay` means no), it is not a streamed request (progress
+  token over SSE; out of this first scope) and not the retry of an upstream input request. Anything else is the call it
+  always was, with no declaration. A server that answers a task to a request that did not declare the extension is a bad
+  response, never tracked.
+- **One attempt.** Creation and every lifecycle operation are a single guarded exchange to the recorded primary: no retry
+  (not even for a read tool), no failover endpoint, no era re-negotiation resend, no legacy fallback, and no automatic
+  renew-and-resend of an upstream 401 (the token is still renewed for the *next* request, and the failure is reported).
+  The transport guard treats `tasks/get|update|cancel` like `tools/call` (single dispatch, `GetBody` removed).
+- **Reservation.** Capacity is reserved (sealed arguments, binding, credential values to scrub) **before** dispatch. At the
+  cap the call is refused (`-32010`, `data.reason: task_capacity`) with nothing sent. Because the reservation precedes
+  dispatch, a principal at the cap is also refused declared calls to task-capable servers that would have answered
+  synchronously; an undeclared call is unaffected. Anything that is not a task result abandons the reservation; an
+  ambiguous failure may leave untracked upstream work and is never reported as cancelled.
+- **Lifecycle.** Every operation: authenticate → the request declares the extension (`-32021`, HTTP 400, with
+  `data.requiredCapabilities`) → `Mcp-Name` equals `params.taskId` (`-32020` otherwise) → look up by handle **and** the
+  starting credential root → re-resolve the exact offer (allowed; same capability, server, revision, full URL, definition
+  fingerprint, tool class and curation) → read-only no-rule approval check (never `Begin`) → fresh credentials and
+  identity token for the actual URL, with an unchanged dependency identity → claim the task for one fenced exchange →
+  send once → build the public result. Every failure of the first five steps is the same `-32602` "Task not found".
+  A transient dependency outage is a retryable `-32010`; a busy task is `-32010 task_busy`, except that a poll that
+  cannot claim the task (another exchange holds it, or the stored interval has not elapsed) is answered from the
+  stored status **only when that status is `working`**; anything else (input requests and results are never stored
+  outside the sealed exchange) is the busy error.
+- **Dependency identity** (`dependencyDigest`): auth mode, static credential parts' kind and name, a person secret's
+  placement/name/prefix, the provider and scopes (and shared connection, resource, server-bound flag) of a delegated
+  credential, a machine client's non-secret configuration, identity on/off and TLS present. Never a token, secret value,
+  hint or generation. The server revision is in the binding as well, so editing the server (a rotated static value
+  included) ends its in-flight tasks: they fail closed rather than silently follow a changed configuration.
+- **Input.** `tasks/update` validates the client's responses with the existing elicitation-result rules against the
+  task's unanswered portal keys, consumes them before the single send, and answers with an acknowledgement only; unknown
+  or already-attempted keys are acknowledged but never sent, and a failed or ambiguous send never restores them.
+  Input requests are rebuilt and validated at the client's **current** declared elicitation capability; a task that wants
+  input the client cannot give is `-32010 task_input_unsupported` and nothing is consumed.
+- **Public shape.** `CreateTaskResult` and `DetailedTask` are rebuilt from validated fields: the portal handle, the
+  portal's own creation time, the local remaining lifetime as whole milliseconds (never null, never beyond the original
+  ceiling) and the stored bounded poll interval. A completed task relays the tool result through the same decoding and
+  `serverInfo` scrub as a synchronous result (`isError: true` is still `completed`); a failed task relays a JSON-RPC error
+  object with its text scrubbed (error `data` over 16 KiB is dropped).
+- **Redaction.** Every status message, input request, result and error is scrubbed on decoded JSON strings, keys and
+  numbers of the actual upstream task ID, the credential values sealed with the creation, and the fresh credentials of
+  that exchange (never `capture.Secrets`, which holds the downstream bearer); an encoding that still contains one is
+  refused. Credential values under four characters are not treated as secrets; the task ID always is (a server that uses
+  a very short ID gets mangled text in results). No handle, upstream ID or input key is logged, recorded, labelled or
+  captured.
+- **Capture.** The creating `tools/call` is captured like any call (its arguments, redacted); its task result is **not**,
+  and task lifecycle payloads are never captured.
+- **Records.** `mcp_calls` rows use `tasks/get|update|cancel` with the original exposed tool and server; the
+  error class says what happened (`task_created`, `task_working`, …, `task_not_found`, `task_binding_changed`,
+  `task_dependency_changed`, `task_approval_required`, `cancel_requested`, `task_input_sent`, `task_input_ignored`).
+  The class is for operators; the client always sees the uniform answer. No audit event per poll.
+- **Retention.** The retention loop prunes expired or abandoned rows in bounded batches (at most 10 × batch statements per
+  pass); expiry already denies on its own.
+
+Known limits of this scope: governed (approval-required) calls, streamed calls, MRTR continuations and legacy/undeclaring
+clients are never tasked; no `tasks/list`, `tasks/result`, notifications or sampling/roots; a lifecycle poll may create a
+provider consent request when a delegated connection lapsed (the answer is still the uniform not-found); and an expired,
+revoked or abandoned handle does not stop upstream work.

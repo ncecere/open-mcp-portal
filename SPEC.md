@@ -167,6 +167,12 @@ encrypted at rest, refreshed by the portal. See [docs/phase5-delegated-credentia
 - Limits: 1 MiB request/response by default, upstream timeout per server, no redirects, SSRF guard (adapted
   from Grounded `internal/mcpclient/guard.go`), development HTTP only for loopback.
 - Sampling, elicitation and roots are not forwarded in the first release.
+- Tasks (the released `io.modelcontextprotocol/tasks` extension, modern era only): `server/discover` advertises it when
+  the task store is on; a request that declares it may get an opaque portal task handle for an ungoverned `tools/call`
+  to a server that advertises it, and polls it with `tasks/get`, `tasks/update` and `tasks/cancel`. Every operation
+  re-authenticates and re-checks live access to the same offer; unknown, foreign, expired and no-longer-allowed handles are
+  one `-32602` "Task not found". Bounds: `TASKS_MAX_TTL` (default 24h) and `TASKS_MAX_OPEN_PER_PRINCIPAL` (default 100).
+  See [docs/mcp-tasks.md](docs/mcp-tasks.md).
 
 ## 7. Phases
 

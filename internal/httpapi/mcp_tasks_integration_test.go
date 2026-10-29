@@ -1,9 +1,7 @@
 package httpapi_test
 
 import (
-	"context"
 	"encoding/json"
-	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -65,7 +63,7 @@ func TestTasksLifecycleEndToEnd(t *testing.T) {
 	}
 	if e.up.Count("tools/call") != 1 || !create.Declared || create.McpName != "slow" || create.Header.Get("X-Api-Key") != tasksStaticKey ||
 		!strings.Contains(string(create.Body), `"text":"hello"`) || strings.Contains(string(create.Body), e.key.Secret) || create.Header.Get("MCP-Gateway-Identity") == "" && create.Header.Get("Authorization") == "" {
-		t.Fatalf("creation request = %+v", create)
+		t.Fatalf("creation request = %s", create.Body)
 	}
 	if got := e.recorded(1); got != "tools/call|tasks__slow|ok|task_created" {
 		t.Fatalf("creation record = %q", got)
@@ -88,7 +86,7 @@ func TestTasksLifecycleEndToEnd(t *testing.T) {
 		}
 	}
 	if seenGet.McpMethod != "tasks/get" || seenGet.McpName != actual || seenGet.TaskID != actual || !seenGet.Declared || seenGet.Header.Get("X-Api-Key") != tasksStaticKey {
-		t.Fatalf("upstream get = %+v", seenGet)
+		t.Fatalf("upstream get = %s %v", seenGet.Body, seenGet.Header)
 	}
 	if strings.Contains(string(seenGet.Body), handle) || strings.Contains(seenGet.McpName, handle) {
 		t.Fatal("the portal handle reached the upstream")
@@ -157,7 +155,7 @@ func TestTasksLifecycleEndToEnd(t *testing.T) {
 		}
 	}
 	if seenUpdate.McpMethod != "tasks/update" || seenUpdate.McpName != actual || seenUpdate.TaskID != actual || !seenUpdate.Declared {
-		t.Fatalf("upstream update = %+v", seenUpdate)
+		t.Fatalf("upstream update = %s", seenUpdate.Body)
 	}
 	// Single use: the same answer again is ignored (acknowledged, not sent).
 	code, _, out = e.op("support", e.key.Secret, "tasks/update", handle, map[string]any{"inputResponses": answer}, declared(true))
@@ -203,7 +201,7 @@ func TestTasksLifecycleEndToEnd(t *testing.T) {
 		}
 	}
 	if k, _ = e.up.Task(actual); !k.CancelRequested || e.up.Count("tasks/cancel") != 1 || seenCancel.McpName != actual || seenCancel.McpMethod != "tasks/cancel" {
-		t.Fatalf("upstream cancel = %+v", seenCancel)
+		t.Fatalf("upstream cancel = %s", seenCancel.Body)
 	}
 
 	// Records: the lifecycle methods with the ORIGINAL exposed tool, no audit
@@ -237,6 +235,3 @@ func (e *tasksEnv) mustJSON(v any) string {
 	}
 	return string(b)
 }
-
-var _ = context.Background
-var _ = http.StatusOK

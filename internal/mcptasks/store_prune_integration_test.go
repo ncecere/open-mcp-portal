@@ -22,15 +22,15 @@ func TestPruneDeletesOnlyExpiredRowsInBoundedBatches(t *testing.T) {
 	}
 	// Expire five of them (the table's lifetime constraint needs expires_at >
 	// created_at, so move created_at back as well) and abandon a reservation.
-	if _, err := f.pool.Exec(ctx, `UPDATE mcp_tasks SET created_at = clock_timestamp() - interval '3 hours', ceiling_at = clock_timestamp() - interval '1 minute',
-		expires_at = clock_timestamp() - interval '1 minute' WHERE id <> (SELECT id FROM mcp_tasks ORDER BY created_at DESC, id LIMIT 1)`); err != nil {
+	if _, err := f.pool.Exec(ctx, `UPDATE mcp_tasks SET created_at = now() - interval '3 hours', ceiling_at = now() - interval '1 minute',
+		expires_at = now() - interval '1 minute' WHERE id <> (SELECT id FROM mcp_tasks ORDER BY created_at DESC, id LIMIT 1)`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.Reserve(ctx, f.binding, f.payload); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.pool.Exec(ctx, `UPDATE mcp_tasks SET created_at = clock_timestamp() - interval '3 hours', ceiling_at = clock_timestamp() - interval '1 minute',
-		expires_at = clock_timestamp() - interval '1 minute', reservation_deadline = clock_timestamp() - interval '2 minutes' WHERE status = 'reserved'`); err != nil {
+	if _, err := f.pool.Exec(ctx, `UPDATE mcp_tasks SET created_at = now() - interval '3 hours', ceiling_at = now() - interval '1 minute',
+		expires_at = now() - interval '1 minute', reservation_deadline = now() - interval '2 minutes' WHERE status = 'reserved'`); err != nil {
 		t.Fatal(err)
 	}
 	before := count()

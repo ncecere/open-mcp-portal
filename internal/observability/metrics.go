@@ -152,7 +152,7 @@ func (m *Metrics) Gather() prometheus.Gatherer { return m.registry }
 
 // MCP methods with their own label value.
 var mcpMethods = []string{"initialize", "ping", "tools/list", "tools/call", "prompts/list", "prompts/get", "resources/list",
-	"resources/templates/list", "resources/read", "notification"}
+	"resources/templates/list", "resources/read", "tasks/get", "tasks/update", "tasks/cancel", "notification"}
 
 // MCPMethod maps a method to its label (other for anything else).
 func MCPMethod(m string) string {

@@ -177,8 +177,8 @@ func (e *tasksEnv) recorded(n int) string {
 // expire makes every task row past its lifetime without waiting for it.
 func (e *tasksEnv) expire() {
 	e.t.Helper()
-	if _, err := e.owned.Exec(context.Background(), `UPDATE mcp_tasks SET created_at = clock_timestamp() - interval '3 hours',
-		ceiling_at = clock_timestamp() - interval '1 minute', expires_at = clock_timestamp() - interval '1 minute'`); err != nil {
+	if _, err := e.owned.Exec(context.Background(), `UPDATE mcp_tasks SET created_at = now() - interval '3 hours',
+		ceiling_at = now() - interval '1 minute', expires_at = now() - interval '1 minute'`); err != nil {
 		e.t.Fatal(err)
 	}
 }
@@ -198,4 +198,11 @@ func waitUntil(t *testing.T, what string, cond func() bool) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for %s", what)
+}
+
+// newTasksUpstream is another fake that advertises the extension.
+func newTasksUpstream(t *testing.T) *testutil.FakeTasks { return testutil.NewFakeTasks(t) }
+
+func testFakeTasksTool(name, description string) testutil.FakeTasksTool {
+	return testutil.FakeTasksTool{Name: name, Description: description, Mode: testutil.TasksModeTask}
 }

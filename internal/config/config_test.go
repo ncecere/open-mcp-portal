@@ -359,3 +359,53 @@ func TestProviderRefreshIsOffByDefault(t *testing.T) {
 		t.Fatalf("ProviderRefreshInterval = %v, want 0 (off)", got)
 	}
 }
+
+// The task relay's bounds (docs/mcp-tasks.md): defaults, accepted range, and
+// refusal (never "unlimited") of everything else at load AND at validation.
+func TestTaskLimits(t *testing.T) {
+	c, err := LoadFrom("", env(map[string]string{}))
+	if err != nil || c.TasksMaxTTL != 24*time.Hour || c.TasksMaxOpenPerPrincipal != 100 {
+		t.Fatalf("defaults = %s/%d %v", c.TasksMaxTTL, c.TasksMaxOpenPerPrincipal, err)
+	}
+	c, err = LoadFrom("", env(map[string]string{"TASKS_MAX_TTL": "1m", "TASKS_MAX_OPEN_PER_PRINCIPAL": "1000"}))
+	if err != nil || c.TasksMaxTTL != time.Minute || c.TasksMaxOpenPerPrincipal != 1000 {
+		t.Fatalf("upper bounds = %s/%d %v", c.TasksMaxTTL, c.TasksMaxOpenPerPrincipal, err)
+	}
+	c, err = LoadFrom("", env(map[string]string{"TASKS_MAX_TTL": "24h", "TASKS_MAX_OPEN_PER_PRINCIPAL": "1"}))
+	if err != nil || c.TasksMaxTTL != 24*time.Hour || c.TasksMaxOpenPerPrincipal != 1 {
+		t.Fatalf("lower bounds = %s/%d %v", c.TasksMaxTTL, c.TasksMaxOpenPerPrincipal, err)
+	}
+	for key, values := range map[string][]string{
+		"TASKS_MAX_TTL":                {"59s", "0", "-1h", "24h1s", "48h", "7d", "forever", "", "unlimited", "0s"},
+		"TASKS_MAX_OPEN_PER_PRINCIPAL": {"0", "-1", "1001", "100000", "many", "1.5", "", "unlimited"},
+	} {
+		for _, v := range values {
+			if _, err := LoadFrom("", env(map[string]string{key: v})); err == nil || !strings.Contains(err.Error(), key) {
+				t.Errorf("%s=%q loaded: %v", key, v, err)
+			}
+		}
+	}
+	// A configuration built any other way (zero values included) is refused by
+	// Validate too, so an unset limit can never become an unlimited one.
+	for name, mutate := range map[string]func(*Config){
+		"zero ttl":      func(c *Config) { c.TasksMaxTTL = 0 },
+		"short ttl":     func(c *Config) { c.TasksMaxTTL = 30 * time.Second },
+		"long ttl":      func(c *Config) { c.TasksMaxTTL = 25 * time.Hour },
+		"zero open":     func(c *Config) { c.TasksMaxOpenPerPrincipal = 0 },
+		"negative open": func(c *Config) { c.TasksMaxOpenPerPrincipal = -5 },
+		"huge open":     func(c *Config) { c.TasksMaxOpenPerPrincipal = 1_000_000 },
+	} {
+		c := Defaults()
+		c.AppURL, c.DevAuth, c.EncryptionKey, c.APIKeyPepper = "http://localhost:8088", true, testKey, testPepper
+		c.DatabaseURL = "postgres://x"
+		mutate(&c)
+		if err := c.Validate("serve"); err == nil || !strings.Contains(err.Error(), "TASKS_MAX_TTL") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	good := Defaults()
+	good.AppURL, good.DevAuth, good.EncryptionKey, good.APIKeyPepper, good.DatabaseURL = "http://localhost:8088", true, testKey, testPepper, "postgres://x"
+	if err := good.Validate("serve"); err != nil {
+		t.Fatalf("defaults do not validate: %v", err)
+	}
+}

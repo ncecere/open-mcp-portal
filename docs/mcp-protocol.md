@@ -375,8 +375,10 @@ For servers in `oauth` mode ([phase7-upstream-oauth.md](phase7-upstream-oauth.md
 ## Limits and not done
 
 - A response is one JSON object (≤ 1 MiB), except a `tools/call` with a progress token from a client that accepts
-  `text/event-stream`, which is [streamed](#streaming). No `subscriptions/listen`, no tasks extension, no
-  `notifications/message`.
+  `text/event-stream`, which is [streamed](#streaming). No `subscriptions/listen`, no `notifications/message`.
+- Modern requests may use the released Tasks extension (`io.modelcontextprotocol/tasks`), relayed as a poll-only task
+  handle ([mcp-tasks.md](mcp-tasks.md)): advertised in `server/discover` only, declared on every task request, never for
+  a legacy client. No `tasks/list` or `tasks/result`, no legacy experimental tasks and no task notifications.
 - The gateway originates input requests for consent, and [relays a server's elicitation](#relaying-a-servers-elicitation);
   never sampling or roots.
 - No `completion/complete`, logging, sampling or roots, and `ping` only for legacy clients.
