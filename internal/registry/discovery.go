@@ -247,6 +247,7 @@ func (s *Service) Test(ctx context.Context, a authz.Actor, ref string, id uuid.U
 		return TestResult{}, err
 	}
 	res := s.testAs(ctx, a, sv)
+	s.checkExtraEndpoints(ctx, sv, TriggerManual, a)
 	if err := recordCheck(context.WithoutCancel(ctx), s.q, id, res, TriggerManual, by(a)); err != nil {
 		s.log.WarnContext(ctx, "could not store an MCP server test", "server", id, "err", err)
 	} else {

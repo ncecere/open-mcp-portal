@@ -160,6 +160,10 @@ func digests(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServer) (
 // and TLS settings already read.
 func digestsWith(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServer, creds map[uuid.UUID][]CredentialView,
 	machines map[uuid.UUID]*MachineOAuthView, tls map[uuid.UUID]*dbgen.McpServerTl) (map[uuid.UUID]string, error) {
+	endpoints, err := endpointViews(ctx, q, servers)
+	if err != nil {
+		return nil, err
+	}
 	ids := make([]uuid.UUID, len(servers))
 	for i, sv := range servers {
 		ids[i] = sv.ID
@@ -178,7 +182,7 @@ func digestsWith(ctx context.Context, q *dbgen.Queries, servers []dbgen.McpServe
 		for i, r := range byServer[sv.ID] {
 			refs[i] = CapabilityRefOf(r.Kind, r.Name, r.Fingerprint, r.ToolClass)
 		}
-		out[sv.ID] = reviewDigest(sv, refs, machines[sv.ID], digestOf(tls[sv.ID]), creds[sv.ID])
+		out[sv.ID] = withEndpointDigest(reviewDigest(sv, refs, machines[sv.ID], digestOf(tls[sv.ID]), creds[sv.ID]), endpoints[sv.ID])
 	}
 	return out, nil
 }

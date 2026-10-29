@@ -96,9 +96,18 @@ func (c *Client) log() *slog.Logger {
 	return c.Log
 }
 
+// Endpoint is the network identity of an independently configured extra.
+// Provider/person/machine credentials and TLS are deliberately not representable.
+type Endpoint struct {
+	ID, URL                       string
+	Credentials                   []Credential
+	IdentityHeader, IdentityValue string
+}
+
 // Target is where and how to reach one server.
 type Target struct {
-	URL string
+	URL       string
+	Endpoints []Endpoint // ordered extras; Forward only, never implicit discovery routing
 	// Credentials are the server's own static credential parts (header,
 	// bearer, basic and query; credentials.go), sent on every request to it.
 	Credentials []Credential
@@ -134,9 +143,10 @@ type Target struct {
 	// operation attempt, so quota/authority refusal precedes approval spend.
 	BeforeAttempt func(context.Context, int) error
 	// MaxConcurrent is a fail-fast replica-local forward cap (0: unlimited).
-	MaxConcurrent int32
-	ServerSlug    string
-	forwarding    bool // inspect only MCP forwards, never OAuth token requests
+	MaxConcurrent    int32
+	ServerSlug       string
+	forwarding       bool     // inspect only MCP forwards, never OAuth token requests
+	redactionSecrets []string // prior endpoints' values: scrub only, never send
 	// NoReplay permits at most one tools/call transport attempt per Forward,
 	// even if authorization fails or the response is lost. Negotiation may
 	// still recover before that attempt. This does not provide exactly-once
@@ -506,7 +516,8 @@ type Error struct {
 	// BeforeDispatch proves refusal before any upstream forward/negotiation
 	// in this iteration. It does not undo dispatch in PriorAttempts.
 	BeforeDispatch bool
-	retryable      bool // only explicit bounded transport/HTTP failures, not local guards
+	retryable      bool
+	preRequest     bool // positively identified dial/handshake failure before operation write // only explicit bounded transport/HTTP failures, not local guards
 	// cause preserves a local transport guard failure without exposing its
 	// potentially sensitive message.
 	cause error
@@ -525,7 +536,7 @@ func (c *Client) classify(ctx context.Context, t Target, ex *exchange, err error
 		return classified
 	}
 	e := *original // Never mutate a shared sentinel or another exchange's error.
-	e.retryable, e.RetryAfter = retryFacts(&e, ex, err)
+	e.retryable, e.preRequest, e.RetryAfter = retryFacts(&e, ex, err)
 	return &e
 }
 

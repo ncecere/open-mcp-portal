@@ -80,6 +80,8 @@ var Columns = []Column{
 	// Basic user name) and the Basic password.
 	{Table: "mcp_server_credentials", Column: "value_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(registry.CredentialAAD)},
 	{Table: "mcp_server_credentials", Column: "secondary_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(registry.CredentialSecondaryAAD)},
+	// Independent origin/server-bound extra-endpoint static credential envelope.
+	{Table: "mcp_server_endpoints", Column: "credentials_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(registry.EndpointCredentialsAAD)},
 	// A person's own secret for a server in person_secret mode (decision 72;
 	// registry.PersonSecretAAD), and the link a call returns for entering one
 	// (personsecrets.RequestAAD).

@@ -3,12 +3,64 @@
 Last updated: 2026-10-29. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.7.0 published and verified; #33 quotas/concurrency/read retries/breaker shipped, failover remains open**. The owner resumed ordered backlog development and authorized pre-1.0 releases; **v1.0.0 remains the owner's explicit decision**. #33 remains open for its separate failover stage. The v0.6.0 publication-evidence/image-pin follow-up passed its final checks. A fresh agent should read [agent-handoff.md](agent-handoff.md).
 (release notes: [releases/v0.7.0.md](releases/v0.7.0.md); earlier: [v0.6.0](releases/v0.6.0.md), [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
+## v0.8.0 release candidate: remaining #33 failover stage
+
+Decision85 and [upstream-failover.md](upstream-failover.md) record the conservative design before routing code:
+canonical primary plus two extras, independent origin-bound static credentials, explicit unsupported-mode/
+provider/TLS refusals and primary-only governed/NoReplay calls. A different origin cannot reuse an exact-call
+approval. The total attempt/deadline budget, current authority/quota, actual-URL identity audiences and
+fallback definition parity remain mandatory.
+
+The development branch now wires draft contracts, revision-checked owner-only endpoint mutations, sealed
+origin/server/endpoint-bound credentials, endpoint-aware review/audit/health, guarded routing with trusted
+definition parity and fresh actual-URL identities. Focused real-HTTP races passed in both protocol eras and
+both genuine database role modes: read503 fallback, independent credentials/audiences, proven unsent dial/TLS
+write fallback, mismatch/ambiguous/auth/business/governed/continuation negatives, revocation/quota admission
+and a spent approval remaining primary-only. Foundation store/rotation/registry races passed in both modes.
+The historical relocation42 test now isolates its exact-preservation assertion at schema42 and separately
+asserts latest-migration invalidation without changing the root/history.
+
+The source is now a **v0.8.0 candidate, not published**. Focused endpoint UI/type/styling/size checks passed.
+The initial full 853-test web/deployment/advisory gate passed; real Chromium then exposed a narrow-screen
+health Card/table-scroll region sharing the same accessible name. The product Card was renamed and a
+retained regression distinguishes the names. The corrected actual browser run passed on schema47 with a
+genuinely authenticated restricted runtime: owner UI credential entry/review resubmission, reviewer-visible
+actual URL/shape, editor read-only, forward/reverse keyboard, primary/endpoint health and primary503→
+secondary200 with independently required credentials and a cryptographically verified secondary-URL JWT.
+Both forwarding iterations consumed the shared rate2 bucket; the next call was429 before any new primary
+operation or SSE commitment. The final browser rerun also includes full historical endpoint UUID labels.
+Six desktop/390px states had zero axe violations/overflow. **Health-mobile contrast and review-dialog aria-
+hidden-focus/contrast remain axe incompletes**; an earlier source run also had an owner-mobile contrast
+incomplete (not present on the final rerun). None is independent whole-product accessibility acceptance.
+
+The actual immutable v0.7.0 image also passed schema47 doctor (informational newer schema), health/readiness
+and a real metadata write as read-only UID65532 with authenticated runtime/no owner URL or mounts. Endpoint
+IDs/order/origin/shape/cipher bytes and operational limits were preserved; revision and authority epoch
+advanced. This is expand compatibility, **not old-image failover/review/rotation enforcement**.
+
+The final post-browser-fix gate passed in753s: all **853 web tests**, generated freshness, lint/build,
+styling/size, actionlint, Kubernetes validation, four Python tests, npm audit (zero vulnerabilities) and
+govulncheck (zero reachable/imported-package vulnerabilities; two module-only advisories). All652 runtime/
+test/generated SQL/migration/API files match the immutable snapshot12 backend test tree byte-for-byte.
+
+**All four complete mandatory-PostgreSQL suites passed in 3,440 seconds**: normal and race in both actual
+legacy and authenticated split-role modes, every test retained, `OMP_TEST_REQUIRE_DB=1`, `GOFLAGS='-p=2'`.
+The first full normal run had hit the cumulative 10-minute HTTP-package watchdog while a late OAuth test had
+run for one second; it is a failed run, not acceptance. All four passed with the documented CI 20-minute
+per-package budget. The normal `make test` target now uses that same budget, removing no tests/roles/
+assertions. No runtime/generated SQL/API code changed after the fully validated snapshot. Final versioned-
+tree endpoint/relocation/contract races in both role modes plus lint/build/Python checks also passed in103s.
+
+**Local release-candidate gates are complete; main/tag CI and publication/independent artifact/runtime
+verification remain required.** No v0.8.0 tag/image has been published yet. Migration47 has been applied only
+to owned disposable databases and must not be edited. #33 remains open until final release evidence passes.
+
 ## v0.7.0 (2026-10-29): first #33 upstream-protection stage
 
 Decision84 and [upstream-protection.md](upstream-protection.md) specify the staged scope. Per-server shared
 quotas, per-replica concurrency, bounded safe-read retries and circuit breaking are **published and verified**
 in [v0.7.0](releases/v0.7.0.md). Migration46 is new and expand-only. Failover
-has not been implemented and the parent issue remains open.
+was not part of that release; the separate candidate above remains unaccepted and the parent issue open.
 
 Focused mandatory-PostgreSQL race tests passed in both actual role modes, including owner/token boundaries,
 ceilings/audit, a quota shared across gateways/replicas, an approval left unspent by quota refusal and read
@@ -56,8 +108,11 @@ Verified image: `ghcr.io/ncecere/open-mcp-portal@sha256:a377ef8d7b8303780eb1ffbd
   remain untouched. No production rollout, real IDE/provider/pilot, load/soak or independent whole-product
   security review is claimed. The example overlay pins the independently verified digest above.
 
-The evidence/image-pin follow-up has its own final CI/smoke checks; it does not replace the immutable source
-checks above. **#33 stays open for failover.** There are still 26 open issues (18 feature/operations/design,
+The evidence/image-pin follow-up `b22081e9270f002f788b92a385c0f68b041177c2` passed all seven
+[main CI jobs](https://github.com/ncecere/open-mcp-portal/actions/runs/40855403928) and both
+[smoke CNIs](https://github.com/ncecere/open-mcp-portal/actions/runs/40855403905). These are separate from
+the immutable source checks above; [final confirmation](https://github.com/ncecere/open-mcp-portal/issues/33#issuecomment-6494386547)
+records completion. **#33 stays open for failover.** There are still 26 open issues (18 feature/operations/design,
 eight real-world verification); v1.0.0 has not been cut.
 
 ## v0.6.0 (2026-10-29): gateway access requests
@@ -680,7 +735,7 @@ blind restart/seed of an existing one. The historical dev-database migration hel
    Use the new binary's rotation utility for the new ciphertext columns. Keep production autovacuum enabled;
    governed transitions intentionally fail closed during conflicting writes/reads/maintenance.
 3. **v0.6.0/#32 is published, verified and closed**, including follow-up checks. The first #33 stage is
-   published and verified in v0.7.0; finish the evidence/image-pin follow-up checks, then separate failover and
+   published and verified in v0.7.0, including follow-up checks; continue separate failover and
    the ordered operations/lifecycle/audit lanes in
    [implementation order](implementation-order.md). #43 must prove upgrades, ingress, restore and load before
    Helm packaging; existing kindnet/Calico smoke does not establish those broader requirements.

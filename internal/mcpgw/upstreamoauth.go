@@ -71,6 +71,10 @@ func serverBound(cred *providers.Credential) bool {
 // returns the identity token ("" when none is sent), or ok false when it
 // answered the call itself.
 func (rc *request) prepareTarget(t *upstream.Target, who identityFor, o gateways.Offer, cred *providers.Credential, rec *calls.Call) (string, bool) {
+	if len(t.Endpoints) > 0 && cred != nil {
+		rc.targetFailed(*rec, &upstream.Error{Class: upstream.ClassConfig, Reason: "failover_not_supported", Message: "Additional endpoints do not support delegated credentials."})
+		return "", false
+	}
 	if serverBound(cred) && cred.Resource != o.Server.URL {
 		// The token is only ever sent to its own resource.
 		n := rc.failData(codeDenied, "This server's sign-in no longer matches its URL; ask its team to save its sign-in again",
@@ -89,6 +93,21 @@ func (rc *request) prepareTarget(t *upstream.Target, who identityFor, o gateways
 		t.IdentityHeader, t.IdentityValue = identity.Header(t.AuthorizationHeader(), token)
 		if serverBound(cred) {
 			t.IdentityHeader, t.IdentityValue = identity.HeaderIdentity, token
+		}
+	}
+	for i := range t.Endpoints {
+		ep := &t.Endpoints[i]
+		if o.Server.SendIdentity {
+			actual := o
+			actual.Server.URL = ep.URL
+			value, err := rc.identityToken(who, actual, nil)
+			if err != nil {
+				rc.internal(err)
+				return "", false
+			}
+			placement := upstream.Target{Credentials: ep.Credentials}
+			ep.IdentityHeader, ep.IdentityValue = identity.Header(placement.AuthorizationHeader(), value)
+			rc.scrub = append(rc.scrub, value)
 		}
 	}
 	// Recorded with the call (decision 64): whether the identity token was

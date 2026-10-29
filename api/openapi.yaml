@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Open MCP Portal API
-  version: 0.7.0
+  version: 0.8.0
   description: 'Management API. Browser sessions authenticate with a cookie; writes need the session''s `X-CSRF-Token`
     (from `GET /v1/me`) and a same-origin `Origin`. Success responses are `{"data": ...}` and errors `{"error":
     {"code": "...", "message": "..."}}`.
@@ -8258,6 +8258,12 @@ components:
         url:
           type: string
           example: https://status.example.com/mcp
+        endpoints:
+          type: array
+          maxItems: 2
+          description: Ordered additional replicas, not the canonical primary URL. None on existing servers. Governing approval/NoReplay calls use the primary only; ordinary failover is bounded by the same three-iteration deadline/quota budget. Values are never returned.
+          items:
+            $ref: '#/components/schemas/McpServerEndpoint'
         transport:
           type: string
           enum:
@@ -8603,6 +8609,66 @@ components:
           type: string
           format: date-time
           description: When it expires (or expired)
+    McpServerEndpoint:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - position
+      - url
+      - enabled
+      - authMode
+      - credentials
+      properties:
+        id:
+          type: string
+          format: uuid
+        position:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 2
+        url:
+          type: string
+          maxLength: 500
+        enabled:
+          type: boolean
+        authMode:
+          type: string
+          enum:
+          - none
+          - static_header
+          description: Effective mode when this endpoint's origin/credential was explicitly configured; mismatches fail closed.
+        credentials:
+          type: array
+          maxItems: 8
+          description: Public shape/hints only; never values, ciphertext or inherited primary secrets.
+          items:
+            $ref: '#/components/schemas/McpServerCredential'
+    McpServerEndpointInput:
+      type: object
+      additionalProperties: false
+      required:
+      - url
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Update only; retain this server's existing endpoint. Absent creates a new endpoint with independent credentials. Never copy another server's ID.
+        url:
+          type: string
+          maxLength: 500
+          description: Each actual destination passes address/origin rules. A new origin requires every credential value again.
+        enabled:
+          type: boolean
+          default: true
+          description: Omit to keep for an existing entry; defaults true on a new entry. Disabled entries retain encrypted credentials and still participate in mode compatibility and review.
+        credentials:
+          type: array
+          maxItems: 8
+          description: This endpoint's independent multipart credential. No implicit primary inheritance. A new static endpoint requires all values; an unchanged-origin existing endpoint may omit to retain or use keep parts. A changed origin requires all values again, never keep or hints. No-auth entries accept no parts.
+          items:
+            $ref: '#/components/schemas/McpServerCredentialInput'
     McpServerCreate:
       type: object
       required:
@@ -8625,6 +8691,12 @@ components:
           type: string
           maxLength: 500
           description: The Streamable HTTP endpoint, https only (plain http for loopback in development)
+        endpoints:
+          type: array
+          maxItems: 2
+          description: Optional ordered additional endpoints, owner/admin browser sessions only. Initially only none/static_header with no provider requirement or TLS settings; unsupported combinations are 422 failover_not_supported. Each static entry requires independently entered credentials, never a primary copy. IDs are absent on create.
+          items:
+            $ref: '#/components/schemas/McpServerEndpointInput'
         authHeaderName:
           type: string
           description: A header such as Authorization or X-API-Key; send it with authValue, or neither
@@ -8711,6 +8783,12 @@ components:
         url:
           type: string
           maxLength: 500
+        endpoints:
+          type: array
+          maxItems: 2
+          description: Omit to retain, empty list clears; null is invalid. Ordered full replacement with stable IDs for retained entries, owner/admin browser sessions only. New origins require every static value re-entered. URL/order/enabled/credential shape changes require catalog re-review. Remove extras before selecting an unsupported mode/provider/TLS combination (422 failover_not_supported). Governed/NoReplay calls remain primary-only.
+          items:
+            $ref: '#/components/schemas/McpServerEndpointInput'
         authHeaderName:
           type: string
           description: Omit to keep; an empty string removes the header and its value
@@ -9008,6 +9086,17 @@ components:
       - latencyMs
       - trigger
       properties:
+        endpointId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Additional endpoint checked; absent/null is the canonical primary or historical primary-only record. History retains the ID after endpoint deletion.
+        endpointPosition:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 2
+          description: Position when checked (zero primary); a historical fact, not a current routing selector.
         checkedAt:
           type: string
           format: date-time
@@ -14191,6 +14280,7 @@ components:
           - url_changed
           - upstream_auth_changed
           - upstream_tls_changed
+          - endpoints_changed
           - requirement_changed
           - classification_changed
         note:

@@ -25,6 +25,7 @@ import { RequirementSummary } from "./requirement-card";
 import { invalidateServer, type ServerScope, storeServer } from "./scope";
 import { SignInSummary } from "./sign-in-card";
 import { authModeOf } from "./upstream-auth";
+import { EndpointsSummary } from "./endpoints-summary";
 
 const maxNote = 2000;
 
@@ -42,6 +43,7 @@ function ServerReceives({ server, scope }: { server: McpServer; scope: ServerSco
         <strong>What the server receives</strong>
       </p>
       <SignInSummary server={server} />
+      <EndpointsSummary server={server} />
       {authModeOf(server) !== "oauth" && authModeOf(server) !== "machine_oauth" && (
         <>
           <p>

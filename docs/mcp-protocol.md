@@ -194,7 +194,29 @@ Only owner-stored read-class tools, prompts and resources can opt into at most t
 explicit transient responses or known pre-request failures. Each attempt rechecks current authority and quota
 within the original timeout. Governed/NoReplay calls, continuations, progress/streamed/partial results and
 ambiguous post-send failures never automatically retry. Neither annotations nor a 503 prove side-effect safety.
-No failover or new credential origin is implemented. Publication/verification evidence is in [status](status.md).
+That first stage adds no endpoint. Publication/verification evidence is in [status](status.md).
+
+### Ordered endpoint failover (#33 separate stage, v0.8.0)
+
+[Decision85 / design](upstream-failover.md) keeps the primary canonical and allows at most two ordered extras,
+only with independently entered no-auth/static multipart credentials and no provider requirement or TLS
+settings. A changed origin requires all values again and catalog re-review. Provider/OAuth/person/machine/
+private-CA/mTLS configurations refuse extras; there is no implicit primary credential inheritance.
+
+One operation keeps its original deadline and server lease/breaker, with at most three forwarding iterations
+**total**, not a retry budget per destination. Every iteration freshly checks current authority and quota.
+Trusted reads may switch on the transient conditions above; ordinary writes switch only on positive unsent
+actual dial/TLS-handshake evidence before any operation write, not a generic TLS label,503 or ambiguity.
+Governed/NoReplay calls stay **primary-only**, even during negotiation, and never transfer/restore an approval.
+Continuations, progress/partial/streamed results and auth/business/local refusals never trigger a switch.
+
+A fallback must advertise the offered stored kind/name/fingerprint before invocation; it cannot redefine
+canonical capabilities or owner classification. The target contains only that endpoint's own credentials,
+with freshly signed full-URL audience and endpoint-specific Authorization placement. Era/session caches are
+server-and-URL-aware and each exchange/dial repeats the current address guard. Extra manual/scheduled health
+checks record stable historical endpoint UUID/position but do not replace canonical primary status/protocol.
+Drain older serving/workers before relying on endpoint policy. Local validation passed; consult [status](status.md)
+for main/tag/publication verification rather than inferring a release from this source document.
 
 ### Era negotiation
 

@@ -66,6 +66,8 @@ func seed(t *testing.T, pool *pgxpool.Pool, b *secrets.Box) map[string]string {
 	}
 
 	keys["mcp_server_credentials"] = scalar(t, pool, `INSERT INTO mcp_server_credentials (server_id, position, kind, value_cipher, secondary_cipher) VALUES ($1, 0, 'basic', '\x00', '\x00') RETURNING id::text`, keys["mcp_servers"])
+	keys["mcp_server_endpoints"] = scalar(t, pool, `INSERT INTO mcp_server_endpoints (id,server_id,position,url,auth_mode,credential_origin,credentials_cipher,credential_shapes)
+		VALUES (gen_random_uuid(),$1,1,'https://replica.example/mcp','static_header','https://replica.example','\x00','[{"Kind":"bearer","Name":"","Hint":""}]') RETURNING id::text`, keys["mcp_servers"])
 	keys["person_secrets"] = scalar(t, pool, `INSERT INTO person_secrets (user_id, server_id, origin, secret_cipher) VALUES ($1, $2, 'https://x', '\x00') RETURNING id::text`, user, keys["mcp_servers"])
 	// A machine OAuth client (decision 73) is keyed by its server.
 	scalar(t, pool, `INSERT INTO mcp_server_machine_oauth (server_id, token_url, client_id, client_secret_cipher) VALUES ($1, 'https://idp.example/token', 'c', '\x00') RETURNING server_id::text`, keys["mcp_servers"])

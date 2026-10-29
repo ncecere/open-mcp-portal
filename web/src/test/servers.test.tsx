@@ -293,12 +293,18 @@ describe("MCP server › Capabilities", () => {
 });
 
 describe("MCP server › Health and Settings", () => {
-  it("lists recent checks with why a check failed", async () => {
-    mockApi(routes("member"));
+  it("lists checks with stable historical endpoint identity and why a check failed", async () => {
+    const endpointId = "10000000-0000-0000-0000-000000000001";
+    mockApi(routes("member", mcpServer(), { [`GET ${base}/${serverId}/health-checks`]: () => [healthCheck(), healthCheck({ checkedAt: "2026-10-16T06:55:00Z", endpointId, endpointPosition: 1, ok: false, errorClass: "auth", httpStatus: 401, message: "token expired", trigger: "manual" })] }));
     const { container } = renderApp(`${record}?tab=health`);
     const table = await screen.findByRole("table", { name: "Recent checks" });
+    // On narrow screens an overflowing table becomes a region named from
+    // its caption. The enclosing card must not share that accessible name.
+    expect(screen.getByRole("region", { name: "Upstream health" })).toContainElement(table);
     expect(await within(table).findByText(/Credentials refused \(HTTP 401\)/)).toBeInTheDocument();
     expect(within(table).getByText("token expired")).toBeInTheDocument();
+    expect(within(table).getByText(`Additional endpoint 1 · ${endpointId}`)).toBeInTheDocument();
+    expect(within(table).getByText("Primary")).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 

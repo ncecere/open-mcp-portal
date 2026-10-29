@@ -158,12 +158,12 @@ func (a *api) listTeamMcpServers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) createTeamMcpServer(w http.ResponseWriter, r *http.Request) {
-	var in apitypes.McpServerCreate
-	if !httpx.Decode(w, r, &in) {
+	in, keys, ok := decodeKeys[apitypes.McpServerCreate](w, r)
+	if !ok || !a.endpointPayload(w, r, keys) {
 		return
 	}
 	ci := registry.CreateInput{Slug: in.Slug, Name: in.Name, URL: in.Url, Enabled: true,
-		RateLimitPerMinute: in.RateLimitPerMinute, MaxConcurrent: in.MaxConcurrent}
+		RateLimitPerMinute: in.RateLimitPerMinute, MaxConcurrent: in.MaxConcurrent, Endpoints: fromAPIEndpoints(in.Endpoints)}
 	setIf(&ci.Description, in.Description)
 	setIf(&ci.AuthHeaderName, in.AuthHeaderName)
 	setIf(&ci.AuthValue, in.AuthValue)
@@ -261,12 +261,15 @@ func (a *api) updateTeamMcpServer(w http.ResponseWriter, r *http.Request) {
 	if actor := a.actor(r); actor.IsToken() && !a.tokenMayUpdateServer(w, r, actor, id, in, keys) {
 		return
 	}
+	if !a.endpointPayload(w, r, keys) {
+		return
+	}
 	_, setRequirement := keys["requirement"]
 	_, setRate := keys["rateLimitPerMinute"]
 	_, setConcurrent := keys["maxConcurrent"]
 	v, err := a.Registry.Update(r.Context(), a.actor(r), r.PathValue("team"), id, registry.UpdateInput{
 		Name: in.Name, Description: in.Description, URL: in.Url, AuthHeaderName: in.AuthHeaderName, AuthValue: in.AuthValue,
-		Credentials:        fromAPICredentialsPtr(in.Credentials),
+		Credentials: fromAPICredentialsPtr(in.Credentials), Endpoints: fromAPIEndpoints(in.Endpoints),
 		RateLimitPerMinute: in.RateLimitPerMinute, MaxConcurrent: in.MaxConcurrent,
 		SetRateLimit: setRate, SetMaxConcurrent: setConcurrent,
 		TimeoutSeconds: in.TimeoutSeconds, Enabled: in.Enabled, SetRequirement: setRequirement, Requirement: fromAPIRequirement(in.Requirement),

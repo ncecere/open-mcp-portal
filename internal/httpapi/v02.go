@@ -570,7 +570,7 @@ func (a *api) tokenMayUpdateServer(w http.ResponseWriter, r *http.Request, actor
 		a.refuseToken(w, r, field)
 		return false
 	}
-	for _, field := range []string{"rateLimitPerMinute", "maxConcurrent"} {
+	for _, field := range []string{"rateLimitPerMinute", "maxConcurrent", "endpoints"} {
 		if _, ok := keys[field]; ok {
 			return refuse(field)
 		}

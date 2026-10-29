@@ -57,7 +57,7 @@ func (a *api) toAPIServer(v registry.ServerView) apitypes.McpServer {
 		Id: s.ID, TeamId: s.TeamID, TeamSlug: v.TeamSlug, TeamName: v.TeamName,
 		Slug: s.Slug, Name: s.Name, Description: s.Description, Url: s.URL,
 		Transport:      apitypes.McpServerTransport(s.Transport),
-		AuthHeaderName: s.AuthHeaderName, HasAuth: v.HasAuth(), AuthValueHint: s.AuthValueHint, Credentials: toAPICredentials(v.Credentials),
+		AuthHeaderName: s.AuthHeaderName, HasAuth: v.HasAuth(), AuthValueHint: s.AuthValueHint, Credentials: toAPICredentials(v.Credentials), Endpoints: toAPIEndpoints(v.Endpoints),
 		TimeoutSeconds: s.TimeoutSeconds, Enabled: s.Enabled,
 		RateLimitPerMinute: s.RateLimitPerMinute, MaxConcurrent: s.MaxConcurrent,
 		PublishState:           apitypes.PublishState(s.PublishState),
@@ -231,6 +231,11 @@ func toAPIRefresh(r registry.RefreshResult) apitypes.McpRefreshResult {
 func toAPIHealthCheck(h dbgen.McpHealthCheck) apitypes.McpHealthCheck {
 	out := apitypes.McpHealthCheck{CheckedAt: h.CheckedAt, Ok: h.Ok, LatencyMs: h.LatencyMs,
 		Trigger: apitypes.McpHealthCheckTrigger(h.Trigger), HttpStatus: h.HttpStatus, Message: nonEmpty(h.Message)}
+	position := int32(h.EndpointPosition)
+	out.EndpointPosition = &position
+	if h.EndpointID.Valid {
+		out.EndpointId = &h.EndpointID.UUID
+	}
 	if h.SignInRequired {
 		yes := true
 		out.SignInRequired = &yes

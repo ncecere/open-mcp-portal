@@ -6,6 +6,12 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
+## [0.8.0] - 2026-10-29
+
+- **Origin-isolated endpoint failover** (#33 remaining stage, decision85). Keep the canonical primary plus at most two ordered extras with independent entered static credentials. New origins require every value again; owner/admin session-only mutations are audited/revision-checked and destination/shape changes require catalog review. Unsupported OAuth/person/provider/machine/TLS combinations refuse extras rather than forwarding an existing credential elsewhere.
+- **Bounded, authority-checked fallback.** Share one original deadline, at most three forwarding iterations, per-attempt authority/quota and the existing server lease/breaker. Trusted reads retain bounded retry policy; ordinary writes switch only after positively observed unsent dial/TLS-handshake failure. Validate the offered definition before fallback and mint identity for the actual endpoint URL. Governed/NoReplay calls stay primary-only; never transfer or restore exact-call approval. No continuation/progress/partial/auth/business/ambiguous-send replay.
+- **Endpoint trust/history.** Expand-only migration47 adds endpoint-bound versioned sealed credentials with server/origin/shape validation and key rotation, journal/fence participation and endpoint-aware health history. Settings, review and health views expose destinations and placement, never values. Drain older serving/workers before relying on endpoint policy; schema compatibility is not enforcement. Keep full normal and race test invocations on the same bounded 20-minute per-package budget; no tests or assertions removed.
+
 ## [0.7.0] - 2026-10-29
 
 ### First #33 upstream-protection stage

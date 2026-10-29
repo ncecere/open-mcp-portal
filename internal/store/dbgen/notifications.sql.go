@@ -622,7 +622,7 @@ func (q *Queries) InsertNotificationOutbox(ctx context.Context, arg InsertNotifi
 }
 
 const latestMCPHealthChecksOfServer = `-- name: LatestMCPHealthChecksOfServer :many
-SELECT id, server_id, checked_at, ok, latency_ms, trigger, triggered_by, error_class, http_status, message, status_since, sign_in_required FROM mcp_health_checks WHERE server_id = $1 ORDER BY checked_at DESC, id DESC LIMIT $2
+SELECT id, server_id, checked_at, ok, latency_ms, trigger, triggered_by, error_class, http_status, message, status_since, sign_in_required, endpoint_id, endpoint_position FROM mcp_health_checks WHERE server_id = $1 ORDER BY checked_at DESC, id DESC LIMIT $2
 `
 
 type LatestMCPHealthChecksOfServerParams struct {
@@ -652,6 +652,8 @@ func (q *Queries) LatestMCPHealthChecksOfServer(ctx context.Context, arg LatestM
 			&i.Message,
 			&i.StatusSince,
 			&i.SignInRequired,
+			&i.EndpointID,
+			&i.EndpointPosition,
 		); err != nil {
 			return nil, err
 		}

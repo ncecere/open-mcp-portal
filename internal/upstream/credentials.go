@@ -108,12 +108,20 @@ func (t Target) Secrets() []string {
 			add(base64.RawStdEncoding.EncodeToString([]byte(c.Value + ":" + c.Secondary)))
 		}
 	}
+	for _, value := range t.redactionSecrets {
+		add(value)
+	}
 	add(t.PersonSecret)
 	add(t.IdentityValue)
 	add(t.ProviderToken)
 	add(t.BearerToken)
 	for _, k := range t.TLS.secrets() {
 		add(k) // the client key, should a message ever quote it
+	}
+	for _, endpoint := range t.Endpoints {
+		for _, secret := range (Target{Credentials: endpoint.Credentials, IdentityValue: endpoint.IdentityValue}).Secrets() {
+			add(secret)
+		}
 	}
 	return out
 }

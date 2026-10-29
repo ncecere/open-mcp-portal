@@ -23,6 +23,9 @@ type Check = Schemas["McpHealthCheck"];
 const checkText = (c: Check) => (c.ok ? (c.signInRequired ? signInRequiredLabel : "Healthy") : "Failing");
 
 const triggerLabels: Record<Check["trigger"], string> = { manual: "Manual", scheduled: "Scheduled" };
+// Position is historical, not a lookup into today's list: a removed/replaced
+// replica must not masquerade as the new endpoint occupying the same position.
+const endpointLabel = (c: Check) => c.endpointId ? `Additional endpoint ${c.endpointPosition ?? ""} · ${c.endpointId}` : "Primary";
 
 const columns: DataTableColumn<Check>[] = [
   {
@@ -37,6 +40,7 @@ const columns: DataTableColumn<Check>[] = [
       </span>
     ),
   },
+  { id: "endpoint", header: "Endpoint", accessor: endpointLabel, cell: endpointLabel },
   { id: "result", header: "Result", accessor: (c) => checkText(c), cell: (c) => <StatusBadge tone={c.ok ? "success" : "danger"}>{checkText(c)}</StatusBadge> },
   { id: "latency", header: "Latency", accessor: (c) => c.latencyMs, numeric: true, cell: (c) => `${c.latencyMs.toLocaleString()} ms` },
   { id: "trigger", header: "Trigger", accessor: (c) => triggerLabels[c.trigger], cell: (c) => <Badge size="sm">{triggerLabels[c.trigger]}</Badge>, defaultHiddenNarrow: true },
@@ -60,14 +64,14 @@ const columns: DataTableColumn<Check>[] = [
 export function HealthTab({ server, scope }: { server: McpServer; scope: ServerScope }) {
   const checks = useQuery(healthChecksQuery(scope, server.id));
   return (
-    <Card title="Recent checks" description={<HealthBadge health={server.health} />}>
+    <Card title="Upstream health" description={<HealthBadge health={server.health} />}>
       <ListPage<Check>
         id="server-health"
         caption="Recent checks"
         columns={columns}
         data={checks.data ?? []}
-        getRowId={(c) => c.checkedAt}
-        rowLabel={(c) => c.checkedAt}
+        getRowId={(c) => `${c.checkedAt}:${c.endpointId ?? "primary"}`}
+        rowLabel={(c) => `${endpointLabel(c)} ${c.checkedAt}`}
         loading={checks.isLoading}
         error={checks.error}
         onRetry={() => void checks.refetch()}

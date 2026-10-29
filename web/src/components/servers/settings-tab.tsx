@@ -44,6 +44,8 @@ import { CredentialFields } from "./credential-fields";
 import { credentialsBody, partProblems, type PartForm, partsOf } from "./credentials";
 import { EnabledSwitch, type ServerForm, serverFieldErrors, serverProblems, TimeoutField, UrlField, urlProblem } from "./server-fields";
 import { DeleteServer } from "./delete-server";
+import { EndpointFields } from "./endpoint-fields";
+import { endpointFormsOf, endpointsBody, endpointProblems, endpointReviewChanged, type EndpointForm } from "./endpoints";
 import { type ProtectionForm, protectionFormOf, protectionProblems, protectionBody, ServerProtectionFields } from "./protection-fields";
 import { sameOrigin } from "./origin";
 import { machineProblems } from "./machine-auth";
@@ -53,7 +55,7 @@ import { changesCa, emptyTlsForm, tlsBody, tlsDirty, tlsProblems, tlsRefusal, ty
 import { AuthChangeNotes, settingsAuthBody } from "./settings-auth";
 import { applyDetection, authChange, authModeOf, countedUpstream, type DetectResult, oauthProblems, upstreamFormOf, type UpstreamForm } from "./upstream-auth";
 
-type SettingsForm = ServerForm & { requirement: RequirementForm; capturePayloads: boolean; upstream: UpstreamForm; protection: ProtectionForm };
+type SettingsForm = ServerForm & { requirement: RequirementForm; capturePayloads: boolean; upstream: UpstreamForm; protection: ProtectionForm; endpoints: EndpointForm[] };
 
 const formOf = (x: McpServer): SettingsForm => ({
   name: x.name,
@@ -65,6 +67,7 @@ const formOf = (x: McpServer): SettingsForm => ({
   capturePayloads: x.capturePayloads ?? false,
   upstream: upstreamFormOf(x),
   protection: protectionFormOf(x),
+  endpoints: endpointFormsOf(x),
 });
 const labels = {
   name: "Name",
@@ -76,6 +79,7 @@ const labels = {
   capturePayloads: "Record call contents",
   upstream: "Authentication",
   protection: "Upstream protection",
+  endpoints: "Additional endpoints",
 };
 
 /** Why the User authorization section is closed in the modes that already send one credential per call. */
@@ -105,9 +109,9 @@ function requirementErrors(r: RequirementForm, err: unknown, shown: boolean) {
 type Props = { server: McpServer; scope: ServerScope; abilities: ServerAbilities };
 
 /** The saved message: what a new URL did (read again; back to review), or a wider requirement (back to review). */
-function savedMessage(before: McpServer, after: McpServer, urlChanged: boolean, caChanged = false) {
+function savedMessage(before: McpServer, after: McpServer, urlChanged: boolean, caChanged = false, endpointsChanged = false) {
   if (before.publishState === "published" && after.publishState === "pending") {
-    toast.success("Server settings saved", `${after.name} left the catalog until a platform admin reviews ${urlChanged ? "its new URL" : caChanged ? "its new CA" : "what it now receives"}.`);
+    toast.success("Server settings saved", `${after.name} left the catalog until a platform admin reviews ${urlChanged ? "its new URL" : caChanged ? "its new CA" : endpointsChanged ? "its additional destinations" : "what it now receives"}.`);
   } else if (urlChanged && after.lastRefreshError) {
     toast.warning("Server settings saved", "Its capabilities couldn't be read from the new URL. See the Overview tab.");
   } else {
@@ -135,6 +139,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   const save = useMutation({
     mutationFn: async (_: { before: McpServer; urlChanged: boolean }) => {
       const authBody = settingsAuthBody(server, form, parts, secret, detected);
+      const endpointBody = endpointsBody(form.endpoints, server, form.upstream.mode);
       // OAuth replaces a requirement (one credential per call): switching removes it.
       const requirement = noRequirement ? (server.requirement ? null : undefined) : requirementBody(form.requirement, server);
       return unwrap(
@@ -148,7 +153,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
             enabled: form.enabled,
             ...protectionBody(form.protection, saved.protection),
             ...authBody,
-            ...(requirement === undefined ? {} : { requirement }),
+            ...(endpointBody === undefined ? {} : { endpoints: endpointBody }),            ...(requirement === undefined ? {} : { requirement }),
             ...(tlsBody(tlsForm) ? { tls: tlsBody(tlsForm) } : {}),
             ...(form.capturePayloads !== saved.capturePayloads ? { capturePayloads: form.capturePayloads } : {}),
           },
@@ -160,11 +165,12 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
       setParts(partsOf(updated));
       setSecret("");
       setTlsForm(emptyTlsForm);
+      setForm((f) => ({ ...f, endpoints: endpointFormsOf(updated) }));
       setSubmitted(false);
       storeServer(qc, updated);
       // Overrides may have gone back to inherit, and every capability's requirement may differ.
       void qc.invalidateQueries({ queryKey: capabilitiesQuery(scope, server.id).queryKey });
-      savedMessage(before, updated, urlChanged, caChanged);
+      savedMessage(before, updated, urlChanged, caChanged, endpointChanged);
     },
   });
   const canEdit = abilities.canEdit && scope.kind === "team";
@@ -191,7 +197,10 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   const reqErrors = requirementErrors(form.requirement, save.error, submitted);
   const secretErrors = ownKeys ? secretProblems(form.upstream.secret) : {};
   const tlsErrors = { ...(submitted ? tlsProblems(tlsForm, server) : {}), ...tlsRefusal(save.error) };
+  const endpointBlocked = !["none", "static_header"].includes(form.upstream.mode) || form.requirement.on || server.tls != null || tlsDirty(tlsForm);
+  const endpointChanged = endpointReviewChanged(form.endpoints, server) || (form.endpoints.length > 0 && form.upstream.mode !== saved.upstream.mode);
   const invalid =
+    Object.keys(endpointProblems(form.endpoints, { ...server, url: form.url }, form.upstream.mode, dev, endpointBlocked)).length > 0 ||
     Object.keys(protectionProblems(form.protection)).length > 0 ||
     Object.keys(tlsProblems(tlsForm, server)).length > 0 ||
     Object.keys(problems).length > 0 ||
@@ -218,7 +227,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
   }, [save.error]);
   const change = authChange(server, form.upstream, { urlChanged, detected });
   const caChanged = changesCa(tlsForm, server);
-  const leavesCatalog = canEdit && reviewedAgain(server) && (urlChanged || (!noRequirement && requirementWidens) || Boolean(change.review) || caChanged);
+  const leavesCatalog = canEdit && reviewedAgain(server) && (urlChanged || (!noRequirement && requirementWidens) || Boolean(change.review) || caChanged || endpointChanged);
   const providerChanges = Boolean(server.requirement) && (!form.requirement.on || form.requirement.providerId !== server.requirement?.providerId);
   const resetsOverrides = providerChanges ? (caps.data ?? []).filter((c) => !c.goneAt && c.requirementOverride.mode === "scopes").length : 0;
 
@@ -269,6 +278,7 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
         <TimeoutField {...fields} />
         <EnabledSwitch {...fields} />
       </SettingsSection>
+      <EndpointFields value={form.endpoints} onChange={(endpoints) => set({ endpoints })} server={server} primaryUrl={form.url} mode={form.upstream.mode} blocked={endpointBlocked} disabled={!canEdit || !abilities.canManage} submitted={submitted} dev={dev} />
       <ServerProtectionFields value={form.protection} onChange={(protection) => set({ protection })} disabled={!canEdit || !abilities.canManage} submitted={submitted} error={save.error} />
       <SettingsSection title="Authentication" description="How the portal proves itself to the server: nothing, a static credential of headers, a token, Basic or a query key (stored encrypted), each person's own key, the portal's own OAuth client, or each person's own OAuth sign-in.">
         <AuthModeFields

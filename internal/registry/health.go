@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ncecere/open-mcp-portal/internal/authz"
 	"github.com/ncecere/open-mcp-portal/internal/observability"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
@@ -58,6 +59,7 @@ func (s *Service) RunHealthChecks(ctx context.Context, interval time.Duration) (
 			defer wg.Done()
 			defer func() { <-sem }()
 			res, _, _ := s.probe(ctx, sv, TriggerScheduled)
+			s.checkExtraEndpoints(ctx, sv, TriggerScheduled, authz.Actor{})
 			if err := recordCheck(ctx, s.q, sv.ID, res, TriggerScheduled, uuid.NullUUID{}); err != nil {
 				// The server may have been deleted meanwhile.
 				s.log.DebugContext(ctx, "could not store a scheduled MCP health check", "server", sv.ID, "err", err)

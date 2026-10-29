@@ -10,6 +10,13 @@ secure restoration of an existing encrypted database still requires its matching
 
 [Status](status.md) is the source of truth for release SHAs, image digests, CI evidence and remaining blockers.
 
+The separate **v0.8.0 failover candidate** now passed local acceptance: four complete mandatory-PostgreSQL
+normal/race suites in both actual role modes (3,440s), all 853 web tests and final deployment/advisory gates,
+actual source browser/secondary-audience/quota checks and the actual previous v0.7.0 image on schema47.
+See [failover](upstream-failover.md) and [candidate notes](releases/v0.8.0.md). Publication is not implied:
+main/tag CI, signed images, independent artifacts and actual published runtime remain required. Inspect the
+active branch/worktree instead of restarting implementation or moving/reusing a tag; #33 remains open.
+
 ## Start here
 
 1. Fetch `origin/main` and tags; inspect `git status`, the latest main CI and the published release. Work from
@@ -74,7 +81,11 @@ backlog work as well as publication evidence and the verified example image dige
   drain pre-v0.5 images before enabling approval rules, and pre-v0.6 serving/background-worker replicas
   before enabling access requests or expiring grants. New server protection also requires draining older
   serving/background-worker replicas before relying on it; expanded-schema compatibility is not enforcement.
-  Use the new rotation utility for new ciphertext fields.
+  Use the new rotation utility for new ciphertext fields. Failover permits only independently entered
+  none/static credentials with no provider/TLS state: primary plus at most two ordered extras, three total
+  iterations and fresh actual-URL identity/definition parity. Governed/NoReplay is primary-only even after
+  failed negotiation; never restore/transfer a spent receipt. New-origin values must be entered again.
+  Drain pre-v0.8 serving/workers before relying on endpoint policy, review, health or new-column rotation.
 
 ## Code and checks
 

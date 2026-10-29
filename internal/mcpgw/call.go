@@ -202,6 +202,7 @@ func (rc *request) forwardCall(o gateways.Offer, rec calls.Call, cred *providers
 	// deadline after any approval consumption/commit, not just before it.
 	fwd.Retryable = rc.h.Approvals != nil && !target.NoReplay && (fwd.Method == upstream.MethodPromptsGet || fwd.Method == upstream.MethodResourcesRead ||
 		(o.Capability.ToolClass != nil && *o.Capability.ToolClass == "read"))
+	fwd.Expected = &upstream.ExpectedCapability{Kind: o.Capability.Kind, Name: o.Capability.Name, Fingerprint: o.Capability.Fingerprint}
 	rc.guardServerAttempt(o, &target)
 	rc.guardGrantExpiry(&target)
 	ctx := rc.r.Context()

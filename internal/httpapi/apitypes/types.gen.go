@@ -1415,6 +1415,24 @@ func (e McpServerCredentialInputKind) Valid() bool {
 	}
 }
 
+// Defines values for McpServerEndpointAuthMode.
+const (
+	McpServerEndpointAuthModeNone         McpServerEndpointAuthMode = "none"
+	McpServerEndpointAuthModeStaticHeader McpServerEndpointAuthMode = "static_header"
+)
+
+// Valid indicates whether the value is a known member of the McpServerEndpointAuthMode enum.
+func (e McpServerEndpointAuthMode) Valid() bool {
+	switch e {
+	case McpServerEndpointAuthModeNone:
+		return true
+	case McpServerEndpointAuthModeStaticHeader:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for McpServerMachineOAuthTokenAuthMethod.
 const (
 	McpServerMachineOAuthTokenAuthMethodClientSecretBasic McpServerMachineOAuthTokenAuthMethod = "client_secret_basic"
@@ -2132,6 +2150,7 @@ func (e PublishPolicy) Valid() bool {
 // Defines values for PublishRequestedDataReason.
 const (
 	PublishRequestedDataReasonClassificationChanged PublishRequestedDataReason = "classification_changed"
+	PublishRequestedDataReasonEndpointsChanged      PublishRequestedDataReason = "endpoints_changed"
 	PublishRequestedDataReasonNew                   PublishRequestedDataReason = "new"
 	PublishRequestedDataReasonRequirementChanged    PublishRequestedDataReason = "requirement_changed"
 	PublishRequestedDataReasonUpstreamAuthChanged   PublishRequestedDataReason = "upstream_auth_changed"
@@ -2143,6 +2162,8 @@ const (
 func (e PublishRequestedDataReason) Valid() bool {
 	switch e {
 	case PublishRequestedDataReasonClassificationChanged:
+		return true
+	case PublishRequestedDataReasonEndpointsChanged:
 		return true
 	case PublishRequestedDataReasonNew:
 		return true
@@ -4591,6 +4612,12 @@ type McpErrorClass string
 type McpHealthCheck struct {
 	CheckedAt time.Time `json:"checkedAt"`
 
+	// EndpointId Additional endpoint checked; absent/null is the canonical primary or historical primary-only record. History retains the ID after endpoint deletion.
+	EndpointId *openapi_types.UUID `json:"endpointId,omitempty"`
+
+	// EndpointPosition Position when checked (zero primary); a historical fact, not a current routing selector.
+	EndpointPosition *int32 `json:"endpointPosition,omitempty"`
+
 	// ErrorClass not_allowed: the URL or an address it resolves to is refused (blocked, or internal and not allowlisted), or the server redirected. tls: the TLS handshake failed (the server's certificate isn't trusted or isn't valid for the host name, or the server refused the portal's client certificate); the message says which and what to do. See McpServerTls.
 	ErrorClass *McpErrorClass `json:"errorClass,omitempty"`
 	HttpStatus *int32         `json:"httpStatus,omitempty"`
@@ -4665,6 +4692,9 @@ type McpServer struct {
 	// EffectivePublishPolicy approval_required: a platform admin approves each server, and each changed capability, before it reaches the catalog. self_publish: the team's owners and admins do.
 	EffectivePublishPolicy PublishPolicy `json:"effectivePublishPolicy"`
 	Enabled                bool          `json:"enabled"`
+
+	// Endpoints Ordered additional replicas, not the canonical primary URL. None on existing servers. Governing approval/NoReplay calls use the primary only; ordinary failover is bounded by the same three-iteration deadline/quota budget. Values are never returned.
+	Endpoints *[]McpServerEndpoint `json:"endpoints,omitempty"`
 
 	// HasAuth Whether the server has any credential part (the single header or credentials)
 	HasAuth bool `json:"hasAuth"`
@@ -4762,6 +4792,9 @@ type McpServerCreate struct {
 	Description *string                     `json:"description,omitempty"`
 	Enabled     *bool                       `json:"enabled,omitempty"`
 
+	// Endpoints Optional ordered additional endpoints, owner/admin browser sessions only. Initially only none/static_header with no provider requirement or TLS settings; unsupported combinations are 422 failover_not_supported. Each static entry requires independently entered credentials, never a primary copy. IDs are absent on create.
+	Endpoints *[]McpServerEndpointInput `json:"endpoints,omitempty"`
+
 	// MachineOAuth Required with authMode machine_oauth (tokenUrl, clientId and clientSecret); refused (400 invalid_machine_oauth) with any other mode, because it carries a secret
 	MachineOAuth *McpServerMachineOAuthInput `json:"machineOAuth,omitempty"`
 
@@ -4841,6 +4874,37 @@ type McpServerCredentialInput struct {
 
 // McpServerCredentialInputKind defines model for McpServerCredentialInput.Kind.
 type McpServerCredentialInputKind string
+
+// McpServerEndpoint defines model for McpServerEndpoint.
+type McpServerEndpoint struct {
+	// AuthMode Effective mode when this endpoint's origin/credential was explicitly configured; mismatches fail closed.
+	AuthMode McpServerEndpointAuthMode `json:"authMode"`
+
+	// Credentials Public shape/hints only; never values, ciphertext or inherited primary secrets.
+	Credentials []McpServerCredential `json:"credentials"`
+	Enabled     bool                  `json:"enabled"`
+	Id          openapi_types.UUID    `json:"id"`
+	Position    int32                 `json:"position"`
+	Url         string                `json:"url"`
+}
+
+// McpServerEndpointAuthMode Effective mode when this endpoint's origin/credential was explicitly configured; mismatches fail closed.
+type McpServerEndpointAuthMode string
+
+// McpServerEndpointInput defines model for McpServerEndpointInput.
+type McpServerEndpointInput struct {
+	// Credentials This endpoint's independent multipart credential. No implicit primary inheritance. A new static endpoint requires all values; an unchanged-origin existing endpoint may omit to retain or use keep parts. A changed origin requires all values again, never keep or hints. No-auth entries accept no parts.
+	Credentials *[]McpServerCredentialInput `json:"credentials,omitempty"`
+
+	// Enabled Omit to keep for an existing entry; defaults true on a new entry. Disabled entries retain encrypted credentials and still participate in mode compatibility and review.
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Id Update only; retain this server's existing endpoint. Absent creates a new endpoint with independent credentials. Never copy another server's ID.
+	Id *openapi_types.UUID `json:"id,omitempty"`
+
+	// Url Each actual destination passes address/origin rules. A new origin requires every credential value again.
+	Url string `json:"url"`
+}
 
 // McpServerMachineOAuth A server's machine OAuth client (decision 73, docs/machine-oauth.md). The portal gets a token with the client credentials grant from tokenUrl and sends it as Authorization: Bearer to the server's URL. The client secret is never returned
 type McpServerMachineOAuth struct {
@@ -5133,6 +5197,9 @@ type McpServerUpdate struct {
 	Credentials *[]McpServerCredentialInput `json:"credentials,omitempty"`
 	Description *string                     `json:"description,omitempty"`
 	Enabled     *bool                       `json:"enabled,omitempty"`
+
+	// Endpoints Omit to retain, empty list clears; null is invalid. Ordered full replacement with stable IDs for retained entries, owner/admin browser sessions only. New origins require every static value re-entered. URL/order/enabled/credential shape changes require catalog re-review. Remove extras before selecting an unsupported mode/provider/TLS combination (422 failover_not_supported). Governed/NoReplay calls remain primary-only.
+	Endpoints *[]McpServerEndpointInput `json:"endpoints,omitempty"`
 
 	// MachineOAuth Only with authMode machine_oauth (sent now or stored; 400 invalid_machine_oauth otherwise). Omitted fields keep their stored values; the first time (switching to the mode) tokenUrl, clientId and clientSecret are required. A new tokenUrl, a new clientId or a URL with another origin needs clientSecret in the same request (422 client_secret_required, details.reason token_url_changed, client_id_changed or origin_changed; nothing is stored and nothing is sent to the new endpoint)
 	MachineOAuth *McpServerMachineOAuthInput `json:"machineOAuth,omitempty"`

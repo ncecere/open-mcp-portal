@@ -3,12 +3,14 @@ package upstream
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/netip"
 	"net/url"
 	"strings"
@@ -250,6 +252,9 @@ type exchange struct {
 	retryAfterValid   bool
 	retryAfterPresent bool
 	streaming         bool
+	operationWritten  bool // headers or any attempted operation write; conservative
+	handshakeFailed   bool // observed TLS handshake callback error, not a generic TLS label
+	dialFailed        bool // ConnectDone error before any operation write
 }
 
 // errorPeek bounds how much of an error response's body is kept to explain
@@ -402,6 +407,30 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			}
 			return nil, t.ex.refuse(err)
 		}
+	}
+	if t.forwarding {
+		operation := method == MethodToolsCall || method == MethodPromptsGet || method == MethodResourcesRead
+		wrote := func() {
+			if operation {
+				t.ex.mu.Lock()
+				t.ex.operationWritten = true
+				t.ex.mu.Unlock()
+			}
+		}
+		trace := &httptrace.ClientTrace{ConnectDone: func(_, _ string, err error) {
+			if err != nil {
+				t.ex.mu.Lock()
+				t.ex.dialFailed = true
+				t.ex.mu.Unlock()
+			}
+		}, TLSHandshakeDone: func(_ tls.ConnectionState, err error) {
+			if err != nil {
+				t.ex.mu.Lock()
+				t.ex.handshakeFailed = true
+				t.ex.mu.Unlock()
+			}
+		}, WroteHeaders: wrote, WroteRequest: func(httptrace.WroteRequestInfo) { wrote() }}
+		req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 	}
 	res, err := t.next.RoundTrip(req)
 	if err != nil {

@@ -382,18 +382,20 @@ type McpCapability struct {
 }
 
 type McpHealthCheck struct {
-	ID             int64
-	ServerID       uuid.UUID
-	CheckedAt      time.Time
-	Ok             bool
-	LatencyMs      int32
-	Trigger        string
-	TriggeredBy    uuid.NullUUID
-	ErrorClass     *string
-	HttpStatus     *int32
-	Message        string
-	StatusSince    time.Time
-	SignInRequired bool
+	ID               int64
+	ServerID         uuid.UUID
+	CheckedAt        time.Time
+	Ok               bool
+	LatencyMs        int32
+	Trigger          string
+	TriggeredBy      uuid.NullUUID
+	ErrorClass       *string
+	HttpStatus       *int32
+	Message          string
+	StatusSince      time.Time
+	SignInRequired   bool
+	EndpointID       uuid.NullUUID
+	EndpointPosition int16
 }
 
 type McpServer struct {
@@ -456,6 +458,20 @@ type McpServerCredential struct {
 	SecondaryCipher []byte
 	Hint            string
 	CreatedAt       time.Time
+}
+
+type McpServerEndpoint struct {
+	ID                uuid.UUID
+	ServerID          uuid.UUID
+	Position          int16
+	URL               string
+	Enabled           bool
+	AuthMode          string
+	CredentialOrigin  string
+	CredentialsCipher []byte
+	CredentialShapes  json.RawMessage
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 type McpServerMachineOauth struct {

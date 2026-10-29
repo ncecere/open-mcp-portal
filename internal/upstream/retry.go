@@ -43,32 +43,42 @@ func parseRetryAfter(raw string, now time.Time) (time.Duration, bool) {
 // retryFacts distinguishes known pre-request failures / explicit transient
 // statuses from ambiguous failures after sending. A streamed operation or a
 // valid RPC answer is never automatically replayed, whatever its HTTP status.
-func retryFacts(e *Error, ex *exchange, cause error) (bool, time.Duration) {
+func retryFacts(e *Error, ex *exchange, cause error) (retryable, preRequest bool, after time.Duration) {
 	if e.cause != nil || e.Reason != "" || e.RPCCode != 0 {
-		return false, 0
+		return false, false, 0
 	}
 	ex.mu.Lock()
 	streaming, delay, valid, present, detail := ex.streaming, ex.retryAfter, ex.retryAfterValid, ex.retryAfterPresent, ex.detail
+	written, handshake, dial := ex.operationWritten, ex.handshakeFailed, ex.dialFailed
 	ex.mu.Unlock()
 	if streaming || strings.Contains(detail, `"jsonrpc"`) {
-		return false, 0
+		return false, false, 0
 	}
 	if present && (!valid || delay > MaxAutomaticRetryAfter) {
-		return false, 0
+		return false, false, 0
 	}
 	switch e.HTTPStatus {
 	case http.StatusTooManyRequests:
-		return valid, delay
+		return valid, false, delay
 	case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
-		return true, delay
+		return true, false, delay
 	case 0:
-		if e.Class == ClassTLS {
-			return true, 0
+		// Trace evidence (or a preserved dial cause) is required, and never
+		// after any operation write. A TLS label alone proves no such thing.
+		if written {
+			return false, false, 0
+		}
+		if e.Class == ClassTLS && handshake {
+			return true, true, 0
+		}
+		if e.Class != ClassUnavailable && e.Class != ClassTimeout {
+			return false, false, 0
 		}
 		var op *net.OpError
-		return errors.As(cause, &op) && op.Op == "dial", 0
+		known := dial || (errors.As(cause, &op) && op.Op == "dial")
+		return known, known, 0
 	}
-	return false, 0
+	return false, false, 0
 }
 
 func (c *Client) pauseRetry(ctx context.Context, after time.Duration) error {

@@ -4114,6 +4114,8 @@ export interface components {
             description: string;
             /** @example https://status.example.com/mcp */
             url: string;
+            /** @description Ordered additional replicas, not the canonical primary URL. None on existing servers. Governing approval/NoReplay calls use the primary only; ordinary failover is bounded by the same three-iteration deadline/quota budget. Values are never returned. */
+            endpoints?: components["schemas"]["McpServerEndpoint"][];
             /** @enum {string} */
             transport: "streamable_http";
             /** @description The static header sent with every request, for a server whose credential is still its single header (absent: none, or the credential is the list credentials) */
@@ -4278,6 +4280,37 @@ export interface components {
              */
             at?: string;
         };
+        McpServerEndpoint: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            position: number;
+            url: string;
+            enabled: boolean;
+            /**
+             * @description Effective mode when this endpoint's origin/credential was explicitly configured; mismatches fail closed.
+             * @enum {string}
+             */
+            authMode: "none" | "static_header";
+            /** @description Public shape/hints only; never values, ciphertext or inherited primary secrets. */
+            credentials: components["schemas"]["McpServerCredential"][];
+        };
+        McpServerEndpointInput: {
+            /**
+             * Format: uuid
+             * @description Update only; retain this server's existing endpoint. Absent creates a new endpoint with independent credentials. Never copy another server's ID.
+             */
+            id?: string;
+            /** @description Each actual destination passes address/origin rules. A new origin requires every credential value again. */
+            url: string;
+            /**
+             * @description Omit to keep for an existing entry; defaults true on a new entry. Disabled entries retain encrypted credentials and still participate in mode compatibility and review.
+             * @default true
+             */
+            enabled: boolean;
+            /** @description This endpoint's independent multipart credential. No implicit primary inheritance. A new static endpoint requires all values; an unchanged-origin existing endpoint may omit to retain or use keep parts. A changed origin requires all values again, never keep or hints. No-auth entries accept no parts. */
+            credentials?: components["schemas"]["McpServerCredentialInput"][];
+        };
         McpServerCreate: {
             /** @description Unique across the platform, immutable */
             slug: string;
@@ -4285,6 +4318,8 @@ export interface components {
             description?: string;
             /** @description The Streamable HTTP endpoint, https only (plain http for loopback in development) */
             url: string;
+            /** @description Optional ordered additional endpoints, owner/admin browser sessions only. Initially only none/static_header with no provider requirement or TLS settings; unsupported combinations are 422 failover_not_supported. Each static entry requires independently entered credentials, never a primary copy. IDs are absent on create. */
+            endpoints?: components["schemas"]["McpServerEndpointInput"][];
             /** @description A header such as Authorization or X-API-Key; send it with authValue, or neither */
             authHeaderName?: string;
             /** @description Stored encrypted, never returned */
@@ -4331,6 +4366,8 @@ export interface components {
             name?: string;
             description?: string;
             url?: string;
+            /** @description Omit to retain, empty list clears; null is invalid. Ordered full replacement with stable IDs for retained entries, owner/admin browser sessions only. New origins require every static value re-entered. URL/order/enabled/credential shape changes require catalog re-review. Remove extras before selecting an unsupported mode/provider/TLS combination (422 failover_not_supported). Governed/NoReplay calls remain primary-only. */
+            endpoints?: components["schemas"]["McpServerEndpointInput"][];
             /** @description Omit to keep; an empty string removes the header and its value */
             authHeaderName?: string;
             /** @description Omit to keep the stored value */
@@ -4461,6 +4498,16 @@ export interface components {
             setupRequired?: boolean;
         };
         McpHealthCheck: {
+            /**
+             * Format: uuid
+             * @description Additional endpoint checked; absent/null is the canonical primary or historical primary-only record. History retains the ID after endpoint deletion.
+             */
+            endpointId?: string | null;
+            /**
+             * Format: int32
+             * @description Position when checked (zero primary); a historical fact, not a current routing selector.
+             */
+            endpointPosition?: number;
             /** Format: date-time */
             checkedAt: string;
             ok: boolean;
@@ -6872,7 +6919,7 @@ export interface components {
         PublishRequestedData: {
             server: components["schemas"]["NotificationServerRef"];
             /** @enum {string} */
-            reason: "new" | "url_changed" | "upstream_auth_changed" | "upstream_tls_changed" | "requirement_changed" | "classification_changed";
+            reason: "new" | "url_changed" | "upstream_auth_changed" | "upstream_tls_changed" | "endpoints_changed" | "requirement_changed" | "classification_changed";
             note?: string;
             requestedBy: {
                 /** @enum {string} */

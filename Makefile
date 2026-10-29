@@ -73,7 +73,8 @@ example-mail-smoke: ## Set up provider google-dev, server and gateway "mail" in 
 	python3 examples/mail-mcp/smoke.py
 
 test: ## All Go tests; integration tests skip when Postgres is unreachable
-	$(GO) test -count=1 ./...
+	# The complete HTTP integration package needs CI's bounded budget in normal mode too.
+	$(GO) test -count=1 -timeout=20m ./...
 
 test-integration: deps-up test-ci ## All Go tests with Postgres required (fails instead of skipping)
 

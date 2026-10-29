@@ -188,9 +188,11 @@ func (q *Queries) DeleteMachineOAuth(ctx context.Context, serverID uuid.UUID) er
 }
 
 const forgetMCPHealthChecks = `-- name: ForgetMCPHealthChecks :exec
-DELETE FROM mcp_health_checks WHERE server_id = $1
+DELETE FROM mcp_health_checks WHERE server_id = $1 AND endpoint_id IS NULL
 `
 
+// Only the canonical primary was changed. Extra checks remain historical facts
+// with their original endpoint identity/position, including deleted endpoints.
 func (q *Queries) ForgetMCPHealthChecks(ctx context.Context, serverID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, forgetMCPHealthChecks, serverID)
 	return err
@@ -425,10 +427,10 @@ INSERT INTO mcp_health_checks (server_id, ok, latency_ms, trigger, triggered_by,
                                sign_in_required)
 SELECT $1, $2::bool, $3, $4, $5, $6, $7, $8,
        COALESCE((SELECT CASE WHEN p.ok = $2::bool THEN p.status_since END
-                 FROM mcp_health_checks p WHERE p.server_id = $1
+                 FROM mcp_health_checks p WHERE p.server_id = $1 AND p.endpoint_id IS NULL
                  ORDER BY p.checked_at DESC, p.id DESC LIMIT 1), now()),
        $9::bool
-RETURNING id, server_id, checked_at, ok, latency_ms, trigger, triggered_by, error_class, http_status, message, status_since, sign_in_required
+RETURNING id, server_id, checked_at, ok, latency_ms, trigger, triggered_by, error_class, http_status, message, status_since, sign_in_required, endpoint_id, endpoint_position
 `
 
 type InsertMCPHealthCheckParams struct {
@@ -471,6 +473,8 @@ func (q *Queries) InsertMCPHealthCheck(ctx context.Context, arg InsertMCPHealthC
 		&i.Message,
 		&i.StatusSince,
 		&i.SignInRequired,
+		&i.EndpointID,
+		&i.EndpointPosition,
 	)
 	return i, err
 }
@@ -627,9 +631,9 @@ func (q *Queries) InsertMCPServerCredential(ctx context.Context, arg InsertMCPSe
 }
 
 const latestMCPHealthChecks = `-- name: LatestMCPHealthChecks :many
-SELECT DISTINCT ON (h.server_id) h.id, h.server_id, h.checked_at, h.ok, h.latency_ms, h.trigger, h.triggered_by, h.error_class, h.http_status, h.message, h.status_since, h.sign_in_required
+SELECT DISTINCT ON (h.server_id) h.id, h.server_id, h.checked_at, h.ok, h.latency_ms, h.trigger, h.triggered_by, h.error_class, h.http_status, h.message, h.status_since, h.sign_in_required, h.endpoint_id, h.endpoint_position
 FROM mcp_health_checks h
-WHERE h.server_id = ANY($1::uuid[])
+WHERE h.server_id = ANY($1::uuid[]) AND h.endpoint_id IS NULL
 ORDER BY h.server_id, h.checked_at DESC, h.id DESC
 `
 
@@ -655,6 +659,8 @@ func (q *Queries) LatestMCPHealthChecks(ctx context.Context, serverIds []uuid.UU
 			&i.Message,
 			&i.StatusSince,
 			&i.SignInRequired,
+			&i.EndpointID,
+			&i.EndpointPosition,
 		); err != nil {
 			return nil, err
 		}
@@ -822,7 +828,7 @@ func (q *Queries) ListMCPCapabilityFingerprints(ctx context.Context, serverIds [
 }
 
 const listMCPHealthChecks = `-- name: ListMCPHealthChecks :many
-SELECT id, server_id, checked_at, ok, latency_ms, trigger, triggered_by, error_class, http_status, message, status_since, sign_in_required FROM mcp_health_checks WHERE server_id = $1 ORDER BY checked_at DESC, id DESC LIMIT $2
+SELECT id, server_id, checked_at, ok, latency_ms, trigger, triggered_by, error_class, http_status, message, status_since, sign_in_required, endpoint_id, endpoint_position FROM mcp_health_checks WHERE server_id = $1 ORDER BY checked_at DESC, id DESC LIMIT $2
 `
 
 type ListMCPHealthChecksParams struct {
@@ -852,6 +858,8 @@ func (q *Queries) ListMCPHealthChecks(ctx context.Context, arg ListMCPHealthChec
 			&i.Message,
 			&i.StatusSince,
 			&i.SignInRequired,
+			&i.EndpointID,
+			&i.EndpointPosition,
 		); err != nil {
 			return nil, err
 		}
@@ -1108,7 +1116,7 @@ const listMCPServersDueForCheck = `-- name: ListMCPServersDueForCheck :many
 SELECT s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, s.rate_limit_per_minute, s.max_concurrent FROM mcp_servers s
 JOIN teams t ON t.id = s.team_id
 WHERE s.enabled AND t.status = 'active'
-  AND NOT EXISTS (SELECT 1 FROM mcp_health_checks h WHERE h.server_id = s.id AND h.checked_at >= $1)
+  AND NOT EXISTS (SELECT 1 FROM mcp_health_checks h WHERE h.server_id = s.id AND h.endpoint_id IS NULL AND h.checked_at >= $1)
 ORDER BY s.id
 `
 
@@ -1443,6 +1451,7 @@ const pruneMCPHealthChecks = `-- name: PruneMCPHealthChecks :execrows
 DELETE FROM mcp_health_checks d
 WHERE d.server_id = $1::uuid
   AND d.id NOT IN (SELECT h.id FROM mcp_health_checks h WHERE h.server_id = $1::uuid
+                    AND h.endpoint_id IS NOT DISTINCT FROM d.endpoint_id
                    ORDER BY h.checked_at DESC, h.id DESC LIMIT $2::int)
 `
 

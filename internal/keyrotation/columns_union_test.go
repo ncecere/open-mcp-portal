@@ -21,6 +21,7 @@ func TestColumnsIncludeEveryFeaturesSealedValues(t *testing.T) {
 	}
 	for _, want := range []string{
 		"mcp_servers.auth_value_cipher", "mcp_server_credentials.value_cipher", "mcp_server_credentials.secondary_cipher", // static credentials (70)
+		"mcp_server_endpoints.credentials_cipher",                   // independent extra-endpoint envelope (85)
 		"person_secrets.secret_cipher", "secret_requests.id_cipher", // person secrets (72)
 		"mcp_server_machine_oauth.client_secret_cipher", // machine OAuth (73)
 		"mcp_server_tls.client_key_cipher",              // mTLS (74)

@@ -30,8 +30,10 @@ func TestApprovalPrivateRelocationPreservesLiveState(t *testing.T) {
 	t.Setenv("OMP_TEST_SPLIT_ROLES", "1")
 	ctx := context.Background()
 	var epoch int64
+	var runtimeRole string
 	cipher := bytes.Repeat([]byte{0x42}, 69)
 	runtime, _ := testutil.NewDBWithMigration(t, func(ctx context.Context, owner *pgxpool.Pool, role string) error {
+		runtimeRole = role
 		db := stdlib.OpenDBFromPool(owner)
 		defer db.Close()
 		p, err := goose.NewProvider(goose.DialectPostgres, db, migrations.FS)
@@ -51,7 +53,17 @@ func TestApprovalPrivateRelocationPreservesLiveState(t *testing.T) {
  SELECT gen_random_uuid(),1,$1,'user',gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),'relocation',repeat('a',64),repeat('b',64),repeat('c',64),'https://test.invalid',now()+interval '1 hour','sealed'::bytea`, epoch); err != nil {
 			return err
 		}
-		return store.Migrate(ctx, owner, testutil.Logger(), role)
+		// This assertion is about relocation42, not every future migration's
+		// intentionally invalidating authority change. Exercise latest below.
+		if _, err = p.UpTo(ctx, 42); err != nil {
+			return err
+		}
+		conn, err := owner.Acquire(ctx)
+		if err != nil {
+			return err
+		}
+		defer conn.Release()
+		return store.ReconcileRuntimeGrants(ctx, conn.Conn(), role)
 	})
 	if got := approvalEpoch(t, runtime); got != epoch {
 		t.Fatalf("relocation changed visible epoch: %d -> %d", epoch, got)
@@ -81,6 +93,25 @@ func TestApprovalPrivateRelocationPreservesLiveState(t *testing.T) {
 	tx := approvalBegin(t, ctx, runtime)
 	if _, err := dbgen.New(tx).LockApprovalContext(ctx); err != nil {
 		t.Fatal(err)
+	}
+	if err := tx.Rollback(ctx); err != nil {
+		t.Fatal(err)
+	}
+	beforeUpgrade := approvalEpoch(t, runtime)
+	if err := store.Migrate(ctx, testutil.OwnerPool(t, runtime), testutil.Logger(), runtimeRole); err != nil {
+		t.Fatal(err)
+	}
+	if approvalEpoch(t, runtime) <= beforeUpgrade {
+		t.Fatal("endpoint authority migration failed to invalidate old snapshots")
+	}
+	if err := runtime.QueryRow(ctx, `SELECT binding_key_cipher FROM omp_private.approval_binding_keys WHERE id=1`).Scan(&got); err != nil || !bytes.Equal(got, cipher) {
+		t.Fatal("latest migration changed the stable binding root", err)
+	}
+	if n := roleCount(t, runtime, `SELECT count(*) FROM approval_requests WHERE context_epoch=$1 AND preview_cipher='sealed'::bytea AND binding_digest=repeat('b',64)`, epoch); n != 1 {
+		t.Fatal("latest migration erased historical binding or preview")
+	}
+	if n := roleCount(t, runtime, `SELECT count(*) FROM approval_requests WHERE context_epoch=omp_private.omp_current_approval_context()`); n != 0 {
+		t.Fatal("old receipt acquired new endpoint authority")
 	}
 }
 

@@ -72,6 +72,8 @@ type ForwardRequest struct {
 	// NoReplay, continuations, partial/progress responses and local failures
 	// still prohibit retry even when this is true.
 	Retryable bool
+	// Expected is the trusted stored offer, required before any fallback.
+	Expected *ExpectedCapability
 	// OnAdmitted runs once, after local admission and before networking. It
 	// lets a gateway start SSE only after initial quota/cap/breaker refusal.
 	OnAdmitted func()
@@ -126,6 +128,9 @@ func (c *Client) Forward(ctx context.Context, t Target, req ForwardRequest) (out
 	start, caller := time.Now(), ctx
 	ctx, cancel := context.WithTimeout(ctx, t.Timeout)
 	defer cancel()
+	if err := validateFailoverTarget(t); err != nil {
+		return nil, err
+	}
 	guard := &forwardTransportGuard{before: t.BeforeTransport}
 	if t.NoReplay {
 		t.BeforeTransport = guard.check
@@ -160,6 +165,7 @@ func (c *Client) Forward(ctx context.Context, t Target, req ForwardRequest) (out
 		}
 	}
 	t.forwarding = true
+	endpointIndex := -1 // canonical primary; extras are ordered 0..N-1
 	for attempt := 0; ; attempt++ {
 		priorAttempts = attempt
 		if err = forwardCancellation(ctx); err != nil {
@@ -178,14 +184,27 @@ func (c *Client) Forward(ctx context.Context, t Target, req ForwardRequest) (out
 		if err = forwardCancellation(ctx); err != nil {
 			return nil, err
 		}
-		out, err = c.forwardAttempt(ctx, t, req, guard)
+		selected := t
+		if endpointIndex >= 0 {
+			selected = endpointTarget(t, t.Endpoints[endpointIndex])
+		}
+		err = nil
+		if endpointIndex >= 0 {
+			err = c.validateFallbackOffer(ctx, selected, req)
+		}
+		if err == nil {
+			out, err = c.forwardAttempt(ctx, selected, req, guard)
+		}
 		if err == nil {
 			out.Latency, out.Retries = time.Since(start), attempt
 			return out, nil
 		}
-		e, retry := mayRetry(ctx, t, req, err, progress.Load(), attempt)
+		e, retry, nextEndpoint := mayRetryOrFailover(ctx, t, req, err, progress.Load(), attempt, endpointIndex)
 		if !retry {
 			return nil, err
+		}
+		if nextEndpoint {
+			endpointIndex++
 		}
 		if waitErr := c.pauseRetry(ctx, e.RetryAfter); waitErr != nil {
 			return nil, c.classify(ctx, t, &exchange{}, waitErr)

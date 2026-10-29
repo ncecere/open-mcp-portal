@@ -246,7 +246,7 @@ INSERT INTO mcp_health_checks (server_id, ok, latency_ms, trigger, triggered_by,
                                sign_in_required)
 SELECT @server_id, @ok::bool, @latency_ms, @trigger, @triggered_by, @error_class, @http_status, @message,
        COALESCE((SELECT CASE WHEN p.ok = @ok::bool THEN p.status_since END
-                 FROM mcp_health_checks p WHERE p.server_id = @server_id
+                 FROM mcp_health_checks p WHERE p.server_id = @server_id AND p.endpoint_id IS NULL
                  ORDER BY p.checked_at DESC, p.id DESC LIMIT 1), now()),
        @sign_in_required::bool
 RETURNING *;
@@ -256,10 +256,13 @@ RETURNING *;
 DELETE FROM mcp_health_checks d
 WHERE d.server_id = @server_id::uuid
   AND d.id NOT IN (SELECT h.id FROM mcp_health_checks h WHERE h.server_id = @server_id::uuid
+                    AND h.endpoint_id IS NOT DISTINCT FROM d.endpoint_id
                    ORDER BY h.checked_at DESC, h.id DESC LIMIT @keep::int);
 
 -- name: ForgetMCPHealthChecks :exec
-DELETE FROM mcp_health_checks WHERE server_id = $1;
+-- Only the canonical primary was changed. Extra checks remain historical facts
+-- with their original endpoint identity/position, including deleted endpoints.
+DELETE FROM mcp_health_checks WHERE server_id = $1 AND endpoint_id IS NULL;
 
 -- name: ListMCPHealthChecks :many
 SELECT * FROM mcp_health_checks WHERE server_id = @server_id ORDER BY checked_at DESC, id DESC LIMIT @page_size;
@@ -267,7 +270,7 @@ SELECT * FROM mcp_health_checks WHERE server_id = @server_id ORDER BY checked_at
 -- name: LatestMCPHealthChecks :many
 SELECT DISTINCT ON (h.server_id) h.*
 FROM mcp_health_checks h
-WHERE h.server_id = ANY(@server_ids::uuid[])
+WHERE h.server_id = ANY(@server_ids::uuid[]) AND h.endpoint_id IS NULL
 ORDER BY h.server_id, h.checked_at DESC, h.id DESC;
 
 -- name: ListMCPServersDueForCheck :many
@@ -277,7 +280,7 @@ ORDER BY h.server_id, h.checked_at DESC, h.id DESC;
 SELECT s.* FROM mcp_servers s
 JOIN teams t ON t.id = s.team_id
 WHERE s.enabled AND t.status = 'active'
-  AND NOT EXISTS (SELECT 1 FROM mcp_health_checks h WHERE h.server_id = s.id AND h.checked_at >= @due_before)
+  AND NOT EXISTS (SELECT 1 FROM mcp_health_checks h WHERE h.server_id = s.id AND h.endpoint_id IS NULL AND h.checked_at >= @due_before)
 ORDER BY s.id;
 
 -- name: ListMCPServerCredentials :many

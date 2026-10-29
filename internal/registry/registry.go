@@ -225,6 +225,8 @@ type ServerView struct {
 	// Credentials are the parts of the server's own credential, in order:
 	// kind, name and hint only (the legacy header counts as one part).
 	Credentials []CredentialView
+	// Endpoints are ordered extra replicas, never secret values or the primary.
+	Endpoints []EndpointView
 	// TLS is the server's CA bundle and client certificate as facts about the
 	// certificates (nil: none set); never the key.
 	TLS *TLSView
@@ -276,6 +278,10 @@ func views(ctx context.Context, q *dbgen.Queries, rows []dbgen.ListMCPServersRow
 	if err != nil {
 		return nil, err
 	}
+	endpoints, err := endpointViews(ctx, q, servers)
+	if err != nil {
+		return nil, err
+	}
 	digest, err := digestsWith(ctx, q, servers, creds, machines, tlsByServer)
 	if err != nil {
 		return nil, err
@@ -284,6 +290,7 @@ func views(ctx context.Context, q *dbgen.Queries, rows []dbgen.ListMCPServersRow
 	for i := range out {
 		out[i].ReviewDigest = digest[out[i].Server.ID]
 		out[i].Credentials = creds[out[i].Server.ID]
+		out[i].Endpoints = endpoints[out[i].Server.ID]
 		out[i].Machine = machines[out[i].Server.ID]
 		out[i].TLS = viewOfTLS(tlsByServer[out[i].Server.ID], now)
 		out[i].Warnings = out[i].TLS.warnings()
@@ -433,7 +440,8 @@ type CreateInput struct {
 	Slug, Name, Description, URL string
 	AuthHeaderName, AuthValue    string
 	Credentials                  []CredentialInput
-	TimeoutSeconds               int32 // 0: the default (30)
+	Endpoints                    *[]EndpointInput // nil omitted; owner/admin sessions only
+	TimeoutSeconds               int32            // 0: the default (30)
 	RateLimitPerMinute           *int64
 	MaxConcurrent                *int32
 	Enabled                      bool
@@ -468,6 +476,7 @@ type UpdateInput struct {
 	Name, Description, URL         *string
 	AuthHeaderName, AuthValue      *string
 	Credentials                    *[]CredentialInput
+	Endpoints                      *[]EndpointInput // nil keeps, empty clears; null rejected by HTTP
 	TimeoutSeconds                 *int32
 	SetRateLimit, SetMaxConcurrent bool
 	RateLimitPerMinute             *int64
@@ -586,12 +595,15 @@ type Created struct {
 // capabilities at once. The server is created even when that fails.
 // Audited as mcp_server.create (and mcp_server.refresh when discovery works).
 func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in CreateInput) (Created, error) {
+	if in.Endpoints != nil && a.IsToken() {
+		return Created{}, endpointTokenRefusal()
+	}
 	in.Slug = strings.TrimSpace(in.Slug)
 	in.Name = strings.TrimSpace(in.Name)
 	if in.TimeoutSeconds == 0 {
 		in.TimeoutSeconds = defaultTimeoutSec
 	}
-	if in.RateLimitPerMinute != nil || in.MaxConcurrent != nil {
+	if in.RateLimitPerMinute != nil || in.MaxConcurrent != nil || in.Endpoints != nil {
 		ta, err := access(ctx, s.q, a, ref)
 		if err != nil {
 			return Created{}, err
@@ -599,8 +611,13 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 		if err := ta.writable(authz.CheckServerEdit); err != nil {
 			return Created{}, err
 		}
-		if err := s.checkProtection(ctx, s.q, ta.role, in.RateLimitPerMinute, in.MaxConcurrent, true); err != nil {
+		if err := s.checkProtection(ctx, s.q, ta.role, in.RateLimitPerMinute, in.MaxConcurrent, in.RateLimitPerMinute != nil || in.MaxConcurrent != nil); err != nil {
 			return Created{}, err
+		}
+		if in.Endpoints != nil {
+			if err := checkEndpointRole(ta.role); err != nil {
+				return Created{}, err
+			}
 		}
 	}
 	if err := checkCreateCredentials(in); err != nil {
@@ -609,6 +626,30 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 	mode, err := createMode(in)
 	if err != nil {
 		return Created{}, err
+	}
+	id := uuid.New()
+	var endpointInputs *[]EndpointInput
+	if in.Endpoints != nil {
+		ta, err := access(ctx, s.q, a, ref)
+		if err != nil {
+			return Created{}, err
+		}
+		tp, err := s.planTLS(id, nil, in.TLS, false, time.Now())
+		if err != nil {
+			return Created{}, err
+		}
+		if len(*in.Endpoints) > 0 {
+			if err := checkEndpointMode(mode, in.Requirement != nil, !tp.next.empty()); err != nil {
+				return Created{}, err
+			}
+		}
+		if in.URL, err = s.client.NormalizeURL(ctx, in.URL); err != nil {
+			return Created{}, err
+		}
+		endpointInputs, err = s.prepareEndpointChange(ctx, s.q, dbgen.McpServer{ID: id}, in.URL, mode, in.Requirement != nil, !tp.next.empty(), ta.role, in.Endpoints, true)
+		if err != nil {
+			return Created{}, err
+		}
 	}
 	var secretCfg *PersonSecretInput
 	if mode == AuthPersonSecret {
@@ -659,7 +700,6 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 			sendIdentity = s.defaultSendIdentity(ctx, mode, u).SendIdentity
 		}
 	}
-	id := uuid.New()
 	err = store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
 		ta, err := access(ctx, q, a, ref)
 		if err != nil {
@@ -730,8 +770,15 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 				return err
 			}
 		}
+		ep, err := s.planEndpointRows(row, nil, tlsRow != nil, ta.role, endpointInputs, true)
+		if err != nil {
+			return err
+		}
+		if err := storeEndpoints(ctx, q, id, ep); err != nil {
+			return err
+		}
 		e := a.Audit("mcp_server.create", "mcp_server", id.String())
-		e.TeamID, e.After = ta.team.ID, withTLS(snapshot(row, parts...), tlsRow)
+		e.TeamID, e.After = ta.team.ID, withEndpointAudit(withTLS(snapshot(row, parts...), tlsRow), ep.after)
 		if err := audit.Record(ctx, q, e); err != nil {
 			return err
 		}
@@ -883,11 +930,19 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 		if in.SendIdentity != nil {
 			p.SendIdentity = *in.SendIdentity
 		}
+		storedEndpoints, err := q.ListMCPServerEndpoints(ctx, id)
+		if err != nil {
+			return err
+		}
+		ep, err := s.planEndpointRows(endpointServerAfter(cur, p, pre.mode), storedEndpoints, !tp.next.empty(), ta.role, pre.endpoints, false)
+		if err != nil {
+			return err
+		}
 		curProv := pre.provider
 		planChanged := pre.plan != nil && (curProv == nil || !planUnchanged(*curProv, pre.plan))
 		secretChanged := pre.secret != nil && !samePersonSecret(cur, *pre.secret)
 		machineChanged := machine != nil && machine.changed
-		if unchanged(cur, p, valueChanged || ap.rewrites() || tp.changed(), in.CapturePayloads) && !planChanged && !machineChanged && pre.mode == AuthModeOf(cur) && !secretChanged {
+		if unchanged(cur, p, valueChanged || ap.rewrites() || tp.changed(), in.CapturePayloads) && !planChanged && !machineChanged && pre.mode == AuthModeOf(cur) && !secretChanged && !ep.changed {
 			return nil
 		}
 		ps, err := LoadProviders(ctx, q)
@@ -929,6 +984,9 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 			return err
 		}
 		tlsChanged = tp.changed()
+		if err := storeEndpoints(ctx, q, id, ep); err != nil {
+			return err
+		}
 		reset := int64(0)
 		if row.AuthProviderID != cur.AuthProviderID {
 			// Overrides with other scopes belong to the old provider.
@@ -949,7 +1007,7 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 			return err
 		}
 		e := a.Audit("mcp_server.update", "mcp_server", id.String())
-		e.TeamID, e.Before, e.After = ta.team.ID, withTLS(snapshot(cur, ap.before...), curTLS), withTLS(snapshot(row, ap.afterParts()...), newTLS)
+		e.TeamID, e.Before, e.After = ta.team.ID, withEndpointAudit(withTLS(snapshot(cur, ap.before...), curTLS), ep.before), withEndpointAudit(withTLS(snapshot(row, ap.afterParts()...), newTLS), ep.after)
 		e.Metadata = map[string]any{"authValueChanged": valueChanged}
 		if tp.changed() {
 			// Which part changed and whether the origin dropped the old settings;
@@ -980,6 +1038,8 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 		switch {
 		case row.URL != cur.URL:
 			err = s.resubmit(ctx, q, a, ta.team, cur, "url_changed", "The server's URL changed; review it again.")
+		case ep.review:
+			err = s.resubmit(ctx, q, a, ta.team, cur, "endpoints_changed", "The server's additional destinations or credential placement changed; review them again.")
 		case authChanged:
 			err = s.resubmit(ctx, q, a, ta.team, cur, "upstream_auth_changed", noteUpstreamAuthChanged)
 		case secretAuthChanged(cur, row):
@@ -1034,6 +1094,7 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 
 // updatePrep is what an update decided before its transaction.
 type updatePrep struct {
+	endpoints *[]EndpointInput // normalized outside the mutation transaction
 	// mode is the auth mode after the update.
 	mode string
 	// provider is the server-bound provider before the update (nil: none).
@@ -1051,6 +1112,9 @@ type updatePrep struct {
 // registration when the server is (or stays) in oauth mode and its URL or
 // sign-in changes, and revoking connections when it leaves oauth.
 func (s *Service) prepareUpdate(ctx context.Context, a authz.Actor, ref string, id uuid.UUID, in UpdateInput, expectedRevision int64) (updatePrep, error) {
+	if in.Endpoints != nil && a.IsToken() {
+		return updatePrep{}, endpointTokenRefusal()
+	}
 	ta, err := access(ctx, s.q, a, ref)
 	if err != nil {
 		return updatePrep{}, err
@@ -1060,6 +1124,11 @@ func (s *Service) prepareUpdate(ctx context.Context, a authz.Actor, ref string, 
 	}
 	if err := s.checkProtection(ctx, s.q, ta.role, in.RateLimitPerMinute, in.MaxConcurrent, in.SetRateLimit || in.SetMaxConcurrent); err != nil {
 		return updatePrep{}, err
+	}
+	if in.Endpoints != nil {
+		if err := checkEndpointRole(ta.role); err != nil {
+			return updatePrep{}, err
+		}
 	}
 	cur, err := teamServer(ctx, s.q, ta.team.ID, id, false)
 	if err != nil {
@@ -1136,9 +1205,20 @@ func (s *Service) prepareUpdate(ctx context.Context, a authz.Actor, ref string, 
 	if err := requireValueForOrigin(cur, stored, newURL, in, out.mode); err != nil {
 		return out, err
 	}
-	if curTLS, err := loadTLS(ctx, s.q, id); err != nil {
+	curTLS, err := loadTLS(ctx, s.q, id)
+	if err != nil {
 		return out, err
-	} else if _, err := s.planTLS(id, curTLS, in.TLS, !sameOrigin(cur.URL, newURL), time.Now()); err != nil {
+	}
+	projectedTLS, err := s.planTLS(id, curTLS, in.TLS, !sameOrigin(cur.URL, newURL), time.Now())
+	if err != nil {
+		return out, err
+	}
+	requirement := cur.AuthProviderID.Valid
+	if in.SetRequirement {
+		requirement = in.Requirement != nil
+	}
+	out.endpoints, err = s.prepareEndpointChange(ctx, s.q, cur, newURL, out.mode, requirement, !projectedTLS.next.empty(), ta.role, in.Endpoints, false)
+	if err != nil {
 		return out, err
 	}
 	switch {
@@ -1487,7 +1567,7 @@ func (s *Service) Delete(ctx context.Context, a authz.Actor, ref string, id uuid
 // Target is how to reach a server for a forwarded call (internal/mcpgw):
 // see target.
 func (s *Service) Target(ctx context.Context, sv dbgen.McpServer) (upstream.Target, error) {
-	return s.target(ctx, sv)
+	return s.forwardTarget(ctx, sv)
 }
 
 // Client is the guarded client servers are reached with.
