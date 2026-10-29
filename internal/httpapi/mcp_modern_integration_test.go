@@ -121,7 +121,10 @@ type eraEnv struct {
 
 func newEraEnv(t *testing.T) *eraEnv {
 	t.Helper()
-	e := &eraEnv{gwEnv: newGwEnv(t, nil)}
+	// These tests pin the era behaviour of a portal WITHOUT the Tasks extension
+	// (not advertised, task methods unknown); mcp_tasks_integration_test.go
+	// covers the same surface with tasks enabled.
+	e := &eraEnv{gwEnv: newGwEnvHook(t, nil, disableTasks)}
 	e.fake.SetJWKS(e.app.URL+"/.well-known/jwks.json", e.fake.URL())
 	e.fake.EnableSchemaTools()
 	e.refresh(e.owner, e.server)

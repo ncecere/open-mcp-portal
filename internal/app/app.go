@@ -27,6 +27,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/keyrotation"
 	"github.com/ncecere/open-mcp-portal/internal/limits"
 	"github.com/ncecere/open-mcp-portal/internal/mcpgw"
+	"github.com/ncecere/open-mcp-portal/internal/mcptasks"
 	"github.com/ncecere/open-mcp-portal/internal/notify"
 	"github.com/ncecere/open-mcp-portal/internal/oauth"
 	"github.com/ncecere/open-mcp-portal/internal/observability"
@@ -384,6 +385,20 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 	ret.Hooks = append(ret.Hooks, func(ctx context.Context) (int64, error) {
 		return 0, approvalSvc.Cleanup(ctx, min(int32(cfg.RetentionBatchSize), 1000))
 	})
+	// MCP task relay (docs/mcp-tasks.md). The limits were validated at startup;
+	// an invalid pair fails here too and never becomes "unlimited". A nil store
+	// would mean tasks are fully off (not advertised, never negotiated).
+	taskStore, err := mcptasks.NewStore(pool, box, cfg.TasksMaxTTL, cfg.TasksMaxOpenPerPrincipal)
+	if err != nil {
+		return httpapi.Deps{}, fmt.Errorf("MCP tasks: invalid TASKS_MAX_TTL or TASKS_MAX_OPEN_PER_PRINCIPAL: %w", err)
+	}
+	ret.Hooks = append(ret.Hooks, func(ctx context.Context) (int64, error) {
+		n, err := taskStore.Prune(ctx, min(int32(cfg.RetentionBatchSize), 1000))
+		if n > 0 {
+			observability.RetentionDeleted.WithLabelValues("mcp_tasks").Add(float64(n))
+		}
+		return n, err
+	})
 	use := usage.New(pool, log)
 	use.Observe = func(leader bool, success time.Time) {
 		observability.SetLeader("usage_rollup", leader)
@@ -420,7 +435,7 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 		Notify:          notifier,
 		Approvals:       approvalSvc,
 		Overview:        overviewSvc,
-		MCP: &mcpgw.Handler{Approvals: approvalSvc, Gateways: gws, Keys: keys, OAuth: as, ServiceAccounts: sas, Identity: ids, Registry: reg, Providers: provs, PersonSecrets: pers, Secrets: box,
+		MCP: &mcpgw.Handler{Approvals: approvalSvc, Gateways: gws, Keys: keys, OAuth: as, ServiceAccounts: sas, Identity: ids, Registry: reg, Providers: provs, PersonSecrets: pers, Secrets: box, Tasks: taskStore,
 			Limits: lims, RateStore: rates, Capture: capt, Pool: pool, AppURL: cfg.AppURL, Log: log},
 	}, nil
 }

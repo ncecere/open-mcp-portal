@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ncecere/open-mcp-portal/internal/mcptasks"
 	"github.com/ncecere/open-mcp-portal/internal/netpolicy"
 )
 
@@ -91,6 +92,15 @@ type Config struct {
 	// used lately, which finds a revoked grant before a call does (0: never,
 	// the default; one replica at a time).
 	ProviderRefreshInterval time.Duration
+
+	// TasksMaxTTL is the longest a relayed task handle lives in this portal,
+	// whatever the upstream's own lifetime says (1m to 24h, default 24h), and
+	// TasksMaxOpenPerPrincipal how many unfinished tasks (reserved, working or
+	// input required) one person or service account may hold across all its
+	// keys and gateways (1 to 1000, default 100). Invalid values fail startup;
+	// neither can ever mean unlimited (docs/mcp-tasks.md).
+	TasksMaxTTL              time.Duration
+	TasksMaxOpenPerPrincipal int
 
 	// Tracing is OpenTelemetry tracing, off unless an OTLP endpoint is set
 	// (tracing.go; docs/deploy.md "Tracing").
@@ -187,6 +197,8 @@ func Defaults() Config {
 		SigningKeyPrepublish:            24 * time.Hour,
 		MetricsMaxObjects:               200,
 		Tracing:                         Tracing{Sampler: DefaultTracesSampler, SamplerArg: DefaultSamplerArg, ServiceName: DefaultTraceServiceName},
+		TasksMaxTTL:                     mcptasks.DefaultMaxTTL,
+		TasksMaxOpenPerPrincipal:        mcptasks.DefaultMaxOpen,
 		RetentionInterval:               15 * time.Minute,
 		RetentionBatchSize:              1000,
 		OAuthMaxRegisteredClients:       1000,

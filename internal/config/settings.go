@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ncecere/open-mcp-portal/internal/mcptasks"
 	"github.com/ncecere/open-mcp-portal/internal/netpolicy"
 )
 
@@ -181,6 +182,8 @@ var settings = []setting{
 	{key: "OAUTH_REFRESH_ABSOLUTE_TTL", apply: daysOrDuration(func(c *Config) *time.Duration { return &c.OAuthRefreshAbsoluteTTL }, time.Hour, 10*365*24*time.Hour)},
 	{key: "HEALTH_CHECK_INTERVAL", apply: duration(func(c *Config) *time.Duration { return &c.HealthCheckInterval }, 0, 24*time.Hour)},
 	{key: "PROVIDER_REFRESH_INTERVAL", apply: duration(func(c *Config) *time.Duration { return &c.ProviderRefreshInterval }, 0, 24*time.Hour)},
+	{key: "TASKS_MAX_TTL", apply: duration(func(c *Config) *time.Duration { return &c.TasksMaxTTL }, mcptasks.MinMaxTTL, mcptasks.MaxMaxTTL)},
+	{key: "TASKS_MAX_OPEN_PER_PRINCIPAL", apply: integer(func(c *Config) *int { return &c.TasksMaxOpenPerPrincipal }, mcptasks.MinMaxOpen, mcptasks.MaxMaxOpen)},
 	{key: "SIGNING_KEY_PREPUBLISH", apply: duration(func(c *Config) *time.Duration { return &c.SigningKeyPrepublish }, 0, 7*24*time.Hour)},
 	{key: "SESSION_IDLE_TIMEOUT", apply: duration(func(c *Config) *time.Duration { return &c.SessionIdleTimeout }, 0, 30*24*time.Hour)},
 	{key: "SESSION_TTL", apply: duration(func(c *Config) *time.Duration { return &c.SessionTTL }, 5*time.Minute, 30*24*time.Hour)},

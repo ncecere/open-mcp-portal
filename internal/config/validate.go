@@ -13,6 +13,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/ncecere/open-mcp-portal/internal/mcptasks"
 	"github.com/ncecere/open-mcp-portal/internal/secrets"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 )
@@ -105,6 +106,10 @@ func (c Config) validateSecrets() []error {
 	}
 	if c.ProviderRefreshInterval != 0 && c.ProviderRefreshInterval < time.Minute {
 		errs = append(errs, errors.New("PROVIDER_REFRESH_INTERVAL must be 0 (off) or at least 1m"))
+	}
+	if err := mcptasks.ValidateLimits(c.TasksMaxTTL, c.TasksMaxOpenPerPrincipal); err != nil {
+		errs = append(errs, fmt.Errorf("TASKS_MAX_TTL must be from %s to %s and TASKS_MAX_OPEN_PER_PRINCIPAL from %d to %d (neither can be unlimited)",
+			mcptasks.MinMaxTTL, mcptasks.MaxMaxTTL, mcptasks.MinMaxOpen, mcptasks.MaxMaxOpen))
 	}
 	return errs
 }
