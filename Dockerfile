@@ -4,6 +4,7 @@
 #
 #   make docker                                  # open-mcp-portal:<version>
 #   docker build --target fakemcp -t omp-fakemcp .   # the fake MCP server (demo only)
+#   docker build --target omp -t omp-cli .           # the omp command line (docs/cli.md)
 #
 # Multi-arch build: the web UI and the Go binary are built on the build
 # platform and cross-compiled for the target (no emulation for the slow
@@ -51,6 +52,26 @@ FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c
 COPY --from=build-fakemcp /out/fakemcp /fakemcp
 USER 65532:65532
 ENTRYPOINT ["/fakemcp"]
+
+# The omp command line (cmd/omp, docs/cli.md) for CI jobs that run containers:
+#   docker run --rm -e OMP_URL -e OMP_TOKEN omp-cli servers list
+# It authenticates with an automation token only and holds no secret itself.
+# Defined before the portal stage, which stays the default (last) target.
+FROM gobase AS build-omp
+ARG VERSION=dev
+ARG COMMIT=unknown
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    go build -trimpath \
+    -ldflags "-s -w -X github.com/ncecere/open-mcp-portal/internal/buildinfo.Version=${VERSION} -X github.com/ncecere/open-mcp-portal/internal/buildinfo.Commit=${COMMIT}" \
+    -o /out/omp ./cmd/omp
+
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab AS omp
+LABEL org.opencontainers.image.title="omp" \
+      org.opencontainers.image.description="The Open MCP Portal command line" \
+      org.opencontainers.image.source="https://github.com/ncecere/open-mcp-portal"
+COPY --from=build-omp /out/omp /omp
+USER 65532:65532
+ENTRYPOINT ["/omp"]
 
 # The portal (default target). Distroless: no shell or package manager;
 # runs as a non-root user (65532) and works with a read-only root
