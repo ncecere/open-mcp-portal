@@ -1,8 +1,8 @@
 # MCP task-handle relay (#35)
 
-Status: **in development, not released** (the storage, upstream client and gateway wiring exist; the release
-acceptance below is not met). Decision86 records conservative delegated scope after specification confirmation.
-#35 stays open; source version0.8.0 does not mean task support.
+Status: **first stage shipping in v0.9.0** (decision86). The scope below is deliberately conservative: ungoverned,
+non-streamed modern `tools/call` only. Real client/server interoperability with the released extension has not been
+exercised; see [releases/v0.9.0.md](releases/v0.9.0.md).
 The portal relays a server's durable task; it does not run a worker, queue or workflow engine.
 
 ## Confirmed specification
@@ -166,10 +166,9 @@ upstream operation, with no false termination claim. Normal tasks do not expose 
   actual previous immutable v0.8.0 image on expanded schema, browser and independently published artifacts/
   runtime checks. Real client/provider/channel/pilot/independent-review issues require separate evidence.
 
-This is a design boundary, not an implementation or release claim. Resolve/test concrete schema, dependency
-binding and mutation-fencing details before relying on them. #35 remains open and no release version is chosen.
+The design boundary above is implemented as described in the next section; v0.9.0 is its first release.
 
-## As built in the gateway and upstream client (unreleased)
+## As built in the gateway and upstream client (v0.9.0)
 
 What the code does, and where the design left room:
 

@@ -1,9 +1,21 @@
 # Status and handoff
 
-Last updated: 2026-10-29. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.8.0 published and verified; #33 upstream protection/failover is closed**. The owner resumed ordered backlog development and authorized pre-1.0 releases; **v1.0.0 remains the owner's explicit decision**. #32 and #33 are closed with release evidence. The v0.8.0 evidence/image-pin follow-up passed main CI and both smoke CNIs. #35's official specification is confirmed; its bounded design is in development, not implemented. A fresh agent should read [agent-handoff.md](agent-handoff.md).
-(release notes: [releases/v0.8.0.md](releases/v0.8.0.md); earlier: [v0.7.0](releases/v0.7.0.md), [v0.6.0](releases/v0.6.0.md), [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+Last updated: 2026-10-30. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.9.0 is being prepared** (#35's first task-relay stage, #43's Kubernetes release gates and #52's content-scanning design); **v0.8.0 remains the latest published, verified release**. The owner directed continued ordered work through every development issue, delegated subagents (Sonnet 5.5) and pre-1.0 releases; **v1.0.0 remains the owner's explicit decision**. #32, #33, #43 and #52 are closed with evidence. A fresh agent should read [agent-handoff.md](agent-handoff.md).
+(release notes: [releases/v0.9.0.md](releases/v0.9.0.md) (in preparation), [v0.8.0](releases/v0.8.0.md); earlier: [v0.7.0](releases/v0.7.0.md), [v0.6.0](releases/v0.6.0.md), [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
-## In development: #35 modern task-handle relay
+## v0.9.0 (in preparation): #35 first stage, #43 release gates, #52 design
+
+#43 closed after every new job passed on GitHub-hosted runners at `f3e4c75` (CI 40940744356, k8s-smoke
+40940744144, k8s-upgrade incl. the breaking-migration canary 40940784735; k8s-load 40937148348 at `4fef32b`).
+Two GitHub-only findings were fixed rather than hidden: an unpinned runner ShellCheck, and an ingress assertion
+racing a draining pod with the old configuration. #52 closed with decision 87 and first-slice follow-ups #70–#73.
+
+#35's gateway/upstream wiring (delegated to a Sonnet 5.5 subagent and reviewed line by line) is merged into the
+feature branch with the sealed store, fenced operations and single-use input ledger. Release gates, previous-
+image compatibility on schema48 and publication evidence are recorded below once they exist; until then
+**no task-support claim is made for a published image**. See [releases/v0.9.0.md](releases/v0.9.0.md).
+
+### History: #35 development notes
 
 The v0.8.0 evidence/pin follow-up `3a2183ce763da08e0e0183ec8b0572a1c947f21e` passed all seven
 [main CI jobs40895243972](https://github.com/ncecere/open-mcp-portal/actions/runs/40895243972) and both

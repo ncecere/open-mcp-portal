@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **2026-10-29.** v0.8.0 is published and independently verified; #32 and #33 are closed. Finish the evidence/image-pin follow-up, then confirm #35's tasks-extension specification before design/code. This is an order of work, not a schedule, for one maintainer. Every item below is an
+Status: **2026-10-30.** v0.8.0 is published and independently verified; v0.9.0 is in preparation with #35's first task-relay stage, #43's Kubernetes release gates and #52's content-scanning design (decision 87). #32, #33, #43 and #52 are closed. Work continues through [the implementation order](implementation-order.md); v1.0.0 remains the owner's decision.
 issue with its implementation plan (data model, API, packages to change, tests, acceptance criteria, open questions):
 [all roadmap issues](https://github.com/ncecere/open-mcp-portal/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap), grouped by
 [milestone](https://github.com/ncecere/open-mcp-portal/milestones). Sizes are relative effort: **S** a few days, **M** a week or two, **L** several weeks. Each item that needs a
