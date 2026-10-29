@@ -6,6 +6,10 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
+## [0.5.1] - 2026-10-28
+
+- **Provider refresh reliability.** Keep endpoint dependency reads on the locked refresh transaction, with serialized cancellation/drain and complete exchange deadlines. Preserve live address-policy and linked-provider checks; scoped read errors roll back without erasing consent. One-connection/two-handler regressions cover successful concurrent refresh and fail-closed denial. No schema/API change; see [v0.5.1 notes](docs/releases/v0.5.1.md).
+
 ## [0.5.0] - 2026-10-28
 
 - **Dependency maintenance.** Update the existing transitive Seroval dependency to 1.7.3, resolving the newly reported npm advisories without adding dependencies.

@@ -1,7 +1,22 @@
 # Status and handoff
 
-Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.5.0 published and independently verified**. Development is paused for a machine transfer; #32 has not been started.
+Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.5.1 release candidate; latest published release v0.5.0**. Finish the refresh-reliability patch before the machine-transfer stop point; #32 has not been started.
 (release notes: [releases/v0.5.0.md](releases/v0.5.0.md); earlier: [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+
+## v0.5.1 candidate: provider-refresh reliability
+
+The final handoff CI exposed a shared-refresh concurrency hang, independently reproduced with an actual
+one-connection runtime pool. A patch is integrated on `fix/provider-refresh-pool-starvation`: narrow
+transaction-scoped endpoint reads, checked address-policy failures, whole-exchange deadlines and explicit
+cancel/drain before transaction SQL resumes. It preserves row-lock serialization, live linked-provider and
+post-refresh authority checks, and commit-before-cache publication. No API or schema migration is added;
+see [patch notes](releases/v0.5.1.md). The v0.5.0 tag/image remain immutable.
+
+The parent confirmed the pre-fix five-second regression failure in both database-role modes. Independent
+correctness and security reviews approved the merged fix without confirmed findings; both independently
+ran focused regressions, including repeated races in the two role modes. Full merged normal/race suites
+and release gates for v0.5.1 are pending. Do not treat the earlier
+handoff as complete until the patch is published and its artifacts verified. No new feature work is started.
 
 ## v0.5.0 (2026-10-28): exact-call approvals
 
@@ -486,7 +501,8 @@ blind restart/seed of an existing one. The historical dev-database migration hel
 
 1. v0.4.0 is published and verified; #26/#29/#30/#44/#68 are closed with acceptance evidence. Its follow-up
    documentation/image-pin CI and both smoke jobs also passed. Keep the immutable release tag/digest intact.
-2. **Stop point for machine transfer:** v0.5.0 is published and verified; #31 is closed. Decision **82** and
+2. **Stop point for machine transfer:** #31 shipped in verified v0.5.0 and is closed. Finish and verify the
+   v0.5.1 provider-refresh patch before stopping; its review/full gates/CI/publication are pending. Decision **82** and
    [design](tool-approvals.md) document migrations **`00035`–`00042`**, exact dispatch and private review.
    Drain older serving images before enabling rules; schema compatibility does not imply enforcement.
    Use the new binary's rotation utility for the new ciphertext columns. Keep production autovacuum enabled;
