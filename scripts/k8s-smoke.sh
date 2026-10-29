@@ -627,9 +627,19 @@ wait_for_stack() {
   kn rollout status deploy/fakemcp --timeout=120s >/dev/null || fail "fake MCP server not ready in 120s"
   wait_portal_rollout 240
 }
+# wait_portal_rollout [SECONDS]: the Deployment is rolled out AND every pod of
+# the previous configuration is gone. `rollout status` returns while old pods
+# still drain (SHUTDOWN_DELAY) and can still be routed to, so an assertion
+# about the new configuration could otherwise be answered by an old pod.
 wait_portal_rollout() { # [SECONDS]
-  kn rollout status deploy/open-mcp-portal --timeout="${1:-300}s" >/dev/null ||
-    fail "portal Deployment not rolled out in ${1:-300}s (see artifacts; startup probe allows 4 minutes)"
+  local limit=${1:-300} end
+  end=$((SECONDS + limit))
+  kn rollout status deploy/open-mcp-portal --timeout="${limit}s" >/dev/null ||
+    fail "portal Deployment not rolled out in ${limit}s (see artifacts; startup probe allows 4 minutes)"
+  while [ "$(kn get pods -l "$POD_SEL" -o json | jq '[.items[] | select(.metadata.deletionTimestamp != null)] | length')" != 0 ]; do
+    [ "$SECONDS" -lt "$end" ] || fail "old portal pods still terminating ${limit}s after the rollout began"
+    sleep 2
+  done
 }
 
 

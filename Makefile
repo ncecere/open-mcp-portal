@@ -137,9 +137,16 @@ k8s-smoke: ## Apply the Kubernetes base to a throwaway kind cluster and check it
 
 SHELLCHECK_FILES := scripts/*.sh scripts/smoke/*.sh deploy/kubernetes/scripts/validate.sh
 
-shellcheck: ## ShellCheck the deployment and smoke scripts (the pinned release is installed into bin/k8s-tools/bin when shellcheck is not on the PATH)
-	@command -v shellcheck >/dev/null 2>&1 || scripts/install-smoke-tools.sh $(K8S_TOOLS)/bin shellcheck >/dev/null
-	PATH="$(K8S_TOOLS)/bin:$$PATH" shellcheck $(SHELLCHECK_FILES)
+# Always the pinned, checksum-verified release: a runner's preinstalled
+# ShellCheck is another version with other findings.
+SHELLCHECK_VERSION := $(shell sed -n 's/^SHELLCHECK_VERSION="\(.*\)"$$/\1/p' scripts/install-smoke-tools.sh)
+SHELLCHECK_BIN := $(K8S_TOOLS)/shellcheck-$(SHELLCHECK_VERSION)/shellcheck
+
+shellcheck: ## ShellCheck the deployment and smoke scripts with the pinned release (installed into bin/k8s-tools on first use)
+	@test -n "$(SHELLCHECK_VERSION)" || (echo "no SHELLCHECK_VERSION in scripts/install-smoke-tools.sh" && exit 1)
+	@test -x $(SHELLCHECK_BIN) || scripts/install-smoke-tools.sh $(dir $(SHELLCHECK_BIN)) shellcheck >/dev/null
+	@$(SHELLCHECK_BIN) --version | grep -q "^version: $(patsubst v%,%,$(SHELLCHECK_VERSION))$$" || (echo "$(SHELLCHECK_BIN) is not ShellCheck $(SHELLCHECK_VERSION)" && exit 1)
+	$(SHELLCHECK_BIN) $(SHELLCHECK_FILES)
 
 smoke-selftest: ## The smoke scripts' assertion helpers against stubs, and the script tests in scripts/tests (no cluster, no Docker)
 	SMOKE_SELFTEST=1 scripts/k8s-smoke.sh
