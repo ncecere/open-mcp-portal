@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **2026-10-28.** v0.5.0 is the current release. This is an order of work, not a schedule, for one maintainer. Every item below is an
+Status: **2026-10-28.** v0.5.1 is the current release. This is an order of work, not a schedule, for one maintainer. Every item below is an
 issue with its implementation plan (data model, API, packages to change, tests, acceptance criteria, open questions):
 [all roadmap issues](https://github.com/ncecere/open-mcp-portal/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap), grouped by
 [milestone](https://github.com/ncecere/open-mcp-portal/milestones). Sizes are relative effort: **S** a few days, **M** a week or two, **L** several weeks. Each item that needs a
@@ -36,6 +36,7 @@ Decided out of scope:
 | [v0.3.3](releases/v0.3.3.md) | 2026-10-28 | Owner-set tool classification and review binding; browser-session inventory/revocation and optional idle expiry; patched dependencies and deterministic smoke-helper lifecycle tests. |
 | [v0.4.0](releases/v0.4.0.md) | 2026-10-28 | Credential tool scopes, per-selection tool curation, team-owned service connections, migration/runtime database roles and safe retirement of external-platform impersonation. |
 | [v0.5.0](releases/v0.5.0.md) | 2026-10-28 | Sensitive-call approval rules, private human review, exact merged-argument binding and single-use dispatch; private notices/attention, sealed preview and binding-key rotation. |
+| [v0.5.1](releases/v0.5.1.md) | 2026-10-28 | Provider-refresh reliability under constrained runtime pools; scoped dependency reads, fail-closed address-policy checks and bounded cancellation/drain. No schema/API change. |
 
 Proven on a real deployment (one Talos cluster, Authentik sign-in, CloudNativePG with continuous archiving and daily backups, a restore tested twice):
 Claude Code over OAuth and an API key on the 2026-07-28 revision; per-person OAuth to GitHub's hosted MCP server; DeepWiki through a gateway.
@@ -50,7 +51,8 @@ shipped. **#28 classification** and **#37 session hardening** shipped in v0.3.3.
 with independent review corrections, full-tree tests, browser checks and CI/deployment/artifact verification.
 #62/#63 are withdrawn as not planned, not completed verification. Historical milestone headings below are
 planning buckets, not a promise of release numbering. #31 approvals shipped in v0.5.0 under decision 82.
-Development is paused for a machine transfer; #32 is next and has not been started.
+The v0.5.1 reliability follow-up is published and verified. Development is paused for a machine transfer;
+#32 is next and has not been started. A new agent should read [agent-handoff.md](agent-handoff.md).
 
 1. **Verify and pilot alongside implementation.** Decisions #5, #6 and #7 shipped in v0.2.2. The
    real-client checks (#14–#17), provider/channel checks (#18–#19), independent review (#13) and

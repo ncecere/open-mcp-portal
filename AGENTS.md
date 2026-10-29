@@ -2,7 +2,8 @@
 
 Conventions for building and testing are in [CONTRIBUTING.md](CONTRIBUTING.md), and where the work stands is in
 [docs/status.md](docs/status.md) (its "Resume checklist" and "Next steps"). This file covers what is specific to working
-with an AI agent on this repository.
+with an AI agent on this repository. For a fresh machine/session, start with
+[docs/agent-handoff.md](docs/agent-handoff.md); confirm its release stop point against `docs/status.md` and GitHub.
 
 - **Names.** The product is Open MCP Portal (OMP only after the full name). "Gateway" is the feature (a curated set
   of capabilities at `/mcp/{slug}`): write "the portal" for the product. Keep the `MCP-Gateway-*` header names.

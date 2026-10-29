@@ -1,22 +1,47 @@
 # Status and handoff
 
-Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.5.1 release candidate; latest published release v0.5.0**. Finish the refresh-reliability patch before the machine-transfer stop point; #32 has not been started.
-(release notes: [releases/v0.5.0.md](releases/v0.5.0.md); earlier: [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.5.1 published and independently verified**. Development is paused for the owner's machine transfer; #32 has not been started. A fresh agent should read [agent-handoff.md](agent-handoff.md).
+(release notes: [releases/v0.5.1.md](releases/v0.5.1.md); earlier: [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
-## v0.5.1 candidate: provider-refresh reliability
+## v0.5.1 (2026-10-28): provider-refresh reliability
 
 The final handoff CI exposed a shared-refresh concurrency hang, independently reproduced with an actual
-one-connection runtime pool. A patch is integrated on `fix/provider-refresh-pool-starvation`: narrow
-transaction-scoped endpoint reads, checked address-policy failures, whole-exchange deadlines and explicit
-cancel/drain before transaction SQL resumes. It preserves row-lock serialization, live linked-provider and
-post-refresh authority checks, and commit-before-cache publication. No API or schema migration is added;
-see [patch notes](releases/v0.5.1.md). The v0.5.0 tag/image remain immutable.
+one-connection runtime pool. The reviewed fix and test are merged into main, tagged immutably at
+`10753fec4610cb290454cb2767bdaebdf51120ae` and
+[published on GitHub](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.5.1).
+Narrow transaction-scoped endpoint reads, checked address-policy failures, whole-exchange deadlines and
+explicit cancel/drain remove the nested pool acquisition before transaction SQL resumes. Row-lock
+serialization, live linked-provider/post-refresh authority checks and commit-before-cache publication remain.
+No API or schema migration is added; see [patch notes](releases/v0.5.1.md). The v0.5.0 tag/image remain immutable.
 
-The parent confirmed the pre-fix five-second regression failure in both database-role modes. Independent
-correctness and security reviews approved the merged fix without confirmed findings; both independently
-ran focused regressions, including repeated races in the two role modes. Full merged normal/race suites
-and release gates for v0.5.1 are pending. Do not treat the earlier
-handoff as complete until the patch is published and its artifacts verified. No new feature work is started.
+Verification:
+- The parent reproduced the pre-fix five-second failure in both database-role modes. The unchanged regression
+  now passes with one runtime connection, two cold handlers, singleton/eight concurrent calls, exactly one
+  refresh and committed rotation. Denial/missing-policy controls preserve consent and dispatch nothing.
+- Independent correctness and security reviews approved without confirmed findings; both ran focused tests,
+  including repeated races in the two role modes. Linked-provider, SQL-error, cancellation/late-dial and
+  cache-isolation regressions passed. These are scoped agent reviews, not #13's whole-product assessment.
+- Full merged normal/race suites passed in **both** legacy and authenticated split-role modes. The legacy
+  normal suite passed first; a shared compiler-cache artifact disappeared during the next build, so the
+  remaining full suites were rerun using an owned isolated `GOCACHE` (1,145 seconds). No vet/race gate was disabled.
+- Generation, lint/build, freshness, Kubernetes validation, actionlint, four smoke-helper tests and all web
+  gates passed (**836 tests**). npm audit reports zero vulnerabilities; CI-pinned govulncheck reports zero
+  reachable vulnerabilities (two module-only advisories). No new dependency was added.
+- [Main CI](https://github.com/ncecere/open-mcp-portal/actions/runs/40799601862), both
+  [kindnet/Calico smoke jobs](https://github.com/ncecere/open-mcp-portal/actions/runs/40799601853), and
+  [native multiarchitecture image build/scan/sign/publication](https://github.com/ncecere/open-mcp-portal/actions/runs/40801468165)
+  passed at the release commit.
+- Independently verified the tag/index digest, exactly linux/amd64 and linux/arm64, tag-specific GitHub OIDC
+  cosign identity/certificate/transparency proof, all asset checksums and equality of both SPDX assets with
+  registry attestations. The published arm64 image runs as `65532:65532`, read-only without network,
+  reporting `open-mcp-portal 0.5.1 (10753fec4610)`. The verified example-overlay digest is
+  `sha256:f0752082128be618003c0a5f0e2917c7b5cabc64b60bdec60d161135519617d2`.
+
+The owned disposable PostgreSQL container is removed; development services/data were untouched. No fresh
+browser run was needed for this backend-only patch; the v0.5.0 browser evidence below remains scoped to
+those pages. Real IDE/provider/channel/pilot and broader load/soak evidence remain open. No production
+deployment is implied. **Pause here:** no #32 or other feature work has been started. Final main follow-ups
+only record release evidence, the verified image pin and the agent/machine handoff.
 
 ## v0.5.0 (2026-10-28): exact-call approvals
 
@@ -481,7 +506,7 @@ server allow-list).
 
 - Clone `git@github.com:ncecere/open-mcp-portal.git`, check out `main` and fetch tags. All required source,
   migrations, generated code and release/handoff documentation are on the remote; no local patch is needed.
-  The immutable shipped source is `v0.5.0`; main also records publication evidence and the verified image pin.
+  The immutable shipped source is `v0.5.1`; main also records publication evidence and the verified image pin.
 - Read this release section, `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md) and
   [implementation order](implementation-order.md). Next is #32; do not resume old #31 implementation branches.
 - Install Go 1.26.10+, Node 22+, Docker, Python 3 and sqlc 1.31.1; run `npm ci` in `web/`.
@@ -501,8 +526,9 @@ blind restart/seed of an existing one. The historical dev-database migration hel
 
 1. v0.4.0 is published and verified; #26/#29/#30/#44/#68 are closed with acceptance evidence. Its follow-up
    documentation/image-pin CI and both smoke jobs also passed. Keep the immutable release tag/digest intact.
-2. **Stop point for machine transfer:** #31 shipped in verified v0.5.0 and is closed. Finish and verify the
-   v0.5.1 provider-refresh patch before stopping; its review/full gates/CI/publication are pending. Decision **82** and
+2. **Stop point for machine transfer:** #31 shipped in verified v0.5.0 and is closed. The v0.5.1 provider-refresh
+   patch is also published and independently verified. All required work is merged/pushed to main; resume
+   with [agent-handoff.md](agent-handoff.md), not an old implementation branch. Decision **82** and
    [design](tool-approvals.md) document migrations **`00035`–`00042`**, exact dispatch and private review.
    Drain older serving images before enabling rules; schema compatibility does not imply enforcement.
    Use the new binary's rotation utility for the new ciphertext columns. Keep production autovacuum enabled;

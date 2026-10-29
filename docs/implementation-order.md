@@ -21,6 +21,8 @@ deployment is implied.
 Full tests, browser checks, main CI, both smoke CNIs and native image publication passed; the signed index,
 SPDX assets and published runtime were independently verified. See [design](tool-approvals.md) and
 [release evidence](status.md). Work is paused for a machine transfer; #32 is next and has not been started.
+The v0.5.1 provider-refresh reliability patch is also published and verified, with no new migration or API.
+All required work is on main. Resume with [agent-handoff.md](agent-handoff.md); no local patch is needed.
 There are 27 open issues: 19 feature/operations/design and eight real-world verification issues.
 
 ## Ordered backlog
