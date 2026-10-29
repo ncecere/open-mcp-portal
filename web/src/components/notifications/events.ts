@@ -17,6 +17,8 @@ export const allEvents = [
   "key.expiring",
   "approval.requested",
   "approval.decided",
+  "access.requested",
+  "access.decided",
 ] as const satisfies readonly NotificationEvent[];
 
 export const eventLabels: Record<NotificationEvent, string> = {
@@ -30,6 +32,8 @@ export const eventLabels: Record<NotificationEvent, string> = {
   "key.expiring": "A key or token expires soon",
   "approval.requested": "A tool call is waiting for approval",
   "approval.decided": "A tool-call approval was decided",
+  "access.requested": "Gateway access is waiting for review",
+  "access.decided": "A gateway access request was decided",
 };
 
 /** What happens and when, in a line. */
@@ -44,6 +48,8 @@ export const eventDescriptions: Record<NotificationEvent, string> = {
   "key.expiring": "A key or token will expire in 7 days: your own API key, a service account key, a publisher token or a platform token.",
   "approval.requested": "An exact tool call needs human review. The notice links to the private receipt, never its arguments or preview.",
   "approval.decided": "A reviewer approved or denied an exact tool call. Approval authorizes one attempt, not proof of execution.",
+  "access.requested": "A private gateway access request needs review. The notice never includes its reason or notes.",
+  "access.decided": "Your gateway access request was approved or denied. Tool scopes, credentials and sensitive-call approvals still apply.",
 };
 
 /** Who receives each event in the portal and by email. */
@@ -58,6 +64,8 @@ export const eventRecipients: Record<NotificationEvent, string> = {
   "key.expiring": "Your own keys: you. Service account keys and publisher tokens: team owners and admins. Platform tokens: platform admins",
   "approval.requested": "Currently eligible reviewers, with self-approval and service-account separation of duties enforced",
   "approval.decided": "The requester, or the requesting service account's current team owners and admins",
+  "access.requested": "Current platform admins and named gateway stewards, never the requester",
+  "access.decided": "The requester only",
 };
 
 /** Events a team's webhook can receive (key.expiring: service account keys and publisher tokens). */

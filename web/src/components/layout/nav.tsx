@@ -23,7 +23,7 @@ export const icon = (C: typeof Home) => <C aria-hidden />;
 
 /* ---------------- workspace ---------------- */
 
-export type WorkspacePath = "/" | "/catalog" | "/gateways" | "/approvals";
+export type WorkspacePath = "/" | "/catalog" | "/gateways" | "/approvals" | "/access-requests";
 
 export type WorkspaceNavItem = { to: WorkspacePath; label: string; icon: ReactNode; exact?: boolean; keywords?: string[] };
 
@@ -31,6 +31,7 @@ export type WorkspaceNavItem = { to: WorkspacePath; label: string; icon: ReactNo
 export const workspaceNav: WorkspaceNavItem[] = [
   { to: "/", label: terms.home, icon: icon(Home), exact: true, keywords: ["start", "welcome", "teams"] },
   { to: "/approvals", label: "Approvals", icon: icon(ShieldCheck), keywords: ["review", "approval", "tool", "request"] },
+  { to: "/access-requests", label: "Access requests", icon: icon(ShieldCheck), keywords: ["gateway", "access", "steward", "request"] },
   { to: "/catalog", label: terms.catalog, icon: icon(Library), keywords: ["mcp", "servers", "published", "tools", "resources", "prompts", "browse"] },
   { to: "/gateways", label: terms.myGateways, icon: icon(Network), keywords: ["gateway", "connect", "mcp", "url", "claude", "vs code", "cursor", "tools", "access"] },
 ];

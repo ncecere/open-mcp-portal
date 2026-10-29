@@ -31,6 +31,7 @@ const (
 	UpstreamSigninLapsed       = "upstream_signin_lapsed"
 	ReviewPending              = "review_pending"
 	ApprovalPending            = "approval_pending"
+	AccessRequestsPending      = "access_requests_pending"
 	CapabilitiesChanged        = "capabilities_changed"
 	PersonalKeysExpiring       = "personal_keys_expiring"
 	ServiceAccountKeysExpiring = "service_account_keys_expiring"
@@ -63,6 +64,7 @@ const (
 const (
 	LinkServer                   = "server"
 	LinkApproval                 = "approval"
+	LinkAccessRequests           = "access_requests"
 	LinkServers                  = "servers"
 	LinkReviewQueue              = "review_queue"
 	LinkGateways                 = "gateways"
@@ -515,6 +517,16 @@ func (s *Service) Admin(ctx context.Context, a authz.Actor) (Admin, error) {
 	}
 	if err := s.approvalKind(ctx, c, a, nil); err != nil {
 		return out, err
+	}
+	if !a.IsToken() && a.UserID != uuid.Nil {
+		n, err := s.q.CountActionableAccessRequests(ctx, a.UserID)
+		if err != nil {
+			return out, err
+		}
+		if n > 0 {
+			c.add(AccessRequestsPending, n, 1, Item{Kind: AccessRequestsPending, Severity: Info, Count: i64(n),
+				Summary: fmt.Sprintf("%d gateway access requests need your review", n), Link: &Link{Type: LinkAccessRequests}})
+		}
 	}
 	out.Attention, out.Totals, out.Truncated = c.sorted(), c.totals, c.truncated
 	return out, nil

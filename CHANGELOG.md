@@ -6,6 +6,12 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
+## [0.6.0] - 2026-10-29
+
+- **Gateway access requests** (#32, decision 83). Platform gateways explicitly opt into discoverability. Active people request access for themselves or teams they currently own/administer; platform admins and named per-gateway stewards review privately, never their own requests. Approval, the normal user/team grant and audits commit together. Stewardship grants no direct gateway, general administration or grant-management authority.
+- **Optional gateway grant expiry.** New grants can last 1–365 days or remain permanent by default. User/group/team and service-account authorization, OAuth/key reachability and final MCP/sensitive-call approval transport checks exclude expired authority without a cleanup job. Existing permanent grants are unchanged. Migrations `00043`–`00045` expand the schema; **drain older serving/background-worker replicas before enabling requests or expiring grants**, because schema compatibility does not imply deadline enforcement or delivery of the new private notice types.
+- **Private access workflow.** Browser-only discovery, request/review queues and per-gateway settings, requester withdrawal, pending limits, denial cooldown, transactional audits, private inbox/verified-email notices and live eligible attention counts. Reasons and decision notes never enter audit/notification payloads or webhooks. Request and grant decisions preserve existing credential, curation, approval and SSRF protections.
+
 ## [0.5.1] - 2026-10-28
 
 - **Provider refresh reliability.** Keep endpoint dependency reads on the locked refresh transaction, with serialized cancellation/drain and complete exchange deadlines. Preserve live address-policy and linked-provider checks; scoped read errors roll back without erasing consent. One-connection/two-handler regressions cover successful concurrent refresh and fail-closed denial. No schema/API change; see [v0.5.1 notes](docs/releases/v0.5.1.md).

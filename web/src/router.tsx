@@ -52,6 +52,7 @@ const pages = {
   adminTokens: () => import("./pages/admin/automation-tokens/routes"),
   inbox: () => import("./pages/notifications/routes"),
   approvals: () => import("./pages/approvals/routes"),
+  accessRequests: () => import("./pages/access-requests/routes"),
 };
 const lazy = lazyRouteComponent;
 type Page = ReturnType<typeof lazyRouteComponent>;
@@ -115,6 +116,8 @@ const appRoute = createRoute({
 
 const approvalsRoute = createRoute({ getParentRoute: () => appRoute, path: "approvals", component: lazy(pages.approvals, "ApprovalsPage") });
 const approvalRoute = createRoute({ getParentRoute: () => appRoute, path: "approvals/$approvalId", component: lazy(pages.approvals, "ApprovalPage") });
+const accessRequestsRoute = createRoute({ getParentRoute: () => appRoute, path: "access-requests", component: lazy(pages.accessRequests, "AccessRequestsPage") });
+const accessRequestRoute = createRoute({ getParentRoute: () => appRoute, path: "access-requests/$requestId", component: lazy(pages.accessRequests, "AccessRequestPage") });
 const homeRoute = createRoute({ getParentRoute: () => appRoute, path: "/", component: lazy(pages.home, "HomePage") });
 const sessionsRoute = createRoute({ getParentRoute: () => appRoute, path: "settings/sessions", component: lazy(pages.account, "SessionsPage") });
 const profileRoute = createRoute({ getParentRoute: () => appRoute, path: "settings/profile", component: lazy(pages.account, "ProfilePage") });
@@ -250,6 +253,8 @@ const appTree = appRoute.addChildren([
   homeRoute,
   approvalsRoute,
   approvalRoute,
+  accessRequestsRoute,
+  accessRequestRoute,
   profileRoute,
   sessionsRoute,
   apiKeysRoute,

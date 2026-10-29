@@ -1,16 +1,22 @@
-# Agent handoff: resume after v0.5.1
+# Agent handoff: development resumed after v0.5.1
 
-The owner asked to finish the current release, merge/push everything to `main`, then **pause** for a machine
-transfer. Do not start #32 until the owner resumes development. [Status](status.md) is the source of truth
-for release SHAs, image digests, CI evidence and any remaining blocker.
+The original stop point was the verified v0.5.1 machine transfer. On 2026-10-29 the owner resumed ordered
+backlog work, authorized releases when ready and delegated incidental decisions. **Do not cut v1.0.0 without
+the owner's explicit decision.** #32 is implemented and locally validated for v0.6.0; publication is pending. See
+[design](access-requests.md) and [status](status.md) for the current validation state. The original release
+tags remain immutable. No old environment, keys or data were transferred implicitly. Use owned fresh fixtures;
+secure restoration of an existing encrypted database still requires its matching keys and operator control.
+
+[Status](status.md) is the source of truth for release SHAs, image digests, CI evidence and remaining blockers.
 
 ## Start here
 
 1. Fetch `origin/main` and tags; inspect `git status`, the latest main CI and the published release. Work from
    `main`, not an old approval or refresh-fix branch. No uncommitted patch is needed for the handoff.
 2. Read `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md), [status](status.md) and
-   [implementation order](implementation-order.md). The next feature is **#32 gateway access requests**;
-   #33 upstream protection follows. Neither has been implemented in this batch.
+   [implementation order](implementation-order.md). The current feature is **#32 gateway access requests**;
+   Complete v0.6.0 CI/publication/verification, then #33 upstream protection follows. Do not treat a version
+   string or prepared release notes as proof of publication.
 3. Git transfers source, migrations, generated contracts, tests and docs—not `.env`, encryption/signing keys,
    provider credentials or the existing development database. Use the documented fresh-instance setup or
    explicitly arrange a secure, consistent database-and-keys transfer. Never reset/reseed the old database,
@@ -28,8 +34,8 @@ for release SHAs, image digests, CI evidence and any remaining blocker.
   exchange deadlines, and cancellation/drain before transaction SQL resumes. No new migration/API setting.
 
 See the release sections in [status](status.md) for actual publication/verification rather than interpreting
-this list or a local version string as evidence. Release tags are immutable. Main may be ahead of the tag
-only to record publication evidence, the verified example image digest and handoff documentation.
+this list or a local version string as evidence. Release tags are immutable. Main may contain unreleased
+backlog work as well as publication evidence and the verified example image digest; inspect current Git/CI.
 
 ## Safety boundaries to retain
 
@@ -45,9 +51,15 @@ only to record publication evidence, the verified example image digest and hando
   use the scoped transaction capability, not recursively acquire a pool connection. Scope closure must cancel
   and drain before ordinary transaction SQL resumes; detached/late dials must not use a closed transaction or
   fall back to the pool. Checked policy failures must refuse public as well as private destinations.
+- Access-request stewardship is not general admin or MCP access. Decisions recheck active requester/reviewer,
+  current administered-team authority and gateway opt-in under transaction locks, never synthetic admin actors.
+  Temporary-grant transport checks wrap approval consumption and recheck authoritative database time after
+  commit; clock-read failure refuses dispatch. No pool connection/lock survives into network I/O. Keep
+  spent-authorization/no-replay semantics even when a post-commit deadline check prevents the actual send.
 - Preserve live linked-provider endpoint matching, requester/reviewer separation, private previews/notices,
   and least-privilege runtime grants. Historical schema compatibility does not imply old-image enforcement;
-  drain pre-v0.5 images before enabling approval rules. Use the new rotation utility for new ciphertext fields.
+  drain pre-v0.5 images before enabling approval rules, and pre-v0.6 serving/background-worker replicas
+  before enabling access requests or expiring grants. Use the new rotation utility for new ciphertext fields.
 
 ## Code and checks
 

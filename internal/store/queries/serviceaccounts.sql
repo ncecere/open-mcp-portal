@@ -110,10 +110,12 @@ WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < now() - interval '1 mi
 
 -- name: TeamHasGatewayGrant :one
 -- Kept until the runtime switches to scoped matching rows.
-SELECT EXISTS (SELECT 1 FROM gateway_grants WHERE gateway_id = @gateway_id AND team_id = @team_id)::bool;
+SELECT EXISTS (SELECT 1 FROM gateway_grants WHERE gateway_id = @gateway_id AND team_id = @team_id
+    AND (expires_at IS NULL OR expires_at > clock_timestamp()))::bool;
 
 -- name: GatewayGrantsForTeam :many
-SELECT * FROM gateway_grants WHERE gateway_id = @gateway_id AND team_id = @team_id;
+SELECT * FROM gateway_grants WHERE gateway_id = @gateway_id AND team_id = @team_id
+    AND (expires_at IS NULL OR expires_at > clock_timestamp());
 
 -- name: AdminListServiceAccounts :many
 -- One page of every team's service accounts ordered by (name, id), with

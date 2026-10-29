@@ -37,6 +37,7 @@ const columns: DataTableColumn<GatewayGrant>[] = [
   { id: "toolScope", header: "Tool scope", cell: (g) => <ScopeBadges scope={g.toolScope} /> },
   { id: "kind", header: "Kind", accessor: (g) => kindLabels[g.subjectKind], sortable: true },
   { ...timeColumn<GatewayGrant>("createdAt", "Added", (g) => g.createdAt) },
+  { id: "expires", header: "Expires", cell: (g) => g.expiresAt ? `${Date.parse(g.expiresAt) <= Date.now() ? "Expired · " : ""}${new Date(g.expiresAt).toLocaleString()}` : "Permanent" },
   { id: "by", header: "Added by", accessor: (g) => g.addedByName ?? "", defaultHiddenNarrow: true, cell: (g) => g.addedByName ?? <span className={s.muted}>—</span> },
 ];
 

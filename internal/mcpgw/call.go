@@ -189,6 +189,9 @@ func (rc *request) forward(kind string, o gateways.Offer, args json.RawMessage, 
 
 // forwardCall makes the call and answers with its outcome.
 func (rc *request) forwardCall(o gateways.Offer, rec calls.Call, cred *providers.Credential, target upstream.Target, fwd upstream.ForwardRequest) {
+	// Outermost guard: cover tools/prompts/resources and check the database
+	// deadline after any approval consumption/commit, not just before it.
+	rc.guardGrantExpiry(&target)
 	ctx := rc.r.Context()
 	client := rc.h.Registry.Client()
 	out, _, ok := rc.exchange(o, &rec, cred, target, func(t upstream.Target) (any, bool, error) {

@@ -15,7 +15,7 @@ export type ServerTab = (typeof serverTabs)[number];
  * A gateway's record (the team's and the admin's): Overview · Capabilities · Access · Activity · Settings. Access
  * (grants) shows only for platform gateways in Admin.
  */
-export const gatewayTabs = ["overview", "capabilities", "access", "activity", "settings"] as const;
+export const gatewayTabs = ["overview", "capabilities", "access", "requests", "activity", "settings"] as const;
 export type GatewayTab = (typeof gatewayTabs)[number];
 
 /** A team's service account: Overview (role and access) · Keys · Settings. */

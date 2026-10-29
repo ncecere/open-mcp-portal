@@ -475,7 +475,7 @@ func (a *api) adminAddGatewayGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g, err := a.Gateways.AddGrant(r.Context(), a.actor(r), id, gateways.GrantInput{
-		Kind: string(in.SubjectKind), Team: in.Team, UserEmail: in.UserEmail, Group: in.Group, ToolScope: fromAPIToolScope(in.ToolScope),
+		Kind: string(in.SubjectKind), Team: in.Team, UserEmail: in.UserEmail, Group: in.Group, ToolScope: fromAPIToolScope(in.ToolScope), ExpiresInDays: in.ExpiresInDays,
 	})
 	if failed(w, r, err) {
 		return

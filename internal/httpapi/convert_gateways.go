@@ -24,7 +24,7 @@ func (a *api) toAPIGateway(v gateways.View, effective *int64) apitypes.Gateway {
 		Id: g.ID, Slug: g.Slug, Name: g.Name, Description: g.Description, OwnerKind: apitypes.GatewayOwnerKind(g.OwnerKind),
 		Enabled: g.Enabled, Url: a.Gateways.URL(g.Slug), CapabilityCount: v.CapabilityCount, UnavailableCount: v.UnavailableCount,
 		GrantCount: v.GrantCount, Revision: g.Revision, CreatedAt: g.CreatedAt, UpdatedAt: g.UpdatedAt,
-		CapturePayloads: &capture, RateLimitPerMinute: g.RateLimitPerMinute, EffectiveRateLimitPerMinute: effective,
+		CapturePayloads: &capture, RateLimitPerMinute: g.RateLimitPerMinute, EffectiveRateLimitPerMinute: effective, AccessRequestsEnabled: &g.AccessRequestsEnabled,
 	}
 	if g.TeamID.Valid {
 		id := g.TeamID.UUID
@@ -93,7 +93,7 @@ func toAPIGatewayOption(o gateways.Option) apitypes.GatewayOption {
 func toAPIGrant(r dbgen.ListGatewayGrantsRow) apitypes.GatewayGrant {
 	g := r.GatewayGrant
 	out := apitypes.GatewayGrant{Id: g.ID, SubjectKind: apitypes.GatewayGrantSubjectKind(g.SubjectKind), CreatedAt: g.AddedAt,
-		AddedByName: nonEmpty(r.AddedByName), ToolScope: toAPIToolScope(g.ToolScope)}
+		AddedByName: nonEmpty(r.AddedByName), ToolScope: toAPIToolScope(g.ToolScope), ExpiresAt: g.ExpiresAt}
 	switch {
 	case g.TeamID.Valid:
 		out.Team = &apitypes.GrantTeam{Id: g.TeamID.UUID, Slug: r.TeamSlug, Name: r.TeamName}

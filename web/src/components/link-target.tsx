@@ -45,6 +45,8 @@ export const linkTargets: Record<LinkType, Resolver> = {
     element: ({ id }) => id ? <Link to="/approvals/$approvalId" params={{ approvalId: id }} /> : null,
   },
   gateways: { route: "/admin/gateways", element: () => <Link to="/admin/gateways" /> },
+  access_requests: { route: "/access-requests", element: () => <Link to="/access-requests" /> },
+  access_request: { route: "/access-requests/$requestId", element: ({ id }) => id ? <Link to="/access-requests/$requestId" params={{ requestId: id }} /> : null },
   service_account: {
     route: "/teams/$team/service-accounts/$serviceAccountId",
     element: ({ id, teamSlug }) =>

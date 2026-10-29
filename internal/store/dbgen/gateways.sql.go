@@ -16,7 +16,7 @@ import (
 const bumpGatewayRevision = `-- name: BumpGatewayRevision :one
 UPDATE gateways SET revision = revision + 1, updated_by = $1, updated_at = now()
 WHERE id = $2
-RETURNING id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute
+RETURNING id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled
 `
 
 type BumpGatewayRevisionParams struct {
@@ -42,6 +42,7 @@ func (q *Queries) BumpGatewayRevision(ctx context.Context, arg BumpGatewayRevisi
 		&i.UpdatedBy,
 		&i.UpdatedAt,
 		&i.RateLimitPerMinute,
+		&i.AccessRequestsEnabled,
 	)
 	return i, err
 }
@@ -57,7 +58,7 @@ func (q *Queries) DeleteGateway(ctx context.Context, id uuid.UUID) error {
 
 const deleteGatewayGrant = `-- name: DeleteGatewayGrant :one
 DELETE FROM gateway_grants WHERE id = $1 AND gateway_id = $2
-RETURNING id, gateway_id, subject_kind, team_id, user_id, group_name, added_by, added_at, tool_scope
+RETURNING id, gateway_id, subject_kind, team_id, user_id, group_name, added_by, added_at, tool_scope, expires_at
 `
 
 type DeleteGatewayGrantParams struct {
@@ -78,6 +79,7 @@ func (q *Queries) DeleteGatewayGrant(ctx context.Context, arg DeleteGatewayGrant
 		&i.AddedBy,
 		&i.AddedAt,
 		&i.ToolScope,
+		&i.ExpiresAt,
 	)
 	return i, err
 }
@@ -86,6 +88,7 @@ const gatewayGrantGroupsForUser = `-- name: GatewayGrantGroupsForUser :many
 SELECT DISTINCT gg.group_name::text AS group_name
 FROM gateway_grants gg
 WHERE gg.gateway_id = $1 AND gg.group_name = ANY($2::text[])
+  AND (gg.expires_at IS NULL OR gg.expires_at > clock_timestamp())
 ORDER BY 1
 `
 
@@ -119,6 +122,7 @@ const gatewayGrantKindsForUser = `-- name: GatewayGrantKindsForUser :many
 SELECT DISTINCT gg.subject_kind
 FROM gateway_grants gg
 WHERE gg.gateway_id = $1
+  AND (gg.expires_at IS NULL OR gg.expires_at > clock_timestamp())
   AND (gg.user_id = $2
        OR gg.team_id IN (SELECT m.team_id FROM team_members m WHERE m.user_id = $2)
        OR gg.group_name = ANY($3::text[]))
@@ -152,9 +156,10 @@ func (q *Queries) GatewayGrantKindsForUser(ctx context.Context, arg GatewayGrant
 }
 
 const gatewayGrantsForUser = `-- name: GatewayGrantsForUser :many
-SELECT gg.id, gg.gateway_id, gg.subject_kind, gg.team_id, gg.user_id, gg.group_name, gg.added_by, gg.added_at, gg.tool_scope
+SELECT gg.id, gg.gateway_id, gg.subject_kind, gg.team_id, gg.user_id, gg.group_name, gg.added_by, gg.added_at, gg.tool_scope, gg.expires_at
 FROM gateway_grants gg
 WHERE gg.gateway_id = $1
+  AND (gg.expires_at IS NULL OR gg.expires_at > clock_timestamp())
   AND (gg.user_id = $2
        OR gg.team_id IN (SELECT m.team_id FROM team_members m WHERE m.user_id = $2)
        OR gg.group_name = ANY($3::text[]))
@@ -187,6 +192,7 @@ func (q *Queries) GatewayGrantsForUser(ctx context.Context, arg GatewayGrantsFor
 			&i.AddedBy,
 			&i.AddedAt,
 			&i.ToolScope,
+			&i.ExpiresAt,
 		); err != nil {
 			return nil, err
 		}
@@ -216,7 +222,8 @@ SELECT g.id AS gateway_id,
                            AND ((g.owner_kind = 'team' AND s.team_id = g.team_id)
                                 OR (s.publish_state = 'published' AND c.approved_fingerprint = c.fingerprint)), false)
        )::bigint AS unavailable_count,
-       (SELECT count(*) FROM gateway_grants gg WHERE gg.gateway_id = g.id)::bigint AS grant_count
+       (SELECT count(*) FROM gateway_grants gg WHERE gg.gateway_id = g.id
+          AND (gg.expires_at IS NULL OR gg.expires_at > clock_timestamp()))::bigint AS grant_count
 FROM gateways g
 LEFT JOIN teams gt ON gt.id = g.team_id
 WHERE g.id = ANY($1::uuid[])
@@ -292,7 +299,7 @@ func (q *Queries) GetCapability(ctx context.Context, id uuid.UUID) (McpCapabilit
 }
 
 const getGateway = `-- name: GetGateway :one
-SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute FROM gateways WHERE id = $1
+SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled FROM gateways WHERE id = $1
 `
 
 func (q *Queries) GetGateway(ctx context.Context, id uuid.UUID) (Gateway, error) {
@@ -313,12 +320,13 @@ func (q *Queries) GetGateway(ctx context.Context, id uuid.UUID) (Gateway, error)
 		&i.UpdatedBy,
 		&i.UpdatedAt,
 		&i.RateLimitPerMinute,
+		&i.AccessRequestsEnabled,
 	)
 	return i, err
 }
 
 const getGatewayBySlug = `-- name: GetGatewayBySlug :one
-SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute FROM gateways WHERE slug = $1
+SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled FROM gateways WHERE slug = $1
 `
 
 func (q *Queries) GetGatewayBySlug(ctx context.Context, slug string) (Gateway, error) {
@@ -339,12 +347,13 @@ func (q *Queries) GetGatewayBySlug(ctx context.Context, slug string) (Gateway, e
 		&i.UpdatedBy,
 		&i.UpdatedAt,
 		&i.RateLimitPerMinute,
+		&i.AccessRequestsEnabled,
 	)
 	return i, err
 }
 
 const getGatewayView = `-- name: GetGatewayView :one
-SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name
+SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, g.access_requests_enabled, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name
 FROM gateways g
 LEFT JOIN teams t ON t.id = g.team_id
 WHERE g.id = $1
@@ -374,6 +383,7 @@ func (q *Queries) GetGatewayView(ctx context.Context, id uuid.UUID) (GetGatewayV
 		&i.Gateway.UpdatedBy,
 		&i.Gateway.UpdatedAt,
 		&i.Gateway.RateLimitPerMinute,
+		&i.Gateway.AccessRequestsEnabled,
 		&i.TeamSlug,
 		&i.TeamName,
 	)
@@ -386,7 +396,7 @@ INSERT INTO gateways (id, slug, name, description, owner_kind, team_id, enabled,
                       created_by, updated_by)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
         $9, $10, $10)
-RETURNING id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute
+RETURNING id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled
 `
 
 type InsertGatewayParams struct {
@@ -432,14 +442,15 @@ func (q *Queries) InsertGateway(ctx context.Context, arg InsertGatewayParams) (G
 		&i.UpdatedBy,
 		&i.UpdatedAt,
 		&i.RateLimitPerMinute,
+		&i.AccessRequestsEnabled,
 	)
 	return i, err
 }
 
 const insertGatewayGrant = `-- name: InsertGatewayGrant :one
-INSERT INTO gateway_grants (gateway_id, subject_kind, team_id, user_id, group_name, added_by, tool_scope)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, gateway_id, subject_kind, team_id, user_id, group_name, added_by, added_at, tool_scope
+INSERT INTO gateway_grants (gateway_id, subject_kind, team_id, user_id, group_name, added_by, tool_scope, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, gateway_id, subject_kind, team_id, user_id, group_name, added_by, added_at, tool_scope, expires_at
 `
 
 type InsertGatewayGrantParams struct {
@@ -450,6 +461,7 @@ type InsertGatewayGrantParams struct {
 	GroupName   *string
 	AddedBy     uuid.NullUUID
 	ToolScope   json.RawMessage
+	ExpiresAt   *time.Time
 }
 
 func (q *Queries) InsertGatewayGrant(ctx context.Context, arg InsertGatewayGrantParams) (GatewayGrant, error) {
@@ -461,6 +473,7 @@ func (q *Queries) InsertGatewayGrant(ctx context.Context, arg InsertGatewayGrant
 		arg.GroupName,
 		arg.AddedBy,
 		arg.ToolScope,
+		arg.ExpiresAt,
 	)
 	var i GatewayGrant
 	err := row.Scan(
@@ -473,12 +486,13 @@ func (q *Queries) InsertGatewayGrant(ctx context.Context, arg InsertGatewayGrant
 		&i.AddedBy,
 		&i.AddedAt,
 		&i.ToolScope,
+		&i.ExpiresAt,
 	)
 	return i, err
 }
 
 const listGatewayGrants = `-- name: ListGatewayGrants :many
-SELECT gg.id, gg.gateway_id, gg.subject_kind, gg.team_id, gg.user_id, gg.group_name, gg.added_by, gg.added_at, gg.tool_scope,
+SELECT gg.id, gg.gateway_id, gg.subject_kind, gg.team_id, gg.user_id, gg.group_name, gg.added_by, gg.added_at, gg.tool_scope, gg.expires_at,
        COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name,
        COALESCE(u.email::text, '')::text AS user_email, COALESCE(u.display_name, '')::text AS user_display_name,
        COALESCE(u.status, '')::text AS user_status,
@@ -520,6 +534,7 @@ func (q *Queries) ListGatewayGrants(ctx context.Context, gatewayID uuid.UUID) ([
 			&i.GatewayGrant.AddedBy,
 			&i.GatewayGrant.AddedAt,
 			&i.GatewayGrant.ToolScope,
+			&i.GatewayGrant.ExpiresAt,
 			&i.TeamSlug,
 			&i.TeamName,
 			&i.UserEmail,
@@ -782,7 +797,7 @@ func (q *Queries) ListGatewaySelection(ctx context.Context, gatewayID uuid.UUID)
 }
 
 const listGateways = `-- name: ListGateways :many
-SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name
+SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, g.access_requests_enabled, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name
 FROM gateways g
 LEFT JOIN teams t ON t.id = g.team_id
 WHERE ($1::uuid IS NULL OR g.team_id = $1::uuid)
@@ -843,6 +858,7 @@ func (q *Queries) ListGateways(ctx context.Context, arg ListGatewaysParams) ([]L
 			&i.Gateway.UpdatedBy,
 			&i.Gateway.UpdatedAt,
 			&i.Gateway.RateLimitPerMinute,
+			&i.Gateway.AccessRequestsEnabled,
 			&i.TeamSlug,
 			&i.TeamName,
 		); err != nil {
@@ -857,13 +873,14 @@ func (q *Queries) ListGateways(ctx context.Context, arg ListGatewaysParams) ([]L
 }
 
 const listGatewaysForServiceAccount = `-- name: ListGatewaysForServiceAccount :many
-SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name
+SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, g.access_requests_enabled, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name
 FROM gateways g
 LEFT JOIN teams t ON t.id = g.team_id
 WHERE g.enabled
   AND ((g.owner_kind = 'team' AND g.team_id = $1 AND t.status = 'active')
        OR (g.owner_kind = 'platform' AND EXISTS (
-            SELECT 1 FROM gateway_grants gg WHERE gg.gateway_id = g.id AND gg.team_id = $1)))
+            SELECT 1 FROM gateway_grants gg WHERE gg.gateway_id = g.id AND gg.team_id = $1
+              AND (gg.expires_at IS NULL OR gg.expires_at > clock_timestamp()))))
 ORDER BY g.name, g.id
 `
 
@@ -900,6 +917,7 @@ func (q *Queries) ListGatewaysForServiceAccount(ctx context.Context, teamID uuid
 			&i.Gateway.UpdatedBy,
 			&i.Gateway.UpdatedAt,
 			&i.Gateway.RateLimitPerMinute,
+			&i.Gateway.AccessRequestsEnabled,
 			&i.TeamSlug,
 			&i.TeamName,
 		); err != nil {
@@ -914,15 +932,17 @@ func (q *Queries) ListGatewaysForServiceAccount(ctx context.Context, teamID uuid
 }
 
 const listGatewaysForUser = `-- name: ListGatewaysForUser :many
-SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name,
+SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, g.access_requests_enabled, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name,
        COALESCE(m.role, '')::text AS member_role,
        ARRAY(SELECT DISTINCT gg.subject_kind FROM gateway_grants gg
              WHERE gg.gateway_id = g.id
+               AND (gg.expires_at IS NULL OR gg.expires_at > clock_timestamp())
                AND (gg.user_id = $1
                     OR gg.team_id IN (SELECT tm.team_id FROM team_members tm WHERE tm.user_id = $1)
                     OR gg.group_name = ANY($2::text[])))::text[] AS grant_kinds,
        ARRAY(SELECT DISTINCT gg.group_name FROM gateway_grants gg
              WHERE gg.gateway_id = g.id AND gg.group_name = ANY($2::text[])
+               AND (gg.expires_at IS NULL OR gg.expires_at > clock_timestamp())
              ORDER BY gg.group_name)::text[] AS grant_groups
 FROM gateways g
 LEFT JOIN teams t ON t.id = g.team_id
@@ -932,6 +952,7 @@ WHERE g.enabled
        OR (g.owner_kind = 'platform' AND EXISTS (
             SELECT 1 FROM gateway_grants gg
             WHERE gg.gateway_id = g.id
+              AND (gg.expires_at IS NULL OR gg.expires_at > clock_timestamp())
               AND (gg.user_id = $1
                    OR gg.team_id IN (SELECT tm.team_id FROM team_members tm WHERE tm.user_id = $1)
                    OR gg.group_name = ANY($2::text[])))))
@@ -979,6 +1000,7 @@ func (q *Queries) ListGatewaysForUser(ctx context.Context, arg ListGatewaysForUs
 			&i.Gateway.UpdatedBy,
 			&i.Gateway.UpdatedAt,
 			&i.Gateway.RateLimitPerMinute,
+			&i.Gateway.AccessRequestsEnabled,
 			&i.TeamSlug,
 			&i.TeamName,
 			&i.MemberRole,
@@ -996,7 +1018,7 @@ func (q *Queries) ListGatewaysForUser(ctx context.Context, arg ListGatewaysForUs
 }
 
 const listUsableGatewayCandidates = `-- name: ListUsableGatewayCandidates :many
-SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute FROM gateways WHERE id = ANY($1::uuid[])
+SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled FROM gateways WHERE id = ANY($1::uuid[])
 `
 
 // Gateways by ID, for checking which a person may use (API key scopes).
@@ -1024,6 +1046,7 @@ func (q *Queries) ListUsableGatewayCandidates(ctx context.Context, ids []uuid.UU
 			&i.UpdatedBy,
 			&i.UpdatedAt,
 			&i.RateLimitPerMinute,
+			&i.AccessRequestsEnabled,
 		); err != nil {
 			return nil, err
 		}
@@ -1068,7 +1091,7 @@ func (q *Queries) LockCapabilityForCuration(ctx context.Context, id uuid.UUID) (
 }
 
 const lockGateway = `-- name: LockGateway :one
-SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute FROM gateways WHERE id = $1 FOR UPDATE
+SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled FROM gateways WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockGateway(ctx context.Context, id uuid.UUID) (Gateway, error) {
@@ -1089,6 +1112,7 @@ func (q *Queries) LockGateway(ctx context.Context, id uuid.UUID) (Gateway, error
 		&i.UpdatedBy,
 		&i.UpdatedAt,
 		&i.RateLimitPerMinute,
+		&i.AccessRequestsEnabled,
 	)
 	return i, err
 }
@@ -1147,7 +1171,7 @@ SET name = $1, description = $2, enabled = $3, capture_payloads = $4,
     rate_limit_per_minute = $5,
     revision = revision + 1, updated_by = $6, updated_at = now()
 WHERE id = $7
-RETURNING id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute
+RETURNING id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled
 `
 
 type UpdateGatewayParams struct {
@@ -1186,6 +1210,7 @@ func (q *Queries) UpdateGateway(ctx context.Context, arg UpdateGatewayParams) (G
 		&i.UpdatedBy,
 		&i.UpdatedAt,
 		&i.RateLimitPerMinute,
+		&i.AccessRequestsEnabled,
 	)
 	return i, err
 }

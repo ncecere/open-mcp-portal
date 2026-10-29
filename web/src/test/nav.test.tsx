@@ -20,6 +20,7 @@ describe("navigation lists", () => {
     expect(workspaceNav.map((n) => [n.label, n.to])).toEqual([
       ["Home", "/"],
       ["Approvals", "/approvals"],
+      ["Access requests", "/access-requests"],
       ["Catalog", "/catalog"],
       ["My gateways", "/gateways"],
     ]);
@@ -143,7 +144,7 @@ describe("workspace sidebar", () => {
     renderApp(`/teams/${team.slug}`);
     const nav = await screen.findByRole("navigation", { name: "Main" });
     await waitFor(() => expect(within(nav).getByRole("link", { name: "Overview" })).toHaveAttribute("aria-current", "page"));
-    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Home", "Approvals", "Catalog", "My gateways", "Overview", "MCP servers", "Gateways", "Service accounts", "Team settings"]);
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Home", "Approvals", "Access requests", "Catalog", "My gateways", "Overview", "MCP servers", "Gateways", "Service accounts", "Team settings"]);
     expect(within(nav).getByRole("link", { name: "Service accounts" })).toHaveAttribute("href", `/teams/${team.slug}/service-accounts`);
     expect(within(nav).getByRole("link", { name: "Gateways" })).toHaveAttribute("href", `/teams/${team.slug}/gateways`);
     expect(within(nav).getByRole("link", { name: "MCP servers" })).toHaveAttribute("href", `/teams/${team.slug}/servers`);

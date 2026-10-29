@@ -27,6 +27,7 @@ const (
 	LinkAccountConnections   = "account_connections"
 	LinkAccountAPIKeys       = "account_api_keys"
 	LinkApproval             = "approval"
+	LinkAccessRequest        = "access_request"
 )
 
 // Link is where an inbox row goes.
@@ -105,6 +106,17 @@ func compose(ev dbgen.NotificationEvent, team *teamInfo) Message {
 	}
 	m := Message{Title: ev.Event, Body: ""}
 	switch ev.Event {
+	case AccessRequested, AccessDecided:
+		var d accessNotificationData
+		if json.Unmarshal(ev.Payload, &d) != nil || d.RequestID == uuid.Nil {
+			break
+		}
+		m.Link = &Link{Type: LinkAccessRequest, ID: d.RequestID.String()}
+		if ev.Event == AccessRequested {
+			m.Title, m.Body = "Gateway access requested", "A gateway access request is waiting for your review. Open the private request to decide."
+		} else if d.Status == "approved" || d.Status == "denied" {
+			m.Title, m.Body = "Gateway access request "+d.Status, "Open your private request for its current status. Gateway access does not bypass tool policies or call approvals."
+		}
 	case ApprovalRequested, ApprovalDecided:
 		var d approvalNotificationData
 		if json.Unmarshal(ev.Payload, &d) != nil || d.ApprovalID == uuid.Nil {
@@ -268,6 +280,14 @@ func (l *Link) path() string {
 	}
 	team := "/teams/" + url.PathEscape(l.TeamSlug)
 	switch l.Type {
+	case "access_requests":
+		return "/access-requests"
+	case LinkAccessRequest:
+		id, err := uuid.Parse(l.ID)
+		if err != nil || id == uuid.Nil {
+			return "/access-requests"
+		}
+		return "/access-requests/" + id.String()
 	case LinkApproval:
 		id, err := uuid.Parse(l.ID)
 		if err != nil || id == uuid.Nil {

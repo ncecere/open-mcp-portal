@@ -28,6 +28,7 @@ import { capabilityCount, type Gateway, grantCountLabel, ownerKindLabels } from 
 import { GatewayOverviewTab } from "./overview-tab";
 import { type GatewayAbilities, type GatewayScope, storeGateway, updateGateway } from "./scope";
 import { GatewaySettingsTab } from "./settings-tab";
+import { GatewayRequestSettings } from "./request-settings";
 
 type Props = {
   gateway: Gateway;
@@ -77,6 +78,7 @@ export function GatewayRecord({ gateway, scope, abilities, notices, links = [] }
         { value: "overview", label: "Overview", icon: <LayoutDashboard aria-hidden />, content: <GatewayOverviewTab gateway={gateway} scope={scope} /> },
         { value: "capabilities", label: "Capabilities", icon: <ListTree aria-hidden />, count: gateway.capabilityCount, content: <GatewayCapabilitiesTab {...props} /> },
         { value: "access", label: "Access", icon: <Users aria-hidden />, count: gateway.grantCount, hidden: !(platform && scope.kind === "admin"), content: <GatewayAccessTab gateway={gateway} abilities={abilities} /> },
+        { value: "requests", label: "Requests", icon: <Shield aria-hidden />, hidden: !(platform && scope.kind === "admin"), content: <GatewayRequestSettings gatewayId={gateway.id} readOnly={!abilities.canManageGrants} /> },
         { value: "activity", label: "Activity", icon: <Activity aria-hidden />, content: <GatewayActivityTab {...props} /> },
         { value: "settings", label: "Settings", icon: <Settings2 aria-hidden />, content: <GatewaySettingsTab {...props} /> },
       ]}

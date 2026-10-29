@@ -131,6 +131,13 @@ team, under `self_publish`) approves the change.
 **Gateway**: owner (team or platform), slug, name, description, enabled, selected capabilities (each with an
 optional minimum team role), access grants (team | user | SSO group), payload capture setting.
 
+**Gateway access requests** (decision 83, unreleased #32): platform gateways opt into discoverability and
+private user/team requests. Platform admins and named gateway-specific stewards decide, never the requester;
+stewardship is not gateway/admin/MCP access. Decisions create grants and audit atomically. Optional grant
+expiry is enforced by effective-access queries and final transport/approval deadlines without a sweeper.
+All new workflow APIs are browser-session-only; notifications use private inbox/email metadata only.
+See [access requests](docs/access-requests.md) and [status](docs/status.md) for implementation/acceptance state.
+
 **Sensitive-call approval** (decision 82): owner-managed server/gateway rules gate exact tool calls.
 Human reviewers cannot approve their own requests; service-account separation of duties also applies.
 Approvals bind merged arguments, definition, destination and live authority, and authorize one actual

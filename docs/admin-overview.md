@@ -85,6 +85,15 @@ The UI routes on `type` (+ `id`, `teamSlug`); the same `LinkTarget` is used by i
 - A sentinel test that no header value, token prefix or URL appears in either response; each `link` resolves through the UI's route table (Vitest) and to an object the caller may open.
 - Vitest: both screens (grouping, empty and all-clear states, truncation line, error with Retry).
 
+## Access-request attention (v0.6.0, #32)
+
+Human platform overview requests may include `access_requests_pending`: one aggregate with the exact count
+of pending gateway access requests the current human can decide, excluding their own. It links to the
+session-only `/access-requests` review queues. Named stewards without platform roles get their count in the
+review-queue response, not general admin access. Automation tokens receive no private access-request count.
+The count respects active requester/reviewer status, gateway opt-in/enabled state and current team-request
+authority; reasons/notes never appear here. See [access requests](access-requests.md).
+
 ## As built
 
 `internal/overview` (`Service.Admin`, `Service.Team`) and `internal/httpapi/v02.go`; queries in `internal/store/queries/overview.sql`. No migration.

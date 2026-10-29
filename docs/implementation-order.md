@@ -20,10 +20,14 @@ deployment is implied.
 **Shipped and closed in v0.5.0:** #31 sensitive-call approvals, decision 82, migrations `00035`–`00042`.
 Full tests, browser checks, main CI, both smoke CNIs and native image publication passed; the signed index,
 SPDX assets and published runtime were independently verified. See [design](tool-approvals.md) and
-[release evidence](status.md). Work is paused for a machine transfer; #32 is next and has not been started.
+[release evidence](status.md). The original machine-transfer stop point is complete. The owner has resumed the ordered backlog;
+#32 is implemented and locally validated for v0.6.0; final CI/publication/acceptance is pending.
+Decision 83 and [design](access-requests.md) describe its scope.
 The v0.5.1 provider-refresh reliability patch is also published and verified, with no new migration or API.
 All required work is on main. Resume with [agent-handoff.md](agent-handoff.md); no local patch is needed.
 There are 27 open issues: 19 feature/operations/design and eight real-world verification issues.
+The owner authorized ready pre-1.0 releases; v1.0.0 remains their explicit decision. Follow the order below
+without closing evidence-gated issues on fixture results or claiming unfinished branch work is released.
 
 ## Ordered backlog
 

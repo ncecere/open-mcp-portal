@@ -1,7 +1,59 @@
 # Status and handoff
 
-Last updated: 2026-10-28. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.5.1 published and independently verified**. Development is paused for the owner's machine transfer; #32 has not been started. A fresh agent should read [agent-handoff.md](agent-handoff.md).
+Last updated: 2026-10-29. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.5.1 published and independently verified**. The owner resumed ordered backlog development and authorized pre-1.0 releases; **v1.0.0 remains the owner's explicit decision**. #32 gateway access requests is implemented and locally validated for v0.6.0; final CI/publication remains pending. A fresh agent should read [agent-handoff.md](agent-handoff.md).
 (release notes: [releases/v0.5.1.md](releases/v0.5.1.md); earlier: [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+
+## Resumed development: gateway access requests (#32)
+
+The fresh-machine checkout was clean at handoff commit `4a5e4c4d26b68ef7232a247a53c0c3bb38b3b2bc`;
+fetch confirmed it equals `origin/main`. The local and remote immutable `v0.5.1` tag still resolve to
+`10753fec4610cb290454cb2767bdaebdf51120ae`. Final [main CI](https://github.com/ncecere/open-mcp-portal/actions/runs/40802200660)
+and [tag CI](https://github.com/ncecere/open-mcp-portal/actions/runs/40801468105) subsequently **both passed**, including
+both complete database-role race suites. Final [kindnet/Calico smoke](https://github.com/ncecere/open-mcp-portal/actions/runs/40802200599)
+and release publication also passed. No tag was moved or check skipped.
+
+Fresh-machine Go 1.26.10/sqlc 1.31.1, Node 22, Docker/Compose, Python and GCC are available. Dependency
+installation, generation/freshness, lint/build, all existing web checks, actionlint and Kubernetes validation
+passed on the unchanged handoff. All four full normal/race PostgreSQL suites then passed in actual legacy
+and authenticated split-role modes using `GOFLAGS='-p=2'` and an owned isolated compiler cache (2,680 seconds).
+The owned disposable baseline PostgreSQL container was removed. No old `.env`, credentials, keys or database
+was imported, regenerated or modified; no persistent development instance or production deployment is implied.
+
+#32's [design](access-requests.md) and decision 83 cover opt-in discoverability, private user/team requests,
+narrow per-gateway stewardship, atomic grant decisions and optional expiry. Migrations `00043`–`00045` are
+new expand-only migrations; older serving/background-worker replicas must be drained before enabling requests
+or expiring grants.
+Focused lifecycle/authorization, concurrency, rollback, notification privacy, database-clock and
+approval-dispatch expiry regressions passed with races in both role modes. The full web suite passed
+(**844 tests**), as did typecheck/build/styling/size and npm audit. Generation/freshness passed. Browser
+checks on an owned disposable instance (Chromium 156) exercised private request submission, steward
+decisions, requester status and auditor denial, plus desktop/390px layout. All seven checked states had
+zero axe violations and no horizontal overflow; the request modal retains two incomplete checks
+(`aria-hidden-focus`, `color-contrast`), so this is not whole-product accessibility acceptance. Forward/reverse
+keyboard traversal (24 steps) and Escape were also exercised; dialog-scoped axe still has incomplete contrast.
+
+The actual immutable published v0.5.1 image ran read-only as `65532:65532` on schema 45 with a genuinely
+authenticated restricted runtime login and no owner secret in its serving container. Health/readiness and
+an HTTP gateway authority write passed; the private journal advanced and new access settings remained
+intact. Its doctor reports the newer schema informationally. No old-image expiry enforcement or new-event
+delivery is implied: drain older serving and background-worker replicas before enabling these features.
+
+All four complete final normal/race PostgreSQL suites passed in both role modes (3,022 seconds).
+Release-version/schema-contract, expiry and duplicate-email exact-requester identity regressions also passed
+with races in both actual role modes. The release-candidate full web rerun found an existing DST-sensitive
+API-key date fixture; freezing Date (not timers) preserves its exact seven-day assertion. The focused seven
+API-key tests passed, then all complete v0.6.0 candidate gates passed (490 seconds): all 844 web tests,
+typecheck/build/styling/size/audit, Go vet/format and scratch build/version, actionlint, Kubernetes validation
+and smoke-helper Python tests. Final GitHub checks and publication verification remain pending. CI-pinned govulncheck
+reports zero reachable/package vulnerabilities and two module-only advisories; npm audit reports zero.
+Owned browser, compatibility and final-suite fixtures are stopped/removed; existing development ports and
+any historical database/keys remain untouched. Final GitHub CI/deployment/publication is pending.
+Earlier full-gate failures identified a
+missing access-request audit-label lookup and a stale preference fixture; both were fixed with retained
+regressions. Real-browser testing found/fixed a long-button mobile overflow. The OpenAPI response contract
+also has an explicit regression against a closed-object `allOf` mismatch. This section is **not** release
+acceptance evidence until final CI, deployment smoke and publication verification complete. #33 and the remaining ordered backlog are not implemented
+by this work. Real-client/provider/channel/pilot and independent whole-product review issues remain open.
 
 ## v0.5.1 (2026-10-28): provider-refresh reliability
 
@@ -40,7 +92,7 @@ Verification:
 The owned disposable PostgreSQL container is removed; development services/data were untouched. No fresh
 browser run was needed for this backend-only patch; the v0.5.0 browser evidence below remains scoped to
 those pages. Real IDE/provider/channel/pilot and broader load/soak evidence remain open. No production
-deployment is implied. **Pause here:** no #32 or other feature work has been started. Final main follow-ups
+deployment is implied. **Original machine-transfer stop point:** no #32 or other feature work had been started at publication. Final main follow-ups
 only record release evidence, the verified image pin and the agent/machine handoff.
 
 ## v0.5.0 (2026-10-28): exact-call approvals
@@ -508,15 +560,17 @@ server allow-list).
   migrations, generated code and release/handoff documentation are on the remote; no local patch is needed.
   The immutable shipped source is `v0.5.1`; main also records publication evidence and the verified image pin.
 - Read this release section, `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md) and
-  [implementation order](implementation-order.md). Next is #32; do not resume old #31 implementation branches.
+  [implementation order](implementation-order.md). Complete #32's v0.6.0 publication/acceptance, then #33;
+  do not resume old #31 implementation branches.
 - Install Go 1.26.10+, Node 22+, Docker, Python 3 and sqlc 1.31.1; run `npm ci` in `web/`.
   Use owned disposable PostgreSQL for integration tests and actual split-role verification.
 - Git does **not** transfer `.env`, encryption/signing keys, provider credentials or the existing development
   database. They were deliberately not exported or committed. Use a fresh development instance, or securely
   transfer a consistent database backup and its required keys separately under explicit operator control.
   Do not regenerate encryption keys for an existing database or migrate/reset the old instance implicitly.
-- Development is paused after this release. There are 27 open issues (19 feature/operations/design, eight
-  real-world verification); no #32 code or further feature work has been started.
+- Development resumed on 2026-10-29 under owner authorization. There are 27 open issues (19 feature/operations/design,
+  eight real-world verification). #32 is locally validated and prepared for v0.6.0, not yet published;
+  inspect Git, final CI and the current release section before continuing. v1.0.0 requires the owner's explicit decision.
 
 For a **new** development instance, use [development setup](../CONTRIBUTING.md#development-setup), not a
 blind restart/seed of an existing one. The historical dev-database migration helper remains
@@ -526,14 +580,14 @@ blind restart/seed of an existing one. The historical dev-database migration hel
 
 1. v0.4.0 is published and verified; #26/#29/#30/#44/#68 are closed with acceptance evidence. Its follow-up
    documentation/image-pin CI and both smoke jobs also passed. Keep the immutable release tag/digest intact.
-2. **Stop point for machine transfer:** #31 shipped in verified v0.5.0 and is closed. The v0.5.1 provider-refresh
-   patch is also published and independently verified. All required work is merged/pushed to main; resume
-   with [agent-handoff.md](agent-handoff.md), not an old implementation branch. Decision **82** and
+2. **Historical machine-transfer stop point completed:** #31 shipped in verified v0.5.0 and is closed. The
+   v0.5.1 provider-refresh patch is also published and independently verified. Development has resumed;
+   use [agent-handoff.md](agent-handoff.md) and current Git/CI, not an old implementation branch. Decision **82** and
    [design](tool-approvals.md) document migrations **`00035`–`00042`**, exact dispatch and private review.
    Drain older serving images before enabling rules; schema compatibility does not imply enforcement.
    Use the new binary's rotation utility for the new ciphertext columns. Keep production autovacuum enabled;
    governed transitions intentionally fail closed during conflicting writes/reads/maintenance.
-3. **Next, not started: #32 access requests**, followed by #33 and the ordered operations/lifecycle/audit lanes in
+3. **Publish and verify v0.6.0 for #32 access requests**, then proceed with #33 and the ordered operations/lifecycle/audit lanes in
    [implementation order](implementation-order.md). #43 must prove upgrades, ingress, restore and load before
    Helm packaging; existing kindnet/Calico smoke does not establish those broader requirements.
 4. Keep #13–#20's real review/client/provider/channel/pilot evidence separate. VS Code planning and fake OAuth

@@ -1,0 +1,5 @@
+.privateText {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+}

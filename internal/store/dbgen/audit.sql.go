@@ -119,6 +119,8 @@ CROSS JOIN LATERAL (
         WHEN 'gateway' THEN (SELECT g.name FROM gateways g WHERE g.id = ids.target_uuid)
         WHEN 'approval_rule' THEN (SELECT r.name FROM approval_rules r WHERE r.id = ids.target_uuid)
         WHEN 'approval_request' THEN (SELECT r.exposed_name FROM approval_requests r WHERE r.id = ids.target_uuid)
+        WHEN 'access_request' THEN (SELECT g.name FROM access_requests r JOIN gateways g ON g.id = r.gateway_id
+                                    WHERE r.id = ids.target_uuid)
         WHEN 'gateway_grant' THEN (SELECT g.name || ' · ' || COALESCE(t.slug, u.email::text, gg.group_name)
                                    FROM gateway_grants gg JOIN gateways g ON g.id = gg.gateway_id
                                    LEFT JOIN teams t ON t.id = gg.team_id LEFT JOIN users u ON u.id = gg.user_id

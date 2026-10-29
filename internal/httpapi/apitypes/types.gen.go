@@ -11,6 +11,66 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AccessRequestStatus.
+const (
+	AccessRequestStatusApproved  AccessRequestStatus = "approved"
+	AccessRequestStatusDenied    AccessRequestStatus = "denied"
+	AccessRequestStatusPending   AccessRequestStatus = "pending"
+	AccessRequestStatusWithdrawn AccessRequestStatus = "withdrawn"
+)
+
+// Valid indicates whether the value is a known member of the AccessRequestStatus enum.
+func (e AccessRequestStatus) Valid() bool {
+	switch e {
+	case AccessRequestStatusApproved:
+		return true
+	case AccessRequestStatusDenied:
+		return true
+	case AccessRequestStatusPending:
+		return true
+	case AccessRequestStatusWithdrawn:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AccessRequestSubjectKind.
+const (
+	AccessRequestSubjectKindTeam AccessRequestSubjectKind = "team"
+	AccessRequestSubjectKindUser AccessRequestSubjectKind = "user"
+)
+
+// Valid indicates whether the value is a known member of the AccessRequestSubjectKind enum.
+func (e AccessRequestSubjectKind) Valid() bool {
+	switch e {
+	case AccessRequestSubjectKindTeam:
+		return true
+	case AccessRequestSubjectKindUser:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AccessRequestDecisionDecision.
+const (
+	AccessApprove AccessRequestDecisionDecision = "approve"
+	AccessDeny    AccessRequestDecisionDecision = "deny"
+)
+
+// Valid indicates whether the value is a known member of the AccessRequestDecisionDecision enum.
+func (e AccessRequestDecisionDecision) Valid() bool {
+	switch e {
+	case AccessApprove:
+		return true
+	case AccessDeny:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ApiKeyStatus.
 const (
 	ApiKeyStatusActive  ApiKeyStatus = "active"
@@ -136,6 +196,7 @@ func (e ApprovalTargetKind) Valid() bool {
 
 // Defines values for AttentionKind.
 const (
+	AttentionKindAccessRequestsPending      AttentionKind = "access_requests_pending"
 	AttentionKindApprovalPending            AttentionKind = "approval_pending"
 	AttentionKindAutomationTokensExpiring   AttentionKind = "automation_tokens_expiring"
 	AttentionKindCapabilitiesChanged        AttentionKind = "capabilities_changed"
@@ -154,6 +215,8 @@ const (
 // Valid indicates whether the value is a known member of the AttentionKind enum.
 func (e AttentionKind) Valid() bool {
 	switch e {
+	case AttentionKindAccessRequestsPending:
+		return true
 	case AttentionKindApprovalPending:
 		return true
 	case AttentionKindAutomationTokensExpiring:
@@ -1069,6 +1132,8 @@ func (e KeyExpiringDataKeyKind) Valid() bool {
 
 // Defines values for LinkTargetType.
 const (
+	LinkTargetTypeAccessRequest            LinkTargetType = "access_request"
+	LinkTargetTypeAccessRequests           LinkTargetType = "access_requests"
 	LinkTargetTypeAccountApiKeys           LinkTargetType = "account_api_keys"
 	LinkTargetTypeAccountConnections       LinkTargetType = "account_connections"
 	LinkTargetTypeApproval                 LinkTargetType = "approval"
@@ -1090,6 +1155,10 @@ const (
 // Valid indicates whether the value is a known member of the LinkTargetType enum.
 func (e LinkTargetType) Valid() bool {
 	switch e {
+	case LinkTargetTypeAccessRequest:
+		return true
+	case LinkTargetTypeAccessRequests:
+		return true
 	case LinkTargetTypeAccountApiKeys:
 		return true
 	case LinkTargetTypeAccountConnections:
@@ -1771,6 +1840,8 @@ func (e NotificationErrorClass) Valid() bool {
 
 // Defines values for NotificationEventType.
 const (
+	NotificationEventTypeAccessDecided            NotificationEventType = "access.decided"
+	NotificationEventTypeAccessRequested          NotificationEventType = "access.requested"
 	NotificationEventTypeApprovalDecided          NotificationEventType = "approval.decided"
 	NotificationEventTypeApprovalRequested        NotificationEventType = "approval.requested"
 	NotificationEventTypeCapabilityChanged        NotificationEventType = "capability.changed"
@@ -1786,6 +1857,10 @@ const (
 // Valid indicates whether the value is a known member of the NotificationEventType enum.
 func (e NotificationEventType) Valid() bool {
 	switch e {
+	case NotificationEventTypeAccessDecided:
+		return true
+	case NotificationEventTypeAccessRequested:
+		return true
 	case NotificationEventTypeApprovalDecided:
 		return true
 	case NotificationEventTypeApprovalRequested:
@@ -1831,6 +1906,8 @@ func (e NotificationFormat) Valid() bool {
 
 // Defines values for NotificationPayloadType.
 const (
+	NotificationPayloadTypeAccessDecided            NotificationPayloadType = "access.decided"
+	NotificationPayloadTypeAccessRequested          NotificationPayloadType = "access.requested"
 	NotificationPayloadTypeApprovalDecided          NotificationPayloadType = "approval.decided"
 	NotificationPayloadTypeApprovalRequested        NotificationPayloadType = "approval.requested"
 	NotificationPayloadTypeCapabilityChanged        NotificationPayloadType = "capability.changed"
@@ -1847,6 +1924,10 @@ const (
 // Valid indicates whether the value is a known member of the NotificationPayloadType enum.
 func (e NotificationPayloadType) Valid() bool {
 	switch e {
+	case NotificationPayloadTypeAccessDecided:
+		return true
+	case NotificationPayloadTypeAccessRequested:
+		return true
 	case NotificationPayloadTypeApprovalDecided:
 		return true
 	case NotificationPayloadTypeApprovalRequested:
@@ -2534,18 +2615,36 @@ func (e AdminGetUsageParamsMethod) Valid() bool {
 	}
 }
 
+// Defines values for ListMyAccessRequestsParamsView.
+const (
+	ListMyAccessRequestsParamsViewRequested ListMyAccessRequestsParamsView = "requested"
+	ListMyAccessRequestsParamsViewReview    ListMyAccessRequestsParamsView = "review"
+)
+
+// Valid indicates whether the value is a known member of the ListMyAccessRequestsParamsView enum.
+func (e ListMyAccessRequestsParamsView) Valid() bool {
+	switch e {
+	case ListMyAccessRequestsParamsViewRequested:
+		return true
+	case ListMyAccessRequestsParamsViewReview:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListMyApprovalsParamsView.
 const (
-	Actionable ListMyApprovalsParamsView = "actionable"
-	Requested  ListMyApprovalsParamsView = "requested"
+	ListMyApprovalsParamsViewActionable ListMyApprovalsParamsView = "actionable"
+	ListMyApprovalsParamsViewRequested  ListMyApprovalsParamsView = "requested"
 )
 
 // Valid indicates whether the value is a known member of the ListMyApprovalsParamsView enum.
 func (e ListMyApprovalsParamsView) Valid() bool {
 	switch e {
-	case Actionable:
+	case ListMyApprovalsParamsViewActionable:
 		return true
-	case Requested:
+	case ListMyApprovalsParamsViewRequested:
 		return true
 	default:
 		return false
@@ -2601,6 +2700,60 @@ func (e GetTeamUsageParamsMethod) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// AccessRequest defines model for AccessRequest.
+type AccessRequest struct {
+	CanDecide      bool                     `json:"canDecide"`
+	CreatedAt      time.Time                `json:"createdAt"`
+	DecidedAt      *time.Time               `json:"decidedAt"`
+	DecisionNote   string                   `json:"decisionNote"`
+	GatewayId      openapi_types.UUID       `json:"gatewayId"`
+	GatewayName    string                   `json:"gatewayName"`
+	GrantExpiresAt *time.Time               `json:"grantExpiresAt"`
+	GrantId        *openapi_types.UUID      `json:"grantId"`
+	Id             openapi_types.UUID       `json:"id"`
+	Reason         string                   `json:"reason"`
+	RequesterId    openapi_types.UUID       `json:"requesterId"`
+	RequesterName  string                   `json:"requesterName"`
+	Status         AccessRequestStatus      `json:"status"`
+	SubjectKind    AccessRequestSubjectKind `json:"subjectKind"`
+	TeamId         *openapi_types.UUID      `json:"teamId,omitempty"`
+	TeamName       *string                  `json:"teamName,omitempty"`
+}
+
+// AccessRequestStatus defines model for AccessRequest.Status.
+type AccessRequestStatus string
+
+// AccessRequestSubjectKind defines model for AccessRequest.SubjectKind.
+type AccessRequestSubjectKind string
+
+// AccessRequestCreate defines model for AccessRequestCreate.
+type AccessRequestCreate struct {
+	GatewayId openapi_types.UUID `json:"gatewayId"`
+	Reason    string             `json:"reason"`
+
+	// TeamId Omitted means oneself; otherwise requires current owner/admin authority in this active team.
+	TeamId *openapi_types.UUID `json:"teamId,omitempty"`
+}
+
+// AccessRequestDecision defines model for AccessRequestDecision.
+type AccessRequestDecision struct {
+	Decision AccessRequestDecisionDecision `json:"decision"`
+
+	// ExpiresInDays Approval only; omitted means a permanent grant.
+	ExpiresInDays *int32  `json:"expiresInDays,omitempty"`
+	Note          *string `json:"note,omitempty"`
+}
+
+// AccessRequestDecisionDecision defines model for AccessRequestDecision.Decision.
+type AccessRequestDecisionDecision string
+
+// AccessRequestPage defines model for AccessRequestPage.
+type AccessRequestPage struct {
+	Items              []AccessRequest `json:"items"`
+	NextCursor         *string         `json:"nextCursor,omitempty"`
+	PendingReviewCount int64           `json:"pendingReviewCount"`
 }
 
 // AdminOverview The platform overview (Admin > Overview)
@@ -3935,6 +4088,9 @@ type ErrorResponse struct {
 
 // Gateway defines model for Gateway.
 type Gateway struct {
+	// AccessRequestsEnabled Platform gateways only; change through the browser-only access-settings operation.
+	AccessRequestsEnabled *bool `json:"accessRequestsEnabled,omitempty"`
+
 	// CapabilityCount Selected capabilities
 	CapabilityCount int64 `json:"capabilityCount"`
 
@@ -3981,6 +4137,19 @@ type Gateway struct {
 	//
 	// Example: https://mcp.example.com/mcp/support-tools
 	Url string `json:"url"`
+}
+
+// GatewayAccessSettings defines model for GatewayAccessSettings.
+type GatewayAccessSettings struct {
+	Enabled    bool                 `json:"enabled"`
+	Revision   int64                `json:"revision"`
+	StewardIds []openapi_types.UUID `json:"stewardIds"`
+}
+
+// GatewayAccessSettingsUpdate defines model for GatewayAccessSettingsUpdate.
+type GatewayAccessSettingsUpdate struct {
+	Enabled    bool                 `json:"enabled"`
+	StewardIds []openapi_types.UUID `json:"stewardIds"`
 }
 
 // GatewayCapabilities defines model for GatewayCapabilities.
@@ -4071,10 +4240,11 @@ type GatewayCreate struct {
 	Slug string `json:"slug"`
 }
 
-// GatewayGrant defines model for GatewayGrant.
+// GatewayGrant A platform-gateway grant. Null expiry is permanent; an elapsed expiry never contributes access or tool scope, even before cleanup.
 type GatewayGrant struct {
-	AddedByName *string   `json:"addedByName,omitempty"`
-	CreatedAt   time.Time `json:"createdAt"`
+	AddedByName *string    `json:"addedByName,omitempty"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	ExpiresAt   *time.Time `json:"expiresAt,omitempty"`
 
 	// Group The IdP group name, as in the groups claim
 	Group       *string                 `json:"group,omitempty"`
@@ -4087,10 +4257,12 @@ type GatewayGrant struct {
 	User      *MemberUser `json:"user,omitempty"`
 }
 
-// GatewayGrantCreate Exactly one of team, userEmail or group, matching subjectKind
+// GatewayGrantCreate Exactly one of team, userEmail or group, matching subjectKind. Expiry is optional and permanent by default. Drain older serving binaries before creating expiring grants.
 type GatewayGrantCreate struct {
-	Group       *string                 `json:"group,omitempty"`
-	SubjectKind GatewayGrantSubjectKind `json:"subjectKind"`
+	// ExpiresInDays Elapsed UTC days from creation; omitted means permanent.
+	ExpiresInDays *int32                  `json:"expiresInDays,omitempty"`
+	Group         *string                 `json:"group,omitempty"`
+	SubjectKind   GatewayGrantSubjectKind `json:"subjectKind"`
 
 	// Team Team slug or ID
 	Team *string `json:"team,omitempty"`
@@ -5149,7 +5321,7 @@ type NotificationDelivery struct {
 	CreatedAt  time.Time               `json:"createdAt"`
 	ErrorClass *NotificationErrorClass `json:"errorClass,omitempty"`
 
-	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
+	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
 	Event NotificationEventType `json:"event"`
 
 	// EventId The id of the event, as in the payload and X-OMP-Event-Id
@@ -5286,7 +5458,7 @@ type NotificationEmailStatusTls string
 // NotificationErrorClass not_allowed: the address isn't allowed (blocked or not in the internal-network allowlist, or a redirect). connect: unreachable. tls: certificate or handshake problem (or STARTTLS missing). timeout. auth: SMTP login refused. rejected: the destination answered 4xx (SMTP 5xx). server_error: it answered 5xx. address: the recipient address was refused. expired: still undelivered after 24 hours. internal.
 type NotificationErrorClass string
 
-// NotificationEventType server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
+// NotificationEventType server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
 type NotificationEventType string
 
 // NotificationFormat json: a signed JSON envelope (docs/notifications.md). slack: {"text": ...}, unsigned, for Slack-compatible incoming webhooks.
@@ -5297,7 +5469,7 @@ type NotificationItem struct {
 	Body      string    `json:"body"`
 	CreatedAt time.Time `json:"createdAt"`
 
-	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
+	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
 	Event  NotificationEventType `json:"event"`
 	Id     int64                 `json:"id"`
 	Link   *LinkTarget           `json:"link"`
@@ -5357,7 +5529,7 @@ type NotificationPreference struct {
 	Custom bool `json:"custom"`
 	Email  bool `json:"email"`
 
-	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
+	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
 	Event NotificationEventType `json:"event"`
 	InApp bool                  `json:"inApp"`
 }
@@ -5366,7 +5538,7 @@ type NotificationPreference struct {
 type NotificationPreferenceChange struct {
 	Email *bool `json:"email,omitempty"`
 
-	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
+	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
 	Event NotificationEventType `json:"event"`
 	InApp *bool                 `json:"inApp,omitempty"`
 }
@@ -5823,6 +5995,19 @@ type RedactionTestResult struct {
 	// Rules Which rules matched, and how often
 	Rules     []RedactionRuleCount `json:"rules"`
 	Truncated bool                 `json:"truncated"`
+}
+
+// RequestableGateway defines model for RequestableGateway.
+type RequestableGateway struct {
+	Description string             `json:"description"`
+	Id          openapi_types.UUID `json:"id"`
+	Name        string             `json:"name"`
+}
+
+// RequestableGatewayPage defines model for RequestableGatewayPage.
+type RequestableGatewayPage struct {
+	Items      []RequestableGateway `json:"items"`
+	NextCursor *string              `json:"nextCursor,omitempty"`
 }
 
 // RetentionKind call_metadata: call records (mcp_calls); captured_payloads: captured arguments and results; audit_log: the audit log (platform only); usage_rollups: hourly usage (platform only).
@@ -6552,6 +6737,9 @@ type UserUpdate struct {
 	Status       *UserStatus   `json:"status,omitempty"`
 }
 
+// AccessRequestIdParam defines model for AccessRequestIdParam.
+type AccessRequestIdParam = openapi_types.UUID
+
 // ApprovalIdParam defines model for ApprovalIdParam.
 type ApprovalIdParam = openapi_types.UUID
 
@@ -6684,6 +6872,11 @@ type UsageToParam = time.Time
 // UserIdParam defines model for UserIdParam.
 type UserIdParam = openapi_types.UUID
 
+// AccessRequestReply defines model for AccessRequestReply.
+type AccessRequestReply struct {
+	Data AccessRequest `json:"data"`
+}
+
 // ApprovalPageReply defines model for ApprovalPageReply.
 type ApprovalPageReply struct {
 	// Data Metadata-only page; items NEVER contain preview
@@ -6725,6 +6918,11 @@ type CaptureSettingsReply struct {
 
 // ErrorReply defines model for ErrorReply.
 type ErrorReply = ErrorResponse
+
+// GatewayAccessSettingsReply defines model for GatewayAccessSettingsReply.
+type GatewayAccessSettingsReply struct {
+	Data GatewayAccessSettings `json:"data"`
+}
 
 // GatewayOptionPageReply defines model for GatewayOptionPageReply.
 type GatewayOptionPageReply struct {
@@ -6910,6 +7108,12 @@ type AdminListGatewaysParams struct {
 
 // AdminUpdateGatewayParams defines parameters for AdminUpdateGateway.
 type AdminUpdateGatewayParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
+// AdminSetGatewayAccessSettingsParams defines parameters for AdminSetGatewayAccessSettings.
+type AdminSetGatewayAccessSettingsParams struct {
 	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
 	IfMatch IfMatchHeader `json:"If-Match"`
 }
@@ -7117,11 +7321,30 @@ type ListCatalogServersParams struct {
 	Limit  *LimitParam  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// ListRequestableGatewaysParams defines parameters for ListRequestableGateways.
+type ListRequestableGatewaysParams struct {
+	// Cursor nextCursor from the previous page
+	Cursor *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *LimitParam  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // GetMeParams defines parameters for GetMe.
 type GetMeParams struct {
 	// Optional With true, a request without a session cookie gets data null (200) instead of a 401, for pages that work signed out. An expired session is still a 401 (and clears the cookie).
 	Optional *bool `form:"optional,omitempty" json:"optional,omitempty"`
 }
+
+// ListMyAccessRequestsParams defines parameters for ListMyAccessRequests.
+type ListMyAccessRequestsParams struct {
+	// Cursor nextCursor from the previous page
+	Cursor      *CursorParam                    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit       *LimitParam                     `form:"limit,omitempty" json:"limit,omitempty"`
+	View        *ListMyAccessRequestsParamsView `form:"view,omitempty" json:"view,omitempty"`
+	PendingOnly *bool                           `form:"pendingOnly,omitempty" json:"pendingOnly,omitempty"`
+}
+
+// ListMyAccessRequestsParamsView defines parameters for ListMyAccessRequests.
+type ListMyAccessRequestsParamsView string
 
 // ListMyApprovalsParams defines parameters for ListMyApprovals.
 type ListMyApprovalsParams struct {
@@ -7373,6 +7596,9 @@ type GetTeamUsageParamsMethod string
 // DevLoginJSONRequestBody defines body for DevLogin for application/json ContentType.
 type DevLoginJSONRequestBody = DevLoginRequest
 
+// DecideAccessRequestJSONRequestBody defines body for DecideAccessRequest for application/json ContentType.
+type DecideAccessRequestJSONRequestBody = AccessRequestDecision
+
 // AdminCreateApprovalRuleJSONRequestBody defines body for AdminCreateApprovalRule for application/json ContentType.
 type AdminCreateApprovalRuleJSONRequestBody = ApprovalRuleInput
 
@@ -7396,6 +7622,9 @@ type AdminCreateGatewayJSONRequestBody = GatewayCreate
 
 // AdminUpdateGatewayJSONRequestBody defines body for AdminUpdateGateway for application/json ContentType.
 type AdminUpdateGatewayJSONRequestBody = GatewayUpdate
+
+// AdminSetGatewayAccessSettingsJSONRequestBody defines body for AdminSetGatewayAccessSettings for application/json ContentType.
+type AdminSetGatewayAccessSettingsJSONRequestBody = GatewayAccessSettingsUpdate
 
 // AdminSetGatewayCapabilitiesJSONRequestBody defines body for AdminSetGatewayCapabilities for application/json ContentType.
 type AdminSetGatewayCapabilitiesJSONRequestBody = GatewayCapabilitiesUpdate
@@ -7471,6 +7700,9 @@ type DecideApprovalJSONRequestBody = ApprovalDecisionInput
 
 // RenewApprovalJSONRequestBody defines body for RenewApproval for application/json ContentType.
 type RenewApprovalJSONRequestBody = ApprovalReviewInput
+
+// CreateAccessRequestJSONRequestBody defines body for CreateAccessRequest for application/json ContentType.
+type CreateAccessRequestJSONRequestBody = AccessRequestCreate
 
 // CreateMyApiKeyJSONRequestBody defines body for CreateMyApiKey for application/json ContentType.
 type CreateMyApiKeyJSONRequestBody = ApiKeyCreate

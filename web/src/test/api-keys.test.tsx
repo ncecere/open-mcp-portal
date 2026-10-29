@@ -17,6 +17,11 @@ const routes = (extra: Record<string, Handler> = {}): Record<string, Handler> =>
 });
 
 describe("API keys", () => {
+  // Freeze Date, not timers: the seven-day fixture must not cross a local DST
+  // transition merely because the suite ran on a different day.
+  beforeEach(() => vi.setSystemTime(new Date("2026-10-15T12:00:00Z")));
+  afterEach(() => vi.useRealTimers());
+
   it("lists the person's keys with status, last use and expiry, from the account menu", async () => {
     mockApi(routes());
     const { container } = renderApp("/settings/api-keys");

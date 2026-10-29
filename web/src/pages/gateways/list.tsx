@@ -80,11 +80,12 @@ const columns = (narrow: boolean): DataTableColumn<MyGateway>[] => [
 export function MyGatewaysPage() {
   const gateways = useQuery(myGatewaysQuery());
   const narrow = useMediaQuery(NARROW_QUERY);
-  const keys = (
+  const keys = <div className={s.toolbar}>
+    <Button variant="secondary" render={<Link to="/access-requests" />}>Request gateway access</Button>
     <Button variant="secondary" render={<Link to="/settings/api-keys" />}>
       <KeyRound aria-hidden /> {terms.apiKeys}
     </Button>
-  );
+  </div>;
   return (
     <ListPage<MyGateway>
       id="my-gateways"

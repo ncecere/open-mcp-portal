@@ -11,6 +11,22 @@ import (
 	"github.com/google/uuid"
 )
 
+type AccessRequest struct {
+	ID              uuid.UUID
+	GatewayID       uuid.UUID
+	RequesterUserID uuid.UUID
+	SubjectKind     string
+	TeamID          uuid.NullUUID
+	Reason          string
+	Status          string
+	DecidedBy       uuid.NullUUID
+	DecidedAt       *time.Time
+	DecisionNote    string
+	GrantID         uuid.NullUUID
+	GrantExpiresAt  *time.Time
+	CreatedAt       time.Time
+}
+
 type AgentPlatform struct {
 	ID            uuid.UUID
 	Name          string
@@ -216,20 +232,21 @@ type CaptureSetting struct {
 }
 
 type Gateway struct {
-	ID                 uuid.UUID
-	Slug               string
-	Name               string
-	Description        string
-	OwnerKind          string
-	TeamID             uuid.NullUUID
-	Enabled            bool
-	CapturePayloads    bool
-	Revision           int64
-	CreatedBy          uuid.NullUUID
-	CreatedAt          time.Time
-	UpdatedBy          uuid.NullUUID
-	UpdatedAt          time.Time
-	RateLimitPerMinute *int64
+	ID                    uuid.UUID
+	Slug                  string
+	Name                  string
+	Description           string
+	OwnerKind             string
+	TeamID                uuid.NullUUID
+	Enabled               bool
+	CapturePayloads       bool
+	Revision              int64
+	CreatedBy             uuid.NullUUID
+	CreatedAt             time.Time
+	UpdatedBy             uuid.NullUUID
+	UpdatedAt             time.Time
+	RateLimitPerMinute    *int64
+	AccessRequestsEnabled bool
 }
 
 type GatewayCapability struct {
@@ -256,6 +273,12 @@ type GatewayGrant struct {
 	AddedBy     uuid.NullUUID
 	AddedAt     time.Time
 	ToolScope   json.RawMessage
+	ExpiresAt   *time.Time
+}
+
+type GatewaySteward struct {
+	GatewayID uuid.UUID
+	UserID    uuid.UUID
 }
 
 type LimitSetting struct {

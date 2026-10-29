@@ -101,6 +101,19 @@ GET               /.well-known/jwks.json                                 (outsid
 4. Tools and prompts first; resources later.
 5. Identity header as proposed.
 
+## Gateway access requests (v0.6.0, #32)
+
+Decision 83 and [access-requests.md](access-requests.md) describe the implemented opt-in request workflow.
+Session-only `/v1/admin/gateways/{id}/access-settings` manages discoverability and at most 50 named stewards;
+stewards decide only that gateway's requests, never their own, and gain no other management/MCP authority.
+User or administered-team requests and grant decisions are transactional. `GatewayGrant.expiresAt` and optional
+`GatewayGrantCreate.expiresInDays` (1–365, otherwise permanent) add temporary grants without changing existing
+permanent ones. All effective-grant SQL and final MCP/approval transport checks enforce expiry; cleanup is
+not enforcement. Migrations `00043`–`00045` are expand-only. **Drain previous serving/background-worker
+replicas before enabling requests or expiry:** schema compatibility does not mean older images enforce
+deadlines or deliver the new private notice types. Publication/acceptance evidence belongs in
+[status](status.md), not a local version string.
+
 ## As built (backend)
 
 Code: `internal/gateways` (service, availability, grants), `internal/mcpgw` (`/mcp/{slug}`), `internal/identity`

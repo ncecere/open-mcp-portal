@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Open MCP Portal API
-  version: 0.5.1
+  version: 0.6.0
   description: 'Management API. Browser sessions authenticate with a cookie; writes need the session''s `X-CSRF-Token`
     (from `GET /v1/me`) and a same-origin `Origin`. Success responses are `{"data": ...}` and errors `{"error":
     {"code": "...", "message": "..."}}`.
@@ -2718,6 +2718,136 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '403':
           $ref: '#/components/responses/ErrorReply'
+  /v1/gateways/requestable:
+    get:
+      tags: [gateways]
+      operationId: listRequestableGateways
+      summary: Opted-in platform gateways, browser session only; never grants MCP access
+      parameters:
+      - $ref: '#/components/parameters/CursorParam'
+      - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Minimal discoverable projection
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/RequestableGatewayPage'}
+        '403': {$ref: '#/components/responses/ErrorReply'}
+  /v1/me/access-requests:
+    get:
+      tags: [gateways]
+      operationId: listMyAccessRequests
+      summary: Private requested or gateway-scoped review queue, browser session only
+      parameters:
+      - $ref: '#/components/parameters/CursorParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - name: view
+        in: query
+        schema: {type: string, enum: [requested, review], default: requested}
+      - name: pendingOnly
+        in: query
+        schema: {type: boolean, default: false}
+      responses:
+        '200':
+          description: Authorized private requests and actionable review count
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/AccessRequestPage'}
+        '403': {$ref: '#/components/responses/ErrorReply'}
+    post:
+      tags: [gateways]
+      operationId: createAccessRequest
+      summary: Request for oneself or a currently administered team, browser session only
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AccessRequestCreate'}
+      responses:
+        '201': {$ref: '#/components/responses/AccessRequestReply'}
+        '400': {$ref: '#/components/responses/ErrorReply'}
+        '403': {$ref: '#/components/responses/ErrorReply'}
+        '404': {$ref: '#/components/responses/ErrorReply'}
+        '409': {$ref: '#/components/responses/ErrorReply'}
+        '429': {$ref: '#/components/responses/ErrorReply'}
+  /v1/access-requests/{requestId}:
+    parameters:
+    - $ref: '#/components/parameters/AccessRequestIdParam'
+    get:
+      tags: [gateways]
+      operationId: getAccessRequest
+      summary: Private request, requester or current gateway reviewer, browser session only
+      responses:
+        '200': {$ref: '#/components/responses/AccessRequestReply'}
+        '403': {$ref: '#/components/responses/ErrorReply'}
+        '404': {$ref: '#/components/responses/ErrorReply'}
+  /v1/access-requests/{requestId}/decision:
+    parameters:
+    - $ref: '#/components/parameters/AccessRequestIdParam'
+    post:
+      tags: [gateways]
+      operationId: decideAccessRequest
+      summary: Current platform admin or gateway steward, never requester, browser session only
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AccessRequestDecision'}
+      responses:
+        '200': {$ref: '#/components/responses/AccessRequestReply'}
+        '400': {$ref: '#/components/responses/ErrorReply'}
+        '403': {$ref: '#/components/responses/ErrorReply'}
+        '404': {$ref: '#/components/responses/ErrorReply'}
+        '409': {$ref: '#/components/responses/ErrorReply'}
+  /v1/access-requests/{requestId}/withdraw:
+    parameters:
+    - $ref: '#/components/parameters/AccessRequestIdParam'
+    post:
+      tags: [gateways]
+      operationId: withdrawAccessRequest
+      summary: Requester's pending request only, browser session only
+      responses:
+        '200': {$ref: '#/components/responses/AccessRequestReply'}
+        '403': {$ref: '#/components/responses/ErrorReply'}
+        '404': {$ref: '#/components/responses/ErrorReply'}
+        '409': {$ref: '#/components/responses/ErrorReply'}
+  /v1/admin/gateways/{gatewayId}/access-settings:
+    parameters:
+    - $ref: '#/components/parameters/GatewayIdParam'
+    get:
+      tags: [admin]
+      operationId: adminGetGatewayAccessSettings
+      summary: Platform gateway discoverability/stewards, platform staff browser session only
+      responses:
+        '200': {$ref: '#/components/responses/GatewayAccessSettingsReply'}
+        '403': {$ref: '#/components/responses/ErrorReply'}
+        '404': {$ref: '#/components/responses/ErrorReply'}
+    put:
+      tags: [admin]
+      operationId: adminSetGatewayAccessSettings
+      summary: Replace discoverability/stewards, platform admin browser session only, gateway If-Match required
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GatewayAccessSettingsUpdate'}
+      responses:
+        '200': {$ref: '#/components/responses/GatewayAccessSettingsReply'}
+        '400': {$ref: '#/components/responses/ErrorReply'}
+        '403': {$ref: '#/components/responses/ErrorReply'}
+        '404': {$ref: '#/components/responses/ErrorReply'}
+        '412': {$ref: '#/components/responses/ErrorReply'}
+        '428': {$ref: '#/components/responses/ErrorReply'}
   /v1/me/gateways:
     get:
       tags:
@@ -6449,6 +6579,11 @@ components:
         minimum: 1
         maximum: 500
         default: 100
+    AccessRequestIdParam:
+      name: requestId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
     GatewayIdParam:
       name: gatewayId
       in: path
@@ -6630,6 +6765,24 @@ components:
         type: string
         format: uuid
   responses:
+    AccessRequestReply:
+      description: Authorized private access request
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/AccessRequest'}
+    GatewayAccessSettingsReply:
+      description: Platform gateway access-request settings
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/GatewayAccessSettings'}
     ApprovalReceiptReply:
       description: Approval receipt; preview is restricted to authorized detail reads, never list results
       headers:
@@ -9262,6 +9415,10 @@ components:
           type: integer
           format: int64
           description: Selected capabilities not served right now (see GatewayCapability.unavailableReason)
+        accessRequestsEnabled:
+          type: boolean
+          readOnly: true
+          description: Platform gateways only; change through the browser-only access-settings operation.
         grantCount:
           type: integer
           format: int64
@@ -9626,6 +9783,100 @@ components:
         nextCursor:
           type: string
           nullable: true
+    RequestableGateway:
+      type: object
+      required: [id, name, description]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+    RequestableGatewayPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/RequestableGateway'}
+        nextCursor: {type: string, nullable: true}
+    GatewayAccessSettingsUpdate:
+      type: object
+      additionalProperties: false
+      required: [enabled, stewardIds]
+      properties:
+        enabled: {type: boolean}
+        stewardIds:
+          type: array
+          maxItems: 50
+          uniqueItems: true
+          items: {type: string, format: uuid}
+    GatewayAccessSettings:
+      type: object
+      additionalProperties: false
+      required: [enabled, stewardIds, revision]
+      properties:
+        enabled: {type: boolean}
+        stewardIds:
+          type: array
+          maxItems: 50
+          uniqueItems: true
+          items: {type: string, format: uuid}
+        revision: {type: integer, format: int64}
+    AccessRequestCreate:
+      type: object
+      additionalProperties: false
+      required: [gatewayId, reason]
+      properties:
+        gatewayId: {type: string, format: uuid}
+        teamId:
+          type: string
+          format: uuid
+          description: Omitted means oneself; otherwise requires current owner/admin authority in this active team.
+        reason: {type: string, minLength: 1, maxLength: 1000}
+    AccessRequestDecision:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [approve, deny]
+          x-enum-varnames: [AccessApprove, AccessDeny]
+        note: {type: string, maxLength: 1000}
+        expiresInDays:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 365
+          description: Approval only; omitted means a permanent grant.
+    AccessRequest:
+      type: object
+      required: [id, gatewayId, gatewayName, requesterId, requesterName, subjectKind, reason, status, createdAt, decidedAt, decisionNote, grantId, grantExpiresAt, canDecide]
+      properties:
+        id: {type: string, format: uuid}
+        gatewayId: {type: string, format: uuid}
+        gatewayName: {type: string}
+        requesterId: {type: string, format: uuid}
+        requesterName: {type: string}
+        subjectKind: {type: string, enum: [user, team]}
+        teamId: {type: string, format: uuid}
+        teamName: {type: string}
+        reason: {type: string}
+        status: {type: string, enum: [pending, approved, denied, withdrawn]}
+        createdAt: {type: string, format: date-time}
+        decidedAt: {type: string, format: date-time, nullable: true}
+        decisionNote: {type: string}
+        grantId: {type: string, format: uuid, nullable: true}
+        grantExpiresAt: {type: string, format: date-time, nullable: true}
+        canDecide: {type: boolean}
+    AccessRequestPage:
+      type: object
+      required: [items, pendingReviewCount]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/AccessRequest'}
+        nextCursor: {type: string, nullable: true}
+        pendingReviewCount: {type: integer, format: int64}
     GatewayGrantSubjectKind:
       type: string
       enum:
@@ -9654,6 +9905,7 @@ components:
             description: Exact case-sensitive exposed name, including future aliases. At most 1100 UTF-8 bytes (the byte bound is checked by the API); no control characters or glob operators (* ? [ ] { } backslash). No server__ prefix is required.
     GatewayGrant:
       type: object
+      description: A platform-gateway grant. Null expiry is permanent; an elapsed expiry never contributes access or tool scope, even before cleanup.
       required:
       - id
       - subjectKind
@@ -9679,6 +9931,10 @@ components:
         addedByName:
           type: string
           nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
     GrantTeam:
       type: object
       required:
@@ -9697,8 +9953,14 @@ components:
       type: object
       required:
       - subjectKind
-      description: Exactly one of team, userEmail or group, matching subjectKind
+      description: Exactly one of team, userEmail or group, matching subjectKind. Expiry is optional and permanent by default. Drain older serving binaries before creating expiring grants.
       properties:
+        expiresInDays:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 365
+          description: Elapsed UTC days from creation; omitted means permanent.
         toolScope:
           $ref: '#/components/schemas/ToolScope'
         subjectKind:
@@ -12996,6 +13258,8 @@ components:
           - account_connections
           - account_api_keys
           - approval
+          - access_request
+          - access_requests
         id:
           type: string
           description: The object's ID for singular types (server, service_account, approval)
@@ -13009,6 +13273,7 @@ components:
       - upstream_signin_lapsed
       - review_pending
       - approval_pending
+      - access_requests_pending
       - capabilities_changed
       - personal_keys_expiring
       - service_account_keys_expiring
@@ -13229,12 +13494,14 @@ components:
       - key.expiring
       - approval.requested
       - approval.decided
+      - access.requested
+      - access.decided
       description: 'server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts.
         server.recovered. capability.changed: a published server''s definition changed or grew and is held back. publish.requested:
         a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent:
         a person''s connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server''s
         setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can''t subscribe
-        to connection.needs_reconsent, approval.requested, approval.decided or to personal keys.
+        to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys.
         Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.'
     NotificationItem:
       type: object
@@ -14055,6 +14322,8 @@ components:
           - key.expiring
           - approval.requested
           - approval.decided
+          - access.requested
+          - access.decided
           - test
         version:
           type: integer

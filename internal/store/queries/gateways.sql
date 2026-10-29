@@ -76,7 +76,8 @@ SELECT g.id AS gateway_id,
                            AND ((g.owner_kind = 'team' AND s.team_id = g.team_id)
                                 OR (s.publish_state = 'published' AND c.approved_fingerprint = c.fingerprint)), false)
        )::bigint AS unavailable_count,
-       (SELECT count(*) FROM gateway_grants gg WHERE gg.gateway_id = g.id)::bigint AS grant_count
+       (SELECT count(*) FROM gateway_grants gg WHERE gg.gateway_id = g.id
+          AND (gg.expires_at IS NULL OR gg.expires_at > clock_timestamp()))::bigint AS grant_count
 FROM gateways g
 LEFT JOIN teams gt ON gt.id = g.team_id
 WHERE g.id = ANY(@ids::uuid[]);
@@ -158,8 +159,8 @@ WHERE gg.gateway_id = @gateway_id
 ORDER BY gg.added_at, gg.id;
 
 -- name: InsertGatewayGrant :one
-INSERT INTO gateway_grants (gateway_id, subject_kind, team_id, user_id, group_name, added_by, tool_scope)
-VALUES (@gateway_id, @subject_kind, sqlc.narg(team_id), sqlc.narg(user_id), sqlc.narg(group_name), @added_by, sqlc.narg(tool_scope))
+INSERT INTO gateway_grants (gateway_id, subject_kind, team_id, user_id, group_name, added_by, tool_scope, expires_at)
+VALUES (@gateway_id, @subject_kind, sqlc.narg(team_id), sqlc.narg(user_id), sqlc.narg(group_name), @added_by, sqlc.narg(tool_scope), sqlc.narg(expires_at))
 RETURNING *;
 
 -- name: DeleteGatewayGrant :one
@@ -171,6 +172,7 @@ RETURNING *;
 SELECT DISTINCT gg.group_name::text AS group_name
 FROM gateway_grants gg
 WHERE gg.gateway_id = @gateway_id AND gg.group_name = ANY(@groups::text[])
+  AND (gg.expires_at IS NULL OR gg.expires_at > clock_timestamp())
 ORDER BY 1;
 
 -- name: GatewayGrantKindsForUser :many
@@ -178,6 +180,7 @@ ORDER BY 1;
 SELECT DISTINCT gg.subject_kind
 FROM gateway_grants gg
 WHERE gg.gateway_id = @gateway_id
+  AND (gg.expires_at IS NULL OR gg.expires_at > clock_timestamp())
   AND (gg.user_id = @user_id
        OR gg.team_id IN (SELECT m.team_id FROM team_members m WHERE m.user_id = @user_id)
        OR gg.group_name = ANY(@groups::text[]));
@@ -188,6 +191,7 @@ WHERE gg.gateway_id = @gateway_id
 SELECT gg.*
 FROM gateway_grants gg
 WHERE gg.gateway_id = @gateway_id
+  AND (gg.expires_at IS NULL OR gg.expires_at > clock_timestamp())
   AND (gg.user_id = @user_id
        OR gg.team_id IN (SELECT m.team_id FROM team_members m WHERE m.user_id = @user_id)
        OR gg.group_name = ANY(@groups::text[]));
@@ -200,11 +204,13 @@ SELECT sqlc.embed(g), COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, 
        COALESCE(m.role, '')::text AS member_role,
        ARRAY(SELECT DISTINCT gg.subject_kind FROM gateway_grants gg
              WHERE gg.gateway_id = g.id
+               AND (gg.expires_at IS NULL OR gg.expires_at > clock_timestamp())
                AND (gg.user_id = @user_id
                     OR gg.team_id IN (SELECT tm.team_id FROM team_members tm WHERE tm.user_id = @user_id)
                     OR gg.group_name = ANY(@groups::text[])))::text[] AS grant_kinds,
        ARRAY(SELECT DISTINCT gg.group_name FROM gateway_grants gg
              WHERE gg.gateway_id = g.id AND gg.group_name = ANY(@groups::text[])
+               AND (gg.expires_at IS NULL OR gg.expires_at > clock_timestamp())
              ORDER BY gg.group_name)::text[] AS grant_groups
 FROM gateways g
 LEFT JOIN teams t ON t.id = g.team_id
@@ -214,6 +220,7 @@ WHERE g.enabled
        OR (g.owner_kind = 'platform' AND EXISTS (
             SELECT 1 FROM gateway_grants gg
             WHERE gg.gateway_id = g.id
+              AND (gg.expires_at IS NULL OR gg.expires_at > clock_timestamp())
               AND (gg.user_id = @user_id
                    OR gg.team_id IN (SELECT tm.team_id FROM team_members tm WHERE tm.user_id = @user_id)
                    OR gg.group_name = ANY(@groups::text[])))))
@@ -239,5 +246,6 @@ LEFT JOIN teams t ON t.id = g.team_id
 WHERE g.enabled
   AND ((g.owner_kind = 'team' AND g.team_id = @team_id AND t.status = 'active')
        OR (g.owner_kind = 'platform' AND EXISTS (
-            SELECT 1 FROM gateway_grants gg WHERE gg.gateway_id = g.id AND gg.team_id = @team_id)))
+            SELECT 1 FROM gateway_grants gg WHERE gg.gateway_id = g.id AND gg.team_id = @team_id
+              AND (gg.expires_at IS NULL OR gg.expires_at > clock_timestamp()))))
 ORDER BY g.name, g.id;

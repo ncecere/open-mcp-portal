@@ -66,6 +66,9 @@ type Service struct {
 	// Limits checks a gateway's own rate limit against the ceiling (nil: no
 	// check).
 	Limits *limits.Service
+	// AccessNotice emits private notices in the request transaction. Notification
+	// failure must not roll back an authoritative access decision.
+	AccessNotice func(context.Context, *dbgen.Queries, dbgen.AccessRequest, bool)
 	// ServiceConnectionReady checks live shared-credential policy without
 	// decrypting or refreshing tokens, for accurate service-account views.
 	ServiceConnectionReady func(context.Context, *registry.Requirement, uuid.UUID, uuid.UUID, uuid.UUID, string) (bool, error)

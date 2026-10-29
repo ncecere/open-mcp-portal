@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **2026-10-28.** v0.5.1 is the current release. This is an order of work, not a schedule, for one maintainer. Every item below is an
+Status: **2026-10-29.** v0.5.1 is the current published release; v0.6.0 is prepared, not yet published. This is an order of work, not a schedule, for one maintainer. Every item below is an
 issue with its implementation plan (data model, API, packages to change, tests, acceptance criteria, open questions):
 [all roadmap issues](https://github.com/ncecere/open-mcp-portal/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap), grouped by
 [milestone](https://github.com/ncecere/open-mcp-portal/milestones). Sizes are relative effort: **S** a few days, **M** a week or two, **L** several weeks. Each item that needs a
@@ -51,8 +51,9 @@ shipped. **#28 classification** and **#37 session hardening** shipped in v0.3.3.
 with independent review corrections, full-tree tests, browser checks and CI/deployment/artifact verification.
 #62/#63 are withdrawn as not planned, not completed verification. Historical milestone headings below are
 planning buckets, not a promise of release numbering. #31 approvals shipped in v0.5.0 under decision 82.
-The v0.5.1 reliability follow-up is published and verified. Development is paused for a machine transfer;
-#32 is next and has not been started. A new agent should read [agent-handoff.md](agent-handoff.md).
+The v0.5.1 reliability follow-up is published and verified. Development resumed after the machine transfer;
+#32 is implemented and locally validated for v0.6.0; final CI/publication/acceptance remains pending. The owner authorized ready pre-1.0 releases but reserves the
+v1.0.0 decision. A new agent should read [agent-handoff.md](agent-handoff.md) and current [status](status.md).
 
 1. **Verify and pilot alongside implementation.** Decisions #5, #6 and #7 shipped in v0.2.2. The
    real-client checks (#14–#17), provider/channel checks (#18–#19), independent review (#13) and

@@ -1335,6 +1335,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/gateways/requestable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Opted-in platform gateways, browser session only; never grants MCP access */
+        get: operations["listRequestableGateways"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/access-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Private requested or gateway-scoped review queue, browser session only */
+        get: operations["listMyAccessRequests"];
+        put?: never;
+        /** Request for oneself or a currently administered team, browser session only */
+        post: operations["createAccessRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/access-requests/{requestId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: components["parameters"]["AccessRequestIdParam"];
+            };
+            cookie?: never;
+        };
+        /** Private request, requester or current gateway reviewer, browser session only */
+        get: operations["getAccessRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/access-requests/{requestId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: components["parameters"]["AccessRequestIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Current platform admin or gateway steward, never requester, browser session only */
+        post: operations["decideAccessRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/access-requests/{requestId}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: components["parameters"]["AccessRequestIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Requester's pending request only, browser session only */
+        post: operations["withdrawAccessRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/gateways/{gatewayId}/access-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gatewayId: components["parameters"]["GatewayIdParam"];
+            };
+            cookie?: never;
+        };
+        /** Platform gateway discoverability/stewards, platform staff browser session only */
+        get: operations["adminGetGatewayAccessSettings"];
+        /** Replace discoverability/stewards, platform admin browser session only, gateway If-Match required */
+        put: operations["adminSetGatewayAccessSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/gateways": {
         parameters: {
             query?: never;
@@ -4513,6 +4625,8 @@ export interface components {
              * @description Selected capabilities not served right now (see GatewayCapability.unavailableReason)
              */
             unavailableCount: number;
+            /** @description Platform gateways only; change through the browser-only access-settings operation. */
+            readonly accessRequestsEnabled?: boolean;
             /**
              * Format: int64
              * @description Platform gateways' grants (0 for team gateways)
@@ -4676,6 +4790,80 @@ export interface components {
             items: components["schemas"]["GatewayOption"][];
             nextCursor?: string | null;
         };
+        RequestableGateway: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description: string;
+        };
+        RequestableGatewayPage: {
+            items: components["schemas"]["RequestableGateway"][];
+            nextCursor?: string | null;
+        };
+        GatewayAccessSettingsUpdate: {
+            enabled: boolean;
+            stewardIds: string[];
+        };
+        GatewayAccessSettings: {
+            enabled: boolean;
+            stewardIds: string[];
+            /** Format: int64 */
+            revision: number;
+        };
+        AccessRequestCreate: {
+            /** Format: uuid */
+            gatewayId: string;
+            /**
+             * Format: uuid
+             * @description Omitted means oneself; otherwise requires current owner/admin authority in this active team.
+             */
+            teamId?: string;
+            reason: string;
+        };
+        AccessRequestDecision: {
+            /** @enum {string} */
+            decision: "approve" | "deny";
+            note?: string;
+            /**
+             * Format: int32
+             * @description Approval only; omitted means a permanent grant.
+             */
+            expiresInDays?: number;
+        };
+        AccessRequest: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            gatewayId: string;
+            gatewayName: string;
+            /** Format: uuid */
+            requesterId: string;
+            requesterName: string;
+            /** @enum {string} */
+            subjectKind: "user" | "team";
+            /** Format: uuid */
+            teamId?: string;
+            teamName?: string;
+            reason: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "denied" | "withdrawn";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            decidedAt: string | null;
+            decisionNote: string;
+            /** Format: uuid */
+            grantId: string | null;
+            /** Format: date-time */
+            grantExpiresAt: string | null;
+            canDecide: boolean;
+        };
+        AccessRequestPage: {
+            items: components["schemas"]["AccessRequest"][];
+            nextCursor?: string | null;
+            /** Format: int64 */
+            pendingReviewCount: number;
+        };
         /** @enum {string} */
         GatewayGrantSubjectKind: "team" | "user" | "group";
         /** @description Optional tool ceiling. Null is unrestricted; an empty object denies all tools. Classes OR exact exposed names match within a scope; independent layers intersect. Prompts and resources are unchanged. */
@@ -4683,6 +4871,7 @@ export interface components {
             classes?: components["schemas"]["ToolClass"][];
             tools?: string[];
         } | null;
+        /** @description A platform-gateway grant. Null expiry is permanent; an elapsed expiry never contributes access or tool scope, even before cleanup. */
         GatewayGrant: {
             toolScope?: components["schemas"]["ToolScope"];
             /** Format: uuid */
@@ -4695,6 +4884,8 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             addedByName?: string | null;
+            /** Format: date-time */
+            expiresAt?: string | null;
         };
         GrantTeam: {
             /** Format: uuid */
@@ -4702,8 +4893,13 @@ export interface components {
             slug: string;
             name: string;
         };
-        /** @description Exactly one of team, userEmail or group, matching subjectKind */
+        /** @description Exactly one of team, userEmail or group, matching subjectKind. Expiry is optional and permanent by default. Drain older serving binaries before creating expiring grants. */
         GatewayGrantCreate: {
+            /**
+             * Format: int32
+             * @description Elapsed UTC days from creation; omitted means permanent.
+             */
+            expiresInDays?: number;
             toolScope?: components["schemas"]["ToolScope"];
             subjectKind: components["schemas"]["GatewayGrantSubjectKind"];
             /** @description Team slug or ID */
@@ -6235,7 +6431,7 @@ export interface components {
         /** @description Where the web app goes for an item (docs/admin-overview.md, Link targets). server: the server page (team page for members, Admin > Servers for platform staff); servers: the team's server list; review_queue: Admin > Publishing; gateways: Admin > Gateways; service_account / service_accounts: the team's service accounts; automation_tokens: Admin > Automation tokens; team_automation_tokens: the team's Settings > Automation tokens; auth_providers: Admin > Auth providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team's Settings > Notifications; service_connections: the team's Service accounts > Connections tab; account_connections: Account > Connections; account_api_keys: Account > API keys; approval: the private receipt page. */
         LinkTarget: {
             /** @enum {string} */
-            type: "server" | "servers" | "review_queue" | "gateways" | "service_account" | "service_accounts" | "automation_tokens" | "team_automation_tokens" | "auth_providers" | "usage" | "notification_settings" | "team_notification_settings" | "service_connections" | "account_connections" | "account_api_keys" | "approval";
+            type: "server" | "servers" | "review_queue" | "gateways" | "service_account" | "service_accounts" | "automation_tokens" | "team_automation_tokens" | "auth_providers" | "usage" | "notification_settings" | "team_notification_settings" | "service_connections" | "account_connections" | "account_api_keys" | "approval" | "access_request" | "access_requests";
             /** @description The object's ID for singular types (server, service_account, approval) */
             id?: string;
             /** @description The team's slug, for team pages and for the team's server or service account */
@@ -6245,7 +6441,7 @@ export interface components {
          * @description approval_pending: one private receipt per exact call the current human can review; excludes self-approval, stale or expired requests, ineligible service-account admins and automation tokens. Totals count only that human's eligible receipts. server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within 14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
          * @enum {string}
          */
-        AttentionKind: "server_failing" | "upstream_signin_lapsed" | "review_pending" | "approval_pending" | "capabilities_changed" | "personal_keys_expiring" | "service_account_keys_expiring" | "automation_tokens_expiring" | "connections_reconsent" | "gateways_disabled" | "rate_limited" | "notification_failures" | "server_certificate_expiring";
+        AttentionKind: "server_failing" | "upstream_signin_lapsed" | "review_pending" | "approval_pending" | "access_requests_pending" | "capabilities_changed" | "personal_keys_expiring" | "service_account_keys_expiring" | "automation_tokens_expiring" | "connections_reconsent" | "gateways_disabled" | "rate_limited" | "notification_failures" | "server_certificate_expiring";
         /** @enum {string} */
         AttentionSeverity: "critical" | "warning" | "info";
         /** @description The server (or gateway) an item is about */
@@ -6352,10 +6548,10 @@ export interface components {
             truncated: boolean;
         };
         /**
-         * @description server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
+         * @description server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
          * @enum {string}
          */
-        NotificationEventType: "server.unhealthy" | "server.recovered" | "capability.changed" | "publish.requested" | "publish.decided" | "connection.needs_reconsent" | "upstream_signin.lapsed" | "key.expiring" | "approval.requested" | "approval.decided";
+        NotificationEventType: "server.unhealthy" | "server.recovered" | "capability.changed" | "publish.requested" | "publish.decided" | "connection.needs_reconsent" | "upstream_signin.lapsed" | "key.expiring" | "approval.requested" | "approval.decided" | "access.requested" | "access.decided";
         NotificationItem: {
             /** Format: int64 */
             id: number;
@@ -6709,7 +6905,7 @@ export interface components {
              */
             id: string;
             /** @enum {string} */
-            type: "server.unhealthy" | "server.recovered" | "capability.changed" | "publish.requested" | "publish.decided" | "connection.needs_reconsent" | "upstream_signin.lapsed" | "key.expiring" | "approval.requested" | "approval.decided" | "test";
+            type: "server.unhealthy" | "server.recovered" | "capability.changed" | "publish.requested" | "publish.decided" | "connection.needs_reconsent" | "upstream_signin.lapsed" | "key.expiring" | "approval.requested" | "approval.decided" | "access.requested" | "access.decided" | "test";
             /** @enum {integer} */
             version: 1;
             /** Format: date-time */
@@ -6795,6 +6991,28 @@ export interface components {
         };
     };
     responses: {
+        /** @description Authorized private access request */
+        AccessRequestReply: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["AccessRequest"];
+                };
+            };
+        };
+        /** @description Platform gateway access-request settings */
+        GatewayAccessSettingsReply: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["GatewayAccessSettings"];
+                };
+            };
+        };
         /** @description Approval receipt; preview is restricted to authorized detail reads, never list results */
         ApprovalReceiptReply: {
             headers: {
@@ -7048,6 +7266,7 @@ export interface components {
         /** @description Only this MCP server's capabilities (server ID) */
         GatewayOptionServerParam: string;
         GatewayOptionLimitParam: number;
+        AccessRequestIdParam: string;
         GatewayIdParam: string;
         /** @description Gateway ID */
         CallGatewayParam: string;
@@ -9524,6 +9743,180 @@ export interface operations {
             200: components["responses"]["McpCallPageReply"];
             400: components["responses"]["ErrorReply"];
             403: components["responses"]["ErrorReply"];
+        };
+    };
+    listRequestableGateways: {
+        parameters: {
+            query?: {
+                /** @description nextCursor from the previous page */
+                cursor?: components["parameters"]["CursorParam"];
+                limit?: components["parameters"]["LimitParam"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Minimal discoverable projection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["RequestableGatewayPage"];
+                    };
+                };
+            };
+            403: components["responses"]["ErrorReply"];
+        };
+    };
+    listMyAccessRequests: {
+        parameters: {
+            query?: {
+                /** @description nextCursor from the previous page */
+                cursor?: components["parameters"]["CursorParam"];
+                limit?: components["parameters"]["LimitParam"];
+                view?: "requested" | "review";
+                pendingOnly?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized private requests and actionable review count */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AccessRequestPage"];
+                    };
+                };
+            };
+            403: components["responses"]["ErrorReply"];
+        };
+    };
+    createAccessRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessRequestCreate"];
+            };
+        };
+        responses: {
+            201: components["responses"]["AccessRequestReply"];
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            429: components["responses"]["ErrorReply"];
+        };
+    };
+    getAccessRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: components["parameters"]["AccessRequestIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AccessRequestReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+        };
+    };
+    decideAccessRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: components["parameters"]["AccessRequestIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessRequestDecision"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AccessRequestReply"];
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+        };
+    };
+    withdrawAccessRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: components["parameters"]["AccessRequestIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AccessRequestReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+        };
+    };
+    adminGetGatewayAccessSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gatewayId: components["parameters"]["GatewayIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["GatewayAccessSettingsReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+        };
+    };
+    adminSetGatewayAccessSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                gatewayId: components["parameters"]["GatewayIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GatewayAccessSettingsUpdate"];
+            };
+        };
+        responses: {
+            200: components["responses"]["GatewayAccessSettingsReply"];
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            412: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
         };
     };
     listMyGateways: {

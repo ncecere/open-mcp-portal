@@ -41,6 +41,8 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
   const [team, setTeam] = useState("");
   const [email, setEmail] = useState("");
   const [group, setGroup] = useState("");
+  const [days, setDays] = useState("");
+  const validDays = days === "" || (Number.isInteger(Number(days)) && Number(days) >= 1 && Number(days) <= 365);
   const [toolScope, setToolScope] = useState<ToolScope>(null);
   const [scopeDraftProblem, setScopeDraftProblem] = useState<string>();
   const [submitted, setSubmitted] = useState(false);
@@ -81,10 +83,10 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
       onSubmit={() => {
         if (add.isPending) return;
         setSubmitted(true);
-        if (value && !scopeProblem(toolScope) && !scopeDraftProblem) add.mutate({
+        if (value && validDays && !scopeProblem(toolScope) && !scopeDraftProblem) add.mutate({
           gatewayId: gateway.id,
           gatewayName: gateway.name,
-          body: { ...(kind === "team" ? { subjectKind: kind, team } : kind === "user" ? { subjectKind: kind, userEmail: email.trim() } : { subjectKind: kind, group: group.trim() }), toolScope },
+          body: { ...(kind === "team" ? { subjectKind: kind, team } : kind === "user" ? { subjectKind: kind, userEmail: email.trim() } : { subjectKind: kind, group: group.trim() }), toolScope, ...(days ? { expiresInDays: Number(days) } : {}) },
         });
       }}
       submitLabel="Grant access"
@@ -126,6 +128,9 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
           <Input disabled={add.isPending} spellCheck={false} autoComplete="off" maxLength={256} value={group} onChange={(e) => change(setGroup)(e.target.value)} />
         </Field>
       )}
+      <Field label="Grant lifetime (days)" description="Optional, 1–365 days; empty means permanent. Expiry ends access without waiting for cleanup." error={!validDays ? "Enter a whole number from 1 to 365, or leave empty." : undefined}>
+        <Input disabled={add.isPending} type="number" min={1} max={365} step={1} value={days} onValueChange={setDays} />
+      </Field>
       <ScopeEditor value={toolScope} onChange={setToolScope} onProblemChange={setScopeDraftProblem} disabled={add.isPending} />
       <p>Matching grants are alternatives: another grant can allow additional tools. Independent credential limits still apply.</p>
       <ErrorAlert error={refused ? undefined : add.error} title="Couldn't grant access" />

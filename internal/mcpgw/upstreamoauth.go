@@ -148,7 +148,7 @@ func (rc *request) exchange(o gateways.Offer, rec *calls.Call, cred *providers.C
 		if err == nil {
 			return result, isError, true
 		}
-		if rc.approvalTransportFailed(*rec, err) {
+		if rc.approvalTransportFailed(*rec, err) || rc.grantExpiryFailed(*rec, err) {
 			return nil, false, false
 		}
 		var ue *upstream.Error

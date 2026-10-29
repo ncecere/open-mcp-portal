@@ -109,6 +109,8 @@ func (s *Service) recipients(ctx context.Context, q *dbgen.Queries, ev dbgen.Not
 	switch ev.Event {
 	case ApprovalRequested, ApprovalDecided:
 		out, err = s.approvalRecipients(ctx, q, ev)
+	case AccessRequested, AccessDecided:
+		out, err = s.accessRecipients(ctx, q, ev)
 	case ServerUnhealthy, ServerRecovered, CapabilityChanged, UpstreamSigninLapsed:
 		err = team(editorsUp)
 	case PublishDecided:

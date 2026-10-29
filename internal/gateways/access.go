@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -86,6 +87,9 @@ type Caller struct {
 	Role string
 	// Access says why they may use it (empty: they may not).
 	Access []string
+	// ExpiresAt conservatively bounds this snapshot by the earliest matched
+	// grant expiry. A fresh snapshot may still authorize through alternatives.
+	ExpiresAt *time.Time
 }
 
 // Allowed reports whether the person may use the gateway.
@@ -120,7 +124,7 @@ func callerOf(ctx context.Context, q *dbgen.Queries, g dbgen.Gateway, u dbgen.Us
 		}
 		scopes = append(scopes, toolscope.Stored(gr.ToolScope))
 	}
-	return Caller{Access: grantKinds(kinds), ToolPolicy: toolscope.Union(scopes...)}, nil
+	return Caller{Access: grantKinds(kinds), ToolPolicy: toolscope.Union(scopes...), ExpiresAt: grantDeadline(grants)}, nil
 }
 
 // Offer is a selected capability as one caller sees it.
@@ -255,7 +259,7 @@ func serviceAccountCaller(ctx context.Context, q *dbgen.Queries, g dbgen.Gateway
 	for _, gr := range grants {
 		scopes = append(scopes, toolscope.Stored(gr.ToolScope))
 	}
-	return Caller{Access: []string{AccessTeamGrant}, ToolPolicy: toolscope.Union(scopes...)}, nil
+	return Caller{Access: []string{AccessTeamGrant}, ToolPolicy: toolscope.Union(scopes...), ExpiresAt: grantDeadline(grants)}, nil
 }
 
 // Resolve finds a gateway by slug (404 gateway_not_found).
@@ -574,6 +578,7 @@ type GrantInput struct {
 	ToolScope              []byte
 	Kind                   string
 	Team, UserEmail, Group *string
+	ExpiresInDays          *int32
 }
 
 func validGroup(g string) bool {
@@ -608,7 +613,11 @@ func (s *Service) AddGrant(ctx context.Context, a authz.Actor, id uuid.UUID, in 
 		if g.OwnerKind != OwnerPlatform {
 			return errTeamGateway
 		}
-		p := dbgen.InsertGatewayGrantParams{GatewayID: g.ID, SubjectKind: in.Kind, AddedBy: by(a), ToolScope: toolScope}
+		expires, err := grantExpiry(ctx, q, in.ExpiresInDays)
+		if err != nil {
+			return err
+		}
+		p := dbgen.InsertGatewayGrantParams{GatewayID: g.ID, SubjectKind: in.Kind, AddedBy: by(a), ToolScope: toolScope, ExpiresAt: expires}
 		subject := ""
 		switch {
 		case in.Kind == SubjectTeam && in.Team != nil:
@@ -641,17 +650,9 @@ func (s *Service) AddGrant(ctx context.Context, a authz.Actor, id uuid.UUID, in 
 		default:
 			return errInvalidGrant
 		}
-		row, err := q.InsertGatewayGrant(ctx, p)
-		if apperr.IsUniqueViolation(err, "") {
-			return errGrantExists
-		} else if err != nil {
-			return err
-		}
+		row, err := insertGrant(ctx, q, a, g, p, subject)
 		grantID = row.ID
-		e := a.Audit("gateway.grant_add", "gateway_grant", row.ID.String())
-		e.After = map[string]any{"subjectKind": in.Kind, "subject": subject, "toolScope": toolscope.Stored(row.ToolScope)}
-		e.Metadata = map[string]any{"name": g.Name + " · " + subject, "gatewayId": g.ID.String(), "gatewayName": g.Name}
-		return audit.Record(ctx, q, e)
+		return err
 	})
 	if err != nil {
 		return dbgen.ListGatewayGrantsRow{}, err
@@ -689,7 +690,7 @@ func (s *Service) RemoveGrant(ctx context.Context, a authz.Actor, id, grantID uu
 			return err
 		}
 		e := a.Audit("gateway.grant_remove", "gateway_grant", row.ID.String())
-		e.Before = map[string]any{"subjectKind": row.SubjectKind, "subject": subject, "toolScope": toolscope.Stored(row.ToolScope)}
+		e.Before = map[string]any{"subjectKind": row.SubjectKind, "subject": subject, "toolScope": toolscope.Stored(row.ToolScope), "expiresAt": row.ExpiresAt}
 		e.Metadata = map[string]any{"name": g.Name + " · " + subject, "gatewayId": g.ID.String(), "gatewayName": g.Name}
 		return audit.Record(ctx, q, e)
 	})

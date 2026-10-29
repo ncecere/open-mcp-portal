@@ -355,9 +355,12 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 	notifier.ObserveLeader = func(leader bool) { observability.SetLeader("notifications", leader) }
 	reg.SetNotifier(notifier)
 	provs.Notify = notifier
+	gws.AccessNotice = notify.AccessNotice
 	callSvc := calls.New(pool)
 	ret := retention.New(pool, retention.Config{Interval: cfg.RetentionInterval, BatchSize: int32(cfg.RetentionBatchSize)}, log)
 	ret.Hooks = []retention.Hook{provs.Cleanup, pers.Cleanup, rates.Cleanup, func(ctx context.Context) (int64, error) {
+		return gws.CleanupGrants(ctx, int32(cfg.RetentionBatchSize))
+	}, func(ctx context.Context) (int64, error) {
 		return notifier.Purge(ctx, int32(cfg.RetentionBatchSize), func(kind string, n int64) {
 			observability.RetentionDeleted.WithLabelValues(kind).Add(float64(n))
 		})

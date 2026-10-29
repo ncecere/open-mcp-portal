@@ -128,7 +128,8 @@ func (q *Queries) DeleteServiceAccount(ctx context.Context, id uuid.UUID) error 
 }
 
 const gatewayGrantsForTeam = `-- name: GatewayGrantsForTeam :many
-SELECT id, gateway_id, subject_kind, team_id, user_id, group_name, added_by, added_at, tool_scope FROM gateway_grants WHERE gateway_id = $1 AND team_id = $2
+SELECT id, gateway_id, subject_kind, team_id, user_id, group_name, added_by, added_at, tool_scope, expires_at FROM gateway_grants WHERE gateway_id = $1 AND team_id = $2
+    AND (expires_at IS NULL OR expires_at > clock_timestamp())
 `
 
 type GatewayGrantsForTeamParams struct {
@@ -155,6 +156,7 @@ func (q *Queries) GatewayGrantsForTeam(ctx context.Context, arg GatewayGrantsFor
 			&i.AddedBy,
 			&i.AddedAt,
 			&i.ToolScope,
+			&i.ExpiresAt,
 		); err != nil {
 			return nil, err
 		}
@@ -684,7 +686,8 @@ func (q *Queries) RevokeServiceAccountKeys(ctx context.Context, serviceAccountID
 }
 
 const teamHasGatewayGrant = `-- name: TeamHasGatewayGrant :one
-SELECT EXISTS (SELECT 1 FROM gateway_grants WHERE gateway_id = $1 AND team_id = $2)::bool
+SELECT EXISTS (SELECT 1 FROM gateway_grants WHERE gateway_id = $1 AND team_id = $2
+    AND (expires_at IS NULL OR expires_at > clock_timestamp()))::bool
 `
 
 type TeamHasGatewayGrantParams struct {

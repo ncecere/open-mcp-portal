@@ -37,13 +37,15 @@ const (
 	KeyExpiring              = "key.expiring"
 	ApprovalRequested        = "approval.requested"
 	ApprovalDecided          = "approval.decided"
+	AccessRequested          = "access.requested"
+	AccessDecided            = "access.decided"
 	// Test is the type of a destination's test payload; it is not an event.
 	Test = "test"
 )
 
 // Events lists every event in the order the API shows them.
 var Events = []string{ServerUnhealthy, ServerRecovered, CapabilityChanged, PublishRequested, PublishDecided,
-	ConnectionNeedsReconsent, UpstreamSigninLapsed, KeyExpiring, ApprovalRequested, ApprovalDecided}
+	ConnectionNeedsReconsent, UpstreamSigninLapsed, KeyExpiring, ApprovalRequested, ApprovalDecided, AccessRequested, AccessDecided}
 
 // ValidEvent reports whether e is a supported event.
 func ValidEvent(e string) bool {

@@ -44,6 +44,9 @@ func (rc *request) approvalInput(o gateways.Offer, args json.RawMessage, secrets
 	if rc.principal.expiresAt != nil {
 		in.CredentialExpiresAt = *rc.principal.expiresAt
 	}
+	if expires := rc.caller.ExpiresAt; expires != nil && (in.CredentialExpiresAt.IsZero() || expires.Before(in.CredentialExpiresAt)) {
+		in.CredentialExpiresAt = *expires
+	}
 	return in
 }
 

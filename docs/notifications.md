@@ -14,6 +14,18 @@ suspended people receive nothing. This does not change personal connection
 notifications and does not send shared-account details to personal recipients or
 webhooks. See [service connections](service-connections.md).
 
+## Gateway access-request notices (unreleased #32)
+
+`access.requested` tells current platform admins and the gateway's current named stewards about a new
+pending request, never its requester. `access.decided` tells the active requester about an approval/denial.
+Recipient eligibility is read live at fan-out and again before queued email delivery. A disabled or no-longer
+requestable gateway, inactive requester or lost team-request authority suppresses request notices.
+
+These are private inbox/verified-email events, never webhook subscriptions or deliveries. Payloads contain
+only `accessRequestId` and status. Reasons, decision notes, identities, grant scope and upstream details are
+not serialized into notices. Links open the authorized private request page. Duplicate submission emits
+nothing; notification failure cannot undo the request/grant/audit transaction. See [design](access-requests.md).
+
 ## Sensitive-call approval notices
 
 `approval.requested` is sent only when a new pending receipt is created (including explicit renewal),
