@@ -1,7 +1,26 @@
 # Status and handoff
 
-Last updated: 2026-10-29. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.8.0 published and verified; #33 upstream protection/failover is closed**. The owner resumed ordered backlog development and authorized pre-1.0 releases; **v1.0.0 remains the owner's explicit decision**. #32 and #33 are closed with release evidence. The current v0.8.0 evidence/image-pin follow-up is being checked; finish it before starting #35's specification-confirmation boundary. A fresh agent should read [agent-handoff.md](agent-handoff.md).
+Last updated: 2026-10-29. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.8.0 published and verified; #33 upstream protection/failover is closed**. The owner resumed ordered backlog development and authorized pre-1.0 releases; **v1.0.0 remains the owner's explicit decision**. #32 and #33 are closed with release evidence. The v0.8.0 evidence/image-pin follow-up passed main CI and both smoke CNIs. #35's official specification is confirmed; its bounded design is in development, not implemented. A fresh agent should read [agent-handoff.md](agent-handoff.md).
 (release notes: [releases/v0.8.0.md](releases/v0.8.0.md); earlier: [v0.7.0](releases/v0.7.0.md), [v0.6.0](releases/v0.6.0.md), [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+
+## In development: #35 modern task-handle relay
+
+The v0.8.0 evidence/pin follow-up `3a2183ce763da08e0e0183ec8b0572a1c947f21e` passed all seven
+[main CI jobs40895243972](https://github.com/ncecere/open-mcp-portal/actions/runs/40895243972) and both
+[smoke CNIs40895244112](https://github.com/ncecere/open-mcp-portal/actions/runs/40895244112).
+[Final confirmation](https://github.com/ncecere/open-mcp-portal/issues/33#issuecomment-6500631495) records it.
+
+The official released 2026-07-28 Tasks spec/Final SEP/schema were confirmed and pinned before design;
+[preflight](https://github.com/ncecere/open-mcp-portal/issues/35#issuecomment-6500904668) resolves declaration,
+flat result, ack-only mutation and routing/error semantics. Decision86/[design](mcp-tasks.md) retain current
+exact-call approvals: ordinary ungoverned modern tools only, no task negotiation for governed/NoReplay calls,
+no automatic retry/failover, original principal/credential/definition/curation/origin binding, fresh current
+authority and durable bounded sealed mappings. Cancellation acknowledgement is not proof of termination.
+The current branch adds an **unwired released-shape parser foundation** (flat create/get variants, ack-only
+update/cancel, exact upstream ID, bounded lossless integer/time/payload checks). Ten repeated race runs,
+bounded20s fuzzing (89,681 executions), all-package compilation and lint passed in160s. Full upstream/
+gateway package races and generated freshness then passed in19s. **No task negotiation/dispatch/store/migration or new release version exists yet.** #35
+remains open, all acceptance boxes unchecked. Source version0.8.0 is not evidence of task support.
 
 ## v0.8.0 (2026-10-29): separate #33 failover stage, shipped and closed
 
@@ -71,8 +90,8 @@ tree endpoint/relocation/contract races in both role modes plus lint/build/Pytho
   mobile and health-mobile contrast, and review-dialog aria-hidden-focus/contrast remain incompletes**.
   The source final owner-mobile result had no incomplete; these are distinct results, not a global sign-off.
 
-The example image pin now uses the verified digest. This publication-evidence/pin follow-up's applicable
-local/main-CI/both-CNI checks are still pending; it does not move or recreate the immutable source tag.
+The example image pin uses the verified digest. The publication-evidence/pin follow-up passed applicable
+local checks, main CI and both CNIs as recorded above; it did not move or recreate the immutable source tag.
 Migration47 is applied/frozen: any DDL correction needs a new migration. All owned source/published/fake/
 browser fixtures were stopped and their labeled tmpfs PostgreSQL destroyed before removing matching keys/
 config; existing development services, databases and keys were untouched. No implicit encrypted-state
