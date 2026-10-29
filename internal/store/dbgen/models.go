@@ -446,6 +446,7 @@ type McpServer struct {
 	SecretSetupAt         *time.Time
 	RateLimitPerMinute    *int64
 	MaxConcurrent         *int32
+	SupportsTasks         bool
 }
 
 type McpServerCredential struct {
@@ -500,6 +501,37 @@ type McpServerTl struct {
 	ClientNotAfter   *time.Time
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+}
+
+type McpTask struct {
+	ID                  uuid.UUID
+	HandleDigest        string
+	PrincipalKind       string
+	UserID              uuid.NullUUID
+	ServiceAccountID    uuid.NullUUID
+	CredentialKind      string
+	ApiKeyID            uuid.NullUUID
+	OauthGrantID        uuid.NullUUID
+	ServiceAccountKeyID uuid.NullUUID
+	GatewayID           uuid.UUID
+	ServerID            uuid.UUID
+	CapabilityID        uuid.UUID
+	Status              string
+	Binding             json.RawMessage
+	BindingDigest       *string
+	StateCipher         []byte
+	Revision            int64
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	CeilingAt           time.Time
+	ExpiresAt           time.Time
+	ReservationDeadline *time.Time
+	NextPollAt          time.Time
+	PollIntervalMs      int32
+	UpstreamCreatedAt   *time.Time
+	UpstreamUpdatedAt   *time.Time
+	OperationID         uuid.NullUUID
+	OperationDeadline   *time.Time
 }
 
 type NetworkSetting struct {

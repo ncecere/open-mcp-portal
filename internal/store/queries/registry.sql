@@ -115,7 +115,7 @@ UPDATE mcp_servers SET protocol_era = @era, protocol_version = @version, protoco
 -- name: ClearMCPServerRefreshed :exec
 -- A new URL: the stored capabilities (and the protocol negotiated) were read
 -- from the old endpoint.
-UPDATE mcp_servers SET refreshed_at = NULL, protocol_era = NULL, protocol_version = NULL, protocol_negotiated_at = NULL WHERE id = $1;
+UPDATE mcp_servers SET refreshed_at = NULL, protocol_era = NULL, protocol_version = NULL, protocol_negotiated_at = NULL, supports_tasks = false WHERE id = $1;
 
 -- name: SetMCPServerRefreshError :exec
 UPDATE mcp_servers SET last_refresh_error = @message WHERE id = @id;

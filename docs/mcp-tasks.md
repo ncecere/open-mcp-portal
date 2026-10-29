@@ -88,7 +88,9 @@ boundaries under contention, revocation, narrow scopes and configuration changes
 
 ## Durable storage, bounds and lifetime
 
-A new expand-only migration after47 is required; no applied migration is edited. Proposed operational state:
+The migration48/SQL foundation passed targeted and full store/rotation/approval/task-package races in both
+actual database-role modes; it is not a functional task service. Migration48 is applied/frozen; any further
+DDL starts at49. No applied migration is edited. Its operational schema records:
 
 - Task UUID, handle digest, principal/starting-credential binding and gateway/server/capability references;
   creation/deadline/status/revision, bounded poll timing and in-flight reservation facts.
@@ -100,7 +102,13 @@ A new expand-only migration after47 is required; no applied migration is edited.
   keys/payloads. A stale poll may not resurrect consumed keys or overwrite a newer transition.
 
 Reserve capacity **before** initial network dispatch and persist the actual mapping **before** exposing a
-handle. Initial failed/ambiguous dispatch may have left untracked upstream work; do not claim cancellation or
+handle. The capacity transaction takes a principal-scoped advisory transaction lock, counts live active/reserved
+rows across that principal's credential roots, and inserts before releasing the transaction. Operation
+UUIDs plus monotonic row revisions fence responses; commit input-attempt state before transport, and never
+restore it when releasing a failed operation. These SQL primitives do not replace live authorization or
+implement the sealed input lifecycle by themselves.
+
+Initial failed/ambiguous dispatch may have left untracked upstream work; do not claim cancellation or
 restore spent authorization. Expire abandoned reservations with a bounded deadline. Concurrent replicas must
 not bypass the cap by count-then-insert without serialization.
 

@@ -4524,7 +4524,7 @@ type McpCall struct {
 	IdentitySent *bool `json:"identitySent,omitempty"`
 	LatencyMs    int32 `json:"latencyMs"`
 
-	// Method tools/list, tools/call, prompts/list, prompts/get, resources/list, resources/templates/list or resources/read
+	// Method tools/list, tools/call, prompts/list, prompts/get, resources/list, resources/templates/list, resources/read, tasks/get, tasks/update or tasks/cancel. Task operations retain the original exposed tool identity, never the actual task ID.
 	//
 	// Example: tools/call
 	Method     string    `json:"method"`
@@ -4752,7 +4752,10 @@ type McpServer struct {
 	// Slug Immutable; prefixes the server's tool names in gateways (slug__tool)
 	//
 	// Example: service-status
-	Slug           string             `json:"slug"`
+	Slug string `json:"slug"`
+
+	// SupportsTasks Whether the canonical primary last advertised the modern io.modelcontextprotocol/tasks extension; discovery metadata, not permission to bypass task policy. Optional for older responses; absence does not advertise task support.
+	SupportsTasks  *bool              `json:"supportsTasks,omitempty"`
 	TeamId         openapi_types.UUID `json:"teamId"`
 	TeamName       string             `json:"teamName"`
 	TeamSlug       string             `json:"teamSlug"`

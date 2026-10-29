@@ -6,6 +6,10 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
+## Unreleased
+
+- **In-development task-relay foundations (#35, decision86), not enabled task support.** Confirm released wire shapes, opaque bound handles, sealed state and bounded lifetime; add non-spending policy checks and expand-only task storage/rotation and revision-fence primitives. Negotiation, live-authorized relay/input lifecycle and whole-product acceptance remain unfinished. No task release version is selected.
+
 ## [0.8.0] - 2026-10-29
 
 - **Origin-isolated endpoint failover** (#33 remaining stage, decision85). Keep the canonical primary plus at most two ordered extras with independent entered static credentials. New origins require every value again; owner/admin session-only mutations are audited/revision-checked and destination/shape changes require catalog review. Unsupported OAuth/person/provider/machine/TLS combinations refuse extras rather than forwarding an existing credential elsewhere.

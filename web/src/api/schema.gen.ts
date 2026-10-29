@@ -4178,6 +4178,8 @@ export interface components {
             sendIdentity?: boolean;
             /** @description The MCP protocol version the portal last negotiated with the upstream server (set by refresh, health checks and test); read-only. Null until the first successful exchange. */
             protocol?: components["schemas"]["McpServerProtocol"] | null;
+            /** @description Whether the canonical primary last advertised the modern io.modelcontextprotocol/tasks extension; discovery metadata, not permission to bypass task policy. Optional for older responses; absence does not advertise task support. */
+            readonly supportsTasks?: boolean;
             /** @description SHA-256 (hex) over the server's URL, auth mode and requirement (for machine_oauth also its token endpoint, client ID, token authentication method, scopes, audience and resource, never the secret) and over every listed capability's kind, name and fingerprint, sorted. It changes when any of them does (a refresh, a new URL ...). Send it back as expectedDigest when reviewing (adminReviewMcpServer) or publishing, so what is approved is what was read */
             readonly reviewDigest?: string;
             revision: components["schemas"]["Revision"];
@@ -5076,7 +5078,7 @@ export interface components {
             /** Format: date-time */
             occurredAt: string;
             /**
-             * @description tools/list, tools/call, prompts/list, prompts/get, resources/list, resources/templates/list or resources/read
+             * @description tools/list, tools/call, prompts/list, prompts/get, resources/list, resources/templates/list, resources/read, tasks/get, tasks/update or tasks/cancel. Task operations retain the original exposed tool identity, never the actual task ID.
              * @example tools/call
              */
             method: string;

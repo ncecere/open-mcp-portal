@@ -25,6 +25,7 @@ import (
 
 	"github.com/ncecere/open-mcp-portal/internal/approvals"
 	"github.com/ncecere/open-mcp-portal/internal/capture"
+	"github.com/ncecere/open-mcp-portal/internal/mcptasks"
 	"github.com/ncecere/open-mcp-portal/internal/notify"
 	"github.com/ncecere/open-mcp-portal/internal/personsecrets"
 	"github.com/ncecere/open-mcp-portal/internal/providers"
@@ -82,6 +83,8 @@ var Columns = []Column{
 	{Table: "mcp_server_credentials", Column: "secondary_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(registry.CredentialSecondaryAAD)},
 	// Independent origin/server-bound extra-endpoint static credential envelope.
 	{Table: "mcp_server_endpoints", Column: "credentials_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(registry.EndpointCredentialsAAD)},
+	// Durable private task state; old values are redaction-only, never reused for dispatch.
+	{Table: "mcp_tasks", Column: "state_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(mcptasks.StateAAD)},
 	// A person's own secret for a server in person_secret mode (decision 72;
 	// registry.PersonSecretAAD), and the link a call returns for entering one
 	// (personsecrets.RequestAAD).

@@ -24,8 +24,14 @@ race runs and20s fuzzing (1,179,125 executions); row/handle/principal/credential
 argument/dependency-bound sealed-state, tamper/version/rotation and argument-representation units passed20
 repeated races. Monotonic expiry, wire-integer overflow, UTC/DST and bounded polling/configuration units
 also passed20 repeated races plus package races/compilation/lint in14s. These are clock-unit proofs, not a
-natural-expiry soak, and **unwired primitives, not authorization**. No task negotiation/dispatch/store/
-migration or new release version exists yet. A new read-only, non-spending `CheckUngoverned` policy primitive
+natural-expiry soak, and **unwired primitives, not authorization**. No task negotiation/dispatch or new
+release version exists yet. Expand-only migration48 is now applied/frozen; parameterized reservation/
+revision/operation fences and the cipher's rotation registry passed three repeated SQL races, full store/
+rotation/approval/task-package races in both actual database-role modes, compilation/lint/build/typecheck
+and optional discovery-contract races in528s. SQL fixtures are not a sealed relay or single-use input
+implementation; no functional task service is enabled. The initial typecheck failure exposed a required-TS/
+optional-Go discovery field; the corrected optional contract has a retained regression, not padded fixtures.
+A read-only, non-spending `CheckUngoverned` policy primitive
 passed focused and full approval-package races in both actual role modes in208s, including rule changes,
 expiry/cancellation/suspension and zero receipt/request-audit creation. It is not wired into task traffic.
 #35 remains open, all acceptance boxes unchecked. Source version0.8.0 is not evidence of task support.
