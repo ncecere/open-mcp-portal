@@ -148,16 +148,18 @@ func (rc *request) task() {
 	req := upstream.TaskRequest{Method: method, TaskID: payload.UpstreamID, Elicitation: rc.clientElicitation().declared(),
 		Trace: upstream.TraceFromMeta(rc.paramsMeta()), Redact: append(append([]string(nil), payload.RedactionOnly...), rc.taskCredentialValues(target, token)...)}
 	if method == methodTasksUpdate {
-		var body json.RawMessage
-		var n int
-		if op, body, n, err = rc.h.Tasks.CommitInput(ctx, op, responses); err != nil {
-			if errors.Is(err, mcptasks.ErrBusy) {
+		// A failed commit returns a zero operation: keep ours so the claim is
+		// still released (nothing was consumed, or the store refused to).
+		committed, body, n, cerr := rc.h.Tasks.CommitInput(ctx, op, responses)
+		if cerr != nil {
+			if errors.Is(cerr, mcptasks.ErrBusy) {
 				rc.taskBusy(snap, handle, red, rec)
 				return
 			}
-			rc.internal(err)
+			rc.internal(cerr)
 			return
 		}
+		op = committed
 		if n == 0 {
 			rc.taskAck(rec, "task_input_ignored")
 			return
@@ -501,7 +503,6 @@ func (rc *request) taskObserved(ctx context.Context, rec calls.Call, snap mcptas
 		rec.Outcome = calls.OutcomeToolError
 	}
 	rc.record(rec, n)
-	return
 }
 
 func mustJSON(v any) json.RawMessage {
