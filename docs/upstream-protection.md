@@ -1,6 +1,6 @@
 # Upstream protection (#33)
 
-Status: **locally validated v0.7.0 candidate, not yet published**. Decision84. This is the next ordered boundary after verified
+Status: **quota/concurrency/read-retry/breaker stage shipped and verified in v0.7.0; failover remains open**. Decision84. This is the next ordered boundary after verified
 v0.6.0/#32. The issue was drafted against v0.2.1: its migration29 and credential-mode assumptions are not
 current instructions. Quotas, concurrency, read retries and circuit breaking ship before failover. **#33
 stays open until the separate failover acceptance criteria are met.**

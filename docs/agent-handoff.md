@@ -1,11 +1,11 @@
-# Agent handoff: verified v0.6.0, #33 in development
+# Agent handoff: verified v0.7.0, next #33 failover
 
 The original stop point was the verified v0.5.1 machine transfer. On 2026-10-29 the owner resumed ordered
 backlog work, authorized releases when ready and delegated incidental decisions. **Do not cut v1.0.0 without
-the owner's explicit decision.** #32 shipped in verified v0.6.0 and is closed; #33 is in development,
-not released. See [upstream protection](upstream-protection.md) and [status](status.md) for the current
-scope and validation state. The original release
-tags remain immutable. No old environment, keys or data were transferred implicitly. Use owned fresh fixtures;
+the owner's explicit decision.** #33's quota/concurrency/read-retry/breaker stage shipped and is verified
+in v0.7.0; the parent remains open for separate failover. #32 shipped in v0.6.0 and is closed. See
+[upstream protection](upstream-protection.md) and [status](status.md) for scope and verification.
+The original release tags remain immutable. No old environment, keys or data were transferred implicitly. Use owned fresh fixtures;
 secure restoration of an existing encrypted database still requires its matching keys and operator control.
 
 [Status](status.md) is the source of truth for release SHAs, image digests, CI evidence and remaining blockers.
@@ -13,12 +13,14 @@ secure restoration of an existing encrypted database still requires its matching
 ## Start here
 
 1. Fetch `origin/main` and tags; inspect `git status`, the latest main CI and the published release. Work from
-   `main`, not an old approval or refresh-fix branch, for the released baseline. Inspect any active
-   `feature/upstream-protection` work before changing branches; do not discard an in-progress patch.
+   `main`, not an old approval/refresh/upstream-protection branch, for the released baseline. Inspect
+   any active work before changing branches; do not discard an in-progress patch.
 2. Read `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md), [status](status.md) and
-   [implementation order](implementation-order.md). The v0.6.0 evidence/image-pin follow-up at `be97198`
-   passed main CI and both smoke CNIs. Continue **#33 upstream protection** under decision84:
-   quotas/concurrency/read retries/breaker first, failover separately. Do not close #33 before its failover acceptance criteria are actually met.
+   [implementation order](implementation-order.md). Verify the v0.7.0 evidence/image-pin follow-up checks
+   against the already-green immutable release-source CI. Continue **#33 failover separately** after its
+   credential-origin design: inventory/refuse every current auth mode, require re-entry/review for a new
+   origin, actual-endpoint identity audiences and origin-aware cache. Do not close #33 before those criteria
+   are actually met.
 3. Git transfers source, migrations, generated contracts, tests and docs—not `.env`, encryption/signing keys,
    provider credentials or the existing development database. Use the documented fresh-instance setup or
    explicitly arrange a secure, consistent database-and-keys transfer. Never reset/reseed the old database,
@@ -38,6 +40,11 @@ secure restoration of an existing encrypted database still requires its matching
   grants and optional expiry, decision83/migrations43–45. Main/tag CI, both smoke CNIs, signed native images,
   SPDX/provenance/checksums and actual-published strict-runtime browser/MCP/forced-expiry checks passed.
   Browser modal/mobile-settings axe incompletes remain; this is not whole-product accessibility acceptance.
+- v0.7.0: #33 shared server quotas, replica-local concurrency, bounded trusted-read retries and circuit breaking,
+  decision84/migration46. Full local normal/race suites in both actual role modes, 848 web tests, main/tag CI,
+  both smoke CNIs, independent signature/SPDX/provenance/checksum/runtime verification and actual-published
+  strict-runtime browser/MCP quota checks passed. Owner-mobile contrast remains an axe incomplete. No failover,
+  production deployment, broad soak or real-client/provider/pilot acceptance is implied; #33 stays open.
 
 See the release sections in [status](status.md) for actual publication/verification rather than interpreting
 this list or a local version string as evidence. Release tags are immutable. Main may contain unreleased
@@ -80,6 +87,10 @@ backlog work as well as publication evidence and the verified example image dige
 - Access requests/expiry: `internal/gateways/access_request*.go`, `grant_insert.go`, `grant_expiry.go`,
   `internal/mcpgw/grant_expiry.go`, `internal/httpapi/access_requests.go`, `internal/notify/access_requests.go`,
   `web/src/pages/access-requests/`. Keep the response-schema regression and duplicate-email identity test.
+- Upstream protection: `internal/limits/server.go`, `internal/upstream/{protection,retry,forward}.go`,
+  `internal/mcpgw/server_protection.go` and the server settings UI. Keep fresh per-attempt authority/quota,
+  admission before spending/SSE, original timeout, NoReplay/continuation/progress exclusions, bounded state
+  and before-dispatch/prior-attempt recording proofs. Read503 is not evidence of no remote effect.
 - Follow all contribution gates. Use `GOFLAGS='-p=2'`, mandatory PostgreSQL (`OMP_TEST_REQUIRE_DB=1`) and
   actual legacy/split logins (`OMP_TEST_SPLIT_ROLES=0` and `1`) on an owned disposable PostgreSQL container.
   `make test-ci` keeps every test and the race detector with a bounded 20-minute per-package timeout.

@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **2026-10-29.** v0.6.0 is published and verified; #32 is closed. This is an order of work, not a schedule, for one maintainer. Every item below is an
+Status: **2026-10-29.** v0.7.0 is published and verified; #33's first stage shipped and failover remains open. #32 is closed. This is an order of work, not a schedule, for one maintainer. Every item below is an
 issue with its implementation plan (data model, API, packages to change, tests, acceptance criteria, open questions):
 [all roadmap issues](https://github.com/ncecere/open-mcp-portal/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap), grouped by
 [milestone](https://github.com/ncecere/open-mcp-portal/milestones). Sizes are relative effort: **S** a few days, **M** a week or two, **L** several weeks. Each item that needs a
@@ -38,6 +38,7 @@ Decided out of scope:
 | [v0.5.0](releases/v0.5.0.md) | 2026-10-28 | Sensitive-call approval rules, private human review, exact merged-argument binding and single-use dispatch; private notices/attention, sealed preview and binding-key rotation. |
 | [v0.5.1](releases/v0.5.1.md) | 2026-10-28 | Provider-refresh reliability under constrained runtime pools; scoped dependency reads, fail-closed address-policy checks and bounded cancellation/drain. No schema/API change. |
 | [v0.6.0](releases/v0.6.0.md) | 2026-10-29 | Opt-in gateway access requests, narrowly delegated human stewardship, private queues/notices, atomic user/team grants and optional expiry. |
+| [v0.7.0](releases/v0.7.0.md) | 2026-10-29 | Shared server quotas, replica-local concurrency, bounded trusted-read retries and circuit breaking. Failover is separate; #33 stays open. |
 
 Proven on a real deployment (one Talos cluster, Authentik sign-in, CloudNativePG with continuous archiving and daily backups, a restore tested twice):
 Claude Code over OAuth and an API key on the 2026-07-28 revision; per-person OAuth to GitHub's hosted MCP server; DeepWiki through a gateway.
@@ -53,8 +54,8 @@ with independent review corrections, full-tree tests, browser checks and CI/depl
 #62/#63 are withdrawn as not planned, not completed verification. Historical milestone headings below are
 planning buckets, not a promise of release numbering. #31 approvals shipped in v0.5.0 under decision 82.
 The v0.5.1 reliability follow-up is published and verified. Development resumed after the machine transfer;
-#32 shipped in verified v0.6.0 and is closed. #33 quota/concurrency/read-retry/breaker work is a locally
-validated v0.7.0 candidate, not yet published; failover follows separately and the parent stays open. The owner authorized ready pre-1.0 releases but reserves the
+#32 shipped in verified v0.6.0 and is closed. #33 quota/concurrency/read-retry/breaker work shipped and is
+verified in v0.7.0; failover follows separately and the parent stays open. The owner authorized ready pre-1.0 releases but reserves the
 v1.0.0 decision. A new agent should read [agent-handoff.md](agent-handoff.md) and current [status](status.md).
 
 1. **Verify and pilot alongside implementation.** Decisions #5, #6 and #7 shipped in v0.2.2. The
@@ -64,7 +65,8 @@ v1.0.0 decision. A new agent should read [agent-handoff.md](agent-handoff.md) an
    connections. External-platform impersonation was retired in #68, not extended or verified.
 3. **Governance foundations shipped.** #31 exact-call approvals shipped in v0.5.0,
    with defaults recorded in decision 82; #32 access requests shipped in v0.6.0 under decision83.
-   Next is #33 upstream protection; its read retries also need classification and must never replay spent approvals.
+   #33 quota/concurrency/read-retry/breaker work shipped in v0.7.0; separate failover is next. Keep trusted
+   classification, current authority/deadlines and the ban on replaying spent approvals.
 4. **Operations before scale.** #44 database roles shipped; next prove upgrades, ingress and restores (#43)
    before releasing the Helm chart (#42). See the implementation order for staged lifecycle/audit dependencies.
 

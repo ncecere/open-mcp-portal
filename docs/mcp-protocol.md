@@ -182,7 +182,7 @@ forwards) it is an MCP client, and speaks whichever era each server speaks. Code
 guarded transport as before: the address rule, no redirects, no proxy from the environment, the response bound
 (1 MiB, or 4 MiB for a streamed call), the server's own timeout.
 
-### Upstream protection (#33, v0.7.0 candidate)
+### Upstream protection (#33 first stage, v0.7.0)
 
 [Decision84 / design](upstream-protection.md) adds server-wide forwarded-attempt quotas and fail-fast,
 replica-local concurrency/circuit admission before network, approval spending or downstream SSE commitment.
@@ -194,7 +194,7 @@ Only owner-stored read-class tools, prompts and resources can opt into at most t
 explicit transient responses or known pre-request failures. Each attempt rechecks current authority and quota
 within the original timeout. Governed/NoReplay calls, continuations, progress/streamed/partial results and
 ambiguous post-send failures never automatically retry. Neither annotations nor a 503 prove side-effect safety.
-No failover or new credential origin is implemented. This section is not a release/acceptance claim.
+No failover or new credential origin is implemented. Publication/verification evidence is in [status](status.md).
 
 ### Era negotiation
 

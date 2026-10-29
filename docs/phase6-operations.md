@@ -54,7 +54,7 @@ Platform roles never read payloads through team routes (SPEC §4); they use the 
 | `server_per_minute` | forwarded operation attempts per registered server, including retries | unlimited | yes (default for the team's servers) |
 
 The fifth key, nullable server settings, replica-local concurrency, safe-read retries and circuit breaking
-are the first #33/decision84 stage, a **locally validated v0.7.0 candidate, not yet published**. See [upstream protection](upstream-protection.md) for
+are the first #33/decision84 stage, **shipped and verified in v0.7.0**. See [upstream protection](upstream-protection.md) for
 admission ordering, trusted read classification, rollout requirements and the separate failover scope.
 Server quota is a PostgreSQL bucket `v:<server UUID>` shared across gateways and replicas. It is charged
 once per forwarding iteration before negotiation/transport, not for health/discovery or each transport

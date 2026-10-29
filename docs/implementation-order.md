@@ -29,10 +29,11 @@ narrow stewards, atomic grants, expiry and private notices passed full normal/ra
 strict-runtime browser/MCP/forced-expiry checks. Incomplete modal/mobile-settings accessibility checks and
 real-world evidence remain explicitly separate. See [design](access-requests.md) and [status](status.md).
 The v0.6.0 publication-evidence/image-pin follow-up passed main CI and both smoke CNIs.
-**#33 stage(a)–(d) is a locally validated v0.7.0 candidate, not yet published:** shared server quota,
-replica-local concurrency, trusted-read retries and circuit breaking (decision84/migration46). All four
-mandatory PostgreSQL normal/race suites and 848 web tests passed; final CI/publication evidence is pending.
-Failover is separate and #33 stays open. Resume with [agent-handoff.md](agent-handoff.md) and inspect current
+**#33 stage(a)–(d) shipped and is verified in v0.7.0:** shared server quota, replica-local concurrency,
+trusted-read retries and circuit breaking (decision84/migration46). All four mandatory PostgreSQL normal/race
+suites, 848 web tests, main/tag CI, both smoke CNIs, independent signed-image/SPDX/provenance verification
+and actual-published strict-runtime browser/MCP-quota checks passed. Owner-mobile contrast remains an axe
+incomplete; there is no whole-product accessibility claim. Failover is separate and #33 stays open. Resume with [agent-handoff.md](agent-handoff.md) and inspect current
 Git/CI rather than assuming an active implementation patch or candidate tag is already released.
 There are 26 open issues: 18 feature/operations/design and eight real-world verification issues.
 The owner authorized ready pre-1.0 releases; v1.0.0 remains their explicit decision. Follow the order below
@@ -51,7 +52,7 @@ security boundary before building on it; do not start every large issue at once.
 | 3, shipped v0.4.0 | **#30** per-gateway curation | Keep approved definitions immutable; validate merged arguments and stale fingerprints before approval digests depend on them. |
 | 4, shipped v0.5.0 | **#31** sensitive-call approvals | Needs #28 and #30; bind approval to the merged arguments, definition, origin and requester, atomically single-use. |
 | 2–4, shipped | **#26** v0.4.0; **#32** access requests v0.6.0 | Shared connections, private grant requests/decisions and expiry are validated lifecycle foundations. Preserve scoped refresh and final transport/approval deadline guards. |
-| 5 | **#33** upstream protection | Classification permits safe read retries. Ship quotas/concurrency/breaker before considering failover; credential-origin binding must remain intact for every current auth mode. |
+| 5, first stage shipped v0.7.0 | **#33** upstream protection | Quotas/concurrency/read retries/breaker are verified. Failover follows separately; credential-origin binding must remain intact for every current auth mode. Parent stays open. |
 | 6 | **#35** tasks extension | Confirm the extension specification before design/code; carry approvals and access checks into every task operation. |
 | 2, shipped v0.4.0 | **#44** split database roles | Independent security foundation. Preserve append-only retention through narrowly privileged definer functions; test runtime-role denial and normal operations. |
 | 3, operations lane | **#43** upgrade/ingress/OIDC/restore/load gates; **#41** envelope encryption | #43 builds on #44. #41 also follows #44; select/test an actual KMS target without changing existing static-key installs by default. |

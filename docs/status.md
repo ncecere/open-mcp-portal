@@ -1,13 +1,13 @@
 # Status and handoff
 
-Last updated: 2026-10-29. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.6.0 published and verified; #32 is closed**. The owner resumed ordered backlog development and authorized pre-1.0 releases; **v1.0.0 remains the owner's explicit decision**. #33's first upstream-protection stage is a locally validated v0.7.0 candidate, not yet published; failover remains unfinished. The v0.6.0 publication-evidence/image-pin follow-up passed its final checks. A fresh agent should read [agent-handoff.md](agent-handoff.md).
-(release notes: [releases/v0.6.0.md](releases/v0.6.0.md); earlier: [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+Last updated: 2026-10-29. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.7.0 published and verified; #33 quotas/concurrency/read retries/breaker shipped, failover remains open**. The owner resumed ordered backlog development and authorized pre-1.0 releases; **v1.0.0 remains the owner's explicit decision**. #33 remains open for its separate failover stage. The v0.6.0 publication-evidence/image-pin follow-up passed its final checks. A fresh agent should read [agent-handoff.md](agent-handoff.md).
+(release notes: [releases/v0.7.0.md](releases/v0.7.0.md); earlier: [v0.6.0](releases/v0.6.0.md), [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
-## v0.7.0 candidate: first #33 upstream-protection stage
+## v0.7.0 (2026-10-29): first #33 upstream-protection stage
 
 Decision84 and [upstream-protection.md](upstream-protection.md) specify the staged scope. Per-server shared
-quotas, per-replica concurrency, bounded safe-read retries and circuit breaking are implemented on the feature
-branch; they are **not yet published**. Candidate notes: [v0.7.0](releases/v0.7.0.md). Migration46 is new and expand-only. Failover
+quotas, per-replica concurrency, bounded safe-read retries and circuit breaking are **published and verified**
+in [v0.7.0](releases/v0.7.0.md). Migration46 is new and expand-only. Failover
 has not been implemented and the parent issue remains open.
 
 Focused mandatory-PostgreSQL race tests passed in both actual role modes, including owner/token boundaries,
@@ -26,14 +26,39 @@ not real IDE/provider/pilot or whole-product accessibility evidence.
 The actual immutable v0.6.0 image passed schema46 doctor (informational newer-schema report), health/readiness
 and a journaled metadata write preserving both new operational values. It ran read-only as `65532:65532`,
 authenticated as the restricted runtime, with no owner/migration URL or mounts. This proves expanded-schema
-compatibility, **not new quota/concurrency/retry/breaker enforcement by the old image**. Owned browser/old-image
-serving fixtures were stopped; only the labelled disposable PostgreSQL needed by the test rerun remains.
+compatibility, **not new quota/concurrency/retry/breaker enforcement by the old image**.
 After the mechanical v0.7.0 version change, regenerated/freshness checks, both-role required-DB focused
 races/advisory checks (88 seconds) and the complete 848-test web/build/deployment gate (524 seconds) passed
 again. Production logic matches the four-suite validated snapshot apart from version metadata.
-[Issue progress](https://github.com/ncecere/open-mcp-portal/issues/33#issuecomment-6492007941) records the scope;
-main CI, both smoke CNIs, immutable publication and independent artifact verification are still required.
-There is no new release tag or production rollout.
+[First-stage acceptance](https://github.com/ncecere/open-mcp-portal/issues/33#issuecomment-6493836494) records the
+evidence: the first three acceptance criteria are checked, failover remains unchecked and #33 stays open.
+Immutable source/tag: `289b5aedad462a1ae37ea3de9a82987eca6829b1`,
+[published release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.7.0).
+Verified image: `ghcr.io/ncecere/open-mcp-portal@sha256:a377ef8d7b8303780eb1ffbd1b11a0358954532c771705dc3e56d94650cc3ed6`.
+
+- [Main CI](https://github.com/ncecere/open-mcp-portal/actions/runs/40849249914) and
+  [tag CI](https://github.com/ncecere/open-mcp-portal/actions/runs/40851526772) passed all seven jobs,
+  including both complete mandatory-PostgreSQL race role modes. Both
+  [kindnet/Calico smoke jobs](https://github.com/ncecere/open-mcp-portal/actions/runs/40849249789) passed.
+- [Native amd64/arm64 builds, scans, runtime checks, signing and publication](https://github.com/ncecere/open-mcp-portal/actions/runs/40851527305)
+  passed. Independent verification checked tag/digest equality, exactly two architectures, strict tag-specific
+  GitHub OIDC identity/issuer/workflow SHA and transparency proof, every asset checksum, canonical SPDX equality
+  with registry attestations and both SLSAv1 source/version claims. The actual AMD64 image reports
+  `open-mcp-portal 0.7.0 (289b5aedad46)` as UID65532, read-only with no network. Prior v0.6.0/v0.5.1 tags are unchanged.
+- The actual published image passed schema46 doctor/health/readiness using a genuinely authenticated restricted
+  runtime login with no owner membership. Its serving container was read-only `65532:65532`, with no owner/
+  migration URL, mounts or old-instance keys/data. Chromium156 repeated owner edits/null clearing, editor/
+  foreign-admin read-only controls, keyboard forward/reverse focus and normal scoped-key MCP quota
+  200/200/429 before SSE. Four desktop/390px states had zero axe violations and no overflow; **owner-mobile
+  color-contrast remains incomplete**. This is not whole-product accessibility acceptance.
+- All owned serving, browser, fake-upstream and disposable PostgreSQL fixtures were stopped/removed; matching
+  disposable keys/config were removed only after their database was destroyed. Historical services/data/keys
+  remain untouched. No production rollout, real IDE/provider/pilot, load/soak or independent whole-product
+  security review is claimed. The example overlay pins the independently verified digest above.
+
+The evidence/image-pin follow-up has its own final CI/smoke checks; it does not replace the immutable source
+checks above. **#33 stays open for failover.** There are still 26 open issues (18 feature/operations/design,
+eight real-world verification); v1.0.0 has not been cut.
 
 ## v0.6.0 (2026-10-29): gateway access requests
 
@@ -625,9 +650,9 @@ server allow-list).
 
 - Clone `git@github.com:ncecere/open-mcp-portal.git`, check out `main` and fetch tags. All required source,
   migrations, generated code and release/handoff documentation are on the remote; no local patch is needed.
-  The immutable shipped source is `v0.6.0`; main also records publication evidence and the verified image pin.
+  The immutable shipped source is `v0.7.0`; main also records publication evidence and the verified image pin.
 - Read this release section, `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md) and
-  [implementation order](implementation-order.md). #32 shipped in v0.6.0; next is #33;
+  [implementation order](implementation-order.md). #33's first stage shipped in v0.7.0; next is its separate failover stage;
   do not resume old #31 implementation branches.
 - Install Go 1.26.10+, Node 22+, Docker, Python 3 and sqlc 1.31.1; run `npm ci` in `web/`.
   Use owned disposable PostgreSQL for integration tests and actual split-role verification.
@@ -654,8 +679,8 @@ blind restart/seed of an existing one. The historical dev-database migration hel
    Drain older serving images before enabling rules; schema compatibility does not imply enforcement.
    Use the new binary's rotation utility for the new ciphertext columns. Keep production autovacuum enabled;
    governed transitions intentionally fail closed during conflicting writes/reads/maintenance.
-3. **v0.6.0/#32 is published, verified and closed**, including follow-up checks. The first #33 stage is a
-   locally validated v0.7.0 candidate; finish final CI/publication verification, then separate failover and
+3. **v0.6.0/#32 is published, verified and closed**, including follow-up checks. The first #33 stage is
+   published and verified in v0.7.0; finish the evidence/image-pin follow-up checks, then separate failover and
    the ordered operations/lifecycle/audit lanes in
    [implementation order](implementation-order.md). #43 must prove upgrades, ingress, restore and load before
    Helm packaging; existing kindnet/Calico smoke does not establish those broader requirements.

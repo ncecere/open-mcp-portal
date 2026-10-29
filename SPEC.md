@@ -192,8 +192,8 @@ encrypted at rest, refreshed by the portal. See [docs/phase5-delegated-credentia
    (redacted, 16 KiB per part, sealed, views audited); retention with team overrides; hourly usage rollups and
    dashboards; Prometheus on `METRICS_ADDR`; `API_KEY_PEPPER_PREVIOUS` and `rotate-keys`; GitHub Actions CI.
    Kubernetes manifests are done ([docs/deploy.md](docs/deploy.md)). #33/decision84 adds per-server forwarded-
-   attempt quotas, replica-local concurrency/breakers and bounded trusted-read retries, a **locally validated v0.7.0
-   candidate, not yet published**; [upstream protection](docs/upstream-protection.md) specifies authorization/spend ordering,
+   attempt quotas, replica-local concurrency/breakers and bounded trusted-read retries, **shipped and verified in
+   v0.7.0**; [upstream protection](docs/upstream-protection.md) specifies authorization/spend ordering,
    rollout and the separate unfinished failover stage.
 7. **Upstream OAuth** — *Designed* (decisions 39–44): [docs/phase7-upstream-oauth.md](docs/phase7-upstream-oauth.md);
    contract in `api/openapi.yaml` (`McpServer.authMode`/`oauth`, `detectTeamMcpServerAuth`, `authorizeTeamMcpServerSetup`,
