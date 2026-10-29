@@ -1,8 +1,10 @@
 # Load test (docs/deploy.md, "Smoke test"; issue #43): three replicas on a kind
 # cluster under a k6 ramp of tools/call against the fake MCP server. It fails on
 # any failed request or check, a p95 over a loose bound, rate limit counters that
-# are not shared between replicas, anything but exactly one leader per
-# background loop (omp_loop_leader summed over the replicas' own /metrics) or
+# are not shared between replicas, a background loop with no leader
+# (omp_loop_leader over the replicas' own /metrics; the gauge marks the replica
+# that led its latest run, so the sum can exceed 1), a replica leading the
+# notification or retention loop while its advisory lock is held from outside, or
 # database connections at max_connections. It writes a JSON summary and uploads
 # it. A regression gate with loose bounds, not a benchmark.
 #
