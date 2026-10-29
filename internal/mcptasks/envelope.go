@@ -29,6 +29,8 @@ type Payload struct {
 	UpstreamID    string          `json:"upstreamId"`
 	Arguments     json.RawMessage `json:"arguments"`
 	RedactionOnly []string        `json:"redactionOnly"`
+	// Inputs is the bounded lifetime input-key ledger (see InputRecord).
+	Inputs []InputRecord `json:"inputs,omitempty"`
 }
 
 type stateEnvelope struct {
@@ -46,7 +48,7 @@ func StateAAD(id uuid.UUID) []byte {
 }
 
 func validPayload(b Binding, p Payload) bool {
-	if len(p.UpstreamID) > MaxUpstreamIDBytes || !utf8.ValidString(p.UpstreamID) || len(p.RedactionOnly) > MaxRedactionSecrets {
+	if len(p.UpstreamID) > MaxUpstreamIDBytes || !utf8.ValidString(p.UpstreamID) || len(p.RedactionOnly) > MaxRedactionSecrets || !validLedger(p.Inputs) {
 		return false
 	}
 	arguments, err := DigestArguments(p.Arguments)

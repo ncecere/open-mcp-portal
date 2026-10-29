@@ -21,7 +21,9 @@ UPDATE mcp_tasks SET operation_id = $3,
 WHERE id = $1 AND revision = $2::bigint AND status <> 'reserved'
   AND expires_at > clock_timestamp()
   AND (operation_id IS NULL OR operation_deadline <= clock_timestamp())
-  AND (NOT $5::boolean OR next_poll_at <= clock_timestamp())
+  -- Pacing bounds polling of unfinished work; a terminal result is still
+  -- fetched (never stored) on each authorized get.
+  AND (NOT $5::boolean OR next_poll_at <= clock_timestamp() OR status IN ('completed','failed','cancelled'))
 RETURNING id, handle_digest, principal_kind, user_id, service_account_id, credential_kind, api_key_id, oauth_grant_id, service_account_key_id, gateway_id, server_id, capability_id, status, binding, binding_digest, state_cipher, revision, created_at, updated_at, ceiling_at, expires_at, reservation_deadline, next_poll_at, poll_interval_ms, upstream_created_at, upstream_updated_at, operation_id, operation_deadline
 `
 
@@ -248,6 +250,8 @@ const finishMCPTaskOperation = `-- name: FinishMCPTaskOperation :one
 UPDATE mcp_tasks SET status = $4, state_cipher = $5,
     upstream_updated_at = $6,
     expires_at = least(expires_at,$7::timestamptz), poll_interval_ms = $8,
+    -- Pace from the latest observation using its (bounded) interval.
+    next_poll_at = clock_timestamp() + $8::int * interval '1 millisecond',
     operation_id = NULL, operation_deadline = NULL, revision = revision+1, updated_at = clock_timestamp()
 WHERE id = $1 AND revision = $2::bigint AND operation_id = $3
   AND operation_deadline > clock_timestamp() AND expires_at > clock_timestamp()

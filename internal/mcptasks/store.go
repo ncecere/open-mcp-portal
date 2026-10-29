@@ -45,7 +45,7 @@ func rollbackTaskTransaction(tx pgx.Tx) {
 // Live policy/credential/offer/deadline checks remain the serving layer's job.
 func (s *Store) Reserve(ctx context.Context, binding Binding, payload Payload) (Reservation, error) {
 	fail := func(err error) (Reservation, error) { return Reservation{}, err }
-	if s == nil || payload.UpstreamID != "" {
+	if s == nil || payload.UpstreamID != "" || len(payload.Inputs) != 0 {
 		return fail(ErrUnavailable)
 	}
 	digest, err := DigestBinding(binding)
@@ -61,9 +61,11 @@ func (s *Store) Reserve(ctx context.Context, binding Binding, payload Payload) (
 		return fail(ErrUnavailable)
 	}
 	// Reserve enough encoding space for a maximum-size actual ID, including
-	// worst-case JSON escaping, BEFORE any upstream job can have been created.
+	// worst-case JSON escaping and a full input ledger, BEFORE any upstream job
+	// can have been created: later transitions can never become unsealable.
 	probe := clonePayload(payload)
 	probe.UpstreamID = string(make([]byte, MaxUpstreamIDBytes))
+	probe.Inputs = worstCaseLedger()
 	if _, err := SealState(s.box, id, handleDigest, binding, probe); err != nil {
 		return fail(ErrUnavailable)
 	}

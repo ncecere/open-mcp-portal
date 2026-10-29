@@ -102,6 +102,7 @@ func storeError(err error) error {
 func clonePayload(p Payload) Payload {
 	p.Arguments = bytes.Clone(p.Arguments)
 	p.RedactionOnly = slices.Clone(p.RedactionOnly)
+	p.Inputs = slices.Clone(p.Inputs)
 	return p
 }
 
@@ -137,5 +138,13 @@ func (s Snapshot) CreatedAt() time.Time { return s.row.CreatedAt }
 func (s Snapshot) ExpiresAt() time.Time { return s.row.ExpiresAt }
 func (s Snapshot) Status() string       { return s.row.Status }
 func (s Snapshot) PollMillis() int64    { return int64(s.row.PollIntervalMs) }
-func (Snapshot) String() string         { return "private task snapshot" }
-func (Snapshot) GoString() string       { return "private task snapshot" }
+
+// UpstreamCreatedAt is the stored upstream creation time; it never changes.
+func (s Snapshot) UpstreamCreatedAt() time.Time {
+	if s.row.UpstreamCreatedAt == nil {
+		return time.Time{}
+	}
+	return *s.row.UpstreamCreatedAt
+}
+func (Snapshot) String() string   { return "private task snapshot" }
+func (Snapshot) GoString() string { return "private task snapshot" }
