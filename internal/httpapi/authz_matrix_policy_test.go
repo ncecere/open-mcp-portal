@@ -249,6 +249,21 @@ var matrixPolicies = map[string]policy{
 	}},
 	"getTeamPublishing": {scope: scopeTeam, own: members, foreign: platform, build: func(c *mctx) request { return get(c.team("/publishing")) }},
 
+	// Server governance and transfers (decision 88): every operation is a
+	// browser session's; an editor edits a server but does not move it.
+	"requestTeamMcpServerTransfer": {scope: scopeTeam, own: admins, build: func(c *mctx) request {
+		return post(c.team("/mcp-servers/"+c.server("private")+"/transfer"), map[string]any{"toTeam": c.otherTeam().slug})
+	}},
+	"listTeamMcpServerTransfers": {scope: scopeTeam, own: admins | platform, foreign: platform, build: func(c *mctx) request {
+		return get(c.team("/mcp-server-transfers"))
+	}},
+	"cancelMcpServerTransfer": {scope: scopeTeam, own: admins | padmin, foreign: padmin, build: func(c *mctx) request {
+		return del(c.team("/mcp-server-transfers/" + c.transfer(false))).h(map[string]string{"If-Match": `"1"`})
+	}},
+	"acceptMcpServerTransfer": {scope: scopeTeam, own: of(cOwner), build: func(c *mctx) request {
+		return post(c.team("/mcp-server-transfers/"+c.transfer(true)+"/accept"), nil).h(map[string]string{"If-Match": `"1"`})
+	}},
+
 	// The catalog: anyone signed in.
 	"listCatalogServers": {own: signedIn, build: func(*mctx) request { return get("/v1/catalog/servers") }},
 	"getCatalogServer":   {own: signedIn, build: func(c *mctx) request { return get("/v1/catalog/servers/" + c.e.b.server) }},
@@ -271,6 +286,20 @@ var matrixPolicies = map[string]policy{
 	"adminUpdatePublishingSettings": {own: padmin, build: func(c *mctx) request {
 		rev := c.e.exec(`SELECT revision::text FROM platform_settings`)
 		return request{method: "PUT", path: "/v1/admin/settings/publishing", body: map[string]any{"defaultPolicy": "approval_required"},
+			headers: map[string]string{"If-Match": `"` + rev + `"`}}
+	}},
+	"adminForceTransferMcpServer": {own: padmin, build: func(c *mctx) request {
+		srv := c.e.b.server
+		if c.allowed {
+			srv = c.e.newServer(c.e.b, "private")
+		}
+		rev := c.e.exec(`SELECT revision::text FROM mcp_servers WHERE id = $1`, srv)
+		return post("/v1/admin/mcp-servers/"+srv+"/transfer", map[string]any{"toTeam": c.e.spareTeam}).h(map[string]string{"If-Match": `"` + rev + `"`})
+	}},
+	"adminGetGovernanceSettings": {own: platform, build: func(*mctx) request { return get("/v1/admin/settings/governance") }},
+	"adminUpdateGovernanceSettings": {own: padmin, build: func(c *mctx) request {
+		rev := c.e.exec(`SELECT governance_revision::text FROM platform_settings`)
+		return request{method: "PUT", path: "/v1/admin/settings/governance", body: map[string]any{"returnOverdueToReview": false, "reviewIntervalDays": map[string]any{"internal": 0}},
 			headers: map[string]string{"If-Match": `"` + rev + `"`}}
 	}},
 	"adminGetNetworkSettings": {own: platform, build: func(*mctx) request { return get("/v1/admin/settings/network") }},

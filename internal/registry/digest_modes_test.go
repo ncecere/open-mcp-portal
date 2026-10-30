@@ -8,7 +8,7 @@ import (
 )
 
 // One review digest covers every mode's settings and the TLS settings together
-// (decisions 72, 73 and 74; omp-review-v5): each piece moves the digest, none of
+// (decisions 72, 73 and 74; omp-review-v6): each piece moves the digest, none of
 // them is mistaken for another, and a server in one mode never has another
 // mode's settings in its digest.
 func TestReviewDigestCoversEveryModeAndTLSTogether(t *testing.T) {
@@ -72,7 +72,7 @@ func TestReviewDigestCoversEveryModeAndTLSTogether(t *testing.T) {
 	if reviewDigest(machineSV, caps, &hinted, noTLS, nil) != digests["machine"] {
 		t.Error("the machine secret's hint is in the digest")
 	}
-	if digestVersion != "omp-review-v5" {
+	if digestVersion != "omp-review-v6" {
 		t.Errorf("digest version %s: one version covers the settings of all three features", digestVersion)
 	}
 }
