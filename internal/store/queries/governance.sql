@@ -154,6 +154,13 @@ SELECT sqlc.embed(s), t.slug AS team_slug, t.name AS team_name, t.publish_policy
 FROM mcp_servers s
 JOIN teams t ON t.id = s.team_id AND t.status = 'active'
 WHERE s.publish_state = 'published' AND s.review_due_at IS NOT NULL AND s.review_due_at <= @now::timestamptz
+  -- Approval-required rows leave published when processed. A self-published
+  -- row stays published, so skip it once notified or it can fill every batch
+  -- forever and starve later servers under either policy.
+  AND (COALESCE(t.publish_policy_override,
+                (SELECT ps.publish_default_policy FROM platform_settings ps WHERE ps.id = 1)) = 'approval_required'
+       OR NOT EXISTS (SELECT 1 FROM server_governance_notices n
+                      WHERE n.kind = 'review_due' AND n.server_id = s.id AND n.gateway_id IS NULL AND n.stamp = s.review_due_at))
 ORDER BY s.review_due_at, s.id
 LIMIT @page_size;
 

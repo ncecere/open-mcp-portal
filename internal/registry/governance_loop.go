@@ -88,7 +88,8 @@ func (s *Service) governReviews(ctx context.Context, now time.Time, st dbgen.Pla
 	}
 	var rows []candidate
 	if st.GovernanceReturnOverdue {
-		// Each one leaves published, so the batch moves on.
+		// Approval-required rows leave published; already-notified self-publish
+		// rows are excluded so they cannot occupy the whole batch forever.
 		r, err := s.q.GovernanceReviewDue(ctx, dbgen.GovernanceReviewDueParams{Now: now, PageSize: GovernanceBatch})
 		if err != nil {
 			return err
