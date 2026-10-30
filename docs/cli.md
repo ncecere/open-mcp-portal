@@ -70,7 +70,7 @@ stderr**: text (`omp: error: <code>: <message>`), or with `--json` an object
 |---|---|
 | 0 | Success |
 | 1 | Unexpected internal error |
-| 2 | Usage: bad flags or arguments, a declarative file that is not valid `omp/v1`, a token that cannot do what the file says |
+| 2 | Usage: bad flags or arguments, a declarative file that is not valid `omp/v1`, a token that cannot do what the file says, or a change `omp` refuses (`refused`: curation or a grant deadline it cannot keep) |
 | 3 | Configuration: no URL or token, an `http://` URL that is not loopback, an unsafe config file, a token of the wrong shape |
 | 4 | Authentication: `401` (`invalid_token`: unknown, expired or revoked) |
 | 5 | Forbidden: `403` (`token_not_allowed`, `session_required`) |
@@ -161,10 +161,15 @@ gateways:                         # platform gateways
   - slug: support
     name: Support tools
     capabilities:                 # the whole selection; absent means "leave alone"
-      - { server: status, kind: tool, name: check }
+      - server: status
+        kind: tool
+        name: check
+        curation:                 # a tool's policy, as the portal has it (see "Curation"); absent leaves it alone
+          nameOverride: check_team
+          constraints: { region: { fixed: us } }
     grants:                       # the whole list of grants; absent means "leave alone"
-      - { team: bravo }
-      - { userEmail: ann@example.com, toolScope: { classes: [read] } }
+      - { team: bravo }           # a new grant is unrestricted and permanent; an existing one keeps its ceiling and deadline
+      - { userEmail: ann@example.com, toolScope: { classes: [read] }, expiresAt: "2026-12-31T00:00:00Z" }
 limits:                           # platform rate limits
   person_per_minute: { default: 600, ceiling: null }
 ```
@@ -181,7 +186,11 @@ server that uses them (with a warning on stderr), and import refuses to touch on
 - *Natural keys*: server, team and gateway `slug`. Import creates what is missing and updates what differs. **It never
   deletes** (a token cannot). An object the file does not mention is left alone.
 - *Optional fields mean "leave it alone"*. Lists (`capabilities`, `grants`) are authoritative only when present; `[]` means
-  none. A grant's expiry is not managed.
+  none. This includes what an object already has: a listed capability's `curation`, a listed grant's `toolScope` and
+  `expiresAt` are kept when the file does not say them. See [Curation](#curation) and [Grant expiry](#grant-expiry).
+- *Refusals*. A declaration omp cannot make true without losing or widening authority is refused **while planning, before
+  the first write**: exit 2, error code `refused`, and the message ends "Nothing was changed." `--plan` refuses too, so a
+  pull-request check fails rather than reporting a change that cannot be applied.
 - *Two token kinds, two parts of a file*. A file with servers needs a publisher token; one with teams, gateways or limits
   needs a platform token. A file that has both fails with exit 2 and a hint: split it, or select a part with
   `--only servers|platform`. Applying platform objects checks for `platform:write` before the first change; planning
@@ -200,6 +209,77 @@ server that uses them (with a warning on stderr), and import refuses to touch on
   definitions moved.
 - `publish: request` publishes a private server (or requests it under `approval_required`); `publish: none` withdraws it.
   Absent leaves publication alone.
+
+### Curation
+
+A gateway's selected tools can be *curated* in the web UI ([gateway-curation.md](gateway-curation.md)): a renamed exposed
+name, a rewritten description, and per-argument constraints (a `fixed` value, or an `allowed` list) that the portal
+enforces on every call. `omp` treats that policy as authority it must never lose or widen:
+
+- **Export writes it.** A selected tool's `curation` is exported as the portal stores it, under the tool's own
+  `server`/`name` (not its exposed name). A policy the portal reports but does not return, or returns in a form this version
+  cannot read, **fails the export** (`curation_unreadable`) instead of writing a file that would widen the gateway when
+  imported. A policy that went stale (the tool's definition changed after it was saved, so the tool is not served until an
+  owner saves it again) is exported as stored, with a warning.
+- **Changing the selection keeps it.** Adding or removing *other* capabilities rewrites the gateway's selection, and the
+  portal keeps the policy of every selection that stays when the request names no `curation` (docs/gateway-curation.md:
+  "Omission preserves policy"). `omp` never sends `curation` or `expectedFingerprint`, and after the write it checks that
+  every kept selection reports the same policy as before (`curation_changed` otherwise). Removing a curated selection
+  deletes its policy, as the portal does for any removal; the plan and a warning say so, and selecting the tool again later
+  is uncurated until someone curates it in the web UI.
+- **The file can declare it, and `omp` can only compare.** Writing curation needs a browser session: an automation token
+  gets `403 session_required`, including for `curation: null`. So a declared `curation` is compared with the portal's
+  (normalized as the portal stores it: allowed lists are narrowed to the tool's schema, numbers keep their exact value) and
+  is *no change* when equal. A declaration that **differs** from the portal's, a `curation` on a tool that is not selected
+  yet, or a policy that is invalid for the tool's current definition is refused. Edit the policy in the web UI, or remove the
+  key from the file to leave it alone.
+- **Absent, `null` and `{}` are three different statements.** Absent: leave it alone. `null`: the tool has no policy (the
+  portal's "clear"). `{}`: an empty policy, which the portal stores as a policy; it is not the same as none.
+- *Validation is the portal's own.* The file's policy is checked offline by the same code that checks it on the server
+  (shape, 64 KiB, 50 constraints, `fixed` null is a value, exactly one of `fixed`/`allowed`, numbers that round-trip through
+  binary64, safe integers). YAML spellings with no JSON form (a timestamp, `0x10`, `1_000`, `.5`, aliases) are refused; quote
+  a value to make it a string. Only tools can be curated.
+- *Values are never printed by a refusal or a plan* (only argument names, counts and a short digest), because a fixed value
+  can be a secret. **An export contains them**: it is a configuration file, not a vault. Review it before committing it.
+
+### Grant expiry
+
+A platform gateway grant can expire ([access-requests.md](access-requests.md)). The portal sets a deadline when the grant is
+created (`expiresInDays`, 1 to 365 whole 24-hour days) and **has no operation to change a grant**: only add and remove.
+An elapsed deadline never contributes access, whether or not the row is still listed (the portal removes such rows later, and
+replaces one when the same subject is granted again; `omp` does not claim to clean them up). Given that:
+
+- `expiresAt` (RFC 3339) is exported for every grant that has one, expired ones included (with a warning), and an unrestricted
+  grant is exported as `toolScope: null`, so the file states what the portal has.
+- *Absent `expiresAt`*: a new grant is permanent; an existing grant **keeps its deadline**. Likewise an absent `toolScope`
+  keeps an existing ceiling (and is unrestricted for a new grant); `toolScope: null` declares it unrestricted. `expiresAt: null`
+  is refused when the file is read.
+- *A new grant with `expiresAt`* is created with the whole days that keep its deadline **no later** than the file's (less than a
+  day earlier, minus a 5-minute allowance for clock difference). A past deadline, one under a whole day away and one over 365
+  days away are refused. A later plan treats an existing deadline in that range as met.
+- *Changing a grant's `toolScope`* means removing it and creating it again with the new ceiling. The new grant gets the same
+  deadline **or an earlier one**, never a later one or none. If less than a whole day remains it cannot be recreated at all, and
+  the change is refused (let it expire, or remove it and declare it again).
+- *`omp` never extends a deadline and never makes an expiring grant permanent.* A file that wants a later deadline is refused;
+  a sooner one is applied by the same remove-and-create, and a deadline on an existing permanent grant likewise.
+- *An expired grant is never recreated permanently.* A file that lists it with no `expiresAt` (or a different past one, or a
+  changed ceiling) is refused. A file that records it as exported is no drift. **Renewing** it takes a future `expiresAt`,
+  which creates the grant again with its previous ceiling (a new ceiling needs `toolScope`). Leaving it out of `grants` removes
+  its row.
+- *Partial writes.* Removing and creating a grant are two API calls and not atomic, and grants have no revision to fence them. In
+  one gateway step `omp` first resolves every deadline and checks every refusal, then writes: the selection (conditional on
+  the revision it planned against), new grants, replacements (remove, then create), removals. If a replacement's creation
+  fails after its removal, `omp` creates the previous grant again (same ceiling, a deadline no later than before) and the
+  error says whether that worked; if not it names the grant to re-create by hand. Earlier steps of the same import stay applied
+  (the error says how many).
+
+### Concurrent edits
+
+A gateway's settings and selection are read at one revision; if the gateway changes while the plan is read, the import stops
+with `revision_conflict` before any write. Every write is conditional (`If-Match`) on that revision, advanced only by this
+import's own successful writes: **a selection that was planned from an older state is never applied over somebody else's
+change**, it fails with `412 revision_conflict` and "run the command again". Grants have no revision: a creation for a
+subject that was granted meanwhile is `409 grant_exists`, and a removal of a grant that was replaced meanwhile is `404`.
 
 ```sh
 omp export --only servers -o omp.yaml          # a publisher token: its team's servers
