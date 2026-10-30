@@ -11,9 +11,33 @@ Two GitHub-only findings were fixed rather than hidden: an unpinned runner Shell
 racing a draining pod with the old configuration. #52 closed with decision 87 and first-slice follow-ups #70–#73.
 
 #35's gateway/upstream wiring (delegated to a Sonnet 5.5 subagent and reviewed line by line) is merged into the
-feature branch with the sealed store, fenced operations and single-use input ledger. Release gates, previous-
-image compatibility on schema48 and publication evidence are recorded below once they exist; until then
-**no task-support claim is made for a published image**. See [releases/v0.9.0.md](releases/v0.9.0.md).
+feature branch with the sealed store, fenced operations and single-use input ledger. **All four complete
+mandatory-PostgreSQL suites passed** on the immutable v0.9.0 candidate: normal and race in both actual
+legacy and authenticated split-role modes, `OMP_TEST_REQUIRE_DB=1`, `GOFLAGS='-p=2'`, the same 20-minute
+per-package budget and every test retained. The HTTP package took 624s/975s (normal/race legacy) and
+510s/1,045s (normal/race split). Earlier background runs disappeared without final results; their unfinished
+suites are not credited. The completed suites' permanent logs were retained, and the interrupted race
+suite was rerun in full. Repeated task-specific races also passed in both role modes.
+
+The actual immutable **published v0.8.0 image passed schema48 compatibility**: doctor (informational newer
+schema), health/readiness, login, server reads and a real revision-checked metadata write, running read-only
+as UID65532 with an authenticated restricted runtime and no owner/migration URL or mounts. The write
+preserved the task-support flag and an actual sealed task row's ciphertext, status, revision and expiry;
+the new store reopened the sealed state afterwards. This is expand compatibility, **not task enforcement
+or authorization by the old image**.
+
+A source-candidate real-HTTP/Chromium156 smoke passed modern discovery, undeclared synchronous calls,
+opaque flat task creation, current-root/unknown isolation, per-request declaration, paced polling, mapped
+single-use inputs, completed tool `isError`, cancellation acknowledgement, actual-ID/header routing and
+upstream-ID/credential scrubbing. A handle survived a full serving-process restart and was reopened with
+its original authenticated root. Six desktop/390px owner/editor/admin browser states had zero axe
+violations and no horizontal overflow; **editor-mobile color-contrast remains incomplete**. This is owned-fake
+upstream evidence, not real Tasks-client/server interoperability, a natural-expiry soak or independent
+whole-product accessibility acceptance.
+
+Web/deployment/advisory checks and exact-source GitHub/native publication verification remain pending.
+**No task-support claim is made for a published image** until publication and independent runtime
+verification exist. See [releases/v0.9.0.md](releases/v0.9.0.md).
 
 ### History: #35 development notes
 

@@ -1,4 +1,4 @@
-# Agent handoff: verified v0.8.0, next #35 specification boundary
+# Agent handoff: verified v0.8.0, v0.9.0 release validation
 
 The original stop point was the verified v0.5.1 machine transfer. On 2026-10-29 the owner resumed ordered
 backlog work, authorized releases when ready and delegated incidental decisions. **Do not cut v1.0.0 without
@@ -18,8 +18,19 @@ runtime verification passed at immutable source `c36ed3c6bbb8765004d243d1fc0bb37
 `f73129a94cfdc8cc2badc6b2f1e21b74bd0bbc1fd6144afbb50f1986c592c960`. See [failover](upstream-failover.md),
 [release notes](releases/v0.8.0.md) and [acceptance](https://github.com/ncecere/open-mcp-portal/issues/33#issuecomment-6499585660).
 Keep published owner-mobile/health-mobile contrast and review-dialog aria-hidden-focus/contrast incompletes
-explicit; they are not whole-product accessibility acceptance. Finish the evidence/image-pin follow-up's
-checks, then confirm #35's extension specification before design/code. Never move/reuse an existing tag.
+explicit; they are not whole-product accessibility acceptance. The evidence/image-pin follow-up passed.
+
+**Current override:** v0.9.0 is being prepared on `feature/mcp-tasks`. #35's released specification was
+confirmed before design and its conservative first stage is implemented (decision86, migration48).
+All four mandatory-PostgreSQL normal/race suites in both actual role modes passed on a frozen candidate,
+as did actual published v0.8.0/schema48 compatibility and source runtime/browser/restart smoke. Remaining
+web/deployment/advisory, exact-source GitHub and publication verification gates must finish before tagging
+or closing #35. The source editor-mobile contrast check is incomplete. See [status](status.md).
+#43's Kubernetes gates and #52's scanning design are closed (decision87); scanner follow-ups #70–#73
+are development work, not implemented scanning. #40 governance and #46 CLI have isolated unmerged
+implementations under review. Do not discard them or treat them as releases. The CLI needs curation/
+expiry-preserving import/export fixes. #40's migration49 was applied by its tests and is also immutable;
+its missing explicit-label marker needs a later migration. Never move/reuse an existing tag.
 
 ## Start here
 
@@ -27,11 +38,11 @@ checks, then confirm #35's extension specification before design/code. Never mov
    `main`, not an old approval/refresh/upstream-protection branch, for the released baseline. Inspect
    any active work before changing branches; do not discard an in-progress patch.
 2. Read `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md), [status](status.md) and
-   [implementation order](implementation-order.md). Verify the v0.7.0 evidence/image-pin follow-up checks
-   against the already-green immutable release-source CI, then inspect the v0.8.0 evidence/image-pin follow-
-   up's current checks. #33 is complete/closed; next confirm **#35's tasks-extension specification** before
-   design/code, preserving approvals and access checks on every task operation. Do not restart old failover
-   implementation or treat fixture results as real-client/provider/pilot evidence.
+   [implementation order](implementation-order.md). Preserve active v0.9.0 release validation, completed
+   suite logs and owned compatibility/runtime fixtures (with their matching keys); verify actual current
+   gates before pushing/tagging. #33 is complete/closed; #35 awaits verified publication, not another
+   specification or implementation restart. Preserve approvals and access checks on every task operation.
+   Do not restart old failover work or treat fixture results as real-client/provider/pilot evidence.
 3. Git transfers source, migrations, generated contracts, tests and docs—not `.env`, encryption/signing keys,
    provider credentials or the existing development database. Use the documented fresh-instance setup or
    explicitly arrange a secure, consistent database-and-keys transfer. Never reset/reseed the old database,
@@ -122,7 +133,8 @@ backlog work as well as publication evidence and the verified example image dige
 
 ## What remains separate
 
-There are 25 open issues after #32/#33: 17 feature/operations/design and eight real-world verification issues.
+There are 27 open issues after #32/#33/#43/#52 and the four scanning follow-ups: 19 development and
+eight real-world verification issues.
 #13–#20 still require actual independent review/client/provider/channel/pilot evidence. Fake OAuth/MCP fixtures
 and agent reviews do not close those. Broader load, restore/ingress/OIDC deployment validation, wall-clock
 refresh/expiry and whole-product accessibility acceptance remain separate; no production deployment is implied.

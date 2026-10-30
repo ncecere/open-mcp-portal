@@ -39,9 +39,14 @@ modes (3,440s), all853 web tests/deployment/advisories, source/published browser
 previous-image schema47 compatibility, main/tag CI, both CNIs and signed native publication/independent
 artifact/runtime checks passed. Published mobile/dialog axe incompletes remain. See [status](status.md),
 [release notes](releases/v0.8.0.md) and [acceptance](https://github.com/ncecere/open-mcp-portal/issues/33#issuecomment-6499585660).
-Finish the current evidence/image-pin follow-up checks, then confirm #35's extension specification before
-implementation. Inspect current Git/CI rather than resuming an old feature branch.
-There are 25 open issues: 17 feature/operations/design and eight real-world verification issues.
+**v0.9.0 is being prepared:** #35's released specification is confirmed and its first ungoverned modern-task
+stage is implemented. All four local PostgreSQL normal/race role-mode suites, actual v0.8.0/schema48
+compatibility and source runtime/browser smoke passed; remaining release gates and publication are not yet
+complete. #43's Kubernetes gates and #52's scanning design are closed; #70–#73 track the first scanning
+implementation slice. Inspect current Git/CI rather than resuming an old feature branch.
+There are 27 open issues: 19 development and eight real-world verification issues. #40 governance and
+#46 CLI have isolated implementations under review, not merged or released; #46 import/export must
+preserve curation and grant expiry before integration.
 The owner authorized ready pre-1.0 releases; v1.0.0 remains their explicit decision. Follow the order below
 without closing evidence-gated issues on fixture results or claiming unfinished branch work is released.
 
