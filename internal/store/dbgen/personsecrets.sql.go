@@ -317,7 +317,7 @@ func (q *Queries) InsertSecretRequest(ctx context.Context, arg InsertSecretReque
 }
 
 const listPersonSecretServersForEditor = `-- name: ListPersonSecretServersForEditor :many
-SELECT s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, s.rate_limit_per_minute, s.max_concurrent, s.supports_tasks, s.owner_user_id, s.oncall_contact, s.sensitivity, s.last_reviewed_at, s.review_due_at, s.lifecycle, s.deprecated_at, s.sunset_at, s.replacement_server_id, t.slug AS team_slug, t.name AS team_name
+SELECT s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, s.rate_limit_per_minute, s.max_concurrent, s.supports_tasks, s.owner_user_id, s.oncall_contact, s.sensitivity, s.last_reviewed_at, s.review_due_at, s.lifecycle, s.deprecated_at, s.sunset_at, s.replacement_server_id, s.sensitivity_confirmed_at, t.slug AS team_slug, t.name AS team_name
 FROM mcp_servers s
 JOIN teams t ON t.id = s.team_id AND t.status = 'active'
 JOIN team_members tm ON tm.team_id = s.team_id AND tm.user_id = $1 AND tm.role IN ('owner', 'admin', 'editor')
@@ -401,6 +401,7 @@ func (q *Queries) ListPersonSecretServersForEditor(ctx context.Context, userID u
 			&i.McpServer.DeprecatedAt,
 			&i.McpServer.SunsetAt,
 			&i.McpServer.ReplacementServerID,
+			&i.McpServer.SensitivityConfirmedAt,
 			&i.TeamSlug,
 			&i.TeamName,
 		); err != nil {
@@ -624,7 +625,7 @@ SET secret_placement = $1, secret_name = $2, secret_prefix = $3,
     secret_setup_user_id = CASE WHEN $6::boolean THEN secret_setup_user_id END,
     secret_setup_at = CASE WHEN $6::boolean THEN secret_setup_at END
 WHERE id = $7
-RETURNING id, team_id, slug, name, description, url, transport, auth_header_name, auth_value_cipher, auth_value_hint, timeout_seconds, enabled, publish_state, publish_requested_at, publish_requested_by, publish_request_note, publish_reviewed_at, publish_reviewed_by, publish_review_note, published_at, refreshed_at, last_refresh_error, revision, created_by, created_at, updated_by, updated_at, auth_provider_id, auth_scopes, capture_payloads, auth_mode, oauth_setup_user_id, oauth_setup_at, send_identity, protocol_era, protocol_version, protocol_negotiated_at, requires_present_person, secret_placement, secret_name, secret_prefix, secret_label, secret_help, secret_setup_user_id, secret_setup_at, rate_limit_per_minute, max_concurrent, supports_tasks, owner_user_id, oncall_contact, sensitivity, last_reviewed_at, review_due_at, lifecycle, deprecated_at, sunset_at, replacement_server_id
+RETURNING id, team_id, slug, name, description, url, transport, auth_header_name, auth_value_cipher, auth_value_hint, timeout_seconds, enabled, publish_state, publish_requested_at, publish_requested_by, publish_request_note, publish_reviewed_at, publish_reviewed_by, publish_review_note, published_at, refreshed_at, last_refresh_error, revision, created_by, created_at, updated_by, updated_at, auth_provider_id, auth_scopes, capture_payloads, auth_mode, oauth_setup_user_id, oauth_setup_at, send_identity, protocol_era, protocol_version, protocol_negotiated_at, requires_present_person, secret_placement, secret_name, secret_prefix, secret_label, secret_help, secret_setup_user_id, secret_setup_at, rate_limit_per_minute, max_concurrent, supports_tasks, owner_user_id, oncall_contact, sensitivity, last_reviewed_at, review_due_at, lifecycle, deprecated_at, sunset_at, replacement_server_id, sensitivity_confirmed_at
 `
 
 type SetMCPServerSecretConfigParams struct {
@@ -713,6 +714,7 @@ func (q *Queries) SetMCPServerSecretConfig(ctx context.Context, arg SetMCPServer
 		&i.DeprecatedAt,
 		&i.SunsetAt,
 		&i.ReplacementServerID,
+		&i.SensitivityConfirmedAt,
 	)
 	return i, err
 }
@@ -720,7 +722,7 @@ func (q *Queries) SetMCPServerSecretConfig(ctx context.Context, arg SetMCPServer
 const setMCPServerSecretSetup = `-- name: SetMCPServerSecretSetup :one
 UPDATE mcp_servers SET secret_setup_user_id = $1, secret_setup_at = now(), revision = revision + 1, updated_at = now()
 WHERE id = $2 AND auth_mode = 'person_secret'
-RETURNING id, team_id, slug, name, description, url, transport, auth_header_name, auth_value_cipher, auth_value_hint, timeout_seconds, enabled, publish_state, publish_requested_at, publish_requested_by, publish_request_note, publish_reviewed_at, publish_reviewed_by, publish_review_note, published_at, refreshed_at, last_refresh_error, revision, created_by, created_at, updated_by, updated_at, auth_provider_id, auth_scopes, capture_payloads, auth_mode, oauth_setup_user_id, oauth_setup_at, send_identity, protocol_era, protocol_version, protocol_negotiated_at, requires_present_person, secret_placement, secret_name, secret_prefix, secret_label, secret_help, secret_setup_user_id, secret_setup_at, rate_limit_per_minute, max_concurrent, supports_tasks, owner_user_id, oncall_contact, sensitivity, last_reviewed_at, review_due_at, lifecycle, deprecated_at, sunset_at, replacement_server_id
+RETURNING id, team_id, slug, name, description, url, transport, auth_header_name, auth_value_cipher, auth_value_hint, timeout_seconds, enabled, publish_state, publish_requested_at, publish_requested_by, publish_request_note, publish_reviewed_at, publish_reviewed_by, publish_review_note, published_at, refreshed_at, last_refresh_error, revision, created_by, created_at, updated_by, updated_at, auth_provider_id, auth_scopes, capture_payloads, auth_mode, oauth_setup_user_id, oauth_setup_at, send_identity, protocol_era, protocol_version, protocol_negotiated_at, requires_present_person, secret_placement, secret_name, secret_prefix, secret_label, secret_help, secret_setup_user_id, secret_setup_at, rate_limit_per_minute, max_concurrent, supports_tasks, owner_user_id, oncall_contact, sensitivity, last_reviewed_at, review_due_at, lifecycle, deprecated_at, sunset_at, replacement_server_id, sensitivity_confirmed_at
 `
 
 type SetMCPServerSecretSetupParams struct {
@@ -790,6 +792,7 @@ func (q *Queries) SetMCPServerSecretSetup(ctx context.Context, arg SetMCPServerS
 		&i.DeprecatedAt,
 		&i.SunsetAt,
 		&i.ReplacementServerID,
+		&i.SensitivityConfirmedAt,
 	)
 	return i, err
 }

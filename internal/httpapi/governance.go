@@ -55,7 +55,8 @@ func toAPIReplacement(r *registry.ReplacementRef) *apitypes.ServerReplacementRef
 // toAPIGovernance is a server's governance for its team and platform staff.
 func toAPIGovernance(v registry.ServerView) *apitypes.McpServerGovernance {
 	g := v.Governance
-	out := &apitypes.McpServerGovernance{Sensitivity: apitypes.Sensitivity(g.Sensitivity), Lifecycle: apitypes.ServerLifecycle(g.Lifecycle),
+	confirmed := g.SensitivityConfirmed
+	out := &apitypes.McpServerGovernance{Sensitivity: apitypes.Sensitivity(g.Sensitivity), SensitivityConfirmed: &confirmed, Lifecycle: apitypes.ServerLifecycle(g.Lifecycle),
 		Ownerless: g.Ownerless, ReviewOverdue: g.ReviewOverdue, OncallContact: g.OncallContact, LastReviewedAt: apiTime(g.LastReviewedAt),
 		ReviewDueAt: apiTime(g.ReviewDueAt), DeprecatedAt: apiTime(g.DeprecatedAt), SunsetAt: apiTime(g.SunsetAt),
 		Replacement: toAPIReplacement(g.Replacement.Visible(v.Server.TeamID))}

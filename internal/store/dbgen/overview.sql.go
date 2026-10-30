@@ -633,6 +633,65 @@ func (q *Queries) AttentionServiceAccountKeys(ctx context.Context, arg Attention
 	return items, nil
 }
 
+const attentionUnlabelledServers = `-- name: AttentionUnlabelledServers :many
+SELECT s.id, s.slug, s.name, s.sensitivity, t.id AS team_id, t.slug AS team_slug, t.name AS team_name,
+       (count(*) OVER ())::bigint AS total
+FROM mcp_servers s
+JOIN teams t ON t.id = s.team_id AND t.status = 'active'
+WHERE s.publish_state = 'published' AND s.sensitivity_confirmed_at IS NULL
+  AND ($1::uuid IS NULL OR s.team_id = $1::uuid)
+ORDER BY s.name, s.id
+LIMIT $2
+`
+
+type AttentionUnlabelledServersParams struct {
+	TeamID   uuid.NullUUID
+	PageSize int32
+}
+
+type AttentionUnlabelledServersRow struct {
+	ID          uuid.UUID
+	Slug        string
+	Name        string
+	Sensitivity string
+	TeamID      uuid.UUID
+	TeamSlug    string
+	TeamName    string
+	Total       int64
+}
+
+// Published servers of active teams whose sensitivity label nobody confirmed:
+// a stored 'internal' is the column's default until an owner or admin of the
+// team sends a sensitivity (decision 88). Bookkeeping only: nothing is blocked.
+func (q *Queries) AttentionUnlabelledServers(ctx context.Context, arg AttentionUnlabelledServersParams) ([]AttentionUnlabelledServersRow, error) {
+	rows, err := q.db.Query(ctx, attentionUnlabelledServers, arg.TeamID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AttentionUnlabelledServersRow{}
+	for rows.Next() {
+		var i AttentionUnlabelledServersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.Sensitivity,
+			&i.TeamID,
+			&i.TeamSlug,
+			&i.TeamName,
+			&i.Total,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const overviewActivity = `-- name: OverviewActivity :one
 SELECT COALESCE(sum(calls), 0)::bigint AS calls,
        COALESCE(sum(calls) FILTER (WHERE outcome <> 'ok'), 0)::bigint AS errors,

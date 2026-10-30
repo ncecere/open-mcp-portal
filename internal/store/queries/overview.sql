@@ -193,6 +193,19 @@ WHERE s.publish_state = 'published'
 ORDER BY (s.owner_user_id IS NULL), s.name, s.id
 LIMIT @page_size;
 
+-- name: AttentionUnlabelledServers :many
+-- Published servers of active teams whose sensitivity label nobody confirmed:
+-- a stored 'internal' is the column's default until an owner or admin of the
+-- team sends a sensitivity (decision 88). Bookkeeping only: nothing is blocked.
+SELECT s.id, s.slug, s.name, s.sensitivity, t.id AS team_id, t.slug AS team_slug, t.name AS team_name,
+       (count(*) OVER ())::bigint AS total
+FROM mcp_servers s
+JOIN teams t ON t.id = s.team_id AND t.status = 'active'
+WHERE s.publish_state = 'published' AND s.sensitivity_confirmed_at IS NULL
+  AND (sqlc.narg(team_id)::uuid IS NULL OR s.team_id = sqlc.narg(team_id)::uuid)
+ORDER BY s.name, s.id
+LIMIT @page_size;
+
 -- name: AttentionPendingTransfers :one
 -- Transfers waiting for a team's owners to accept, and the oldest request.
 SELECT count(*)::bigint AS pending, COALESCE(min(t.requested_at), 'epoch'::timestamptz)::timestamptz AS oldest

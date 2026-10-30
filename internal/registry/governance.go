@@ -103,7 +103,9 @@ func ownerEligible(ctx context.Context, q *dbgen.Queries, teamID, userID uuid.UU
 // GovernanceInput is a change of a server's governance. Set* say that the
 // field was sent (a nil value then clears it); omitted fields keep their
 // values. Only a person who owns or administers the server's team may send it,
-// never an automation token.
+// never an automation token. Sending Sensitivity, even the label the server
+// already has, is how a team confirms it (mcp_servers.sensitivity_confirmed_at);
+// nothing else does.
 type GovernanceInput struct {
 	SetOwner            bool
 	OwnerUserID         *uuid.UUID
@@ -173,10 +175,15 @@ func NormalizeOncall(in string) (*string, error) {
 // govPlan is a validated governance change of one server.
 type govPlan struct {
 	after dbgen.McpServer
-	// changed: anything differs; raised: the sensitivity went up;
-	// sensitivityChanged: either way; deprecated: the server just left active.
+	// changed: anything differs (including a first confirmation); raised: the
+	// sensitivity went up; sensitivityChanged: either way; deprecated: the server
+	// just left active.
 	changed, raised, sensitivityChanged, deprecated bool
 	ownerChanged, lifecycleChanged                  bool
+	// confirm: this request sends a sensitivity and the label was not yet
+	// confirmed. Bookkeeping: it moves the revision and is audited like any
+	// governance change, but is not an authority input.
+	confirm bool
 }
 
 // planGovernance validates in against cur (the locked row) for a person with
@@ -226,13 +233,16 @@ func planGovernance(ctx context.Context, q *dbgen.Queries, a authz.Actor, role s
 		curRank, _ := SensitivityRank(cur.Sensitivity)
 		newRank, _ := SensitivityRank(next.Sensitivity)
 		p.raised, p.sensitivityChanged = newRank > curRank, newRank != curRank
+		// An explicit label confirms it, even the one it already has. Nothing
+		// else does: no other field, no other edit, no inference.
+		p.confirm = cur.SensitivityConfirmedAt == nil
 	}
 	if err := planLifecycle(ctx, q, cur, next, in, now); err != nil {
 		return p, err
 	}
 	p.lifecycleChanged = next.Lifecycle != cur.Lifecycle
 	p.deprecated = cur.Lifecycle == LifecycleActive && next.Lifecycle != LifecycleActive
-	p.changed = p.ownerChanged || !equalPtr(next.OncallContact, cur.OncallContact) || next.Sensitivity != cur.Sensitivity ||
+	p.changed = p.confirm || p.ownerChanged || !equalPtr(next.OncallContact, cur.OncallContact) || next.Sensitivity != cur.Sensitivity ||
 		next.Lifecycle != cur.Lifecycle || !equalTime(next.DeprecatedAt, cur.DeprecatedAt) || !equalTime(next.SunsetAt, cur.SunsetAt) ||
 		next.ReplacementServerID != cur.ReplacementServerID
 	return p, nil
@@ -343,7 +353,7 @@ func checkReplacement(ctx context.Context, q *dbgen.Queries, cur dbgen.McpServer
 // governanceSnapshot is the audited governance of a server (the contact is
 // the person's own choice to publish; no secret is in any of it).
 func governanceSnapshot(sv dbgen.McpServer) map[string]any {
-	out := map[string]any{"sensitivity": sv.Sensitivity, "lifecycle": sv.Lifecycle, "oncallContact": sv.OncallContact}
+	out := map[string]any{"sensitivity": sv.Sensitivity, "sensitivityConfirmed": sv.SensitivityConfirmedAt != nil, "lifecycle": sv.Lifecycle, "oncallContact": sv.OncallContact}
 	if sv.OwnerUserID.Valid {
 		out["ownerUserId"] = sv.OwnerUserID.UUID.String()
 	}
@@ -372,6 +382,7 @@ func (s *Service) applyGovernance(ctx context.Context, q *dbgen.Queries, a authz
 	row, err := q.SetMCPServerGovernance(ctx, dbgen.SetMCPServerGovernanceParams{
 		ID: cur.ID, OwnerUserID: n.OwnerUserID, OncallContact: n.OncallContact, Sensitivity: n.Sensitivity, Lifecycle: n.Lifecycle,
 		DeprecatedAt: n.DeprecatedAt, SunsetAt: n.SunsetAt, ReplacementServerID: n.ReplacementServerID, Bump: bump, UpdatedBy: by(a),
+		ConfirmSensitivity: p.confirm,
 	})
 	if err != nil {
 		return row, err
@@ -384,7 +395,7 @@ func (s *Service) applyGovernance(ctx context.Context, q *dbgen.Queries, a authz
 	e := a.Audit("mcp_server.governance_update", "mcp_server", cur.ID.String())
 	e.TeamID = team.ID
 	e.Before, e.After = governanceSnapshot(cur), governanceSnapshot(row)
-	e.Metadata = map[string]any{"name": cur.Name, "sensitivityRaised": p.raised}
+	e.Metadata = map[string]any{"name": cur.Name, "sensitivityRaised": p.raised, "sensitivityConfirmed": p.confirm}
 	if err := audit.Record(ctx, q, e); err != nil {
 		return row, err
 	}

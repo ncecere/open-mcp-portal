@@ -37,6 +37,9 @@ type GovernanceView struct {
 	Ownerless     bool
 	OncallContact *string
 	Sensitivity   string
+	// SensitivityConfirmed: an owner or admin of the team sent the label (even
+	// the default one). Until then internal is only the column's default.
+	SensitivityConfirmed bool
 	// LastReviewedAt is the latest approval; ReviewDueAt the next one due.
 	LastReviewedAt, ReviewDueAt *time.Time
 	ReviewOverdue               bool
@@ -84,7 +87,7 @@ func governanceViews(ctx context.Context, q *dbgen.Queries, out []ServerView, in
 	for i := range out {
 		sv := out[i].Server
 		g := GovernanceView{OwnerUserID: sv.OwnerUserID, OncallContact: sv.OncallContact, Sensitivity: sv.Sensitivity,
-			LastReviewedAt: sv.LastReviewedAt, ReviewDueAt: sv.ReviewDueAt, ReviewOverdue: ReviewOverdue(sv, now),
+			SensitivityConfirmed: sv.SensitivityConfirmedAt != nil, LastReviewedAt: sv.LastReviewedAt, ReviewDueAt: sv.ReviewDueAt, ReviewOverdue: ReviewOverdue(sv, now),
 			Lifecycle: EffectiveLifecycle(sv, now), DeprecatedAt: sv.DeprecatedAt, SunsetAt: sv.SunsetAt, Ownerless: true}
 		if o, ok := ownerOf[sv.ID]; ok {
 			g.OwnerName, g.Ownerless = o.OwnerName, !o.Eligible
