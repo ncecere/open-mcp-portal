@@ -175,7 +175,9 @@ func (s *Service) ListTransfers(ctx context.Context, a authz.Actor, ref string, 
 }
 
 // lockTransfer locks a transfer that involves the team and is still pending
-// at expectedRevision. The order everywhere is transfer first, then server.
+// at expectedRevision. Operations that also lock its server must lock the
+// server FIRST (as RequestTransfer and ForceTransfer do). A cancellation locks
+// only the transfer, so it never waits back on the server.
 func lockTransfer(ctx context.Context, q *dbgen.Queries, teamID, id uuid.UUID, expectedRevision int64) (dbgen.ServerTransfer, error) {
 	t, err := q.LockServerTransfer(ctx, id)
 	if errors.Is(store.NotFound(err), store.ErrNotFound) {
@@ -210,11 +212,17 @@ func (s *Service) AcceptTransfer(ctx context.Context, a authz.Actor, ref string,
 		if err != nil {
 			return err
 		}
-		t, err := lockTransfer(ctx, q, ta.team.ID, id, expectedRevision)
-		if err != nil {
+		// Read an association hint without a lock, then lock server -> transfer.
+		// The transfer row's parties/server are immutable; its state and revision
+		// are checked again after both locks. Transfer -> server would deadlock
+		// with a forced move that holds the server while cancelling this offer.
+		hint, err := q.GetServerTransfer(ctx, id)
+		if errors.Is(store.NotFound(err), store.ErrNotFound) {
+			return errNoTransfer
+		} else if err != nil {
 			return err
 		}
-		if t.ToTeamID != ta.team.ID {
+		if hint.ToTeamID != ta.team.ID {
 			return errNoTransfer
 		}
 		if !authz.RoleAtLeast(ta.role, authz.RoleOwner) {
@@ -223,7 +231,11 @@ func (s *Service) AcceptTransfer(ctx context.Context, a authz.Actor, ref string,
 		if ta.team.Status != teams.StatusActive {
 			return errTeamArchived
 		}
-		sv, err := anyServer(ctx, q, t.ServerID, true)
+		sv, err := anyServer(ctx, q, hint.ServerID, true)
+		if err != nil {
+			return err
+		}
+		t, err := lockTransfer(ctx, q, ta.team.ID, id, expectedRevision)
 		if err != nil {
 			return err
 		}
