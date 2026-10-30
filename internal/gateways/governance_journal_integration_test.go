@@ -53,6 +53,9 @@ func TestGovernanceInputsJoinTheApprovalAuthorityJournal(t *testing.T) {
 		{"the on-call contact", `UPDATE mcp_servers SET oncall_contact = '#x' WHERE id = $1`, false},
 		{"the review dates", `UPDATE mcp_servers SET last_reviewed_at = now(), review_due_at = now() WHERE id = $1`, false},
 		{"the replacement", `UPDATE mcp_servers SET replacement_server_id = NULL WHERE id = $1`, false},
+		// Migration 50: whether a team confirmed the label is bookkeeping, not an input of anything served.
+		{"the sensitivity confirmation", `UPDATE mcp_servers SET sensitivity_confirmed_at = now() WHERE id = $1`, false},
+		{"clearing the sensitivity confirmation", `UPDATE mcp_servers SET sensitivity_confirmed_at = NULL WHERE id = $1`, false},
 		{"the deprecation date", `UPDATE mcp_servers SET deprecated_at = now() - interval '1 day' WHERE id = $1`, false},
 		{"a transfer (the team)", `UPDATE mcp_servers SET team_id = (SELECT id FROM teams WHERE slug = 'j2') WHERE id = $1`, true},
 	} {

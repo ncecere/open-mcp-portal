@@ -9120,7 +9120,9 @@ components:
           description: 'Omit to keep. Team owners and admins, in a browser session: an editor gets 403 governance_role and
             an automation token never changes owner, on-call contact, sensitivity, lifecycle or replacement (403 token_not_allowed,
             details.field governance). Raising the sensitivity of a published server sends it back to review under approval_required
-            (mcp_server.publish_request, reason sensitivity_raised); lowering it does not. Audited as mcp_server.governance_update.
+            (mcp_server.publish_request, reason sensitivity_raised); lowering it does not. Sending sensitivity, even with the
+            value the server already has, confirms the label (see McpServerGovernance.sensitivityConfirmed); no other field or
+            edit does. Audited as mcp_server.governance_update.
             Moving the server to another team is requestTeamMcpServerTransfer.'
         requirement:
           allOf:
@@ -9543,6 +9545,13 @@ components:
           nullable: true
           description: >-
             When the next re-review is due (null: none; set from the platform's interval for its sensitivity)
+        sensitivityConfirmed:
+          type: boolean
+          description: >-
+            Whether an owner or admin of the team has confirmed the sensitivity label. A new server is labelled internal by
+            default, which nobody has checked until this is true; existing servers start unconfirmed. Sending sensitivity in
+            updateTeamMcpServer confirms it (even the value it already has). A published unconfirmed server shows in attention
+            lists (server_unlabelled). Bookkeeping only: the label, not this marker, is what a gateway's ceiling reads.
         reviewOverdue:
           type: boolean
           description: The re-review date has passed. The team asks again with publishTeamMcpServer (or a platform admin approves
@@ -9571,7 +9580,12 @@ components:
           description: An open transfer to another team (the owning team's members only)
     McpServerGovernanceInput:
       type: object
-      description: Omitted fields keep their values; null clears ownerUserId, oncallContact, sunsetAt and replacementServerId.
+      description: >-
+        Omitted fields keep their values; null clears ownerUserId, oncallContact, sunsetAt and replacementServerId.
+        Sending sensitivity is the one way to confirm the label: it confirms it even when it equals the stored value (a
+        server's label is internal by default until a team owner or admin confirms it). Omitting it, and every other
+        field or edit of the server, leaves the confirmation as it was. Confirmation is bookkeeping only: it never
+        changes what a gateway serves.
       properties:
         ownerUserId:
           type: string
@@ -14064,7 +14078,10 @@ components:
       - review_due
       - server_ownerless
       - server_transfer_pending
-      description: 'review_due: one item per published server whose re-review is overdue (at = the due date; the team
+      - server_unlabelled
+      description: 'server_unlabelled: one item per published server whose sensitivity label nobody has confirmed (the label is
+        internal by default until a team owner or admin confirms it; severity info, nothing is blocked or unpublished).
+        review_due: one item per published server whose re-review is overdue (at = the due date; the team
         asks again with publish, or a platform admin approves in place). server_ownerless: one item per published server nobody
         is accountable for (no owner named, or the owner left the team, lost their editor role, was suspended or deleted).
         server_transfer_pending: one item, count = transfers waiting for the team''s owners to accept (team view, owners only).

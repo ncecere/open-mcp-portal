@@ -51,6 +51,7 @@ const wording: Record<AttentionKind, (item: AttentionItem) => Wording> = {
   }),
   review_due: (i) => ({ title: `The review of ${server(i)}${ofTeam(i)} is overdue`, atLabel: "Due since", action: "Open server" }),
   server_ownerless: (i) => ({ title: `${server(i)}${ofTeam(i)} has nobody accountable for it`, action: "Choose an owner" }),
+  server_unlabelled: (i) => ({ title: `${server(i)}${ofTeam(i)} is published with a sensitivity label nobody has confirmed`, action: "Confirm sensitivity" }),
   server_transfer_pending: (i) => ({ title: `${plural(n(i), "server transfer")} waiting for your team's owners to accept`, atLabel: "Oldest asked", action: "See transfers" }),
   notification_failures: (i) => ({ title: `${plural(n(i), "notification destination")}${ofTeam(i)} failing or stopped`, atLabel: "Latest failure", action: "Open notification settings" }),
 };
@@ -67,6 +68,7 @@ export const moreNouns: Partial<Record<AttentionKind, string>> = {
   server_certificate_expiring: "servers with an expiring client certificate",
   review_due: "servers with an overdue review",
   server_ownerless: "servers nobody is accountable for",
+  server_unlabelled: "servers with an unconfirmed sensitivity label",
   service_account_keys_expiring: "teams with expiring service account keys",
   automation_tokens_expiring: "teams with expiring tokens",
 };

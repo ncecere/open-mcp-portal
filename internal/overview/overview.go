@@ -44,6 +44,7 @@ const (
 	ReviewDue                  = "review_due"
 	ServerOwnerless            = "server_ownerless"
 	ServerTransferPending      = "server_transfer_pending"
+	ServerUnlabelled           = "server_unlabelled"
 )
 
 // Severities.
@@ -380,6 +381,23 @@ func (s *Service) serverKinds(ctx context.Context, c *collector, team uuid.NullU
 			Link: &Link{Type: LinkServer, ID: r.ID.String(), TeamSlug: r.TeamSlug}})
 	}
 	c.add(ServerOwnerless, total, len(items), items...)
+
+	// A published server whose sensitivity label nobody confirmed: internal is
+	// only the column's default until a team's owner or admin sends a label.
+	// Informational: nothing is blocked, unpublished or re-reviewed for it.
+	unlabelled, err := s.q.AttentionUnlabelledServers(ctx, dbgen.AttentionUnlabelledServersParams{TeamID: team, PageSize: PerKind})
+	if err != nil {
+		return err
+	}
+	items, total = nil, 0
+	for _, r := range unlabelled {
+		total = r.Total
+		items = append(items, Item{Kind: ServerUnlabelled, Severity: Info,
+			Summary: fmt.Sprintf("%s (%s) is published with the sensitivity label %q that nobody has confirmed", r.Name, r.TeamName, r.Sensitivity),
+			Subject: &Subject{ID: r.ID.String(), Name: r.Name, Slug: r.Slug}, Team: teamRef(r.TeamID, r.TeamSlug, r.TeamName),
+			Link: &Link{Type: LinkServer, ID: r.ID.String(), TeamSlug: r.TeamSlug}})
+	}
+	c.add(ServerUnlabelled, total, len(items), items...)
 	return nil
 }
 

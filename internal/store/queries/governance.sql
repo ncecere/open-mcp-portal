@@ -4,8 +4,11 @@
 -- name: SetMCPServerGovernance :one
 -- Writes the governance columns. bump moves the revision when this is the only
 -- change of the request (an update that changed other settings bumped it).
+-- confirm_sensitivity records that the team's owner or admin sent a label (even
+-- the one it already had); it never clears the record and keeps the first date.
 UPDATE mcp_servers
-SET owner_user_id = sqlc.narg(owner_user_id)::uuid, oncall_contact = sqlc.narg(oncall_contact)::text,
+SET sensitivity_confirmed_at = CASE WHEN @confirm_sensitivity::bool THEN COALESCE(sensitivity_confirmed_at, now()) ELSE sensitivity_confirmed_at END,
+    owner_user_id = sqlc.narg(owner_user_id)::uuid, oncall_contact = sqlc.narg(oncall_contact)::text,
     sensitivity = @sensitivity, lifecycle = @lifecycle,
     deprecated_at = sqlc.narg(deprecated_at)::timestamptz, sunset_at = sqlc.narg(sunset_at)::timestamptz,
     replacement_server_id = sqlc.narg(replacement_server_id)::uuid,

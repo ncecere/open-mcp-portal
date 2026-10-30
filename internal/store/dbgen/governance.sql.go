@@ -457,7 +457,7 @@ func (q *Queries) GovernanceReplacementViews(ctx context.Context, serverIds []uu
 }
 
 const governanceReviewDue = `-- name: GovernanceReviewDue :many
-SELECT s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, s.rate_limit_per_minute, s.max_concurrent, s.supports_tasks, s.owner_user_id, s.oncall_contact, s.sensitivity, s.last_reviewed_at, s.review_due_at, s.lifecycle, s.deprecated_at, s.sunset_at, s.replacement_server_id, t.slug AS team_slug, t.name AS team_name, t.publish_policy_override AS team_policy_override
+SELECT s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, s.rate_limit_per_minute, s.max_concurrent, s.supports_tasks, s.owner_user_id, s.oncall_contact, s.sensitivity, s.last_reviewed_at, s.review_due_at, s.lifecycle, s.deprecated_at, s.sunset_at, s.replacement_server_id, s.sensitivity_confirmed_at, t.slug AS team_slug, t.name AS team_name, t.publish_policy_override AS team_policy_override
 FROM mcp_servers s
 JOIN teams t ON t.id = s.team_id AND t.status = 'active'
 WHERE s.publish_state = 'published' AND s.review_due_at IS NOT NULL AND s.review_due_at <= $1::timestamptz
@@ -552,6 +552,7 @@ func (q *Queries) GovernanceReviewDue(ctx context.Context, arg GovernanceReviewD
 			&i.McpServer.DeprecatedAt,
 			&i.McpServer.SunsetAt,
 			&i.McpServer.ReplacementServerID,
+			&i.McpServer.SensitivityConfirmedAt,
 			&i.TeamSlug,
 			&i.TeamName,
 			&i.TeamPolicyOverride,
@@ -567,7 +568,7 @@ func (q *Queries) GovernanceReviewDue(ctx context.Context, arg GovernanceReviewD
 }
 
 const governanceReviewDueUnnotified = `-- name: GovernanceReviewDueUnnotified :many
-SELECT s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, s.rate_limit_per_minute, s.max_concurrent, s.supports_tasks, s.owner_user_id, s.oncall_contact, s.sensitivity, s.last_reviewed_at, s.review_due_at, s.lifecycle, s.deprecated_at, s.sunset_at, s.replacement_server_id, t.slug AS team_slug, t.name AS team_name, t.publish_policy_override AS team_policy_override
+SELECT s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, s.rate_limit_per_minute, s.max_concurrent, s.supports_tasks, s.owner_user_id, s.oncall_contact, s.sensitivity, s.last_reviewed_at, s.review_due_at, s.lifecycle, s.deprecated_at, s.sunset_at, s.replacement_server_id, s.sensitivity_confirmed_at, t.slug AS team_slug, t.name AS team_name, t.publish_policy_override AS team_policy_override
 FROM mcp_servers s
 JOIN teams t ON t.id = s.team_id AND t.status = 'active'
 WHERE s.publish_state = 'published' AND s.review_due_at IS NOT NULL AND s.review_due_at <= $1::timestamptz
@@ -657,6 +658,7 @@ func (q *Queries) GovernanceReviewDueUnnotified(ctx context.Context, arg Governa
 			&i.McpServer.DeprecatedAt,
 			&i.McpServer.SunsetAt,
 			&i.McpServer.ReplacementServerID,
+			&i.McpServer.SensitivityConfirmedAt,
 			&i.TeamSlug,
 			&i.TeamName,
 			&i.TeamPolicyOverride,
@@ -793,7 +795,7 @@ func (q *Queries) GovernanceSunsetSoonPairs(ctx context.Context, arg GovernanceS
 }
 
 const governanceSunsetSoonServers = `-- name: GovernanceSunsetSoonServers :many
-SELECT s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, s.rate_limit_per_minute, s.max_concurrent, s.supports_tasks, s.owner_user_id, s.oncall_contact, s.sensitivity, s.last_reviewed_at, s.review_due_at, s.lifecycle, s.deprecated_at, s.sunset_at, s.replacement_server_id, t.slug AS team_slug, t.name AS team_name
+SELECT s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, s.rate_limit_per_minute, s.max_concurrent, s.supports_tasks, s.owner_user_id, s.oncall_contact, s.sensitivity, s.last_reviewed_at, s.review_due_at, s.lifecycle, s.deprecated_at, s.sunset_at, s.replacement_server_id, s.sensitivity_confirmed_at, t.slug AS team_slug, t.name AS team_name
 FROM mcp_servers s
 JOIN teams t ON t.id = s.team_id AND t.status = 'active'
 WHERE s.lifecycle = 'deprecated' AND s.sunset_at IS NOT NULL
@@ -885,6 +887,7 @@ func (q *Queries) GovernanceSunsetSoonServers(ctx context.Context, arg Governanc
 			&i.McpServer.DeprecatedAt,
 			&i.McpServer.SunsetAt,
 			&i.McpServer.ReplacementServerID,
+			&i.McpServer.SensitivityConfirmedAt,
 			&i.TeamSlug,
 			&i.TeamName,
 		); err != nil {
@@ -1113,7 +1116,7 @@ UPDATE mcp_servers
 SET team_id = $1, owner_user_id = $2::uuid,
     revision = revision + 1, updated_by = $3::uuid, updated_at = now()
 WHERE id = $4
-RETURNING id, team_id, slug, name, description, url, transport, auth_header_name, auth_value_cipher, auth_value_hint, timeout_seconds, enabled, publish_state, publish_requested_at, publish_requested_by, publish_request_note, publish_reviewed_at, publish_reviewed_by, publish_review_note, published_at, refreshed_at, last_refresh_error, revision, created_by, created_at, updated_by, updated_at, auth_provider_id, auth_scopes, capture_payloads, auth_mode, oauth_setup_user_id, oauth_setup_at, send_identity, protocol_era, protocol_version, protocol_negotiated_at, requires_present_person, secret_placement, secret_name, secret_prefix, secret_label, secret_help, secret_setup_user_id, secret_setup_at, rate_limit_per_minute, max_concurrent, supports_tasks, owner_user_id, oncall_contact, sensitivity, last_reviewed_at, review_due_at, lifecycle, deprecated_at, sunset_at, replacement_server_id
+RETURNING id, team_id, slug, name, description, url, transport, auth_header_name, auth_value_cipher, auth_value_hint, timeout_seconds, enabled, publish_state, publish_requested_at, publish_requested_by, publish_request_note, publish_reviewed_at, publish_reviewed_by, publish_review_note, published_at, refreshed_at, last_refresh_error, revision, created_by, created_at, updated_by, updated_at, auth_provider_id, auth_scopes, capture_payloads, auth_mode, oauth_setup_user_id, oauth_setup_at, send_identity, protocol_era, protocol_version, protocol_negotiated_at, requires_present_person, secret_placement, secret_name, secret_prefix, secret_label, secret_help, secret_setup_user_id, secret_setup_at, rate_limit_per_minute, max_concurrent, supports_tasks, owner_user_id, oncall_contact, sensitivity, last_reviewed_at, review_due_at, lifecycle, deprecated_at, sunset_at, replacement_server_id, sensitivity_confirmed_at
 `
 
 type MoveMCPServerToTeamParams struct {
@@ -1192,6 +1195,7 @@ func (q *Queries) MoveMCPServerToTeam(ctx context.Context, arg MoveMCPServerToTe
 		&i.DeprecatedAt,
 		&i.SunsetAt,
 		&i.ReplacementServerID,
+		&i.SensitivityConfirmedAt,
 	)
 	return i, err
 }
@@ -1297,17 +1301,19 @@ func (q *Queries) RecomputeMCPServerReviewDue(ctx context.Context, serverID uuid
 const setMCPServerGovernance = `-- name: SetMCPServerGovernance :one
 
 UPDATE mcp_servers
-SET owner_user_id = $1::uuid, oncall_contact = $2::text,
-    sensitivity = $3, lifecycle = $4,
-    deprecated_at = $5::timestamptz, sunset_at = $6::timestamptz,
-    replacement_server_id = $7::uuid,
-    revision = CASE WHEN $8::bool THEN revision + 1 ELSE revision END,
-    updated_by = $9::uuid, updated_at = now()
-WHERE id = $10
-RETURNING id, team_id, slug, name, description, url, transport, auth_header_name, auth_value_cipher, auth_value_hint, timeout_seconds, enabled, publish_state, publish_requested_at, publish_requested_by, publish_request_note, publish_reviewed_at, publish_reviewed_by, publish_review_note, published_at, refreshed_at, last_refresh_error, revision, created_by, created_at, updated_by, updated_at, auth_provider_id, auth_scopes, capture_payloads, auth_mode, oauth_setup_user_id, oauth_setup_at, send_identity, protocol_era, protocol_version, protocol_negotiated_at, requires_present_person, secret_placement, secret_name, secret_prefix, secret_label, secret_help, secret_setup_user_id, secret_setup_at, rate_limit_per_minute, max_concurrent, supports_tasks, owner_user_id, oncall_contact, sensitivity, last_reviewed_at, review_due_at, lifecycle, deprecated_at, sunset_at, replacement_server_id
+SET sensitivity_confirmed_at = CASE WHEN $1::bool THEN COALESCE(sensitivity_confirmed_at, now()) ELSE sensitivity_confirmed_at END,
+    owner_user_id = $2::uuid, oncall_contact = $3::text,
+    sensitivity = $4, lifecycle = $5,
+    deprecated_at = $6::timestamptz, sunset_at = $7::timestamptz,
+    replacement_server_id = $8::uuid,
+    revision = CASE WHEN $9::bool THEN revision + 1 ELSE revision END,
+    updated_by = $10::uuid, updated_at = now()
+WHERE id = $11
+RETURNING id, team_id, slug, name, description, url, transport, auth_header_name, auth_value_cipher, auth_value_hint, timeout_seconds, enabled, publish_state, publish_requested_at, publish_requested_by, publish_request_note, publish_reviewed_at, publish_reviewed_by, publish_review_note, published_at, refreshed_at, last_refresh_error, revision, created_by, created_at, updated_by, updated_at, auth_provider_id, auth_scopes, capture_payloads, auth_mode, oauth_setup_user_id, oauth_setup_at, send_identity, protocol_era, protocol_version, protocol_negotiated_at, requires_present_person, secret_placement, secret_name, secret_prefix, secret_label, secret_help, secret_setup_user_id, secret_setup_at, rate_limit_per_minute, max_concurrent, supports_tasks, owner_user_id, oncall_contact, sensitivity, last_reviewed_at, review_due_at, lifecycle, deprecated_at, sunset_at, replacement_server_id, sensitivity_confirmed_at
 `
 
 type SetMCPServerGovernanceParams struct {
+	ConfirmSensitivity  bool
 	OwnerUserID         uuid.NullUUID
 	OncallContact       *string
 	Sensitivity         string
@@ -1324,8 +1330,11 @@ type SetMCPServerGovernanceParams struct {
 // sensitivity, lifecycle, re-review dates, transfers and the governance loop.
 // Writes the governance columns. bump moves the revision when this is the only
 // change of the request (an update that changed other settings bumped it).
+// confirm_sensitivity records that the team's owner or admin sent a label (even
+// the one it already had); it never clears the record and keeps the first date.
 func (q *Queries) SetMCPServerGovernance(ctx context.Context, arg SetMCPServerGovernanceParams) (McpServer, error) {
 	row := q.db.QueryRow(ctx, setMCPServerGovernance,
+		arg.ConfirmSensitivity,
 		arg.OwnerUserID,
 		arg.OncallContact,
 		arg.Sensitivity,
@@ -1396,6 +1405,7 @@ func (q *Queries) SetMCPServerGovernance(ctx context.Context, arg SetMCPServerGo
 		&i.DeprecatedAt,
 		&i.SunsetAt,
 		&i.ReplacementServerID,
+		&i.SensitivityConfirmedAt,
 	)
 	return i, err
 }

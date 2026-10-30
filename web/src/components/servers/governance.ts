@@ -28,6 +28,18 @@ export const sensitivityHelp: Record<Sensitivity, string> = {
 
 export const sensitivityTone = { public: "neutral", internal: "info", confidential: "warning", restricted: "danger" } as const;
 
+/**
+ * What an unconfirmed label means. A server is labelled Internal until someone says otherwise, so Internal on its own
+ * doesn't say a person checked it; only an owner or admin of the team sending a label (even Internal) confirms it.
+ * It is bookkeeping: gateways read the label, never this.
+ */
+export const unconfirmedTitle = "Sensitivity not confirmed";
+export const unconfirmedText = (label: Sensitivity) =>
+  label === "internal"
+    ? "Internal is only the default until someone checks it, and nobody on the team has. Confirm that Internal is right for what this server returns, or choose another label."
+    : `Nobody on the team has confirmed the label ${sensitivityLabels[label]}. Confirm it, or choose another label.`;
+export const unconfirmedNote = "Confirming changes nothing about what gateways serve or who may use the server.";
+
 /** Raising the label sends a published server back to review under approval_required. */
 export const raises = (before: Sensitivity, after: Sensitivity) => sensitivities.indexOf(after) > sensitivities.indexOf(before);
 
