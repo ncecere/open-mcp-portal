@@ -1,9 +1,9 @@
 # Status and handoff
 
-Last updated: 2026-10-30. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.9.0 is being prepared** (#35's first task-relay stage, #43's Kubernetes release gates and #52's content-scanning design); **v0.8.0 remains the latest published, verified release**. The owner directed continued ordered work through every development issue, delegated subagents (Sonnet 5.5) and pre-1.0 releases; **v1.0.0 remains the owner's explicit decision**. #32, #33, #43 and #52 are closed with evidence. A fresh agent should read [agent-handoff.md](agent-handoff.md).
-(release notes: [releases/v0.9.0.md](releases/v0.9.0.md) (in preparation), [v0.8.0](releases/v0.8.0.md); earlier: [v0.7.0](releases/v0.7.0.md), [v0.6.0](releases/v0.6.0.md), [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
+Last updated: 2026-10-30. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.9.0 is published and independently verified** (#35's first task-relay stage, #43's Kubernetes release gates and #52's content-scanning design). #35's first-stage acceptance is complete and the issue is closed. The owner directed continued ordered work through every development issue, delegated subagents (Sonnet 5.5) and pre-1.0 releases; **v1.0.0 remains the owner's explicit decision**. #32, #33, #35, #43 and #52 are closed with evidence. A fresh agent should read [agent-handoff.md](agent-handoff.md).
+(release notes: [releases/v0.9.0.md](releases/v0.9.0.md), [v0.8.0](releases/v0.8.0.md); earlier: [v0.7.0](releases/v0.7.0.md), [v0.6.0](releases/v0.6.0.md), [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
-## v0.9.0 (in preparation): #35 first stage, #43 release gates, #52 design
+## v0.9.0 (2026-10-30): #35 first stage, #43 release gates, #52 design
 
 #43 closed after every new job passed on GitHub-hosted runners at `f3e4c75` (CI 40940744356, k8s-smoke
 40940744144, k8s-upgrade incl. the breaking-migration canary 40940784735; k8s-load 40937148348 at `4fef32b`).
@@ -11,7 +11,7 @@ Two GitHub-only findings were fixed rather than hidden: an unpinned runner Shell
 racing a draining pod with the old configuration. #52 closed with decision 87 and first-slice follow-ups #70–#73.
 
 #35's gateway/upstream wiring (delegated to a Sonnet 5.5 subagent and reviewed line by line) is merged into the
-feature branch with the sealed store, fenced operations and single-use input ledger. **All four complete
+release source with the sealed store, fenced operations and single-use input ledger. **All four complete
 mandatory-PostgreSQL suites passed** on the immutable v0.9.0 candidate: normal and race in both actual
 legacy and authenticated split-role modes, `OMP_TEST_REQUIRE_DB=1`, `GOFLAGS='-p=2'`, the same 20-minute
 per-package budget and every test retained. The HTTP package took 624s/975s (normal/race legacy) and
@@ -44,9 +44,23 @@ gates were rerun successfully in the real checkout with identical source/workflo
 files were compared to the tested snapshot: only four evidence documents differ, not runtime, tests,
 SQL, migrations, generated contracts, web or deployment code.
 
-Exact-source GitHub CI/smoke and native publication/independent artifact/runtime verification are next.
-**No task-support claim is made for a published image** until publication and independent runtime
-verification exist. See [releases/v0.9.0.md](releases/v0.9.0.md).
+The release is now **published and independently verified**:
+
+- Immutable source/tag: `f829b93bd90b2ea1536b9c997978a8f8affd737b`, [v0.9.0](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.9.0).
+- Verified index: `ghcr.io/ncecere/open-mcp-portal@sha256:8a620e21c84786b9d8f6c326c19003a118456f17c322898174f008122f46f115`.
+- [Main CI40990984724](https://github.com/ncecere/open-mcp-portal/actions/runs/40990984724): all seven jobs passed.
+- [Kubernetes smoke40990984804](https://github.com/ncecere/open-mcp-portal/actions/runs/40990984804): base and ingress/TLS/OIDC on both CNIs, plus restore, all passed.
+- [Upgrade/canary40991091656](https://github.com/ncecere/open-mcp-portal/actions/runs/40991091656): actual v0.8.0/schema47 to candidate/schema48, 152 rollout and 146 rollback requests with zero failures, retaining old keys/sessions/OAuth grants. The scratch breaking-migration canary correctly failed 23 of 144 requests; its failure is the gate's expected negative control, not a passing broken rollout.
+- [Load40991094668](https://github.com/ncecere/open-mcp-portal/actions/runs/40991094668): 12,779 requests, zero failed requests/checks, p95 289ms; the shared limit admitted 60 of 120 requests. Peak database connections 13 of 100. This is a loose regression gate, not a capacity benchmark; leader gauges still mean latest-run leadership, not exact simultaneous leader counts.
+- [Native publication40993956632](https://github.com/ncecere/open-mcp-portal/actions/runs/40993956632) passed; release published 2026-10-30T02:53:33Z. Independent verification passed in18s: exact source/tag/registry digest, exactly amd64/arm64, tag-specific OIDC workflow identity/issuer/source SHA and transparency proof, all asset checksums, canonical SPDX equality with registry attestations and both SLSAv1 source/ref/version/build claims. Prior v0.8.0/v0.7.0/v0.6.0/v0.5.1 source/image tags remain unchanged. Read-only UID65532/network-none version: `open-mcp-portal 0.9.0 (f829b93bd90b)`.
+- The **actual published digest** passed doctor and real HTTP/Chromium156 task smoke in13s as read-only UID65532, authenticated restricted runtime, no owner/migration URL or mounts. It first reopened a real authenticated handle sealed before publication, then repeated discovery/declaration/root-isolation/poll/input-single-use/completion/cancel/ID-routing/redaction checks. All six published desktop/390px states had zero violations/overflow; **published editor-mobile contrast remains incomplete**, as in the source run. No real Tasks client/server, production deployment, natural-expiry soak or independent whole-product security/accessibility acceptance is implied.
+
+[Tag CI40993956605](https://github.com/ncecere/open-mcp-portal/actions/runs/40993956605) passed all seven
+jobs, and [tag upgrade40993956611](https://github.com/ncecere/open-mcp-portal/actions/runs/40993956611)
+passed. **[#35 is closed with scoped acceptance](https://github.com/ncecere/open-mcp-portal/issues/35#issuecomment-6514201092)**.
+The example image pin now uses the independently verified index. Its evidence/pin follow-up passed
+local generation/freshness/lint/build/Kubernetes/actionlint checks; the follow-up's GitHub checks are next.
+Release tags are immutable. See [releases/v0.9.0.md](releases/v0.9.0.md).
 
 ### History: #35 development notes
 
@@ -83,7 +97,8 @@ wired into gateway traffic or input mutations.
 A read-only, non-spending `CheckUngoverned` policy primitive
 passed focused and full approval-package races in both actual role modes in208s, including rule changes,
 expiry/cancellation/suspension and zero receipt/request-audit creation. It is not wired into task traffic.
-#35 remains open, all acceptance boxes unchecked. Source version0.8.0 is not evidence of task support.
+At that historical foundation checkpoint #35 remained open and unchecked; the source version0.8.0
+was not task-support evidence. The completed v0.9.0 acceptance above supersedes that checkpoint.
 
 ## v0.8.0 (2026-10-29): separate #33 failover stage, shipped and closed
 
@@ -812,20 +827,22 @@ server allow-list).
 ### Resume on another machine
 
 - Clone `git@github.com:ncecere/open-mcp-portal.git`, check out `main` and fetch tags. All required source,
-  migrations, generated code and release/handoff documentation are on the remote; no local patch is needed.
-  The immutable shipped source is `v0.8.0`; main also records publication evidence and the verified image pin.
+  migrations and generated code for the released baseline are on the remote. The immutable shipped source is
+  `v0.9.0`; main's evidence/pin follow-up is recorded above. Unmerged #40/#46 branches and the #36 design
+  draft still need separate Git transfer if changing machines; do not assume a clone of main contains them.
 - Read this release section, `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md) and
-  [implementation order](implementation-order.md). #33 shipped in v0.7.0/v0.8.0 and is closed; after the
-  evidence/image-pin follow-up, confirm #35's specification before design/code. Do not resume old feature branches.
+  [implementation order](implementation-order.md). #35 shipped in v0.9.0 and is closed. Finish the
+  evidence/pin follow-up checks, then complete #40 governance review/integration and #46 CLI integration;
+  #36 SCIM follows #40 and its identity/deprovisioning preflight. Do not restart already shipped features.
 - Install Go 1.26.10+, Node 22+, Docker, Python 3 and sqlc 1.31.1; run `npm ci` in `web/`.
   Use owned disposable PostgreSQL for integration tests and actual split-role verification.
 - Git does **not** transfer `.env`, encryption/signing keys, provider credentials or the existing development
   database. They were deliberately not exported or committed. Use a fresh development instance, or securely
   transfer a consistent database backup and its required keys separately under explicit operator control.
   Do not regenerate encryption keys for an existing database or migrate/reset the old instance implicitly.
-- Development resumed on 2026-10-29 under owner authorization. There are 25 open issues (17 feature/operations/design,
-  eight real-world verification). #32 shipped in v0.6.0 and #33 in v0.7.0/v0.8.0; both are closed. Inspect
-  current Git/follow-up CI before continuing #35. v1.0.0 requires the owner's explicit decision.
+- Development resumed on 2026-10-29 under owner authorization. There are 26 open issues (18 development,
+  eight real-world verification). #32/#33/#35/#43/#52 are closed. Inspect current Git/follow-up CI before
+  integrating the next features. v1.0.0 requires the owner's explicit decision.
 
 For a **new** development instance, use [development setup](../CONTRIBUTING.md#development-setup), not a
 blind restart/seed of an existing one. The historical dev-database migration helper remains
@@ -842,12 +859,13 @@ blind restart/seed of an existing one. The historical dev-database migration hel
    Drain older serving images before enabling rules; schema compatibility does not imply enforcement.
    Use the new binary's rotation utility for the new ciphertext columns. Keep production autovacuum enabled;
    governed transitions intentionally fail closed during conflicting writes/reads/maintenance.
-3. **v0.6.0/#32 is published, verified and closed**, including follow-up checks. The first #33 stage is
-   published and verified in v0.7.0; its separate failover shipped in verified v0.8.0 and #33 is closed.
-   Finish the current evidence/pin follow-up, then confirm #35's extension specification before design/code.
-   Continue the ordered operations/lifecycle/audit lanes in
-   [implementation order](implementation-order.md). #43 must prove upgrades, ingress, restore and load before
-   Helm packaging; existing kindnet/Calico smoke does not establish those broader requirements.
+3. **v0.9.0/#35 is published, verified and closed**, after #32 in v0.6.0 and #33 in v0.7.0/v0.8.0.
+   Finish the evidence/pin follow-up's checks, then complete the isolated #40 governance and #46 CLI reviews
+   and integration; they are not part of v0.9.0. #40's applied migration49 is immutable; its explicit-label
+   follow-up owns migration50. #36 SCIM comes next, after its linking/deprovisioning design is reviewed.
+   Continue [implementation order](implementation-order.md), serializing migration writers. #43's upgrade,
+   ingress, restore and load gates are proven and closed; Helm packaging still depends on #41's actual
+   KMS handling. #52 was design-only and #70–#73 track its first implementation slice.
 4. Keep #13–#20's real review/client/provider/channel/pilot evidence separate. VS Code planning and fake OAuth
    browser checks do not close compatibility or real-provider issues. Use authorized throwaway accounts and
    dedicated client profiles; do not contact external recipients or use personal profiles implicitly.

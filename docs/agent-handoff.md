@@ -1,4 +1,4 @@
-# Agent handoff: verified v0.8.0, v0.9.0 release validation
+# Agent handoff: verified v0.9.0, next #40 governance and #36 SCIM
 
 The original stop point was the verified v0.5.1 machine transfer. On 2026-10-29 the owner resumed ordered
 backlog work, authorized releases when ready and delegated incidental decisions. **Do not cut v1.0.0 without
@@ -20,17 +20,24 @@ runtime verification passed at immutable source `c36ed3c6bbb8765004d243d1fc0bb37
 Keep published owner-mobile/health-mobile contrast and review-dialog aria-hidden-focus/contrast incompletes
 explicit; they are not whole-product accessibility acceptance. The evidence/image-pin follow-up passed.
 
-**Current override:** v0.9.0 is being prepared on `feature/mcp-tasks`. #35's released specification was
-confirmed before design and its conservative first stage is implemented (decision86, migration48).
-All four mandatory-PostgreSQL normal/race suites in both actual role modes passed on a frozen candidate,
-as did actual published v0.8.0/schema48 compatibility and source runtime/browser/restart smoke. All853
-web tests, generated freshness, lint/build, deployment/workflow/self-tests and advisory gates passed.
-Exact-source GitHub and publication verification gates must finish before tagging or closing #35. The source editor-mobile contrast check is incomplete. See [status](status.md).
+**Current override:** v0.9.0 is published at immutable source `f829b93bd90b2ea1536b9c997978a8f8affd737b`,
+verified image `8a620e21c84786b9d8f6c326c19003a118456f17c322898174f008122f46f115`. #35's released
+specification was confirmed before design and its conservative first stage shipped (decision86, migration48).
+All four mandatory-PostgreSQL normal/race suites, 853 web tests, actual v0.8.0/schema48 compatibility,
+source runtime/browser/restart and deployment/advisory checks passed. Exact-source main CI, both-CNI
+smoke/ingress/restore, actual upgrade/rollback/canary and three-replica load checks passed, as did native
+publication and independent signature/checksum/SPDX/SLSAv1/source/architecture verification. The actual
+published read-only restricted runtime reopened a pre-publication authenticated task handle and passed
+the full real-HTTP/browser smoke. Final tag CI/upgrade passed and
+[#35 is closed](https://github.com/ncecere/open-mcp-portal/issues/35#issuecomment-6514201092). The example
+image-pin/evidence follow-up passed local checks; push it and confirm its GitHub checks before further
+main pushes. Both source and published editor-mobile contrast checks remain incomplete. See [status](status.md).
 #43's Kubernetes gates and #52's scanning design are closed (decision87); scanner follow-ups #70–#73
 are development work, not implemented scanning. #40 governance and #46 CLI have isolated unmerged
-implementations under review. Do not discard them or treat them as releases. The CLI needs curation/
-expiry-preserving import/export fixes. #40's migration49 was applied by its tests and is also immutable;
-its missing explicit-label marker needs a later migration. Never move/reuse an existing tag.
+implementations under review. Do not discard them or treat them as releases. The CLI's curation/expiry/
+concurrency fixes passed focused both-role checks; combined-tree release gates remain. #40's migration49
+was applied by its tests and is immutable; its explicit-label follow-up owns migration50. The #36 SCIM
+preflight is a draft with unresolved parent-review objections, not accepted policy or implementation. Never move/reuse an existing tag.
 
 ## Start here
 
@@ -40,8 +47,9 @@ its missing explicit-label marker needs a later migration. Never move/reuse an e
 2. Read `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md), [status](status.md) and
    [implementation order](implementation-order.md). Preserve active v0.9.0 release validation, completed
    suite logs and owned compatibility/runtime fixtures (with their matching keys); verify actual current
-   gates before pushing/tagging. #33 is complete/closed; #35 awaits verified publication, not another
-   specification or implementation restart. Preserve approvals and access checks on every task operation.
+   gates before pushing the evidence/pin follow-up. The v0.9.0 tag exists and is immutable. #33 is
+   complete/closed and so is #35. Next review/integrate #40 governance and #46 CLI, then #36 SCIM;
+   do not restart shipped task implementation. Preserve approvals and access checks on every task operation.
    Do not restart old failover work or treat fixture results as real-client/provider/pilot evidence.
 3. Git transfers source, migrations, generated contracts, tests and docs—not `.env`, encryption/signing keys,
    provider credentials or the existing development database. Use the documented fresh-instance setup or
@@ -74,6 +82,13 @@ its missing explicit-label marker needs a later migration. Never move/reuse an e
   runtime smoke passed. Governed/NoReplay remains primary-only; all older serving/workers must drain before
   relying on endpoint policy. No source/published/browser/data fixture remains live; matching keys/config were
   removed only after destroying the owned database. Existing development state was untouched.
+
+- v0.9.0: #35 bounded ungoverned modern task relay, migration48/decision86; #43 Kubernetes release gates
+  and #52 content-scanning design-only/decision87. Full normal/race suites in both roles, 853 web tests,
+  main/tag CI, both-CNI base/ingress/restore, upgrade/rollback/canary/load, native publication, independent
+  artifact verification and actual-published restricted-runtime task/browser/pre-publication-handle checks
+  passed. #35 is closed. Editor-mobile contrast remains incomplete; real Tasks-client/server interoperability
+  and governed async lifecycle approval are not claimed. No scanner is implemented by #52.
 
 See the release sections in [status](status.md) for actual publication/verification rather than interpreting
 this list or a local version string as evidence. Release tags are immutable. Main may contain unreleased
@@ -133,7 +148,7 @@ backlog work as well as publication evidence and the verified example image dige
 
 ## What remains separate
 
-There are 27 open issues after #32/#33/#43/#52 and the four scanning follow-ups: 19 development and
+There are 26 open issues after #32/#33/#35/#43/#52 and the four scanning follow-ups: 18 development and
 eight real-world verification issues.
 #13–#20 still require actual independent review/client/provider/channel/pilot evidence. Fake OAuth/MCP fixtures
 and agent reviews do not close those. Broader load, restore/ingress/OIDC deployment validation, wall-clock

@@ -1,6 +1,6 @@
 # MCP task-handle relay (#35)
 
-Status: **first stage shipping in v0.9.0** (decision86). The scope below is deliberately conservative: ungoverned,
+Status: **first stage published and independently verified in v0.9.0** (decision86). The scope below is deliberately conservative: ungoverned,
 non-streamed modern `tools/call` only. Real client/server interoperability with the released extension has not been
 exercised; see [releases/v0.9.0.md](releases/v0.9.0.md).
 The portal relays a server's durable task; it does not run a worker, queue or workflow engine.

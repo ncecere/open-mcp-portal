@@ -39,12 +39,13 @@ modes (3,440s), all853 web tests/deployment/advisories, source/published browser
 previous-image schema47 compatibility, main/tag CI, both CNIs and signed native publication/independent
 artifact/runtime checks passed. Published mobile/dialog axe incompletes remain. See [status](status.md),
 [release notes](releases/v0.8.0.md) and [acceptance](https://github.com/ncecere/open-mcp-portal/issues/33#issuecomment-6499585660).
-**v0.9.0 is being prepared:** #35's released specification is confirmed and its first ungoverned modern-task
-stage is implemented. All four local PostgreSQL normal/race role-mode suites, actual v0.8.0/schema48
-compatibility and source runtime/browser smoke passed; remaining release gates and publication are not yet
-complete. #43's Kubernetes gates and #52's scanning design are closed; #70–#73 track the first scanning
+**v0.9.0 is published and independently verified:** #35's released specification was confirmed and its first
+ungoverned modern-task stage shipped. All four local PostgreSQL role-mode suites, web/deployment/advisories,
+actual v0.8.0/schema48 compatibility, source/published runtime/browser, main CI, both-CNI smoke, upgrade/
+rollback/canary, load and native publication/artifact verification passed. Final tag CI/upgrade passed and
+[#35 is closed with scoped acceptance](https://github.com/ncecere/open-mcp-portal/issues/35#issuecomment-6514201092). #43's Kubernetes gates and #52's scanning design are closed; #70–#73 track the first scanning
 implementation slice. Inspect current Git/CI rather than resuming an old feature branch.
-There are 27 open issues: 19 development and eight real-world verification issues. #40 governance and
+There are 26 open issues: 18 development and eight real-world verification issues. #40 governance and
 #46 CLI have isolated implementations under review, not merged or released; #46 import/export must
 preserve curation and grant expiry before integration.
 The owner authorized ready pre-1.0 releases; v1.0.0 remains their explicit decision. Follow the order below
@@ -64,9 +65,9 @@ security boundary before building on it; do not start every large issue at once.
 | 4, shipped v0.5.0 | **#31** sensitive-call approvals | Needs #28 and #30; bind approval to the merged arguments, definition, origin and requester, atomically single-use. |
 | 2–4, shipped | **#26** v0.4.0; **#32** access requests v0.6.0 | Shared connections, private grant requests/decisions and expiry are validated lifecycle foundations. Preserve scoped refresh and final transport/approval deadline guards. |
 | 5, shipped v0.7.0/v0.8.0 | **#33** upstream protection/failover | Both stages are published/verified and the parent is closed. Keep independent origin-bound credentials, fresh actual-URL identity/authority and primary-only exact approvals. |
-| 6, v0.9.0 | **#35** tasks extension | Specification confirmed; first stage (ungoverned, non-streamed modern `tools/call`) ships in v0.9.0 with approvals and access checks carried into every task operation. Governed async work needs a separate lifecycle-approval decision. |
+| 6, shipped/closed v0.9.0 | **#35** tasks extension | Specification confirmed; first stage (ungoverned, non-streamed modern `tools/call`) ships in v0.9.0 with approvals and access checks carried into every task operation. Governed async work needs a separate lifecycle-approval decision. |
 | 2, shipped v0.4.0 | **#44** split database roles | Independent security foundation. Preserve append-only retention through narrowly privileged definer functions; test runtime-role denial and normal operations. |
-| 3, operations lane | **#43** upgrade/ingress/OIDC/restore/load gates (closed; ships with v0.9.0); **#41** envelope encryption | #43 builds on #44. #41 also follows #44; select/test an actual KMS target without changing existing static-key installs by default. |
+| 3, operations lane | **#43** upgrade/ingress/OIDC/restore/load gates (closed; shipped v0.9.0); **#41** envelope encryption | #43 builds on #44. #41 also follows #44; select/test an actual KMS target without changing existing static-key installs by default. |
 | 4, operations lane | **#42** Helm packaging | Only after #43 proves upgrade/restore and #44/#41 establish credential handling. Test parity with Kustomize rather than duplicating unverified assumptions. |
 | 7 | **#40**, then **#36** lifecycle | #40 needs classification/approvals. Implement accountable ownership and safe transfer first; then SCIM uses that ownership model plus sessions and service connections to deprovision. Group-mapping refinements to #40 can follow #36. |
 | 7, audit lane | **#38**, then **#39** | Start #38's export/sink/cursor and retention-floor foundations after #44. Add #39 hold-aware retention after a durable audit tail exists; integrate #38's hold semantics before #39 erasure. Erasure also waits for #36. This staged split resolves the roadmap's apparent #38 ↔ #39 cycle. |
