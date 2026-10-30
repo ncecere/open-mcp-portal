@@ -217,7 +217,7 @@ func (rc *request) forwardCall(o gateways.Offer, rec calls.Call, cred *providers
 		(o.Capability.ToolClass != nil && *o.Capability.ToolClass == "read"))
 	fwd.Expected = &upstream.ExpectedCapability{Kind: o.Capability.Kind, Name: o.Capability.Name, Fingerprint: o.Capability.Fingerprint}
 	rc.guardServerAttempt(o, &target)
-	rc.guardGrantExpiry(&target)
+	rc.guardAuthorityDeadline(o, &target)
 	ctx := rc.r.Context()
 	client := rc.h.Registry.Client()
 	out, _, ok := rc.exchange(o, &rec, cred, target, func(t upstream.Target) (any, bool, error) {

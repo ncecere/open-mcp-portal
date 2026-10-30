@@ -316,9 +316,9 @@ func (rc *request) taskTarget(o gateways.Offer, b mcptasks.Binding, rec *calls.C
 }
 
 // guardTaskTransport installs the per-exchange admission and live checks: the
-// server quota counts this operation, the approval policy epoch and the
-// credential's deadline are checked again right before transport, and so is
-// the gateway grant's deadline.
+// server quota counts this operation; the approval policy epoch and the frozen
+// earliest credential/grant/server-sunset deadline are checked again right
+// before transport, including after any slow admission or input-attempt commit.
 func (rc *request) guardTaskTransport(o gateways.Offer, target *upstream.Target) {
 	rc.guardServerAttempt(o, target)
 	deadline := rc.approvalInput(o, nil, nil).CredentialExpiresAt
@@ -335,7 +335,7 @@ func (rc *request) guardTaskTransport(o gateways.Offer, target *upstream.Target)
 		}
 		return nil
 	}
-	rc.guardGrantExpiry(target)
+	rc.guardAuthorityDeadline(o, target)
 	rc.noResend = true
 }
 

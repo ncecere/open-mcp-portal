@@ -6,30 +6,33 @@ import (
 	"time"
 
 	"github.com/ncecere/open-mcp-portal/internal/calls"
+	"github.com/ncecere/open-mcp-portal/internal/gateways"
 	"github.com/ncecere/open-mcp-portal/internal/upstream"
 )
 
-var errGrantExpired = errors.New("gateway grant snapshot expired")
+var errGrantExpired = errors.New("authority snapshot deadline expired")
 
 type grantClockCheck func(context.Context, time.Time) (bool, error)
 
-// guardGrantExpiry applies to tools, prompts AND resources, including protocol
-// setup and refresh retries. It wraps approval admission/consumption so the
-// authoritative database clock is checked again AFTER a possibly slow commit.
+// guardAuthorityDeadline applies to tools, prompts, resources AND tasks,
+// including protocol setup and refresh retries. Freeze the earliest credential,
+// gateway-grant or server-sunset deadline. The authoritative database clock is
+// checked again AFTER quota admission and any possibly slow approval commit.
 // No checked-out connection, transaction or authority lock survives this hook.
-func (rc *request) guardGrantExpiry(target *upstream.Target) {
-	if rc.caller.ExpiresAt == nil {
+func (rc *request) guardAuthorityDeadline(o gateways.Offer, target *upstream.Target) {
+	deadline := rc.approvalInput(o, nil, nil).CredentialExpiresAt
+	if deadline.IsZero() {
 		return
 	}
 	var check grantClockCheck
 	if rc.h != nil && rc.h.Gateways != nil {
 		check = rc.h.Gateways.GrantDeadlineLive
 	}
-	target.BeforeTransport = grantExpiryGuard(*rc.caller.ExpiresAt, time.Now, check, target.BeforeTransport)
+	target.BeforeTransport = grantExpiryGuard(deadline, time.Now, check, target.BeforeTransport)
 }
 
-// Freeze the earliest matched deadline. A new client request may reevaluate
-// still-live alternatives; this transport attempt must never extend its permit.
+// A new client request may reevaluate still-live alternatives; this transport
+// attempt must never extend its frozen permit.
 func grantExpiryGuard(deadline time.Time, now func() time.Time, check grantClockCheck, prior func(context.Context, bool) error) func(context.Context, bool) error {
 	live := func(ctx context.Context) error {
 		if !now().Before(deadline) || check == nil {

@@ -17,7 +17,7 @@ func TestGrantExpiryGuardRefusesEveryExchangeKind(t *testing.T) {
 			rc := &request{caller: gateways.Caller{ExpiresAt: &past}}
 			calls := 0
 			target := upstream.Target{BeforeTransport: func(context.Context, bool) error { calls++; return nil }}
-			rc.guardGrantExpiry(&target)
+			rc.guardAuthorityDeadline(gateways.Offer{}, &target)
 			if err := target.BeforeTransport(context.Background(), tool); !errors.Is(err, errGrantExpired) {
 				t.Fatalf("guard = %v", err)
 			}
@@ -39,7 +39,7 @@ func TestGrantExpiryGuardPreservesPriorAndFreezesSnapshot(t *testing.T) {
 	past := time.Now().Add(-time.Hour)
 	rc := &request{caller: gateways.Caller{ExpiresAt: &past}}
 	target := upstream.Target{}
-	rc.guardGrantExpiry(&target)
+	rc.guardAuthorityDeadline(gateways.Offer{}, &target)
 	rc.caller.ExpiresAt = &future
 	if err := target.BeforeTransport(context.Background(), true); !errors.Is(err, errGrantExpired) {
 		t.Fatalf("expired snapshot widened: %v", err)
@@ -79,16 +79,20 @@ func TestGrantExpiryGuardDatabaseClockAndPostCommitCheck(t *testing.T) {
 	}
 }
 
-func TestApprovalInputUsesEarlierGrantAndCredentialDeadline(t *testing.T) {
+func TestApprovalInputUsesEarliestGrantCredentialAndSunsetDeadline(t *testing.T) {
 	early, late := time.Now().Add(time.Minute), time.Now().Add(time.Hour)
 	for _, tt := range []struct {
-		credential, grant *time.Time
-		want              time.Time
+		credential, grant, sunset *time.Time
+		want                      time.Time
 	}{
-		{&early, &late, early}, {&late, &early, early}, {nil, &early, early}, {&late, nil, late},
+		{&early, &late, nil, early}, {&late, &early, nil, early}, {nil, &early, nil, early}, {&late, nil, nil, late},
+		{&late, &late, &early, early}, {nil, nil, &early, early}, {&early, nil, &late, early},
+		{nil, &early, &late, early}, {&early, &early, &early, early}, {nil, nil, nil, time.Time{}},
 	} {
 		rc := &request{principal: principal{expiresAt: tt.credential}, caller: gateways.Caller{ExpiresAt: tt.grant}}
-		in := rc.approvalInput(gateways.Offer{}, nil, nil)
+		o := gateways.Offer{}
+		o.Server.SunsetAt = tt.sunset
+		in := rc.approvalInput(o, nil, nil)
 		if !in.CredentialExpiresAt.Equal(tt.want) {
 			t.Fatalf("deadline=%v want %v", in.CredentialExpiresAt, tt.want)
 		}

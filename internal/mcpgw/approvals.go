@@ -51,6 +51,12 @@ func (rc *request) approvalInput(o gateways.Offer, args json.RawMessage, secrets
 	if expires := rc.caller.ExpiresAt; expires != nil && (in.CredentialExpiresAt.IsZero() || expires.Before(in.CredentialExpiresAt)) {
 		in.CredentialExpiresAt = *expires
 	}
+	// A serving permit cannot outlive the server's frozen sunset, even when
+	// time passes without an authority-journal write. Never extend this
+	// request's permit by rereading a later deadline.
+	if sunset := o.Server.SunsetAt; sunset != nil && (in.CredentialExpiresAt.IsZero() || sunset.Before(in.CredentialExpiresAt)) {
+		in.CredentialExpiresAt = *sunset
+	}
 	return in
 }
 
