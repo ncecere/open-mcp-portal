@@ -24,20 +24,23 @@ import { Input, Textarea } from "@/components/ui/input/input";
 import { Switch } from "@/components/ui/switch/switch";
 import { toast } from "@/components/ui/toast/toast";
 import type { Gateway } from "./labels";
+import { CeilingSection } from "./ceiling-section";
+import type { Sensitivity } from "../servers/governance";
 import { CaptureSection, type RateMode, RateLimitSection, useGatewayLimit } from "./operations-fields";
 import { deleteGateway, type GatewayAbilities, type GatewayScope, invalidateGateway, listPath, storeGateway, updateGateway } from "./scope";
 
-type Form = { name: string; description: string; enabled: boolean; capturePayloads: boolean; rateMode: RateMode; rate: string };
+type Form = { name: string; description: string; enabled: boolean; capturePayloads: boolean; rateMode: RateMode; rate: string; maxSensitivity: Sensitivity };
 const formOf = (x: Gateway): Form => ({
   name: x.name,
   description: x.description,
   enabled: x.enabled,
   capturePayloads: x.capturePayloads ?? false,
+  maxSensitivity: x.maxSensitivity ?? "restricted",
   rateMode: x.rateLimitPerMinute === null || x.rateLimitPerMinute === undefined ? "inherit" : "custom",
   rate: x.rateLimitPerMinute === null || x.rateLimitPerMinute === undefined ? "" : String(x.rateLimitPerMinute),
 });
-const labels = { name: "Name", description: "Description", enabled: "Enabled", capturePayloads: "Record call contents", rateMode: "Rate limit", rate: "Requests per minute" };
-const choices = { rateMode: { inherit: "Inherit", custom: "Its own limit" } };
+const labels = { name: "Name", description: "Description", enabled: "Enabled", capturePayloads: "Record call contents", maxSensitivity: "Sensitivity ceiling", rateMode: "Rate limit", rate: "Requests per minute" };
+const choices = { rateMode: { inherit: "Inherit", custom: "Its own limit" }, maxSensitivity: { public: "Public", internal: "Internal", confidential: "Confidential", restricted: "Restricted (no ceiling)" } };
 
 /** The rate limit as the update sends it: null inherits. */
 const rateOf = (f: Form) => (f.rateMode === "inherit" ? null : parseRate(f.rate));
@@ -73,6 +76,7 @@ export function GatewaySettingsTab({ gateway, scope, abilities }: Props) {
         description: form.description,
         enabled: form.enabled,
         ...(form.capturePayloads !== saved.capturePayloads ? { capturePayloads: form.capturePayloads } : {}),
+        ...(form.maxSensitivity !== saved.maxSensitivity ? { maxSensitivity: form.maxSensitivity } : {}),
         ...(rate !== (gateway.rateLimitPerMinute ?? null) ? { rateLimitPerMinute: rate } : {}),
       });
     },
@@ -135,6 +139,13 @@ export function GatewaySettingsTab({ gateway, scope, abilities }: Props) {
           if (limitRefusal(save.error)) save.reset();
           setForm((f) => ({ ...f, rateMode, rate }));
         }}
+      />
+      <CeilingSection
+        value={form.maxSensitivity}
+        saved={saved.maxSensitivity}
+        disabled={!canEdit}
+        unavailable={gateway.unavailableCount}
+        onChange={(maxSensitivity) => setForm((f) => ({ ...f, maxSensitivity }))}
       />
       <CaptureSection gateway={gateway} checked={form.capturePayloads} disabled={!canEdit} onChange={(v) => setForm((f) => ({ ...f, capturePayloads: v }))} />
       {canEdit && <DeleteGateway gateway={gateway} scope={scope} />}

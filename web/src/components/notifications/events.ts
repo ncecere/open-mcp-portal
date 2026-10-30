@@ -19,6 +19,9 @@ export const allEvents = [
   "approval.decided",
   "access.requested",
   "access.decided",
+  "server.review_due",
+  "server.sunset_soon",
+  "server.deprecated",
 ] as const satisfies readonly NotificationEvent[];
 
 export const eventLabels: Record<NotificationEvent, string> = {
@@ -34,6 +37,9 @@ export const eventLabels: Record<NotificationEvent, string> = {
   "approval.decided": "A tool-call approval was decided",
   "access.requested": "Gateway access is waiting for review",
   "access.decided": "A gateway access request was decided",
+  "server.review_due": "A server's review is overdue",
+  "server.sunset_soon": "A server stops being served soon",
+  "server.deprecated": "A server one of your gateways selects was deprecated",
 };
 
 /** What happens and when, in a line. */
@@ -50,6 +56,9 @@ export const eventDescriptions: Record<NotificationEvent, string> = {
   "approval.decided": "A reviewer approved or denied an exact tool call. Approval authorizes one attempt, not proof of execution.",
   "access.requested": "A private gateway access request needs review. The notice never includes its reason or notes.",
   "access.decided": "Your gateway access request was approved or denied. Tool scopes, credentials and sensitive-call approvals still apply.",
+  "server.review_due": "A published server's periodic review date passed. Sent once per due date; the server stays published unless the platform returns overdue servers to review.",
+  "server.sunset_soon": "A deprecated server stops being served within 14 days, for its team and for the owners of gateways that select it. Sent once per date.",
+  "server.deprecated": "A server that one of your gateways selects was deprecated. It is still served until its sunset date.",
 };
 
 /** Who receives each event in the portal and by email. */
@@ -66,6 +75,9 @@ export const eventRecipients: Record<NotificationEvent, string> = {
   "approval.decided": "The requester, or the requesting service account's current team owners and admins",
   "access.requested": "Current platform admins and named gateway stewards, never the requester",
   "access.decided": "The requester only",
+  "server.review_due": "The server team's owners and admins, and the server's named owner (in the portal and by email only)",
+  "server.sunset_soon": "The server team's owners, admins and named owner, and the owners of gateways that select it (in the portal and by email only)",
+  "server.deprecated": "The owners and admins of each gateway that selects it (in the portal and by email only)",
 };
 
 /** Events a team's webhook can receive (key.expiring: service account keys and publisher tokens). */

@@ -53,6 +53,8 @@ export const unavailableLabels: Record<UnavailableReason, string> = {
   gone: "No longer listed",
   team_archived: "Team archived",
   curation_stale: "Tool policy needs review",
+  sensitivity_exceeds_gateway: "Above this gateway's ceiling",
+  sunset: "Server retired",
 };
 
 export const unavailableHelp: Record<UnavailableReason, string> = {
@@ -63,6 +65,8 @@ export const unavailableHelp: Record<UnavailableReason, string> = {
   gone: "The server doesn't list it any more.",
   team_archived: "The owning team is archived. It's served again when the team is unarchived.",
   curation_stale: "The definition changed. An owner must review and resave this gateway's tool policy, even after catalog approval.",
+  sensitivity_exceeds_gateway: "The server's sensitivity label is higher than this gateway's ceiling, so it is never served here. Raise the ceiling in the gateway's settings, or have the server's team change its label.",
+  sunset: "The server was retired: its sunset date has passed, so no gateway serves it. Its team can bring it back, or you can select its replacement.",
 };
 
 /** Why the person may use a gateway. */
