@@ -4,7 +4,9 @@
  * the revision it opened with (a change made elsewhere is told, never
  * overwritten) and sends only what changed. Raising the sensitivity of a
  * published server sends it back to review under approval_required: the
- * dialog says so before it is saved.
+ * dialog says so before it is saved. A label nobody confirmed is confirmed by
+ * sending one: choosing another label does, and so does ticking the box for
+ * the one it has (saving other changes alone never does).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -12,10 +14,11 @@ import { ApiError, api, ifMatch, staleMessage, unwrap } from "../../api/client";
 import { membersQuery } from "../../api/queries";
 import { FormDialog } from "../form-dialog";
 import { Alert, ErrorAlert } from "@/components/ui/alert/alert";
+import { Checkbox } from "@/components/ui/checkbox/checkbox";
 import { Field } from "@/components/ui/field/field";
 import { Input, NativeSelect } from "@/components/ui/input/input";
 import { toast } from "@/components/ui/toast/toast";
-import { lifecycleLabels, raises, type Sensitivity, sensitivities, sensitivityLabels, type ServerLifecycle } from "./governance";
+import { lifecycleLabels, raises, type Sensitivity, sensitivities, sensitivityLabels, type ServerLifecycle, unconfirmedTitle } from "./governance";
 import type { McpServer } from "./labels";
 import { reviewedAgain } from "./requirement";
 import { type ServerScope, storeServer } from "./scope";
@@ -49,6 +52,7 @@ export function GovernanceDialog({ server, scope, onClose }: Props) {
   const [lifecycle, setLifecycle] = useState<ServerLifecycle>(g.lifecycle);
   const [sunset, setSunset] = useState(localValue(g.sunsetAt));
   const [replacement, setReplacement] = useState(g.replacement?.id ?? "");
+  const [confirmLabel, setConfirmLabel] = useState(false);
   const [stale, setStale] = useState(false);
   const members = useQuery(membersQuery(scope.team));
   const others = useQuery({
@@ -62,7 +66,8 @@ export function GovernanceDialog({ server, scope, onClose }: Props) {
   const governance: Record<string, unknown> = {};
   if (owner !== (seen.g.ownerUserId ?? "")) governance.ownerUserId = owner || null;
   if (oncall.trim() !== (seen.g.oncallContact ?? "")) governance.oncallContact = oncall.trim() || null;
-  if (sensitivity !== seen.g.sensitivity) governance.sensitivity = sensitivity;
+  const unconfirmed = seen.g.sensitivityConfirmed === false;
+  if (sensitivity !== seen.g.sensitivity || (unconfirmed && confirmLabel)) governance.sensitivity = sensitivity;
   if (lifecycle !== seen.g.lifecycle) governance.lifecycle = lifecycle;
   if (retiring && sunset !== localValue(seen.g.sunsetAt)) governance.sunsetAt = sunset ? new Date(sunset).toISOString() : null;
   if (retiring && replacement !== (seen.g.replacement?.id ?? "")) governance.replacementServerId = replacement || null;
@@ -118,6 +123,19 @@ export function GovernanceDialog({ server, scope, onClose }: Props) {
             ))}
           </NativeSelect>
         </Field>
+        {unconfirmed && (
+          <Checkbox
+            label={`${sensitivityLabels[sensitivity]} is the right label for this server`}
+            description={
+              sensitivity === seen.g.sensitivity
+                ? `${unconfirmedTitle}: ${sensitivityLabels[sensitivity]} is only a default until you confirm it. Saving other changes doesn't confirm it.`
+                : "Saving a different label confirms it."
+            }
+            checked={confirmLabel || sensitivity !== seen.g.sensitivity}
+            disabled={save.isPending || sensitivity !== seen.g.sensitivity}
+            onCheckedChange={setConfirmLabel}
+          />
+        )}
         {leaves && (
           <Alert tone="warning" title="It goes back to review">
             Raising the sensitivity of a published server sends it to a platform admin again, and it leaves the catalog until they approve. Lowering it never does.

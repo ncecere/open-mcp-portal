@@ -8,10 +8,10 @@
  * shows them.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRightLeft, Pencil, Send } from "lucide-react";
+import { ArrowRightLeft, Check, Pencil, Send } from "lucide-react";
 import { useState } from "react";
-import { api, unwrap } from "../../api/client";
-import { Alert } from "@/components/ui/alert/alert";
+import { api, ifMatch, unwrap } from "../../api/client";
+import { Alert, ErrorAlert } from "@/components/ui/alert/alert";
 import { Badge } from "@/components/ui/badge/badge";
 import { Button } from "@/components/ui/button/button";
 import { Card } from "@/components/ui/card/card";
@@ -20,7 +20,7 @@ import { Time } from "@/components/ui/time/time";
 import { toast } from "@/components/ui/toast/toast";
 import s from "../../pages/shared.module.css";
 import { GovernanceDialog } from "./governance-dialog";
-import { lifecycleLabels, retirementText, type ServerLifecycle, sensitivityHelp, sensitivityLabels, sensitivityTone } from "./governance";
+import { lifecycleLabels, retirementText, type ServerLifecycle, sensitivityHelp, sensitivityLabels, sensitivityTone, unconfirmedNote, unconfirmedText, unconfirmedTitle } from "./governance";
 import type { McpServer } from "./labels";
 import { invalidateServer, type ServerAbilities, type ServerScope, storeServer } from "./scope";
 import m from "./servers.module.css";
@@ -53,8 +53,20 @@ export function GovernanceCard({ server, scope, abilities }: Props) {
     },
     onSettled: () => invalidateServer(qc, server),
   });
+  // Sending the label the card shows, with the revision it shows, is the confirmation (nothing else is sent).
+  const confirm = useMutation({
+    mutationFn: async () =>
+      unwrap(await api.PATCH("/v1/teams/{team}/mcp-servers/{serverId}", { params: { path: { team: server.teamSlug, serverId: server.id }, header: ifMatch(server.revision) }, body: { governance: { sensitivity: g!.sensitivity } } })),
+    onSuccess: (updated) => {
+      storeServer(qc, updated);
+      toast.success("Sensitivity confirmed", `${sensitivityLabels[updated.governance?.sensitivity ?? g!.sensitivity]} is now the label your team chose.`);
+    },
+    onSettled: () => invalidateServer(qc, server),
+  });
   if (!g) return null;
   const retiring = g.lifecycle !== "active";
+  // Absent means a server that doesn't say: only an explicit false is unconfirmed.
+  const unconfirmed = g.sensitivityConfirmed === false;
   return (
     <Card
       title="Governance"
@@ -79,6 +91,22 @@ export function GovernanceCard({ server, scope, abilities }: Props) {
       }
     >
       <div className={m.stack}>
+        {unconfirmed && (
+          <Alert
+            tone={server.publishState === "published" ? "warning" : "info"}
+            title={unconfirmedTitle}
+            actions={
+              manage ? (
+                <Button size="sm" loading={confirm.isPending} onClick={() => confirm.mutate()}>
+                  <Check aria-hidden /> Confirm sensitivity
+                </Button>
+              ) : undefined
+            }
+          >
+            {unconfirmedText(g.sensitivity)} {unconfirmedNote} {!manage && "A team owner or admin confirms it."}
+          </Alert>
+        )}
+        {confirm.error && <ErrorAlert error={confirm.error} title="Couldn't confirm the sensitivity" />}
         {g.ownerless && server.publishState === "published" && (
           <Alert tone="warning" title="Nobody is accountable for this server">
             {g.ownerUserId ? "Its owner left the team or lost their editor role." : "No owner is named."} {manage ? "Choose an editor, admin or owner of the team as its owner." : "A team owner or admin chooses its owner."}
@@ -117,7 +145,8 @@ export function GovernanceCard({ server, scope, abilities }: Props) {
               value: (
                 <span className={m.inline}>
                   <Badge tone={sensitivityTone[g.sensitivity]}>{sensitivityLabels[g.sensitivity]}</Badge>
-                  <span className={s.muted}>{sensitivityHelp[g.sensitivity]}</span>
+                  {unconfirmed && <Badge tone="warning">Not confirmed</Badge>}
+                  <span className={s.muted}>{unconfirmed ? "A default nobody has checked yet." : sensitivityHelp[g.sensitivity]}</span>
                 </span>
               ),
             },

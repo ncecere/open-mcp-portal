@@ -16,7 +16,7 @@ import a from "./attention.module.css";
 import { type AttentionItem, moreNouns, severityLabels, severityOrder, severityTone, wordsFor } from "./wording";
 
 /** The kinds that count servers: their "more" line continues in a server list. */
-const serverKinds = new Set<string>(["server_failing", "upstream_signin_lapsed", "capabilities_changed", "server_certificate_expiring"]);
+const serverKinds = new Set<string>(["server_failing", "upstream_signin_lapsed", "capabilities_changed", "server_certificate_expiring", "server_unlabelled"]);
 
 type Props = {
   items: AttentionItem[];
