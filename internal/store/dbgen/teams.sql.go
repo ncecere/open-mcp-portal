@@ -27,22 +27,47 @@ func (q *Queries) AcceptInvite(ctx context.Context, arg AcceptInviteParams) erro
 	return err
 }
 
-const claimInvitesForEmail = `-- name: ClaimInvitesForEmail :many
-SELECT id, team_id, email, role, invited_by, created_at, expires_at, accepted_at, accepted_user_id, revoked_at FROM team_invites
-WHERE email = $1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()
-ORDER BY created_at
-FOR UPDATE
+const claimTeamInvitesForEmail = `-- name: ClaimTeamInvitesForEmail :many
+WITH locked AS MATERIALIZED (
+    SELECT id, team_id, email, role, invited_by, created_at, expires_at, accepted_at, accepted_user_id, revoked_at FROM team_invites
+    WHERE team_id = $1 AND email = $2
+      AND accepted_at IS NULL AND revoked_at IS NULL
+    ORDER BY id
+    FOR UPDATE
+)
+SELECT id, team_id, email, role, invited_by, created_at, expires_at, accepted_at, accepted_user_id, revoked_at FROM locked WHERE expires_at > clock_timestamp()
+ORDER BY id
 `
 
-func (q *Queries) ClaimInvitesForEmail(ctx context.Context, email string) ([]TeamInvite, error) {
-	rows, err := q.db.Query(ctx, claimInvitesForEmail, email)
+type ClaimTeamInvitesForEmailParams struct {
+	TeamID uuid.UUID
+	Email  string
+}
+
+type ClaimTeamInvitesForEmailRow struct {
+	ID             uuid.UUID
+	TeamID         uuid.UUID
+	Email          string
+	Role           string
+	InvitedBy      uuid.NullUUID
+	CreatedAt      time.Time
+	ExpiresAt      time.Time
+	AcceptedAt     *time.Time
+	AcceptedUserID uuid.NullUUID
+	RevokedAt      *time.Time
+}
+
+// The team is already locked. Materialise locked, current rows before testing
+// expiry so time spent waiting on an invite lock cannot revive an old invite.
+func (q *Queries) ClaimTeamInvitesForEmail(ctx context.Context, arg ClaimTeamInvitesForEmailParams) ([]ClaimTeamInvitesForEmailRow, error) {
+	rows, err := q.db.Query(ctx, claimTeamInvitesForEmail, arg.TeamID, arg.Email)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []TeamInvite{}
+	items := []ClaimTeamInvitesForEmailRow{}
 	for rows.Next() {
-		var i TeamInvite
+		var i ClaimTeamInvitesForEmailRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.TeamID,
@@ -289,6 +314,35 @@ func (q *Queries) InsertTeam(ctx context.Context, arg InsertTeamParams) (Team, e
 		&i.RetentionOverrides,
 	)
 	return i, err
+}
+
+const listInviteTeamsForEmail = `-- name: ListInviteTeamsForEmail :many
+SELECT DISTINCT team_id FROM team_invites
+WHERE email = $1 AND accepted_at IS NULL AND revoked_at IS NULL
+  AND expires_at > clock_timestamp()
+ORDER BY team_id
+`
+
+// Discover candidates without holding invite rows. All membership/invite
+// mutations take the team first; multiple teams are locked in UUID order.
+func (q *Queries) ListInviteTeamsForEmail(ctx context.Context, email string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listInviteTeamsForEmail, email)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var team_id uuid.UUID
+		if err := rows.Scan(&team_id); err != nil {
+			return nil, err
+		}
+		items = append(items, team_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listMembers = `-- name: ListMembers :many

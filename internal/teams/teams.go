@@ -396,12 +396,38 @@ func (s *Service) RevokeInvite(ctx context.Context, a authz.Actor, ref string, i
 
 // AcceptInvites turns open, unexpired invites for a verified email into
 // memberships. It runs inside the sign-in transaction. Existing memberships
-// keep their current role.
+// keep their current role. Like manual invite/membership writers, it locks the
+// team before any invite. Candidate teams are sorted; invites are re-read after
+// the team lock, so a concurrent revocation, expiry or role change is honoured.
+// An invite for a new candidate team arriving after discovery waits until the
+// next sign-in; it is never consumed without the corresponding team lock.
 func AcceptInvites(ctx context.Context, q *dbgen.Queries, user dbgen.User, requestID, clientIP string) error {
-	invites, err := q.ClaimInvitesForEmail(ctx, user.Email)
+	teamIDs, err := q.ListInviteTeamsForEmail(ctx, user.Email)
 	if err != nil {
 		return err
 	}
+	lockedTeams := make([]uuid.UUID, 0, len(teamIDs))
+	for _, teamID := range teamIDs {
+		if _, err := q.LockTeam(ctx, teamID); errors.Is(err, pgx.ErrNoRows) {
+			continue // a removed candidate team cannot grant membership
+		} else if err != nil {
+			return err
+		}
+		lockedTeams = append(lockedTeams, teamID)
+	}
+	for _, teamID := range lockedTeams {
+		invites, err := q.ClaimTeamInvitesForEmail(ctx, dbgen.ClaimTeamInvitesForEmailParams{TeamID: teamID, Email: user.Email})
+		if err != nil {
+			return err
+		}
+		if err := acceptTeamInvites(ctx, q, user, invites, requestID, clientIP); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func acceptTeamInvites(ctx context.Context, q *dbgen.Queries, user dbgen.User, invites []dbgen.ClaimTeamInvitesForEmailRow, requestID, clientIP string) error {
 	for _, inv := range invites {
 		n, err := q.InsertMemberIfAbsent(ctx, dbgen.InsertMemberIfAbsentParams{
 			TeamID: inv.TeamID, UserID: user.ID, Role: inv.Role, AddedBy: inv.InvitedBy,

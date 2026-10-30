@@ -101,11 +101,26 @@ FOR UPDATE;
 -- name: RevokeInvite :exec
 UPDATE team_invites SET revoked_at = now() WHERE id = @id;
 
--- name: ClaimInvitesForEmail :many
-SELECT * FROM team_invites
-WHERE email = @email AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()
-ORDER BY created_at
-FOR UPDATE;
+-- Discover candidates without holding invite rows. All membership/invite
+-- mutations take the team first; multiple teams are locked in UUID order.
+-- name: ListInviteTeamsForEmail :many
+SELECT DISTINCT team_id FROM team_invites
+WHERE email = @email AND accepted_at IS NULL AND revoked_at IS NULL
+  AND expires_at > clock_timestamp()
+ORDER BY team_id;
+
+-- The team is already locked. Materialise locked, current rows before testing
+-- expiry so time spent waiting on an invite lock cannot revive an old invite.
+-- name: ClaimTeamInvitesForEmail :many
+WITH locked AS MATERIALIZED (
+    SELECT * FROM team_invites
+    WHERE team_id = @team_id AND email = @email
+      AND accepted_at IS NULL AND revoked_at IS NULL
+    ORDER BY id
+    FOR UPDATE
+)
+SELECT * FROM locked WHERE expires_at > clock_timestamp()
+ORDER BY id;
 
 -- name: AcceptInvite :exec
 UPDATE team_invites SET accepted_at = now(), accepted_user_id = @user_id WHERE id = @id;

@@ -6,6 +6,11 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
+## [0.10.1] - 2026-10-30
+
+- **Invite acceptance lock order.** Sign-in now locks all candidate teams in stable UUID order before locking or consuming their invites, matching manual invite/membership writers. A deterministic PostgreSQL barrier reproduced the previous acceptance-versus-revocation deadlock (`40P01`); retained regressions cover it in both database-role modes. Current revocation, role changes and expiry are rechecked after lock waits, while existing memberships keep their roles. No new migration, credential, authority or SCIM endpoint is added.
+- **Main-thread execution.** Repository agent instructions now preserve the owner's preference to work directly, without subagents unless requested again.
+
 ## [0.10.0] - 2026-10-30
 
 - **Unconfirmed sensitivity labels** (#40 follow-up, decision 88). `internal` is the default, so it could not be told from a label a team chose. Servers now record whether an owner or admin of the team **confirmed** the label (`sensitivityConfirmed`, optional and read-only in the team and platform views; expand-only migration `00050`, no backfill: every existing server starts unconfirmed). Only a governance edit that sends `sensitivity` confirms it, also with the value the server already has: the server page has a **Confirm sensitivity** button and the edit dialog a tick-box; saving other changes, publishing, refreshing or a token never does. Published unconfirmed servers show as a new informational attention item `server_unlabelled` (team and Admin overview). Bookkeeping only: nothing is blocked, unpublished or re-reviewed, and no gateway ceiling or approval reads it. See [docs/registry.md](docs/registry.md#governance).

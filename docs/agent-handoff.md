@@ -1,5 +1,7 @@
 # Agent handoff: verified v0.10.0, governance and CLI shipped
 
+**Latest execution instruction:** work directly in the main thread; start no subagents unless the owner explicitly asks again. Earlier delegation authorizations below are historical. The v0.10.0 evidence/pin follow-up `36210cf` passed all seven CI jobs41052812091 and all five Kubernetes jobs41052812085, and its preserved Release evidence footer/final confirmations are complete. A local v0.10.1 invite-acceptance deadlock candidate is now under validation, with no migration or SCIM implementation; see [status](status.md) and [candidate notes](releases/v0.10.1.md).
+
 The original stop point was the verified v0.5.1 machine transfer. On 2026-10-29 the owner resumed ordered
 backlog work, authorized releases when ready and delegated incidental decisions. **Do not cut v1.0.0 without
 the owner's explicit decision.** #33's quota/concurrency/read-retry/breaker stage shipped and is verified

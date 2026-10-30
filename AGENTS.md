@@ -5,6 +5,8 @@ Conventions for building and testing are in [CONTRIBUTING.md](CONTRIBUTING.md), 
 with an AI agent on this repository. For a fresh machine/session, start with
 [docs/agent-handoff.md](docs/agent-handoff.md); confirm its release stop point against `docs/status.md` and GitHub.
 
+- **Execution mode.** The owner now wants work handled directly in the main thread. Do not start subagents unless
+  explicitly asked again; this supersedes earlier delegation authorization in historical handoff notes.
 - **Names.** The product is Open MCP Portal (OMP only after the full name). "Gateway" is the feature (a curated set
   of capabilities at `/mcp/{slug}`): write "the portal" for the product. Keep the `MCP-Gateway-*` header names.
 - **A dev instance may be running.** `make run` (or `bin/open-mcp-portal serve`) on :8088, `make fake-mcp` on :8091,
