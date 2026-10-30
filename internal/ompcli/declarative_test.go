@@ -89,6 +89,21 @@ func TestFileValidationAgreesWithTheJSONSchema(t *testing.T) {
 		{"grant with two subjects", head + "gateways:\n- slug: g\n  name: G\n  grants:\n  - {team: a, group: b}\n", false, false, "exactly one"},
 		{"grant with none", head + "gateways:\n- slug: g\n  name: G\n  grants:\n  - {}\n", false, false, "exactly one"},
 		{"bad tool class", head + "gateways:\n- slug: g\n  name: G\n  grants:\n  - {team: a, toolScope: {classes: [admin]}}\n", false, false, "read, write or destructive"},
+		{"curation", head + gwCap("kind: tool\n    curation: {nameOverride: check_team, descriptionOverride: d, constraints: {region: {fixed: us}, limit: {allowed: [2, 3]}, dry: {fixed: null}}}"), true, true, ""},
+		{"curation null is a declaration", head + gwCap("kind: tool\n    curation: null"), true, true, ""},
+		{"curation on a prompt", head + gwCap("kind: prompt\n    curation: {}"), false, false, "only tools can be curated"},
+		{"unknown curation field", head + gwCap("kind: tool\n    curation: {rename: x}"), false, false, "rename"},
+		{"fixed and allowed", head + gwCap("kind: tool\n    curation: {constraints: {a: {fixed: 1, allowed: [1]}}}"), false, false, "exactly one fixed"},
+		{"empty allowed", head + gwCap("kind: tool\n    curation: {constraints: {a: {allowed: []}}}"), false, false, "exactly one fixed"},
+		{"name override with a space", head + gwCap("kind: tool\n    curation: {nameOverride: a b}"), false, false, "nameOverride"},
+		{"yaml-only spelling in curation", head + gwCap("kind: tool\n    curation: {constraints: {a: {fixed: 0x10}}}"), false, true, "plain decimal"},
+		{"grant deadline", head + gwGrant("{team: a, expiresAt: '2026-12-31T00:00:00Z'}"), true, true, ""},
+		{"grant deadline in words", head + gwGrant("{team: a, expiresAt: tomorrow}"), false, false, "RFC 3339"},
+		{"grant deadline without a time", head + gwGrant("{team: a, expiresAt: '2026-12-31'}"), false, false, "RFC 3339"},
+		{"grant deadline null", head + gwGrant("{team: a, expiresAt: null}"), false, false, "never makes an expiring grant permanent"},
+		{"grant explicitly unrestricted", head + gwGrant("{team: a, toolScope: null}"), true, true, ""},
+		{"grant tool with a glob", head + gwGrant("{team: a, toolScope: {tools: ['a__*']}}"), false, false, "glob"},
+		{"too many classes", head + gwGrant("{team: a, toolScope: {classes: [read, read, read, read]}}"), false, false, "more than 3"},
 		{"platform limits", head + "limits:\n  person_per_minute: {default: 600, ceiling: null}\n", true, true, ""},
 		{"limit missing ceiling means none", head + "limits:\n  person_per_minute: {default: 600}\n", true, true, ""},
 		{"default above ceiling", head + "limits:\n  person_per_minute: {default: 600, ceiling: 100}\n", false, true, "above the ceiling"},
@@ -110,6 +125,14 @@ func TestFileValidationAgreesWithTheJSONSchema(t *testing.T) {
 			t.Errorf("%s: the JSON Schema accepts = %v, want %v", c.name, got, c.schOK)
 		}
 	}
+}
+
+func gwCap(kind string) string {
+	return "gateways:\n- slug: g\n  name: G\n  capabilities:\n  - server: s\n    name: n\n    " + kind + "\n"
+}
+
+func gwGrant(grant string) string {
+	return "gateways:\n- slug: g\n  name: G\n  grants:\n  - " + grant + "\n"
 }
 
 func TestParseFileRejectsMultipleDocumentsAndEmpty(t *testing.T) {

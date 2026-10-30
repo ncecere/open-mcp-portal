@@ -2,6 +2,7 @@ package ompcli
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 )
@@ -22,10 +26,11 @@ const SchemaID = "omp/v1"
 // File is an omp/v1 document.
 //
 // Every optional field means "leave it alone" when it is absent: a plan never
-// changes what the file does not say. Lists such as gateway capabilities and
-// grants are authoritative only when the key is present (an empty list means
-// none). Secrets are never in the file: a static header's value is read from
-// the environment variable named by authValueEnv.
+// changes what the file does not say, including the curation of a selected tool,
+// the tool ceiling of a grant and a grant's deadline. Lists such as gateway
+// capabilities and grants are authoritative only when the key is present (an
+// empty list means none). Secrets are never in the file: a static header's value
+// is read from the environment variable named by authValueEnv.
 type File struct {
 	Schema   string                   `yaml:"schema" json:"schema"`
 	Servers  []Server                 `yaml:"servers,omitempty" json:"servers,omitempty"`
@@ -87,22 +92,60 @@ type CapabilityRef struct {
 	Server string `yaml:"server" json:"server"`
 	Kind   string `yaml:"kind" json:"kind"`
 	Name   string `yaml:"name" json:"name"`
+	// Curation is a tool's policy in this gateway (name and description
+	// overrides, fixed or allowed arguments). Absent: leave the selection's
+	// policy alone (an addition or removal of other capabilities never changes
+	// it). null: declared to have none. An object: declared to equal the
+	// portal's. omp cannot write policy (a token may not edit curation), so a
+	// declaration that differs from the portal's is refused before any change.
+	Curation *Curation `yaml:"curation,omitempty" json:"curation,omitempty"`
 }
 
 // Grant gives a team, an SSO group or a person access to a platform gateway:
 // exactly one of team, group and userEmail.
 type Grant struct {
-	Team      string     `yaml:"team,omitempty" json:"team,omitempty"`
-	Group     string     `yaml:"group,omitempty" json:"group,omitempty"`
-	UserEmail string     `yaml:"userEmail,omitempty" json:"userEmail,omitempty"`
+	Team      string `yaml:"team,omitempty" json:"team,omitempty"`
+	Group     string `yaml:"group,omitempty" json:"group,omitempty"`
+	UserEmail string `yaml:"userEmail,omitempty" json:"userEmail,omitempty"`
+	// ToolScope is the grant's tool ceiling. Absent: a new grant is
+	// unrestricted and an existing grant keeps its ceiling. null: declared
+	// unrestricted. {} : no tools.
 	ToolScope *ToolScope `yaml:"toolScope,omitempty" json:"toolScope,omitempty"`
+	// ExpiresAt is the grant's deadline (RFC 3339). Absent: a new grant is
+	// permanent and an existing grant keeps its deadline. The portal sets
+	// deadlines in whole elapsed days when a grant is created, so omp meets a
+	// deadline to the day, never later (docs/cli.md, "Grant expiry").
+	ExpiresAt string `yaml:"expiresAt,omitempty" json:"expiresAt,omitempty"`
 }
 
-// ToolScope is a grant's optional tool ceiling (absent: unrestricted; empty:
-// no tools).
+// ToolScope is a grant's optional tool ceiling (null: unrestricted; empty: no
+// tools).
 type ToolScope struct {
 	Classes *[]string `yaml:"classes,omitempty" json:"classes,omitempty"`
 	Tools   *[]string `yaml:"tools,omitempty" json:"tools,omitempty"`
+	// Unrestricted is `toolScope: null`, declared explicitly.
+	Unrestricted bool `yaml:"-" json:"-"`
+}
+
+type toolScopeFields struct {
+	Classes *[]string `yaml:"classes,omitempty" json:"classes,omitempty"`
+	Tools   *[]string `yaml:"tools,omitempty" json:"tools,omitempty"`
+}
+
+// MarshalYAML writes an explicitly unrestricted scope as null.
+func (t ToolScope) MarshalYAML() (any, error) {
+	if t.Unrestricted {
+		return nil, nil
+	}
+	return toolScopeFields{Classes: t.Classes, Tools: t.Tools}, nil
+}
+
+// MarshalJSON writes an explicitly unrestricted scope as null.
+func (t ToolScope) MarshalJSON() ([]byte, error) {
+	if t.Unrestricted {
+		return []byte("null"), nil
+	}
+	return json.Marshal(toolScopeFields{Classes: t.Classes, Tools: t.Tools})
 }
 
 // PlatformLimit is a platform rate-limit setting. Both values are declared
@@ -145,10 +188,85 @@ func ParseFile(raw []byte) (*File, error) {
 		}
 		return nil, usageErr("invalid %s file: more than one YAML document", SchemaID)
 	}
+	if err := f.markExplicitNulls(raw); err != nil {
+		return nil, err
+	}
 	if problems := f.Validate(); len(problems) > 0 {
 		return nil, usageErr("invalid %s file:\n  - %s", SchemaID, strings.Join(problems, "\n  - "))
 	}
 	return &f, nil
+}
+
+// markExplicitNulls tells an explicit null from an absent key, which a typed
+// decode cannot: `curation: null` and `toolScope: null` are declarations (no
+// policy; unrestricted), while the same key absent leaves the setting alone.
+// `expiresAt: null` is refused: omp never turns a deadline into permanent
+// access, and silently reading null as "absent" would hide that.
+func (f *File) markExplicitNulls(raw []byte) error {
+	var root yaml.Node
+	if yaml.Unmarshal(raw, &root) != nil {
+		return nil // ParseFile has decoded it already
+	}
+	doc := &root
+	if doc.Kind == yaml.DocumentNode && len(doc.Content) == 1 {
+		doc = doc.Content[0]
+	}
+	gateways := yamlField(doc, "gateways")
+	if gateways == nil || gateways.Kind != yaml.SequenceNode {
+		return nil
+	}
+	isNull := func(n *yaml.Node) bool {
+		n = yamlResolve(n)
+		return n != nil && n.Kind == yaml.ScalarNode && n.ShortTag() == "!!null"
+	}
+	for i, gn := range gateways.Content {
+		if i >= len(f.Gateways) {
+			break
+		}
+		g := &f.Gateways[i]
+		if caps := yamlField(gn, "capabilities"); caps != nil && caps.Kind == yaml.SequenceNode && g.Capabilities != nil {
+			for j, cn := range caps.Content {
+				if j < len(*g.Capabilities) && isNull(yamlField(cn, "curation")) {
+					(*g.Capabilities)[j].Curation = &Curation{Clear: true}
+				}
+			}
+		}
+		if grants := yamlField(gn, "grants"); grants != nil && grants.Kind == yaml.SequenceNode && g.Grants != nil {
+			for j, gr := range grants.Content {
+				if j >= len(*g.Grants) {
+					break
+				}
+				if isNull(yamlField(gr, "toolScope")) {
+					(*g.Grants)[j].ToolScope = &ToolScope{Unrestricted: true}
+				}
+				if isNull(yamlField(gr, "expiresAt")) {
+					return usageErr("invalid %s file: gateways[%d] (%s): grants[%d].expiresAt is null; omit it instead (omp never makes an expiring grant permanent)", SchemaID, i, g.Slug, j)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func yamlResolve(n *yaml.Node) *yaml.Node {
+	for n != nil && n.Kind == yaml.AliasNode {
+		n = n.Alias
+	}
+	return n
+}
+
+// yamlField is the value of a key of a mapping node, or nil.
+func yamlField(n *yaml.Node, key string) *yaml.Node {
+	n = yamlResolve(n)
+	if n == nil || n.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		if n.Content[i].Value == key {
+			return yamlResolve(n.Content[i+1])
+		}
+	}
+	return nil
 }
 
 // Validate lists everything wrong with the document, without any network.
@@ -254,6 +372,13 @@ func (f *File) Validate() []string {
 					add("%s: capabilities[%d] is listed twice", at, j)
 				}
 				keys[c.key()] = true
+				if c.Curation != nil {
+					if c.Kind != "tool" {
+						add("%s: capabilities[%d].curation: only tools can be curated", at, j)
+					} else if err := c.Curation.validate(); err != nil {
+						add("%s: capabilities[%d].curation: %v", at, j, err)
+					}
+				}
 			}
 		}
 		if g.Grants != nil {
@@ -273,11 +398,17 @@ func (f *File) Validate() []string {
 					add("%s: grants[%d] repeats %s", at, j, gr.subject())
 				}
 				keys[gr.subject()] = true
-				if gr.ToolScope != nil && gr.ToolScope.Classes != nil {
-					for _, c := range *gr.ToolScope.Classes {
-						if c != "read" && c != "write" && c != "destructive" {
-							add("%s: grants[%d].toolScope.classes has %q (read, write or destructive)", at, j, c)
-						}
+				if gr.Group != "" && (gr.Group != strings.TrimSpace(gr.Group) || len(gr.Group) > 256 || !utf8.ValidString(gr.Group) || strings.IndexFunc(gr.Group, unicode.IsControl) >= 0) {
+					add("%s: grants[%d].group must be 1-256 characters on one line without leading or trailing space (the portal trims it)", at, j)
+				}
+				if gr.ExpiresAt != "" {
+					if _, err := time.Parse(time.RFC3339, gr.ExpiresAt); err != nil {
+						add("%s: grants[%d].expiresAt must be an RFC 3339 timestamp such as 2026-12-31T00:00:00Z", at, j)
+					}
+				}
+				if ts := gr.ToolScope; ts != nil {
+					for _, m := range validateToolScope(ts) {
+						add("%s: grants[%d].toolScope: %s", at, j, m)
 					}
 				}
 			}
@@ -295,6 +426,34 @@ func (f *File) Validate() []string {
 		}
 		if l.Default != nil && l.Ceiling != nil && *l.Default > *l.Ceiling {
 			add("limits.%s: default is above the ceiling", k)
+		}
+	}
+	return p
+}
+
+// validateToolScope applies the portal's tool-scope rules (internal/toolscope)
+// so a bad ceiling is refused before any request.
+func validateToolScope(ts *ToolScope) []string {
+	var p []string
+	if ts.Classes != nil {
+		if len(*ts.Classes) > 3 {
+			p = append(p, "has more than 3 classes")
+		}
+		for _, c := range *ts.Classes {
+			if c != "read" && c != "write" && c != "destructive" {
+				p = append(p, fmt.Sprintf("classes has %q (read, write or destructive)", c))
+			}
+		}
+	}
+	if ts.Tools != nil {
+		if len(*ts.Tools) > 500 {
+			p = append(p, "has more than 500 tools")
+		}
+		for _, n := range *ts.Tools {
+			if len(n) == 0 || len(n) > 1100 || !utf8.ValidString(n) || strings.ContainsAny(n, `*?[]{}\`) || strings.IndexFunc(n, unicode.IsControl) >= 0 {
+				p = append(p, "tools must be exact names of 1-1100 bytes without control characters or the glob characters * ? [ ] { } \\")
+				break
+			}
 		}
 	}
 	return p

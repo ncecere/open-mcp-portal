@@ -1,6 +1,8 @@
 # Exported by omp (schema omp/v1). Secrets are never exported: a server with a static
 # header names an environment variable in authValueEnv, which "omp import" reads.
 # Set it before an import that creates the server or replaces its secret.
+# A gateway's curation (fixed or allowed tool arguments) and grant deadlines are exported as
+# the portal has them. Fixed values can be sensitive: review the file before sharing it.
 schema: omp/v1
 teams:
   - slug: bravo
@@ -24,6 +26,7 @@ gateways:
         name: check
     grants:
       - team: bravo
+        toolScope: null
       - userEmail: ann@example.com
         toolScope:
           classes:

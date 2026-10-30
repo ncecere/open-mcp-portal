@@ -47,6 +47,14 @@ type fakePortal struct {
 	requests        []recordedRequest
 	forceStatus     map[string]int // "METHOD path-suffix" -> status, for error mapping tests
 	echoAuthInError bool           // a hostile portal that repeats the Authorization header in an error
+
+	// grantPostFail makes the next grant creations fail with these statuses, once each.
+	grantPostFail []int
+	// afterCapsGet runs after a gateway's selection was served, still inside the
+	// request: another writer changing the gateway between the CLI's read and write.
+	afterCapsGet func(g *fakeGateway)
+	// afterGatewayList is the same for the gateway list.
+	afterGatewayList func()
 }
 
 type recordedRequest struct {
@@ -586,6 +594,11 @@ func (f *fakePortal) serveGateways(w http.ResponseWriter, r *http.Request, body 
 				items = append(items, g.Gateway)
 			}
 			writeData(w, 200, ompclient.GatewayPage{Items: items})
+			if f.afterGatewayList != nil {
+				hook := f.afterGatewayList
+				f.afterGatewayList = nil
+				hook()
+			}
 			return
 		}
 		var in ompclient.GatewayCreate
@@ -639,24 +652,37 @@ func (f *fakePortal) serveGateways(w http.ResponseWriter, r *http.Request, body 
 			items = []ompclient.GatewayCapability{}
 		}
 		writeData(w, 200, ompclient.GatewayCapabilities{Items: items, Revision: g.Revision})
+		if f.afterCapsGet != nil {
+			hook := f.afterCapsGet
+			f.afterCapsGet = nil
+			hook(g)
+		}
 	case sub == "capabilities" && r.Method == "PUT":
 		if !checkRev(g.Revision) {
 			return
 		}
 		var in ompclient.GatewayCapabilitiesUpdate
 		_ = json.Unmarshal(body, &in)
+		for _, it := range in.Items {
+			// What the portal does for a token: policy can be kept, never written.
+			if len(it.Curation) > 0 || it.ExpectedFingerprint != nil {
+				writeErr(w, 403, "session_required", "Curation requires a browser session", nil)
+				return
+			}
+		}
 		var caps []ompclient.GatewayCapability
 		for _, it := range in.Items {
 			found := false
-			for _, o := range f.options {
-				if o.CapabilityId == it.CapabilityId {
-					caps = append(caps, ompclient.GatewayCapability{CapabilityId: o.CapabilityId, Kind: o.Kind, Name: o.Name, ServerSlug: o.ServerSlug, ExposedName: o.ExposedName})
-					found = true
-				}
-			}
+			// A selection that stays keeps everything it has, curation included.
 			for _, c := range g.caps {
 				if c.CapabilityId == it.CapabilityId {
 					caps = append(caps, c)
+					found = true
+				}
+			}
+			for _, o := range f.options {
+				if !found && o.CapabilityId == it.CapabilityId {
+					caps = append(caps, ompclient.GatewayCapability{CapabilityId: o.CapabilityId, Kind: o.Kind, Name: o.Name, ServerSlug: o.ServerSlug, ExposedName: o.ExposedName})
 					found = true
 				}
 			}
@@ -677,14 +703,40 @@ func (f *fakePortal) serveGateways(w http.ResponseWriter, r *http.Request, body 
 	case sub == "grants" && r.Method == "POST":
 		var in ompclient.GatewayGrantCreate
 		_ = json.Unmarshal(body, &in)
-		gr := ompclient.GatewayGrant{Id: uuid.New(), SubjectKind: in.SubjectKind, Group: in.Group, ToolScope: in.ToolScope}
+		if len(f.grantPostFail) > 0 {
+			st := f.grantPostFail[0]
+			f.grantPostFail = f.grantPostFail[1:]
+			writeErr(w, st, "forced_"+strconv.Itoa(st), "forced "+strconv.Itoa(st), nil)
+			return
+		}
+		gr := ompclient.GatewayGrant{Id: uuid.New(), SubjectKind: in.SubjectKind, Group: in.Group, ToolScope: in.ToolScope, CreatedAt: time.Now()}
 		if in.Team != nil {
 			gr.Team = &ompclient.GrantTeam{Id: uuid.New(), Slug: *in.Team, Name: *in.Team}
 		}
 		if in.UserEmail != nil {
 			gr.User = &ompclient.MemberUser{Email: *in.UserEmail}
 		}
-		g.grants = append(g.grants, gr)
+		if in.ExpiresInDays != nil {
+			if *in.ExpiresInDays < 1 || *in.ExpiresInDays > 365 {
+				writeErr(w, 400, "invalid_expiry", "Grant expiry must be 1–365 days, or omitted for permanent access", nil)
+				return
+			}
+			at := time.Now().Add(time.Duration(*in.ExpiresInDays) * 24 * time.Hour)
+			gr.ExpiresAt = &at
+		}
+		// One grant per subject; an elapsed one is replaced, an active one never widened.
+		kept := g.grants[:0:0]
+		for _, old := range g.grants {
+			if grantFrom(old).subject() == grantFrom(gr).subject() {
+				if old.ExpiresAt == nil || old.ExpiresAt.After(time.Now()) {
+					writeErr(w, 409, "grant_exists", "The gateway is already granted to them", nil)
+					return
+				}
+				continue
+			}
+			kept = append(kept, old)
+		}
+		g.grants = append(kept, gr)
 		writeData(w, 201, gr)
 	case sub == "grants" && r.Method == "DELETE":
 		gid, _ := uuid.Parse(parts[3])
@@ -693,6 +745,10 @@ func (f *fakePortal) serveGateways(w http.ResponseWriter, r *http.Request, body 
 			if gr.Id != gid {
 				kept = append(kept, gr)
 			}
+		}
+		if len(kept) == len(g.grants) {
+			writeErr(w, 404, "grant_not_found", "Grant not found", nil)
+			return
 		}
 		g.grants = kept
 		writeJSON(w, 200, map[string]any{"ok": true})

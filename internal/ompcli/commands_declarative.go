@@ -16,6 +16,10 @@ const exportHeader = `# Exported by omp (schema omp/v1). Secrets are never expor
 # Set it before an import that creates the server or replaces its secret.
 `
 
+const exportGatewayNote = `# A gateway's curation (fixed or allowed tool arguments) and grant deadlines are exported as
+# the portal has them. Fixed values can be sensitive: review the file before sharing it.
+`
+
 func checkOnly(only string) error {
 	switch only {
 	case "", "servers", "platform":
@@ -76,7 +80,7 @@ func (a *App) cmdExport(ctx context.Context, args []string) error {
 		if *only == "servers" {
 			return usageErr("this is a platform token: platform tokens cannot read team servers through the team routes; use a team publisher token for --only servers")
 		}
-		if err := exportPlatform(ctx, c, f); err != nil {
+		if err := exportPlatform(ctx, c, f, &warnings); err != nil {
 			return err
 		}
 	}
@@ -96,7 +100,11 @@ func (a *App) cmdExport(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		data = append([]byte(exportHeader), b...)
+		head := exportHeader
+		if len(f.Gateways) > 0 {
+			head += exportGatewayNote
+		}
+		data = append([]byte(head), b...)
 	}
 	if *out != "" {
 		if err := os.WriteFile(*out, a.scrub(data), 0o644); err != nil { //nolint:gosec // no secrets in the file
@@ -139,7 +147,7 @@ func exportServers(ctx context.Context, c *api, team string, f *File, warnings *
 	return nil
 }
 
-func exportPlatform(ctx context.Context, c *api, f *File) error {
+func exportPlatform(ctx context.Context, c *api, f *File, warnings *[]string) error {
 	teams, err := listTeams(ctx, c)
 	if err != nil {
 		return err
@@ -174,7 +182,11 @@ func exportPlatform(ctx context.Context, c *api, f *File) error {
 		}
 		refs := []CapabilityRef{}
 		for _, cp := range caps.Items {
-			refs = append(refs, capFrom(cp))
+			ref, err := capExport(gw.Slug, cp, warnings)
+			if err != nil {
+				return err
+			}
+			refs = append(refs, ref)
 		}
 		grants, err := getGatewayGrants(ctx, c, gw.Id)
 		if err != nil {
@@ -183,6 +195,9 @@ func exportPlatform(ctx context.Context, c *api, f *File) error {
 		gl := []Grant{}
 		for _, gr := range grants {
 			gl = append(gl, grantFrom(gr))
+			if gr.ExpiresAt != nil && !gr.ExpiresAt.After(clock()) {
+				*warnings = append(*warnings, fmt.Sprintf("gateway %s: the grant of %s expired at %s and grants nothing; it is exported with its past deadline, and omp will not recreate it from this file elsewhere", gw.Slug, gl[len(gl)-1].subject(), fmtTime(*gr.ExpiresAt)))
+			}
 		}
 		eg.Capabilities, eg.Grants = &refs, &gl
 		f.Gateways = append(f.Gateways, eg)
@@ -385,7 +400,7 @@ func RenderPlan(p *Plan) string {
 			case f.From == nil:
 				fmt.Fprintf(&b, "    %s: (none) -> %s%s\n", f.Field, jsonVal(f.To), note(f))
 			case f.To == nil:
-				fmt.Fprintf(&b, "    %s: %s -> (none)\n", f.Field, jsonVal(f.From))
+				fmt.Fprintf(&b, "    %s: %s -> (none)%s\n", f.Field, jsonVal(f.From), note(f))
 			default:
 				fmt.Fprintf(&b, "    %s: %s -> %s%s\n", f.Field, jsonVal(f.From), jsonVal(f.To), note(f))
 			}
