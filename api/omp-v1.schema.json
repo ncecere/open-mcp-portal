@@ -155,7 +155,7 @@
           "type": "string",
           "format": "date-time",
           "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?([Zz]|[+-][0-9]{2}:[0-9]{2})$",
-          "description": "The grant's deadline (RFC 3339). Absent: a new grant is permanent and an existing grant keeps its deadline. The portal sets a deadline as creation plus whole days (1 to 365), so omp creates a grant that expires no later than this, less than a day earlier, and treats an existing deadline in that range as met. omp never extends a deadline, never makes an expiring grant permanent and never recreates an expired grant without a new future deadline. A grant that has expired is exported with its past deadline. null is not allowed."
+          "description": "The grant's authoritative deadline (RFC 3339), comparison-only in CLI v1. Absent: a new grant is permanent and an existing grant keeps its deadline. A declared timestamp must exactly match an existing unchanged grant. New deadlines, temporary-grant scope changes and renewal are refused before any write: the API accepts only relative day counts, so the CLI cannot preserve an absolute deadline independently of clock skew. Change temporary grants in the web UI. Expired grants are exported with their past deadline. null is not allowed."
         }
       },
       "oneOf": [{ "required": ["team"] }, { "required": ["group"] }, { "required": ["userEmail"] }]

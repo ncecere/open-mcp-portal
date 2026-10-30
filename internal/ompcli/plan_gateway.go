@@ -2,6 +2,7 @@ package ompcli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -21,18 +22,6 @@ import (
 // cannot keep or would have to extend, an expired grant it would have to
 // recreate as permanent. docs/cli.md ("Curation", "Grant expiry") is the
 // contract these rules implement.
-
-const (
-	// grantDay is the unit of a grant's lifetime: the portal sets a deadline as
-	// creation time plus a whole number of 24-hour days (expiresInDays 1-365).
-	grantDay     = 24 * time.Hour
-	maxGrantDays = 365
-	// deadlineSlack absorbs the clock difference and latency between omp and the
-	// portal. Days are counted conservatively by it, so a deadline omp sets is
-	// never later than the one it keeps, and a deadline within it of the file's
-	// counts as met.
-	deadlineSlack = 5 * time.Minute
-)
 
 // clock is the time omp measures grant deadlines against (tests replace it).
 var clock = time.Now
@@ -117,7 +106,7 @@ func scopeKey(ts *ToolScope) string {
 	if ts == nil || ts.Unrestricted {
 		return "unrestricted"
 	}
-	list := func(v *[]string) string {
+	list := func(v *[]string, quote bool) string {
 		if v == nil || len(*v) == 0 {
 			return "-"
 		}
@@ -129,9 +118,15 @@ func scopeKey(ts *ToolScope) string {
 				out = append(out, x)
 			}
 		}
+		if quote {
+			// Exact tool names may contain commas. Delimiter joining would
+			// confuse one tool named "a,b" with two tools named "a" and "b".
+			raw, _ := json.Marshal(out)
+			return string(raw)
+		}
 		return "[" + strings.Join(out, ",") + "]"
 	}
-	return "classes=" + list(ts.Classes) + " tools=" + list(ts.Tools)
+	return "classes=" + list(ts.Classes, false) + " tools=" + list(ts.Tools, true)
 }
 
 // ---- gateways ----------------------------------------------------------------
@@ -165,21 +160,19 @@ func capabilityIDs(ctx context.Context, c *api, want map[string]bool) (map[strin
 	}
 }
 
-// grantWrite is one grant the step creates. A replacement removes old first.
+// grantWrite is one permanent grant the step creates. A replacement removes
+// old first; any non-nil deadline is refused while the plan is built.
 type grantWrite struct {
 	subject string
 	body    ompclient.GatewayGrantCreate // without a deadline
-	// deadline is the latest the new grant may expire (nil: permanent);
-	// clamp lets a deadline beyond 365 days be shortened to it, which is only
-	// for keeping an existing deadline, never for a declared one.
+	// deadline records a requested/retained absolute deadline. Non-nil values
+	// are not writable through the relative-day API and always refuse.
 	deadline *time.Time
 	clamp    bool
-	// old is the grant a replacement removes before creating the new one;
-	// restoreBody and restoreDeadline recreate it if the creation fails.
-	old             *ompclient.GatewayGrant
-	restoreBody     ompclient.GatewayGrantCreate
-	restoreDeadline *time.Time
-	days            *int32 // resolved when the step starts, before its first write
+	// old is the permanent grant a replacement removes before creating the new
+	// one. Failed creation never restores it: another actor may have revoked it.
+	old  *ompclient.GatewayGrant
+	days *int32 // resolved when the step starts, before its first write
 }
 
 func grantBody(g Grant, scope *ToolScope) ompclient.GatewayGrantCreate {
@@ -210,36 +203,22 @@ func grantBody(g Grant, scope *ToolScope) ompclient.GatewayGrantCreate {
 	return body
 }
 
-// daysFor is the number of whole days a new grant is created with so that its
-// deadline, creation plus that many days, is not later than deadline. nil is a
-// permanent grant. The portal accepts 1-365: a declared deadline outside that is
-// refused; a kept one is shortened (never extended).
-func daysFor(deadline *time.Time, clamp bool) (*int32, error) {
+// daysFor refuses writes that would need an absolute deadline. The API only
+// accepts a day count relative to its own authoritative clock; subtracting a
+// guessed clock-skew allowance cannot guarantee the preserved deadline. Reading
+// and comparing an unchanged expiring grant is safe; recreating one is not.
+func daysFor(deadline *time.Time, _ bool) (*int32, error) {
 	if deadline == nil {
 		return nil, nil
 	}
-	n := int64((deadline.Sub(clock()) - deadlineSlack) / grantDay)
-	if n > maxGrantDays {
-		if !clamp {
-			return nil, fmt.Errorf("it expires more than %d days from now, which the portal cannot set", maxGrantDays)
-		}
-		n = maxGrantDays
-	}
-	if n < 1 {
-		return nil, fmt.Errorf("it expires in less than one whole day (%s), and the portal sets deadlines in whole days from creation, so any new grant would outlive it", fmtTime(*deadline))
-	}
-	d := int32(n)
-	return &d, nil
+	return nil, fmt.Errorf("the portal accepts relative whole-day lifetimes, not an absolute expiresAt; omp cannot preserve this deadline independently of clock skew, so change this grant in the web UI")
 }
 
 func fmtTime(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
-// deadlineMet is whether a grant's deadline have satisfies the file's want: the
-// portal's is not later than want (beyond the clock slack) and less than a day
-// earlier, the resolution at which it can be set.
-func deadlineMet(want, have time.Time) bool {
-	return !have.After(want.Add(deadlineSlack)) && have.After(want.Add(-grantDay-deadlineSlack))
-}
+// deadlineMet compares authoritative timestamps exactly. No allowance may
+// treat a grant that lives beyond the declared deadline as compliant.
+func deadlineMet(want, have time.Time) bool { return have.Equal(want) }
 
 func (p *planner) planGateways(ctx context.Context, desired []Gateway) error {
 	if len(desired) == 0 {
@@ -452,14 +431,14 @@ func (p *planner) planGateways(ctx context.Context, desired []Gateway) error {
 						grantAdds = append(grantAdds, grantWrite{subject: k, body: grantBody(g, scope), deadline: want})
 						continue
 					default:
-						return refuseErr("gateway %s: grant %s expired at %s and grants nothing now. omp will not recreate it as a permanent grant or with a past deadline. To renew it, give it an expiresAt in the future; to drop it, leave it out of grants (it stays listed until the portal removes it or it is replaced).", d.Slug, k, fmtTime(expired))
+						return refuseErr("gateway %s: grant %s expired at %s and grants nothing now. omp will not recreate it as a permanent grant or with a past deadline. Renew temporary grants in the web UI; to drop it, leave it out of grants (it may stay listed until cleanup).", d.Slug, k, fmtTime(expired))
 					}
 				}
 				// Active: keep its deadline unless the file asks for a shorter one.
 				shorten := false
 				if want != nil && (hg.ExpiresAt == nil || !deadlineMet(*want, *hg.ExpiresAt)) {
 					if hg.ExpiresAt != nil && hg.ExpiresAt.Before(*want) {
-						return refuseErr("gateway %s: grant %s expires at %s but the file says %s. omp never extends a grant (the portal cannot change a deadline, only create a grant with a new one). Remove the grant by leaving it out of grants, then declare it again with the new deadline, or keep the portal's deadline by leaving expiresAt out.", d.Slug, k, fmtTime(*hg.ExpiresAt), fmtTime(*want))
+						return refuseErr("gateway %s: grant %s expires at %s but the file says %s. omp never extends a grant (the portal cannot change a deadline, only create a grant with a new one). Change temporary grants in the web UI, or keep the portal's deadline by leaving expiresAt out.", d.Slug, k, fmtTime(*hg.ExpiresAt), fmtTime(*want))
 					}
 					shorten = true
 				}
@@ -470,7 +449,7 @@ func (p *planner) planGateways(ctx context.Context, desired []Gateway) error {
 				if shorten {
 					deadline = want
 				}
-				w := grantWrite{subject: k, deadline: deadline, clamp: !shorten, old: &hg, restoreDeadline: hg.ExpiresAt}
+				w := grantWrite{subject: k, deadline: deadline, clamp: !shorten, old: &hg}
 				scope := have.ToolScope
 				if scopeDiffers {
 					scope = g.ToolScope
@@ -484,9 +463,9 @@ func (p *planner) planGateways(ctx context.Context, desired []Gateway) error {
 					add("grant "+k+" expiresAt", from, fmtTime(*want))
 				}
 				if _, err := daysFor(deadline, w.clamp); err != nil {
-					return refuseErr("gateway %s: grant %s cannot be changed in place (the portal has no update, only remove and create): %v. omp never makes a grant outlive its current deadline: let it expire, or remove it and declare it again.", d.Slug, k, err)
+					return refuseErr("gateway %s: grant %s cannot be changed in place (the portal has no update, only remove and create): %v. omp never makes a grant outlive its current deadline: change temporary grants in the web UI.", d.Slug, k, err)
 				}
-				w.body, w.restoreBody = grantBody(g, scope), grantBody(have, have.ToolScope)
+				w.body = grantBody(g, scope)
 				grantReplaces = append(grantReplaces, w)
 			}
 			for _, k := range sortedKeys(haveGrants) {
@@ -604,10 +583,9 @@ func (p *planner) addGrant(ctx context.Context, gateway uuid.UUID, body ompclien
 	return err
 }
 
-// replaceGrant changes a grant's ceiling or deadline. The API has no update:
-// the grant is removed and created again, which is not atomic. If the creation
-// fails after the removal, the previous grant is created again (same ceiling,
-// a deadline no later than before); the error says whether that worked.
+// replaceGrant changes a permanent grant's ceiling. The API has no update:
+// removal and creation are not atomic. A failed creation never restores the old
+// grant automatically; that could resurrect a concurrent revocation.
 func (p *planner) replaceGrant(ctx context.Context, gateway uuid.UUID, w grantWrite) error {
 	if _, err := check(p.c.AdminRemoveGatewayGrantWithResponse(ctx, gateway, w.old.Id)); err != nil {
 		return err // nothing was lost
@@ -618,12 +596,6 @@ func (p *planner) replaceGrant(ctx context.Context, gateway uuid.UUID, w grantWr
 	}
 	e := asError(err)
 	c := *e
-	outcome := "the previous grant was created again"
-	if days, derr := daysFor(w.restoreDeadline, true); derr != nil {
-		outcome = fmt.Sprintf("the previous grant could not be created again (%v): re-create it by hand", derr)
-	} else if rerr := p.addGrant(ctx, gateway, w.restoreBody, days); rerr != nil {
-		outcome = fmt.Sprintf("the previous grant could not be created again (%s): re-create it by hand", asError(rerr).Message)
-	}
-	c.Message = fmt.Sprintf("grant %s was removed to change it and the new grant could not be created: %s; %s", w.subject, e.Message, outcome)
+	c.Message = fmt.Sprintf("grant %s was removed to change it and the new grant could not be created: %s; no automatic rollback was attempted; inspect current grants in the web UI before retrying", w.subject, e.Message)
 	return &c
 }

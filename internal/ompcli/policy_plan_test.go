@@ -472,45 +472,23 @@ func TestExportAndPlanCarryGrantDeadlines(t *testing.T) {
 func TestScopeChangeKeepsTheDeadlineNeverExtendsIt(t *testing.T) {
 	f, h := platformHarness(t)
 	exp := inDays(10.5)
-	setGrant(f, "support", 1, exp, nil) // ann: read-only until +10.5 days
-	code, out, errOut := importFile(t, h, grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com, toolScope: {classes: [read, write]}}\n"), "--plan")
-	if code != ExitChanges || !strings.Contains(out, "toolScope") {
-		t.Fatalf("plan: %d %q %q", code, out, errOut)
+	setGrant(f, "support", 1, exp, nil)
+	before, _ := json.Marshal(f.gateways["support"].grants)
+	// No absolute-deadline write exists. Refuse rather than guess clock skew.
+	mustRefuse(t, f, h, grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com, toolScope: {classes: [read, write]}}\n"), "clock skew")
+	after, _ := json.Marshal(f.gateways["support"].grants)
+	if !bytes.Equal(before, after) {
+		t.Fatal("refused scope change altered a grant")
 	}
-	if code, out, errOut := importFile(t, h, grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com, toolScope: {classes: [read, write]}}\n")); code != 0 {
-		t.Fatalf("apply: %d %q %q", code, out, errOut)
-	}
-	post := lastGrantPost(t, f)
-	if post.ExpiresInDays == nil || *post.ExpiresInDays != 10 {
-		t.Fatalf("the recreated grant must expire no later than before (10 whole days of 10.5): %v", post.ExpiresInDays)
-	}
-	var ann *ompclient.GatewayGrant
-	for i := range f.gateways["support"].grants {
-		if g := &f.gateways["support"].grants[i]; g.User != nil {
-			ann = g
-		}
-	}
-	if ann == nil || ann.ExpiresAt == nil || ann.ExpiresAt.After(*exp) || ann.ExpiresAt.Before(exp.Add(-25*time.Hour)) {
-		t.Fatalf("deadline after the change: %v (was %v)", ann, exp)
-	}
-	if ann.ToolScope == nil || len(*ann.ToolScope.Classes) != 2 {
-		t.Fatalf("scope: %+v", ann.ToolScope)
-	}
-	// The order is removal, then creation, per grant, and nothing else is touched.
-	ws := writes(f)
-	if len(ws) != 2 || ws[0].Method != "DELETE" || ws[1].Method != "POST" {
-		t.Fatalf("writes: %+v", ws)
-	}
-	// Converged, including against the exported deadline of before.
 	if code, out, _ := importFile(t, h, exportOf(t, h), "--plan"); code != 0 || !strings.Contains(out, "No changes") {
-		t.Fatalf("converged: %d %s", code, out)
+		t.Fatalf("unchanged export: %d %s", code, out)
 	}
 }
 
 func TestScopeChangeOfAGrantExpiringInLessThanADayIsRefused(t *testing.T) {
 	f, h := platformHarness(t)
 	setGrant(f, "support", 1, inDays(0.5), nil)
-	mustRefuse(t, f, h, grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com, toolScope: {classes: [read, write]}}\n"), "less than one whole day")
+	mustRefuse(t, f, h, grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com, toolScope: {classes: [read, write]}}\n"), "clock skew")
 	// The grant is untouched, and so is its deadline.
 	if g := f.gateways["support"].grants[1]; g.ExpiresAt == nil || len(f.gateways["support"].grants) != 2 {
 		t.Fatalf("grants: %+v", f.gateways["support"].grants)
@@ -527,11 +505,8 @@ func TestAnOmittedScopeAndDeadlineLeaveAnExistingGrantAlone(t *testing.T) {
 	if code, out, errOut := importFile(t, h, grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com}\n"), "--plan"); code != 0 || !strings.Contains(out, "No changes") {
 		t.Fatalf("omitted scope/deadline: %d %q %q", code, out, errOut)
 	}
-	// An explicit null widens, and says so in the plan.
-	code, out, _ := importFile(t, h, grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com, toolScope: null}\n"), "--plan")
-	if code != ExitChanges || !strings.Contains(out, `toolScope: "classes=[read] tools=-" -> "unrestricted"`) {
-		t.Fatalf("explicit unrestricted: %d %s", code, out)
-	}
+	// Even an explicit scope change cannot drop the expiring deadline.
+	mustRefuse(t, f, h, grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com, toolScope: null}\n"), "clock skew")
 	// A new grant with no scope is unrestricted and permanent, as documented.
 	if code, _, errOut := importFile(t, h, grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com}\n  - {group: ops}\n")); code != 0 {
 		t.Fatalf("new grant: %d %s", code, errOut)
@@ -565,17 +540,11 @@ func TestExpiredGrantsAreNeverExtendedOrRecreatedPermanently(t *testing.T) {
 	if f.gateways["support"].grants[1].ExpiresAt == nil {
 		t.Fatal("the grant was changed")
 	}
-	// Renewal is explicit: a future deadline replaces it (the portal replaces an elapsed row), keeping its ceiling.
+	// Renewal also needs an exact deadline, not a clock-skew guess.
 	renew := inDays(20.2)
-	if code, _, errOut := importFile(t, h, grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com, expiresAt: '"+renew.UTC().Format(time.RFC3339)+"'}\n")); code != 0 {
-		t.Fatalf("renewal: %d %s", code, errOut)
-	}
-	post := lastGrantPost(t, f)
-	if post.ExpiresInDays == nil || *post.ExpiresInDays != 20 || post.ToolScope == nil {
-		t.Fatalf("renewal body: %+v", post)
-	}
-	if n := len(writes(f)); n != 1 {
-		t.Fatalf("renewal needs one creation and no removal, got %d writes", n)
+	mustRefuse(t, f, h, grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com, expiresAt: '"+renew.UTC().Format(time.RFC3339)+"'}\n"), "clock skew")
+	if !f.gateways["support"].grants[1].ExpiresAt.Equal(past) {
+		t.Fatal("refused renewal changed the expired grant")
 	}
 	// Omitting an expired grant removes the row, and the plan says what it is.
 	f2, h2 := platformHarness(t)
@@ -588,80 +557,46 @@ func TestExpiredGrantsAreNeverExtendedOrRecreatedPermanently(t *testing.T) {
 
 func TestDeclaredDeadlinesOfNewAndExistingGrants(t *testing.T) {
 	f, h := platformHarness(t)
-	want := inDays(15.4)
-	if code, _, errOut := importFile(t, h, grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com, toolScope: {classes: [read]}}\n  - {group: ops, expiresAt: '"+want.UTC().Format(time.RFC3339)+"'}\n")); code != 0 {
-		t.Fatalf("new grant with a deadline: %d %s", code, errOut)
-	}
-	post := lastGrantPost(t, f)
-	if post.ExpiresInDays == nil || *post.ExpiresInDays != 15 {
-		t.Fatalf("days: %v", post.ExpiresInDays)
-	}
-	// The result is in the window the file's deadline allows, so the next plan has no drift.
-	doc := grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com, toolScope: {classes: [read]}}\n  - {group: ops, expiresAt: '" + want.UTC().Format(time.RFC3339) + "'}\n")
-	if code, out, _ := importFile(t, h, doc, "--plan"); code != 0 || !strings.Contains(out, "No changes") {
-		t.Fatalf("converged: %d %s", code, out)
-	}
-	// Extension is refused; shortening works; an existing permanent grant can be given a deadline.
-	later := inDays(40)
-	mustRefuse(t, f, h, grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com, toolScope: {classes: [read]}}\n  - {group: ops, expiresAt: '"+later.UTC().Format(time.RFC3339)+"'}\n"), "never extends")
-	sooner := inDays(5.6)
-	if code, _, errOut := importFile(t, h, grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com, toolScope: {classes: [read]}}\n  - {group: ops, expiresAt: '"+sooner.UTC().Format(time.RFC3339)+"'}\n")); code != 0 {
-		t.Fatalf("shorten: %d %s", code, errOut)
-	}
-	if post := lastGrantPost(t, f); post.ExpiresInDays == nil || *post.ExpiresInDays != 5 {
-		t.Fatalf("shortened to %v days", post.ExpiresInDays)
-	}
-	if code, _, errOut := importFile(t, h, grantDoc("  - {team: bravo, expiresAt: '"+inDays(7.3).UTC().Format(time.RFC3339)+"'}\n  - {userEmail: ann@example.com, toolScope: {classes: [read]}}\n  - {group: ops}\n")); code != 0 {
-		t.Fatalf("permanent to expiring: %d %s", code, errOut)
-	}
-	if g := f.gateways["support"].grants; len(g) != 3 {
-		t.Fatalf("grants: %+v", g)
-	}
-	// Refusals for what the portal cannot set.
-	for name, e := range map[string]string{"past": time.Now().Add(-time.Hour).UTC().Format(time.RFC3339), "today": time.Now().Add(6 * time.Hour).UTC().Format(time.RFC3339), "far": inDays(400).UTC().Format(time.RFC3339)} {
+	before, _ := json.Marshal(f.gateways["support"].grants)
+	for name, expiry := range map[string]string{"past": time.Now().Add(-time.Hour).UTC().Format(time.RFC3339), "today": inDays(0.5).UTC().Format(time.RFC3339), "future": inDays(15.4).UTC().Format(time.RFC3339), "far": inDays(400).UTC().Format(time.RFC3339)} {
 		t.Run(name, func(t *testing.T) {
-			mustRefuse(t, f, h, grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com, toolScope: {classes: [read]}}\n  - {group: new-"+name+", expiresAt: '"+e+"'}\n"), "expire")
+			mustRefuse(t, f, h, grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com, toolScope: {classes: [read]}}\n  - {group: new-"+name+", expiresAt: '"+expiry+"'}\n"), "expire")
 		})
+	}
+	mustRefuse(t, f, h, grantDoc("  - {team: bravo, expiresAt: '"+inDays(7.3).UTC().Format(time.RFC3339)+"'}\n  - {userEmail: ann@example.com, toolScope: {classes: [read]}}\n"), "clock skew")
+	after, _ := json.Marshal(f.gateways["support"].grants)
+	if !bytes.Equal(before, after) {
+		t.Fatal("refused deadline edits changed grants")
+	}
+	want := time.Now().UTC()
+	if !deadlineMet(want, want) || deadlineMet(want, want.Add(time.Nanosecond)) || deadlineMet(want, want.Add(-time.Nanosecond)) {
+		t.Fatal("deadline comparison used a tolerance")
 	}
 }
 
-func TestAFailedCreateAfterTheRemovalRestoresThePreviousGrant(t *testing.T) {
+func TestAFailedCreateAfterRemovalNeverRestoresARevocableGrant(t *testing.T) {
 	f, h := platformHarness(t)
-	exp := inDays(10.5)
-	setGrant(f, "support", 1, exp, nil)
 	doc := grantDoc("  - {team: bravo}\n  - {userEmail: ann@example.com, toolScope: {classes: [read, write]}}\n")
 	f.grantPostFail = []int{500}
 	code, _, errOut := importFile(t, h, doc)
-	if code != ExitUnavailable || !strings.Contains(errOut, "was removed to change it") || !strings.Contains(errOut, "the previous grant was created again") {
+	if code != ExitUnavailable || !strings.Contains(errOut, "was removed to change it") || !strings.Contains(errOut, "no automatic rollback") {
 		t.Fatalf("exit %d: %s", code, errOut)
 	}
-	var ann *ompclient.GatewayGrant
-	for i := range f.gateways["support"].grants {
-		if g := &f.gateways["support"].grants[i]; g.User != nil {
-			ann = g
-		}
+	// No third request may resurrect the old grant after a concurrent denial.
+	ws := writes(f)
+	if len(ws) != 2 || ws[0].Method != "DELETE" || ws[1].Method != "POST" {
+		t.Fatalf("unexpected replay/restore: %+v", ws)
 	}
-	if ann == nil || ann.ToolScope == nil || len(*ann.ToolScope.Classes) != 1 || ann.ExpiresAt == nil || ann.ExpiresAt.After(*exp) {
-		t.Fatalf("the previous grant was not restored as it was (scope read, deadline no later): %+v", ann)
-	}
-	// If the restoration fails too, the error says what to do and the state is honest.
-	f2, h2 := platformHarness(t)
-	setGrant(f2, "support", 1, inDays(10.5), nil)
-	f2.grantPostFail = []int{500, 500}
-	code, _, errOut = importFile(t, h2, doc)
-	if code != ExitUnavailable || !strings.Contains(errOut, "could not be created again") || !strings.Contains(errOut, "re-create it by hand") {
-		t.Fatalf("exit %d: %s", code, errOut)
-	}
-	if n := len(f2.gateways["support"].grants); n != 1 {
-		t.Fatalf("expected the one grant that was never touched, got %d", n)
+	if len(f.gateways["support"].grants) != 1 {
+		t.Fatal("failed replacement restored the old grant")
 	}
 }
 
 func TestAGrantThatCannotBeRecreatedBlocksTheWholeStepNotJustItself(t *testing.T) {
-	// A gateway rename and a grant whose deadline leaves no whole day: nothing is written.
+	// A gateway rename and a grant with an absolute deadline: nothing is written.
 	f, h := platformHarness(t)
-	setGrant(f, "support", 1, inDays(1.0+3.0/(24*60)), nil) // 1 day 3 minutes: floors to 0 once the slack is counted
-	mustRefuse(t, f, h, "schema: omp/v1\ngateways:\n- slug: support\n  name: Renamed gateway\n  grants:\n  - {team: bravo}\n  - {userEmail: ann@example.com, toolScope: {classes: [write]}}\n", "less than one whole day")
+	setGrant(f, "support", 1, inDays(1.0+3.0/(24*60)), nil)
+	mustRefuse(t, f, h, "schema: omp/v1\ngateways:\n- slug: support\n  name: Renamed gateway\n  grants:\n  - {team: bravo}\n  - {userEmail: ann@example.com, toolScope: {classes: [write]}}\n", "clock skew")
 }
 
 // ---- negative proof: the hazards are real in this model ----------------------

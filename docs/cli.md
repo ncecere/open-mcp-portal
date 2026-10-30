@@ -254,24 +254,22 @@ replaces one when the same subject is granted again; `omp` does not claim to cle
 - *Absent `expiresAt`*: a new grant is permanent; an existing grant **keeps its deadline**. Likewise an absent `toolScope`
   keeps an existing ceiling (and is unrestricted for a new grant); `toolScope: null` declares it unrestricted. `expiresAt: null`
   is refused when the file is read.
-- *A new grant with `expiresAt`* is created with the whole days that keep its deadline **no later** than the file's (less than a
-  day earlier, minus a 5-minute allowance for clock difference). A past deadline, one under a whole day away and one over 365
-  days away are refused. A later plan treats an existing deadline in that range as met.
-- *Changing a grant's `toolScope`* means removing it and creating it again with the new ceiling. The new grant gets the same
-  deadline **or an earlier one**, never a later one or none. If less than a whole day remains it cannot be recreated at all, and
-  the change is refused (let it expire, or remove it and declare it again).
-- *`omp` never extends a deadline and never makes an expiring grant permanent.* A file that wants a later deadline is refused;
-  a sooner one is applied by the same remove-and-create, and a deadline on an existing permanent grant likewise.
-- *An expired grant is never recreated permanently.* A file that lists it with no `expiresAt` (or a different past one, or a
-  changed ceiling) is refused. A file that records it as exported is no drift. **Renewing** it takes a future `expiresAt`,
-  which creates the grant again with its previous ceiling (a new ceiling needs `toolScope`). Leaving it out of `grants` removes
-  its row.
-- *Partial writes.* Removing and creating a grant are two API calls and not atomic, and grants have no revision to fence them. In
-  one gateway step `omp` first resolves every deadline and checks every refusal, then writes: the selection (conditional on
-  the revision it planned against), new grants, replacements (remove, then create), removals. If a replacement's creation
-  fails after its removal, `omp` creates the previous grant again (same ceiling, a deadline no later than before) and the
-  error says whether that worked; if not it names the grant to re-create by hand. Earlier steps of the same import stay applied
-  (the error says how many).
+- *Absolute deadlines are comparison-only in v1.* An unchanged exported `expiresAt` must match the portal's timestamp
+  exactly. Creating, shortening, extending or renewing an expiring grant, or changing its scope, is refused before any
+  import write. The API accepts only a relative day count against the portal's clock, not an absolute deadline; guessing a
+  clock-skew allowance cannot guarantee the existing deadline. Use the web UI for temporary-grant changes. This limitation
+  preserves the existing row, scope and deadline byte-for-byte instead of silently making it permanent or approximating it.
+- *An expired grant is never recreated permanently.* A file that lists it with no `expiresAt`, a different deadline or a
+  changed ceiling is refused. A file that records it as exported is no drift. Renewal needs a browser operation; leaving it
+  out of the authoritative `grants` list removes its row.
+- *Permanent grant scope changes are not atomic.* The API has no update or grant revision: the CLI removes the existing
+  permanent grant and creates its replacement. If creation fails, **no automatic rollback or replay restores the old grant**:
+  another actor may have revoked it. The error identifies the partial operation and asks the operator to inspect current
+  grants before retrying. A request may also have succeeded when its response was lost.
+- *Partial writes.* All predictable refusals are checked while planning, before any write. Within a gateway step the CLI
+  writes the selection (at the planned revision), new permanent grants, permanent-grant replacements, then removals.
+  Earlier successful steps remain applied on a later runtime failure (the error says how many). There is no transaction
+  across HTTP requests and no automatic restoration of removed authority.
 
 ### Concurrent edits
 

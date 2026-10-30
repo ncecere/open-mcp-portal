@@ -112,9 +112,9 @@ type Grant struct {
 	// unrestricted. {} : no tools.
 	ToolScope *ToolScope `yaml:"toolScope,omitempty" json:"toolScope,omitempty"`
 	// ExpiresAt is the grant's deadline (RFC 3339). Absent: a new grant is
-	// permanent and an existing grant keeps its deadline. The portal sets
-	// deadlines in whole elapsed days when a grant is created, so omp meets a
-	// deadline to the day, never later (docs/cli.md, "Grant expiry").
+	// permanent and an existing grant keeps its deadline. CLI v1 compares
+	// exact authoritative timestamps but refuses any write requiring a new
+	// absolute deadline (docs/cli.md, "Grant expiry").
 	ExpiresAt string `yaml:"expiresAt,omitempty" json:"expiresAt,omitempty"`
 }
 

@@ -312,14 +312,21 @@ func TestOmpCLIKeepsGrantDeadlinesAndRefusesToExtendThem(t *testing.T) {
 	utc := func(d time.Duration) string { return time.Now().Add(d).UTC().Format(time.RFC3339) }
 	day := 24 * time.Hour
 	head := "schema: omp/v1\ngateways:\n- slug: expiring\n  name: Expiring\n  grants:\n"
-	omp.mustRun("import", "-f", f.file(head+
-		"  - {group: eng, expiresAt: '"+utc(10*day+12*time.Hour)+"'}\n"+
-		"  - {group: ops}\n"+
-		"  - {group: reader, toolScope: {classes: [read]}, expiresAt: '"+utc(3*day+5*time.Hour)+"'}\n"))
+	omp.mustRun("import", "-f", f.file(head+"  - {group: ops}\n"))
+	// A browser session creates temporary grants using the portal's clock.
+	// CLI v1 cannot write an absolute deadline and must preserve these rows.
+	for name, days := range map[string]int{"eng": 10, "reader": 3} {
+		body := map[string]any{"subjectKind": "group", "group": name, "expiresInDays": days}
+		if name == "reader" {
+			body["toolScope"] = map[string]any{"classes": []string{"read"}}
+		}
+		status, ec := f.admin.call("POST", "/v1/admin/gateways/"+f.gatewayID("expiring")+"/grants", body, nil, nil)
+		mustCode(t, "temporary grant", status, ec, 201, "")
+	}
 	grants := f.grants("expiring")
 	eng := grants["eng"]
-	if eng.ExpiresAt == nil || eng.ExpiresAt.After(time.Now().Add(10*day+12*time.Hour+time.Minute)) || eng.ExpiresAt.Before(time.Now().Add(10*day-time.Minute)) {
-		t.Fatalf("eng deadline: %v (declared 10.5 days, whole days only, never later)", eng.ExpiresAt)
+	if eng.ExpiresAt == nil || eng.ExpiresAt.After(time.Now().Add(10*day+time.Minute)) || eng.ExpiresAt.Before(time.Now().Add(10*day-time.Minute)) {
+		t.Fatalf("eng deadline from authoritative portal clock: %v", eng.ExpiresAt)
 	}
 	if grants["ops"].ExpiresAt != nil {
 		t.Fatal("a grant declared without a deadline must be permanent")
@@ -339,40 +346,31 @@ func TestOmpCLIKeepsGrantDeadlinesAndRefusesToExtendThem(t *testing.T) {
 		t.Fatal("an unchanged import recreated a grant")
 	}
 
-	// A scope change keeps the deadline: the new grant expires no later than the old one.
-	grantAudits := func() string {
-		return e.exec(`SELECT count(*)::text FROM audit_log WHERE action IN ('gateway.grant_remove', 'gateway.grant_add') AND actor_kind = 'automation_token' AND metadata->>'name' LIKE '%eng'`)
-	}
-	auditsBefore := grantAudits()
-	omp.mustRun("import", "-f", f.file(head+"  - {group: eng, toolScope: {classes: [read, write]}}\n  - {group: ops}\n  - {group: reader, toolScope: {classes: [read]}}\n"))
+	// The API cannot set an absolute deadline. Refuse this scope change before
+	// any writes instead of removing and approximating the temporary grant.
+	f.refuses(head+"  - {group: eng, toolScope: {classes: [read, write]}}\n  - {group: ops}\n  - {group: reader, toolScope: {classes: [read]}}\n", "clock skew")
 	after := f.grants("expiring")["eng"]
-	if after.Id == eng.Id || after.ExpiresAt == nil || after.ExpiresAt.After(*eng.ExpiresAt) || after.ExpiresAt.Before(eng.ExpiresAt.Add(-day-10*time.Minute)) {
-		t.Fatalf("eng after a scope change: %+v (was %v)", after, eng.ExpiresAt)
-	}
-	if after.ToolScope == nil || after.ToolScope.Classes == nil || len(*after.ToolScope.Classes) != 2 {
-		t.Fatalf("scope: %+v", after.ToolScope)
+	if after.Id != eng.Id || after.ExpiresAt == nil || !after.ExpiresAt.Equal(*eng.ExpiresAt) || after.ToolScope != nil {
+		t.Fatalf("refused change altered grant: %+v", after)
 	}
 	if n := e.exec(`SELECT count(*)::text FROM gateway_grants WHERE gateway_id = $1 AND group_name = 'eng'`, f.gatewayID("expiring")); n != "1" {
 		t.Fatalf("%s grants for eng", n)
-	}
-	if n := grantAudits(); n == auditsBefore {
-		t.Errorf("the removal and creation were not audited as the token (%s rows)", n)
 	}
 	// An omitted scope and deadline leave an expiring grant alone; the next plan agrees.
 	if code, out, _ := omp.run("import", "-f", f.file(head+"  - {group: eng}\n  - {group: ops}\n  - {group: reader}\n"), "--plan"); code != 0 {
 		t.Fatalf("omitted scope and deadline: %d %s", code, out)
 	}
-	// Extending is refused; shortening works.
+	// Neither extending nor approximate shortening is allowed by the CLI.
 	f.refuses(head+"  - {group: eng, expiresAt: '"+utc(40*day)+"'}\n  - {group: ops}\n  - {group: reader}\n", "never extends")
-	omp.mustRun("import", "-f", f.file(head+"  - {group: eng, expiresAt: '"+utc(2*day+3*time.Hour)+"'}\n  - {group: ops}\n  - {group: reader}\n"))
-	if short := f.grants("expiring")["eng"]; short.ExpiresAt == nil || short.ExpiresAt.After(time.Now().Add(2*day+3*time.Hour)) || short.ToolScope == nil {
-		t.Fatalf("shortened: %+v", short)
+	f.refuses(head+"  - {group: eng, expiresAt: '"+utc(2*day+3*time.Hour)+"'}\n  - {group: ops}\n  - {group: reader}\n", "clock skew")
+	if kept := f.grants("expiring")["eng"]; kept.Id != eng.Id || !kept.ExpiresAt.Equal(*eng.ExpiresAt) {
+		t.Fatal("refused shortening altered grant")
 	}
 
 	// Less than a day left: it cannot be recreated (the portal sets whole days), so a scope change is refused untouched.
 	e.exec(`UPDATE gateway_grants SET expires_at = now() + interval '2 hours' WHERE gateway_id = $1 AND group_name = 'reader' RETURNING 'x'`, f.gatewayID("expiring"))
 	reader := f.grants("expiring")["reader"]
-	f.refuses(head+"  - {group: eng}\n  - {group: ops}\n  - {group: reader, toolScope: {classes: [read, write]}}\n", "less than one whole day")
+	f.refuses(head+"  - {group: eng}\n  - {group: ops}\n  - {group: reader, toolScope: {classes: [read, write]}}\n", "clock skew")
 	if got := f.grants("expiring")["reader"]; got.Id != reader.Id || !got.ExpiresAt.Equal(*reader.ExpiresAt) {
 		t.Fatal("a refused change touched the grant")
 	}
@@ -390,11 +388,11 @@ func TestOmpCLIKeepsGrantDeadlinesAndRefusesToExtendThem(t *testing.T) {
 	if n := e.exec(`SELECT count(*)::text FROM gateway_grants WHERE gateway_id = $1 AND group_name = 'reader' AND expires_at < now()`, f.gatewayID("expiring")); n != "1" {
 		t.Fatal("the expired grant was recreated")
 	}
-	// Renewal needs a future deadline, and the portal replaces the elapsed row.
-	omp.mustRun("import", "-f", f.file(head+"  - {group: eng}\n  - {group: ops}\n  - {group: reader, expiresAt: '"+utc(20*day+2*time.Hour)+"'}\n"))
-	renewed := f.grants("expiring")["reader"]
-	if renewed.ExpiresAt == nil || !renewed.ExpiresAt.After(time.Now().Add(19*day)) || renewed.ToolScope == nil || renewed.ToolScope.Classes == nil || len(*renewed.ToolScope.Classes) != 1 {
-		t.Fatalf("renewed: %+v (a renewal keeps the ceiling)", renewed)
+	// Renewal also requires a browser operation, not a guessed deadline.
+	f.refuses(head+"  - {group: eng}\n  - {group: ops}\n  - {group: reader, expiresAt: '"+utc(20*day+2*time.Hour)+"'}\n", "clock skew")
+	kept := f.grants("expiring")["reader"]
+	if kept.Id != reader.Id || kept.ExpiresAt == nil || !kept.ExpiresAt.Before(time.Now()) || kept.ToolScope == nil || kept.ToolScope.Classes == nil || len(*kept.ToolScope.Classes) != 1 {
+		t.Fatalf("refused renewal changed grant: %+v", kept)
 	}
 }
 
