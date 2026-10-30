@@ -102,6 +102,8 @@ describe("Unconfirmed sensitivity on the Governance card", () => {
     renderApp(record);
     const alert = (await screen.findByText("Sensitivity not confirmed")).closest("[role=status],[role=alert]")!;
     expect(alert).toHaveTextContent("Nobody on the team has confirmed the label Confidential");
+    expect(screen.getByText("This label has not been confirmed.")).toBeInTheDocument();
+    expect(screen.queryByText("A default nobody has checked yet.")).toBeNull();
   });
 });
 
@@ -144,6 +146,14 @@ describe("Edit governance and the confirmation", () => {
     await u.click(within(dialog).getByRole("checkbox", { name: "Internal is the right label for this server" }));
     await u.click(screen.getByRole("button", { name: "Save governance" }));
     await waitFor(() => expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ governance: { sensitivity: "internal" } }));
+  });
+
+  it("does not call an unconfirmed non-Internal label a default", async () => {
+    const u = userEvent.setup();
+    const { dialog } = await open(u, unconfirmed({ sensitivity: "confidential" }));
+    expect(dialog).toHaveTextContent("Confidential has not been confirmed.");
+    expect(dialog).not.toHaveTextContent("Confidential is only a default");
+    expect(within(dialog).getByRole("checkbox", { name: "Confidential is the right label for this server" })).not.toBeChecked();
   });
 
   it("choosing another label says saving it confirms it", async () => {

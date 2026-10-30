@@ -146,7 +146,7 @@ export function GovernanceCard({ server, scope, abilities }: Props) {
                 <span className={m.inline}>
                   <Badge tone={sensitivityTone[g.sensitivity]}>{sensitivityLabels[g.sensitivity]}</Badge>
                   {unconfirmed && <Badge tone="warning">Not confirmed</Badge>}
-                  <span className={s.muted}>{unconfirmed ? "A default nobody has checked yet." : sensitivityHelp[g.sensitivity]}</span>
+                  <span className={s.muted}>{unconfirmed ? (g.sensitivity === "internal" ? "A default nobody has checked yet." : "This label has not been confirmed.") : sensitivityHelp[g.sensitivity]}</span>
                 </span>
               ),
             },

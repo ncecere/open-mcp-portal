@@ -128,7 +128,7 @@ export function GovernanceDialog({ server, scope, onClose }: Props) {
             label={`${sensitivityLabels[sensitivity]} is the right label for this server`}
             description={
               sensitivity === seen.g.sensitivity
-                ? `${unconfirmedTitle}: ${sensitivityLabels[sensitivity]} is only a default until you confirm it. Saving other changes doesn't confirm it.`
+                ? `${unconfirmedTitle}: ${sensitivity === "internal" ? "Internal is only a default until you confirm it." : `${sensitivityLabels[sensitivity]} has not been confirmed.`} Saving other changes doesn't confirm it.`
                 : "Saving a different label confirms it."
             }
             checked={confirmLabel || sensitivity !== seen.g.sensitivity}

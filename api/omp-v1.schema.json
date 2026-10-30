@@ -69,6 +69,7 @@
       "required": ["sensitivity", "lifecycle", "sunsetAt"],
       "properties": {
         "sensitivity": { "$ref": "#/$defs/sensitivity" },
+        "sensitivityConfirmed": { "type": "boolean", "description": "Comparison-only assertion of the read-only marker. Never confirms a label; omission leaves it unmanaged, and an unreadable declared marker refuses the import." },
         "lifecycle": { "enum": ["active", "deprecated", "sunset"] },
         "sunsetAt": { "anyOf": [{ "const": "" }, { "type": "string", "format": "date-time", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$" }], "description": "Empty string explicitly declares no cutoff; otherwise an exact RFC 3339 instant." },
         "ownerUserId": { "anyOf": [{ "const": "" }, { "type": "string", "format": "uuid" }], "description": "Empty string declares no named owner." },

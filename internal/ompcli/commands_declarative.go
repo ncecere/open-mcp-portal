@@ -108,7 +108,12 @@ func (a *App) cmdExport(ctx context.Context, args []string) error {
 		}
 		data = append([]byte(head), b...)
 	}
-	if *out != "" {
+	if *out != "" && *out != "-" {
+		if info, err := os.Lstat(*out); err == nil && !info.Mode().IsRegular() {
+			return &Error{Exit: ExitFailure, Code: "write_failed", Message: "-o requires a regular file path, not a symlink, directory or special file; omit -o or use -o - for stdout"}
+		} else if err != nil && !os.IsNotExist(err) {
+			return &Error{Exit: ExitFailure, Code: "write_failed", Message: err.Error()}
+		}
 		if err := writePrivateFile(*out, a.scrub(data)); err != nil {
 			return &Error{Exit: ExitFailure, Code: "write_failed", Message: err.Error()}
 		}

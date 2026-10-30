@@ -3,6 +3,7 @@ package ompcli
 import (
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/ncecere/open-mcp-portal/pkg/ompclient"
@@ -14,12 +15,13 @@ import (
 // Optional metadata is compared only when declared. UUIDs are portal-local
 // references, never authentication. Historical review dates are not policy.
 type GovernancePolicy struct {
-	Sensitivity         string  `yaml:"sensitivity" json:"sensitivity"`
-	Lifecycle           string  `yaml:"lifecycle" json:"lifecycle"`
-	SunsetAt            *string `yaml:"sunsetAt" json:"sunsetAt"`
-	OwnerUserID         *string `yaml:"ownerUserId,omitempty" json:"ownerUserId,omitempty"`
-	OncallContact       *string `yaml:"oncallContact,omitempty" json:"oncallContact,omitempty"`
-	ReplacementServerID *string `yaml:"replacementServerId,omitempty" json:"replacementServerId,omitempty"`
+	Sensitivity          string  `yaml:"sensitivity" json:"sensitivity"`
+	SensitivityConfirmed *bool   `yaml:"sensitivityConfirmed,omitempty" json:"sensitivityConfirmed,omitempty"`
+	Lifecycle            string  `yaml:"lifecycle" json:"lifecycle"`
+	SunsetAt             *string `yaml:"sunsetAt" json:"sunsetAt"`
+	OwnerUserID          *string `yaml:"ownerUserId,omitempty" json:"ownerUserId,omitempty"`
+	OncallContact        *string `yaml:"oncallContact,omitempty" json:"oncallContact,omitempty"`
+	ReplacementServerID  *string `yaml:"replacementServerId,omitempty" json:"replacementServerId,omitempty"`
 }
 
 func validSensitivity(s string) bool {
@@ -51,8 +53,8 @@ func (g *GovernancePolicy) validate() error {
 			return fmt.Errorf("replacementServerId must be a visible server UUID; omit it when not declared")
 		}
 	}
-	if g.OncallContact != nil && len(*g.OncallContact) > 200 {
-		return fmt.Errorf("oncallContact must be at most 200 bytes")
+	if g.OncallContact != nil && utf8.RuneCountInString(*g.OncallContact) > 200 {
+		return fmt.Errorf("oncallContact must be at most 200 characters")
 	}
 	return nil
 }
@@ -69,6 +71,10 @@ func governanceFrom(g *ompclient.McpServerGovernance) (*GovernancePolicy, error)
 		owner = g.OwnerUserId.String()
 	}
 	p := &GovernancePolicy{Sensitivity: string(g.Sensitivity), Lifecycle: string(g.Lifecycle), SunsetAt: &deadline, OwnerUserID: &owner, OncallContact: &contact}
+	if g.SensitivityConfirmed != nil {
+		confirmed := *g.SensitivityConfirmed
+		p.SensitivityConfirmed = &confirmed
+	}
 	if g.Replacement != nil {
 		id := g.Replacement.Id.String()
 		p.ReplacementServerID = &id
@@ -116,7 +122,8 @@ func checkGovernanceDeclaration(d Server, cur *ompclient.McpServer) error {
 		y, err2 := uuid.Parse(*b)
 		return err1 == nil && err2 == nil && x == y
 	}
-	if want.Sensitivity != have.Sensitivity || want.Lifecycle != have.Lifecycle || !sameDeadline ||
+	if (want.SensitivityConfirmed != nil && (have.SensitivityConfirmed == nil || *want.SensitivityConfirmed != *have.SensitivityConfirmed)) ||
+		want.Sensitivity != have.Sensitivity || want.Lifecycle != have.Lifecycle || !sameDeadline ||
 		!sameID(want.OwnerUserID, have.OwnerUserID) || !sameID(want.ReplacementServerID, have.ReplacementServerID) ||
 		(want.OncallContact != nil && *want.OncallContact != *have.OncallContact) {
 		return refuseErr("server %s: declared governance differs from the portal's. Automation tokens cannot change it; align the policy in the web UI. Comparison values are not printed.", d.Slug)
@@ -156,6 +163,11 @@ func rejectNullGovernance(doc *yaml.Node) error {
 			return usageErr("governance cannot be null; omit it to preserve existing policy")
 		}
 		if fields, ok := g.(map[string]any); ok {
+			if v, present := fields["sensitivityConfirmed"]; present {
+				if _, ok := v.(bool); !ok {
+					return usageErr("governance.sensitivityConfirmed must be a boolean comparison, never a confirmation request")
+				}
+			}
 			for key, value := range fields {
 				if value == nil {
 					return usageErr("governance.%s cannot be null; use an explicit value or omit an optional declaration", key)
