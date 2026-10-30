@@ -192,6 +192,9 @@ func (p *planner) planServers(ctx context.Context, desired []Server) error {
 	for _, d := range sorted {
 		d := d
 		cur := bySlug[d.Slug]
+		if err := checkGovernanceDeclaration(d, cur); err != nil {
+			return err
+		}
 		// An absent env name is permitted when preserving an existing static
 		// credential, not when creating one. Validate the entire plan before
 		// any step is applied so a later bad declaration cannot partially apply.

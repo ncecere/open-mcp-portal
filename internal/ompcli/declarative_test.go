@@ -195,6 +195,7 @@ func TestSchemaPropertiesMatchTheTypes(t *testing.T) {
 	_ = jsonFields
 	check("top level", props(map[string]any{"properties": doc.Props}), File{})
 	check("server", props(doc.Defs["server"]), Server{})
+	check("governance", props(doc.Defs["governance"]), GovernancePolicy{})
 	check("team", props(doc.Defs["team"]), Team{})
 	check("gateway", props(doc.Defs["gateway"]), Gateway{})
 	check("capability", props(doc.Defs["capability"]), CapabilityRef{})

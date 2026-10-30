@@ -60,6 +60,9 @@ type Server struct {
 	// Publish is none (private) or request (published, or pending review).
 	// Absent leaves the publication alone.
 	Publish string `yaml:"publish,omitempty" json:"publish,omitempty"`
+	// Governance is comparison-only: tokens cannot write it. New servers
+	// with a declaration must first be prepared through the browser UI.
+	Governance *GovernancePolicy `yaml:"governance,omitempty" json:"governance,omitempty"`
 }
 
 // Team is a platform team. The natural key is slug. Needs platform:write.
@@ -78,12 +81,13 @@ type Team struct {
 // Gateway is a platform gateway. The natural key is slug. Team gateways are
 // not reachable by tokens and are not part of omp/v1.
 type Gateway struct {
-	Slug         string           `yaml:"slug" json:"slug"`
-	Name         string           `yaml:"name" json:"name"`
-	Description  *string          `yaml:"description,omitempty" json:"description,omitempty"`
-	Enabled      *bool            `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-	Capabilities *[]CapabilityRef `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
-	Grants       *[]Grant         `yaml:"grants,omitempty" json:"grants,omitempty"`
+	Slug           string           `yaml:"slug" json:"slug"`
+	Name           string           `yaml:"name" json:"name"`
+	Description    *string          `yaml:"description,omitempty" json:"description,omitempty"`
+	Enabled        *bool            `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	Capabilities   *[]CapabilityRef `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
+	Grants         *[]Grant         `yaml:"grants,omitempty" json:"grants,omitempty"`
+	MaxSensitivity *string          `yaml:"maxSensitivity,omitempty" json:"maxSensitivity,omitempty"`
 }
 
 // CapabilityRef selects a capability of a published server by its server's
@@ -211,6 +215,9 @@ func (f *File) markExplicitNulls(raw []byte) error {
 	if doc.Kind == yaml.DocumentNode && len(doc.Content) == 1 {
 		doc = doc.Content[0]
 	}
+	if err := rejectNullGovernance(doc); err != nil {
+		return err
+	}
 	gateways := yamlField(doc, "gateways")
 	if gateways == nil || gateways.Kind != yaml.SequenceNode {
 		return nil
@@ -315,6 +322,11 @@ func (f *File) Validate() []string {
 		default:
 			add("%s: publish must be none or request", at)
 		}
+		if s.Governance != nil {
+			if err := s.Governance.validate(); err != nil {
+				add("%s: governance: %v", at, err)
+			}
+		}
 		if s.TimeoutSeconds != nil && (*s.TimeoutSeconds < 1 || *s.TimeoutSeconds > 600) {
 			add("%s: timeoutSeconds must be between 1 and 600", at)
 		}
@@ -361,6 +373,9 @@ func (f *File) Validate() []string {
 		seen["gateway/"+g.Slug] = true
 		if strings.TrimSpace(g.Name) == "" {
 			add("%s: name is required", at)
+		}
+		if g.MaxSensitivity != nil && !validSensitivity(*g.MaxSensitivity) {
+			add("%s: maxSensitivity must be public, internal, confidential or restricted", at)
 		}
 		if g.Capabilities != nil {
 			keys := map[string]bool{}

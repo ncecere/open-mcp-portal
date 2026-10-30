@@ -14,6 +14,8 @@ import (
 const exportHeader = `# Exported by omp (schema omp/v1). Secrets are never exported: a server with a static
 # header names an environment variable in authValueEnv, which "omp import" reads.
 # Set it before an import that creates the server or replaces its secret.
+# Governance and sensitivity ceilings are comparison-only. Imports cannot create
+# objects with policy that automation tokens cannot preserve; use the browser UI.
 `
 
 const exportGatewayNote = `# A gateway's curation (fixed or allowed tool arguments) and grant deadlines are exported as
@@ -107,7 +109,7 @@ func (a *App) cmdExport(ctx context.Context, args []string) error {
 		data = append([]byte(head), b...)
 	}
 	if *out != "" {
-		if err := os.WriteFile(*out, a.scrub(data), 0o644); err != nil { //nolint:gosec // no secrets in the file
+		if err := writePrivateFile(*out, a.scrub(data)); err != nil {
 			return &Error{Exit: ExitFailure, Code: "write_failed", Message: err.Error()}
 		}
 		a.outf("wrote %s\n", *out)
@@ -141,6 +143,10 @@ func exportServers(ctx context.Context, c *api, team string, f *File, warnings *
 		s.Publish = "none"
 		if sv.PublishState == ompclient.PublishStatePending || sv.PublishState == ompclient.PublishStatePublished {
 			s.Publish = "request"
+		}
+		s.Governance, err = governanceFrom(sv.Governance)
+		if err != nil {
+			return refuseErr("server %s: export cannot preserve unreadable governance.", sv.Slug)
 		}
 		f.Servers = append(f.Servers, s)
 	}
@@ -176,6 +182,13 @@ func exportPlatform(ctx context.Context, c *api, f *File, warnings *[]string) er
 	for _, gw := range gateways {
 		desc, enabled := gw.Description, gw.Enabled
 		eg := Gateway{Slug: gw.Slug, Name: gw.Name, Description: &desc, Enabled: &enabled}
+		if gw.MaxSensitivity != nil {
+			ceiling := string(*gw.MaxSensitivity)
+			if !validSensitivity(ceiling) {
+				return refuseErr("gateway %s: export cannot preserve its unreadable sensitivity ceiling.", gw.Slug)
+			}
+			eg.MaxSensitivity = &ceiling
+		}
 		caps, err := getGatewayCapabilities(ctx, c, gw.Id)
 		if err != nil {
 			return err

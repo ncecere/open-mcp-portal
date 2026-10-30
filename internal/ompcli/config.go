@@ -192,6 +192,12 @@ func writeConfigFile(path string, fc fileConfig) error {
 	if err != nil {
 		return err
 	}
+	return writePrivateFile(path, raw)
+}
+
+// writePrivateFile atomically replaces a file without exposing new sensitive
+// configuration through an existing file's broader permissions.
+func writePrivateFile(path string, raw []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("create %s: %w", dir, err)

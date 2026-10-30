@@ -237,6 +237,13 @@ func (p *planner) planGateways(ctx context.Context, desired []Gateway) error {
 	for _, d := range sorted {
 		d := d
 		cur, exists := by[d.Slug]
+		var ceilingSnapshot *ompclient.Gateway
+		if exists {
+			ceilingSnapshot = &cur
+		}
+		if err := checkCeilingDeclaration(d, ceilingSnapshot); err != nil {
+			return err
+		}
 		ch := Change{Kind: "gateway", Key: d.Slug, Action: "update"}
 		add := func(field string, from, to any) {
 			ch.Fields = append(ch.Fields, FieldChange{Field: field, From: from, To: to})

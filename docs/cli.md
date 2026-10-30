@@ -210,6 +210,17 @@ server that uses them (with a warning on stderr), and import refuses to touch on
 - `publish: request` publishes a private server (or requests it under `approval_required`); `publish: none` withdraws it.
   Absent leaves publication alone.
 
+### Governance and sensitivity ceilings
+
+Export carries `servers[].governance` and `gateways[].maxSensitivity` when the portal exposes them. These are **comparison-only declarations**: automation tokens cannot write governance or ceilings. Missing fields preserve existing policy; a declared mismatch or unreadable policy refuses the **entire plan before any mutation**, in both plan and apply mode. These comparisons are configuration checks, not authentication or a whole-import transaction; the concurrency limits below still apply.
+
+- A server governance declaration contains `sensitivity`, the effective `lifecycle`, and `sunsetAt` (an exact RFC 3339 instant, or `""` to declare no cutoff). Optional `ownerUserId` and `oncallContact` compare the stored metadata; `""` explicitly declares none. `replacementServerId` is exported only for a visible replacement. An omitted replacement may be hidden and never asserts that none is configured. UUIDs are portal-local references, not portable identity mappings or authorization.
+- **Any new server with a governance declaration is refused.** Prepare its governance through the browser first, then import against that existing object. CLI-created servers without a declaration receive the portal's defaults; omission never confirms a sensitivity label. Existing servers keep all undeclared governance, including hidden replacement data. Historical review timestamps are not exported as configurable policy. An effective lifecycle can change when a cutoff passes: re-export rather than treating the old snapshot as current authority.
+- A declared gateway ceiling must match the current ceiling. A new gateway can match only the documented `restricted` default (no ceiling); a more restrictive declaration requires browser preparation. CLI requests never send the session-only `maxSensitivity` field.
+- `null` is not an omission or a request to clear these declarations, including through YAML aliases/merges. Invalid or unreadable labels fail closed; policy values are not printed in refusal messages.
+
+Exports may include private contacts and sensitive fixed curation values, even though authentication secrets are not exported. `-o FILE` atomically writes owner-only mode `0600` where supported, including when replacing a previously broader-permission file. Protect stdout redirects yourself and review exports before sharing them.
+
 ### Curation
 
 A gateway's selected tools can be *curated* in the web UI ([gateway-curation.md](gateway-curation.md)): a renamed exposed

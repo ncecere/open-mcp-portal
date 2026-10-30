@@ -1,6 +1,8 @@
 # Exported by omp (schema omp/v1). Secrets are never exported: a server with a static
 # header names an environment variable in authValueEnv, which "omp import" reads.
 # Set it before an import that creates the server or replaces its secret.
+# Governance and sensitivity ceilings are comparison-only. Imports cannot create
+# objects with policy that automation tokens cannot preserve; use the browser UI.
 schema: omp/v1
 servers:
   - team: bravo
