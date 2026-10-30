@@ -43,6 +43,13 @@ const (
 	// ReasonTeamArchived: the server's team, or a team gateway's own team,
 	// is archived. Nothing is changed on archive, so unarchiving restores it.
 	ReasonTeamArchived = "team_archived"
+	// ReasonSensitivityExceedsGateway: the server's sensitivity is above the
+	// gateway's ceiling (max_sensitivity; decision 88). Raising the ceiling, or
+	// lowering the server's label, restores it.
+	ReasonSensitivityExceedsGateway = "sensitivity_exceeds_gateway"
+	// ReasonSunset: the server is retired: its lifecycle is sunset, or its
+	// sunset date has passed. It stops being served at that moment.
+	ReasonSunset = "sunset"
 )
 
 // Option sources.
@@ -74,10 +81,18 @@ type Archived struct {
 
 // Availability says whether a gateway serves a selected capability now,
 // and why not: it must be listed, of a selectable kind, neither the server's
-// team nor a team gateway's own team archived, its server enabled, and
-// either a server of the team gateway's own team, or published with the
-// current definition approved. GatewayStats (SQL) mirrors this rule.
+// team nor a team gateway's own team archived, its server enabled and not
+// sunset (its lifecycle, or a sunset date that has passed), the server's
+// sensitivity within the gateway's ceiling, and either a server of the team
+// gateway's own team, or published with the current definition approved.
+// GatewayStats (SQL) and the approval check (ApprovalRequesterLive) mirror this
+// rule; it reads the clock for the sunset date (AvailabilityAt takes it).
 func Availability(g dbgen.Gateway, c dbgen.McpCapability, s dbgen.McpServer, archived Archived) (bool, string) {
+	return AvailabilityAt(g, c, s, archived, time.Now())
+}
+
+// AvailabilityAt is Availability at a given time.
+func AvailabilityAt(g dbgen.Gateway, c dbgen.McpCapability, s dbgen.McpServer, archived Archived, now time.Time) (bool, string) {
 	switch {
 	case c.GoneAt != nil || !Selectable(c.Kind):
 		return false, ReasonGone
@@ -85,6 +100,10 @@ func Availability(g dbgen.Gateway, c dbgen.McpCapability, s dbgen.McpServer, arc
 		return false, ReasonTeamArchived
 	case !s.Enabled:
 		return false, ReasonServerDisabled
+	case registry.SunsetReached(s, now):
+		return false, ReasonSunset
+	case registry.ExceedsCeiling(s.Sensitivity, g.MaxSensitivity):
+		return false, ReasonSensitivityExceedsGateway
 	case g.OwnerKind == OwnerTeam && g.TeamID.Valid && s.TeamID == g.TeamID.UUID:
 		return true, ""
 	case s.PublishState != registry.StatePublished:

@@ -16,6 +16,7 @@ import { DescriptionList } from "@/components/ui/description-list/description-li
 import { Time } from "@/components/ui/time/time";
 import s from "../../pages/shared.module.css";
 import { PublishStateBadge } from "./badges";
+import { RetirementBanner } from "./governance-card";
 import { type McpServer, policyHelp, policyLabels, publishStateText } from "./labels";
 import { approveBlocked, PublishDialog, publishBlocked, ReviewDialog, type ReviewDecision, UnpublishDialog } from "./publish-dialogs";
 import { type ServerAbilities, type ServerScope, teamPublishingQuery } from "./scope";
@@ -30,6 +31,7 @@ export function ServerNotices({ server, scope }: { server: McpServer; scope: Ser
       : "a platform admin approves the change";
   return (
     <>
+      <RetirementBanner server={server} />
       {server.publishState === "rejected" && (
         <Alert tone="danger" title="Rejected for the catalog">
           {server.publishReviewedByName ?? "A platform admin"}

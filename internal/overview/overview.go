@@ -41,6 +41,9 @@ const (
 	RateLimited                = "rate_limited"
 	NotificationFailures       = "notification_failures"
 	ServerCertExpiring         = "server_certificate_expiring"
+	ReviewDue                  = "review_due"
+	ServerOwnerless            = "server_ownerless"
+	ServerTransferPending      = "server_transfer_pending"
 )
 
 // Severities.
@@ -343,6 +346,40 @@ func (s *Service) serverKinds(ctx context.Context, c *collector, team uuid.NullU
 			Link: &Link{Type: LinkServer, ID: r.ID.String(), TeamSlug: r.TeamSlug}})
 	}
 	c.add(ServerCertExpiring, total, len(items), items...)
+
+	// Governance (decision 88): published servers whose re-review is overdue,
+	// and ones nobody is accountable for.
+	due, err := s.q.AttentionReviewDue(ctx, dbgen.AttentionReviewDueParams{Now: c.now, TeamID: team, PageSize: PerKind})
+	if err != nil {
+		return err
+	}
+	items, total = nil, 0
+	for _, r := range due {
+		total = r.Total
+		at := *r.ReviewDueAt
+		items = append(items, Item{Kind: ReviewDue, Severity: Warning, At: &at,
+			Summary: fmt.Sprintf("The review of %s (%s) has been overdue for %s", r.Name, r.TeamName, since(c.now, at)),
+			Subject: &Subject{ID: r.ID.String(), Name: r.Name, Slug: r.Slug}, Team: teamRef(r.TeamID, r.TeamSlug, r.TeamName),
+			Link: &Link{Type: LinkServer, ID: r.ID.String(), TeamSlug: r.TeamSlug}})
+	}
+	c.add(ReviewDue, total, len(items), items...)
+
+	ownerless, err := s.q.AttentionOwnerlessServers(ctx, dbgen.AttentionOwnerlessServersParams{TeamID: team, PageSize: PerKind})
+	if err != nil {
+		return err
+	}
+	items, total = nil, 0
+	for _, r := range ownerless {
+		total = r.Total
+		why := "has no owner"
+		if r.OwnerLeft {
+			why = "has no accountable owner any more"
+		}
+		items = append(items, Item{Kind: ServerOwnerless, Severity: Warning, Summary: fmt.Sprintf("%s (%s) %s", r.Name, r.TeamName, why),
+			Subject: &Subject{ID: r.ID.String(), Name: r.Name, Slug: r.Slug}, Team: teamRef(r.TeamID, r.TeamSlug, r.TeamName),
+			Link: &Link{Type: LinkServer, ID: r.ID.String(), TeamSlug: r.TeamSlug}})
+	}
+	c.add(ServerOwnerless, total, len(items), items...)
 	return nil
 }
 
@@ -562,6 +599,18 @@ func (s *Service) Team(ctx context.Context, a authz.Actor, ref string) (Team, er
 		if c.items[i].Kind == ReviewPending {
 			c.items[i].Link = &Link{Type: LinkServers, TeamSlug: t.Slug}
 			c.items[i].Team = teamRef(t.ID, t.Slug, t.Name)
+		}
+	}
+	if authz.RoleAtLeast(role, authz.RoleOwner) && !a.IsToken() {
+		// Only an owner can accept a transfer, so only an owner is asked to.
+		tr, err := s.q.AttentionPendingTransfers(ctx, t.ID)
+		if err != nil {
+			return out, err
+		}
+		if tr.Pending > 0 {
+			c.add(ServerTransferPending, tr.Pending, 1, Item{Kind: ServerTransferPending, Severity: Info, Count: i64(tr.Pending), At: realTime(tr.Oldest),
+				Summary: fmt.Sprintf("%s waiting for your team's owners to accept", plural(tr.Pending, "server transfer is", "server transfers are")),
+				Team:    teamRef(t.ID, t.Slug, t.Name), Link: &Link{Type: LinkServers, TeamSlug: t.Slug}})
 		}
 	}
 	if a.CanReadPlatform() || authz.RoleAtLeast(role, authz.RoleAdmin) {

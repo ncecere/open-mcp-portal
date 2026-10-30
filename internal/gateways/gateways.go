@@ -227,6 +227,8 @@ type CreateInput struct {
 	// own limit per minute (nil: inherit).
 	CapturePayloads bool
 	RateLimit       *int64
+	// MaxSensitivity is the gateway's ceiling (nil: restricted, no ceiling).
+	MaxSensitivity *string
 }
 
 // UpdateInput holds optional changes; the slug never changes.
@@ -238,6 +240,32 @@ type UpdateInput struct {
 	// inherit); false keeps it.
 	SetRateLimit bool
 	RateLimit    *int64
+	// MaxSensitivity changes the ceiling (nil keeps it).
+	MaxSensitivity *string
+}
+
+var (
+	errInvalidCeiling = apperr.Invalid("invalid_max_sensitivity", "maxSensitivity must be public, internal, confidential or restricted")
+	errCeilingToken   = func() *apperr.Error {
+		e := apperr.New(http.StatusForbidden, "token_not_allowed", "An automation token can't change maxSensitivity of a gateway: sign in to do it")
+		e.Details = map[string]any{"field": "maxSensitivity"}
+		return e
+	}()
+)
+
+// checkCeiling validates a gateway ceiling. A ceiling decides which servers a
+// gateway may serve, so no automation token sets or changes one.
+func checkCeiling(a authz.Actor, v *string) error {
+	if v == nil {
+		return nil
+	}
+	if a.IsToken() {
+		return errCeilingToken
+	}
+	if !registry.ValidSensitivity(*v) {
+		return errInvalidCeiling
+	}
+	return nil
 }
 
 func checkFields(name, description string) error {
@@ -253,7 +281,7 @@ func checkFields(name, description string) error {
 // snapshot is a gateway's audited configuration.
 func snapshot(g dbgen.Gateway) map[string]any {
 	return map[string]any{"slug": g.Slug, "name": g.Name, "description": g.Description, "ownerKind": g.OwnerKind, "enabled": g.Enabled,
-		"capturePayloads": g.CapturePayloads, "rateLimitPerMinute": g.RateLimitPerMinute}
+		"capturePayloads": g.CapturePayloads, "rateLimitPerMinute": g.RateLimitPerMinute, "maxSensitivity": g.MaxSensitivity}
 }
 
 // checkLimit refuses a gateway limit above the ceiling (422 invalid_limit).
@@ -284,9 +312,16 @@ func (s *Service) create(ctx context.Context, q *dbgen.Queries, a authz.Actor, k
 	if err := s.checkLimit(ctx, q, in.RateLimit); err != nil {
 		return uuid.Nil, err
 	}
+	if err := checkCeiling(a, in.MaxSensitivity); err != nil {
+		return uuid.Nil, err
+	}
+	ceiling := registry.SensitivityRestricted
+	if in.MaxSensitivity != nil {
+		ceiling = *in.MaxSensitivity
+	}
 	g, err := q.InsertGateway(ctx, dbgen.InsertGatewayParams{
 		ID: uuid.New(), Slug: in.Slug, Name: in.Name, Description: in.Description, OwnerKind: kind, TeamID: teamID,
-		Enabled: in.Enabled, CapturePayloads: in.CapturePayloads, RateLimitPerMinute: in.RateLimit, CreatedBy: by(a),
+		Enabled: in.Enabled, CapturePayloads: in.CapturePayloads, RateLimitPerMinute: in.RateLimit, CreatedBy: by(a), MaxSensitivity: ceiling,
 	})
 	if apperr.IsUniqueViolation(err, "gateways_slug_key") {
 		return uuid.Nil, errSlugTaken
@@ -303,8 +338,14 @@ func (s *Service) update(ctx context.Context, q *dbgen.Queries, a authz.Actor, c
 	if cur.Revision != expectedRevision {
 		return apperr.Stale()
 	}
+	if err := checkCeiling(a, in.MaxSensitivity); err != nil {
+		return err
+	}
 	p := dbgen.UpdateGatewayParams{ID: cur.ID, Name: cur.Name, Description: cur.Description, Enabled: cur.Enabled,
-		CapturePayloads: cur.CapturePayloads, RateLimitPerMinute: cur.RateLimitPerMinute, UpdatedBy: by(a)}
+		CapturePayloads: cur.CapturePayloads, RateLimitPerMinute: cur.RateLimitPerMinute, UpdatedBy: by(a), MaxSensitivity: cur.MaxSensitivity}
+	if in.MaxSensitivity != nil {
+		p.MaxSensitivity = *in.MaxSensitivity
+	}
 	if in.CapturePayloads != nil {
 		p.CapturePayloads = *in.CapturePayloads
 	}

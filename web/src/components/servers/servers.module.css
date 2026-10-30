@@ -223,3 +223,10 @@
   list-style: none;
   font-size: var(--font-size-sm);
 }
+
+/* Fields side by side where there is room (the review intervals). */
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-4);
+}

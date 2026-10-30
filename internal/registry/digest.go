@@ -24,10 +24,14 @@ import (
 // requirement and every listed capability's kind, name, fingerprint and owner-set
 // tool class, sorted. Changes invalidate an earlier review. Retired platform
 // presence settings are deliberately absent; v5 forces pending reviews to reload.
+// v6 adds the server's sensitivity and lifecycle (decision 88): what a reviewer
+// approves includes how sensitive it is and whether it is being retired, so a
+// change of either stales an earlier look. Owner, on-call contact and dates are
+// bookkeeping and stay out.
 
 // digestVersion is hashed first so a future change of what is covered can't
 // collide with this one.
-const digestVersion = "omp-review-v5"
+const digestVersion = "omp-review-v6"
 
 // CapabilityRef is one listed capability as the digest covers it. ToolClass
 // is the owner-set class, nil when unclassified; only tools contribute it.
@@ -69,6 +73,7 @@ func reviewDigest(sv dbgen.McpServer, caps []CapabilityRef, machine *MachineOAut
 	put(digestVersion)
 	put(sv.URL)
 	put(AuthModeOf(sv))
+	put("governance:" + sv.Sensitivity + ":" + sv.Lifecycle)
 	// The kind and name of every part of the server's own credential, sorted,
 	// so adding one (a tenant header, a query key) shows to the reviewer and
 	// moving a header between the legacy columns and the table does not.

@@ -24,13 +24,21 @@ func (a *api) toAPIGateway(v gateways.View, effective *int64) apitypes.Gateway {
 		Id: g.ID, Slug: g.Slug, Name: g.Name, Description: g.Description, OwnerKind: apitypes.GatewayOwnerKind(g.OwnerKind),
 		Enabled: g.Enabled, Url: a.Gateways.URL(g.Slug), CapabilityCount: v.CapabilityCount, UnavailableCount: v.UnavailableCount,
 		GrantCount: v.GrantCount, Revision: g.Revision, CreatedAt: g.CreatedAt, UpdatedAt: g.UpdatedAt,
-		CapturePayloads: &capture, RateLimitPerMinute: g.RateLimitPerMinute, EffectiveRateLimitPerMinute: effective, AccessRequestsEnabled: &g.AccessRequestsEnabled,
+		CapturePayloads: &capture, MaxSensitivity: sensitivityPtr(g.MaxSensitivity), RateLimitPerMinute: g.RateLimitPerMinute, EffectiveRateLimitPerMinute: effective, AccessRequestsEnabled: &g.AccessRequestsEnabled,
 	}
 	if g.TeamID.Valid {
 		id := g.TeamID.UUID
 		out.TeamId, out.TeamSlug, out.TeamName = &id, nonEmpty(v.TeamSlug), nonEmpty(v.TeamName)
 	}
 	return out
+}
+
+func sensitivityPtr(s string) *apitypes.Sensitivity {
+	if s == "" {
+		return nil
+	}
+	v := apitypes.Sensitivity(s)
+	return &v
 }
 
 func toAPIGatewayCapability(s gateways.Selected) apitypes.GatewayCapability {

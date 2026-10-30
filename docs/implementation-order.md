@@ -7,6 +7,10 @@ numbers and file paths are suggestions, not instructions to overwrite existing c
 
 ## Current batch
 
+**In development (unreleased, on `feature/server-governance`):** #40 server governance, decision 88, expand-only
+migration `00049`: owner, on-call contact, sensitivity and lifecycle on servers, a gateway ceiling, re-review
+intervals and the leader-elected `omp.governance` loop, transfers between teams. See [registry](registry.md#governance).
+
 **Shipped in v0.3.3:** #28 owner-set tool classification (migration `00027`) and #37 browser sessions
 (migration `00028`, idle expiry off by default). Both issues are closed. See [classification](tool-classification.md),
 [browser sessions](phase4-client-auth.md#browser-sessions-37-decision-76) and [validation](status.md).

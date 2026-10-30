@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { api, ifMatch, type Schemas, unwrap } from "@/api/client";
+import { GovernanceSettingsCard, governanceSettingsKey } from "@/components/servers/governance-settings";
 import { type PublishPolicy, policyHelp, policyLabels } from "@/components/servers/labels";
 import { PageSkeleton } from "@/components/page-skeleton";
 import { useRevisionForm } from "@/components/templates/revision-form";
@@ -31,6 +32,8 @@ export const policyOptions = (who = "the team's") =>
 
 export function AdminPublishingPage() {
   const settings = useQuery({ queryKey: publishingKey, queryFn: async () => unwrap(await api.GET("/v1/admin/settings/publishing")) });
+  const governance = useQuery({ queryKey: governanceSettingsKey, queryFn: async () => unwrap(await api.GET("/v1/admin/settings/governance")) });
+  const isAdmin = useIsPlatformAdmin();
   return (
     <Stack gap={6} className={s.page}>
       <PageHeader title={terms.publishing} description="How teams' MCP servers reach the company catalog. Team-private servers never need approval for the team's own use." />
@@ -40,6 +43,11 @@ export function AdminPublishingPage() {
         <PublishingForm saved={settings.data} />
       ) : (
         <ErrorAlert error={settings.error} title="Couldn't load the publishing settings" onRetry={() => void settings.refetch()} />
+      )}
+      {governance.data ? (
+        <GovernanceSettingsCard key={governance.data.revision} saved={governance.data} canEdit={isAdmin} />
+      ) : (
+        governance.error && <ErrorAlert error={governance.error} title="Couldn't load the review settings" onRetry={() => void governance.refetch()} />
       )}
     </Stack>
   );

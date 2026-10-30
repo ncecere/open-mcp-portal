@@ -44,7 +44,12 @@ export const linkTargets: Record<LinkType, Resolver> = {
     route: "/approvals/$approvalId",
     element: ({ id }) => id ? <Link to="/approvals/$approvalId" params={{ approvalId: id }} /> : null,
   },
-  gateways: { route: "/admin/gateways", element: () => <Link to="/admin/gateways" /> },
+  gateways: {
+    route: "/admin/gateways",
+    // A team's own gateways when a team is named (a governance notice for a team gateway), else Admin's.
+    element: ({ teamSlug }, viewer) =>
+      teamSlug && viewer.teams.some((t) => t.slug === teamSlug) ? <Link to="/teams/$team/gateways" params={{ team: teamSlug }} /> : <Link to="/admin/gateways" />,
+  },
   access_requests: { route: "/access-requests", element: () => <Link to="/access-requests" /> },
   access_request: { route: "/access-requests/$requestId", element: ({ id }) => id ? <Link to="/access-requests/$requestId" params={{ requestId: id }} /> : null },
   service_account: {

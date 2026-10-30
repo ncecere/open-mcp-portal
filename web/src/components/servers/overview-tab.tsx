@@ -22,6 +22,7 @@ import { toast } from "@/components/ui/toast/toast";
 import s from "../../pages/shared.module.css";
 import { EnabledBadge, HealthBadge } from "./badges";
 import { CatalogCard } from "./catalog-card";
+import { GovernanceCard } from "./governance-card";
 import { PersonSecretCard } from "./person-secret-card";
 import { ProtocolText } from "./protocol";
 import { RequirementCard } from "./requirement-card";
@@ -72,6 +73,7 @@ export function OverviewTab({ server, scope, abilities }: Props) {
       <PersonSecretCard server={server} scope={scope} abilities={abilities} />
       <MachineCard server={server} />
       {!["oauth", "person_secret", "machine_oauth"].includes(authModeOf(server)) && <RequirementCard server={server} scope={scope} />}
+      <GovernanceCard server={server} scope={scope} abilities={abilities} />
       <CatalogCard server={server} scope={scope} abilities={abilities} />
     </>
   );

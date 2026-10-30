@@ -164,3 +164,38 @@ WHERE c.client_not_after IS NOT NULL AND c.client_not_after <= now() + interval 
   AND (sqlc.narg(team_id)::uuid IS NULL OR s.team_id = sqlc.narg(team_id)::uuid)
 ORDER BY c.client_not_after, s.name, s.id
 LIMIT @page_size;
+
+-- name: AttentionReviewDue :many
+-- Published servers of active teams whose re-review is due (decision 88); at
+-- is the due date. team_id narrows to one team's.
+SELECT s.id, s.slug, s.name, t.id AS team_id, t.slug AS team_slug, t.name AS team_name, s.review_due_at,
+       (count(*) OVER ())::bigint AS total
+FROM mcp_servers s
+JOIN teams t ON t.id = s.team_id AND t.status = 'active'
+WHERE s.publish_state = 'published' AND s.review_due_at IS NOT NULL AND s.review_due_at <= @now::timestamptz
+  AND (sqlc.narg(team_id)::uuid IS NULL OR s.team_id = sqlc.narg(team_id)::uuid)
+ORDER BY s.review_due_at, s.name, s.id
+LIMIT @page_size;
+
+-- name: AttentionOwnerlessServers :many
+-- Published servers of active teams nobody is accountable for: no owner is
+-- named, or the owner is no longer an active editor or above of the team (they
+-- left it, lost their role, were suspended or deleted).
+SELECT s.id, s.slug, s.name, t.id AS team_id, t.slug AS team_slug, t.name AS team_name, (s.owner_user_id IS NOT NULL)::boolean AS owner_left,
+       (count(*) OVER ())::bigint AS total
+FROM mcp_servers s
+JOIN teams t ON t.id = s.team_id AND t.status = 'active'
+WHERE s.publish_state = 'published'
+  AND NOT EXISTS (SELECT 1 FROM users u
+                  JOIN team_members m ON m.user_id = u.id AND m.team_id = s.team_id AND m.role IN ('owner', 'admin', 'editor')
+                  WHERE u.id = s.owner_user_id AND u.status = 'active')
+  AND (sqlc.narg(team_id)::uuid IS NULL OR s.team_id = sqlc.narg(team_id)::uuid)
+ORDER BY (s.owner_user_id IS NULL), s.name, s.id
+LIMIT @page_size;
+
+-- name: AttentionPendingTransfers :one
+-- Transfers waiting for a team's owners to accept, and the oldest request.
+SELECT count(*)::bigint AS pending, COALESCE(min(t.requested_at), 'epoch'::timestamptz)::timestamptz AS oldest
+FROM server_transfers t
+JOIN mcp_servers s ON s.id = t.server_id
+WHERE t.state = 'pending' AND t.to_team_id = @team_id;

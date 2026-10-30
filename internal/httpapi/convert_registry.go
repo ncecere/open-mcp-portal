@@ -68,8 +68,8 @@ func (a *api) toAPIServer(v registry.ServerView) apitypes.McpServer {
 		RefreshedAt: s.RefreshedAt, LastRefreshError: s.LastRefreshError,
 		Requirement: toAPIServerRequirement(v.Requirement), CapturePayloads: &s.CapturePayloads,
 		AuthMode: authModePtr(s), Oauth: a.toAPIServerOAuth(v), PersonSecret: toAPIPersonSecretSettings(v.PersonSecret), MachineOAuth: toAPIMachineOAuth(v), SendIdentity: &s.SendIdentity, Protocol: toAPIProtocol(s), ReviewDigest: nonEmpty(v.ReviewDigest),
-		SupportsTasks: &s.SupportsTasks,
-		Revision:      s.Revision, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
+		SupportsTasks: &s.SupportsTasks, Governance: toAPIGovernance(v),
+		Revision: s.Revision, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
 	}
 }
 
@@ -252,7 +252,7 @@ func toAPICatalogServer(v registry.ServerView) apitypes.CatalogServer {
 	s := v.Server
 	out := apitypes.CatalogServer{Id: s.ID, Slug: s.Slug, Name: s.Name, Description: s.Description,
 		TeamSlug: v.TeamSlug, TeamName: v.TeamName, Counts: toAPICounts(v.Approved), Health: toAPIHealth(v.Health, false),
-		CapturePayloads: &s.CapturePayloads, AuthMode: authModePtr(s)}
+		CapturePayloads: &s.CapturePayloads, AuthMode: authModePtr(s), Governance: toAPICatalogGovernance(v)}
 	if s.PublishedAt != nil {
 		out.PublishedAt = *s.PublishedAt
 	}

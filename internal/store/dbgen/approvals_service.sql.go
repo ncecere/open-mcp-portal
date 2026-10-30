@@ -248,6 +248,9 @@ SELECT (EXISTS (
  LEFT JOIN teams gt ON gt.id = g.team_id
  WHERE g.id = $1 AND c.id = $2 AND s.id = $3
    AND g.enabled AND s.enabled AND st.status = 'active' AND COALESCE(gt.status,'active') = 'active'
+   AND NOT (s.lifecycle = 'sunset' OR (s.sunset_at IS NOT NULL AND s.sunset_at <= clock_timestamp()))
+   AND (CASE s.sensitivity WHEN 'public' THEN 0 WHEN 'internal' THEN 1 WHEN 'confidential' THEN 2 ELSE 3 END)
+       <= (CASE g.max_sensitivity WHEN 'public' THEN 0 WHEN 'internal' THEN 1 WHEN 'confidential' THEN 2 ELSE 3 END)
    AND c.gone_at IS NULL AND c.kind = 'tool' AND c.fingerprint = $4
    AND ((g.owner_kind = 'team' AND g.team_id = s.team_id)
         OR (s.publish_state = 'published' AND c.approved_fingerprint = c.fingerprint))

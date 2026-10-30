@@ -14,6 +14,7 @@ import { teamServersKey } from "../../../api/queries";
 import { AddServerForm } from "../../../components/servers/add-server-form";
 import { type McpServer, publishStateLabels } from "../../../components/servers/labels";
 import { PublishDialog, publishBlocked, UnpublishDialog } from "../../../components/servers/publish-dialogs";
+import { TransfersCard } from "../../../components/servers/transfers-card";
 import { serverColumns } from "../../../components/servers/server-columns";
 import { useFormParam } from "../../../components/templates/form-page";
 import { ListPage, useListFilters } from "../../../components/templates/list-page";
@@ -43,7 +44,7 @@ const facets: Facet<McpServer>[] = [
 ];
 
 export function TeamServersPage() {
-  const { slug, team, canEdit, isManager, archived } = useTeam();
+  const { slug, team, role, canEdit, isManager, archived } = useTeam();
   const form = useFormParam();
   const [dialog, setDialog] = useState<{ server: McpServer; kind: "publish" | "unpublish" } | null>(null);
   const manage = isManager && !archived;
@@ -75,6 +76,7 @@ export function TeamServersPage() {
           <>
             <ArchivedNotice />
             <ReadOnlyNotice what="the team's servers" change="add and change them" />
+            <TransfersCard team={slug} owner={role === "owner" && !archived} manager={isManager} />
           </>
         }
         caption={terms.mcpServers}

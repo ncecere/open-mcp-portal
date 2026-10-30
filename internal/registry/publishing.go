@@ -160,6 +160,10 @@ func (s *Service) Publish(ctx context.Context, a authz.Actor, ref string, id uui
 			return err
 		}
 		policy := authz.EffectivePolicy(ta.team.PublishPolicyOverride, def)
+		if ReviewOverdue(cur, s.clock()) {
+			// A published server whose re-review is due: publishing asks again.
+			return s.requestRereview(ctx, q, a, ta.team, cur, policy, note, expectedDigest)
+		}
 		next, approveAll, err := PublishTransition(cur.PublishState, policy)
 		if err != nil {
 			return err
@@ -271,6 +275,15 @@ func (s *Service) Review(ctx context.Context, a authz.Actor, id uuid.UUID, decis
 			return err
 		}
 		next, approveAll, err := ReviewTransition(cur.PublishState, decision)
+		if decision == DecisionApprove && cur.PublishState == StatePublished && ReviewOverdue(cur, s.clock()) {
+			// Re-review: a platform admin confirms a published server whose
+			// review is due, bound to what they read like any approval; changed
+			// capabilities still wait for their own approval.
+			next, approveAll, err = StatePublished, false, nil
+			if err := checkDigest(ctx, q, cur, expectedDigest); err != nil {
+				return err
+			}
+		}
 		if err != nil {
 			return err
 		}
@@ -305,6 +318,9 @@ func (s *Service) Review(ctx context.Context, a authz.Actor, id uuid.UUID, decis
 		e.Metadata = map[string]any{"name": cur.Name, "decision": decision, "approvedCapabilities": approved, "note": deref(note)}
 		if approveAll {
 			e.Metadata["reviewDigest"] = expectedDigest
+		}
+		if cur.PublishState == StatePublished && next == StatePublished {
+			e.Metadata["rereview"] = true
 		}
 		return audit.Record(ctx, q, e)
 	})

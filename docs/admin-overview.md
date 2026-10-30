@@ -34,6 +34,9 @@ Computed per request, `Cache-Control: no-store`; each kind is one indexed query 
 | `gateways_disabled` | one item: switched-off gateways (platform gateways, and team gateways of active teams) | none | none | info | `gateways` |
 | `rate_limited` | one item when the last 24 h had calls refused by a rate limit (from the usage rollups) | none | none | info | `usage` |
 | `server_certificate_expiring` | one per published, enabled server of an active team whose mTLS client certificate has expired or expires within **14 days** (decision 74) | one per enabled server of the team, any publish state | the certificate's expiry | info; warning within 3 days; critical once expired | `server` |
+| `review_due` | one per **published** server of an active team whose `review_due_at` has passed (decision 88) | same for the team's published servers | the due date | warning | `server` |
+| `server_ownerless` | one per **published** server of an active team with no accountable owner: none named, or the owner left the team, lost the editor role, was suspended or deleted | same for the team | none | warning | `server` |
+| `server_transfer_pending` | none | one item, `count` = servers other teams offered this team that wait for its owners to accept; **owners only** | the oldest request | info | `servers` |
 | `notification_failures` | one item: failing webhook destinations (stopped automatically, or 3+ failures in a row; platform and team) plus 1 if email had a failed delivery in the last 24 h | one item: the team's failing destinations; owners and admins only | the latest failure | warning | `notification_settings` / `team_notification_settings` |
 
 `last24h` sums the hourly rollups (`usage_hourly`) of the 24 buckets ending with the current hour, so it lags the call log by the rollup's few minutes (`rolledUpTo`).

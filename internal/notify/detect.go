@@ -153,6 +153,9 @@ func (s *Service) actorName(ctx context.Context, q *dbgen.Queries, a authz.Actor
 	if a.IsToken() {
 		return "automation_token", a.TokenName
 	}
+	if a.UserID == uuid.Nil {
+		return "system", "The portal" // the governance loop (an overdue re-review)
+	}
 	if n, err := q.GetNotificationActorName(ctx, a.UserID); err == nil {
 		return "user", n
 	}

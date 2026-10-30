@@ -296,12 +296,17 @@ func (s *Service) subject(title string) string { return "[" + s.cfg.InstanceName
 // active and their address verified (else the row is skipped). The address
 // is read from the profile now, never copied.
 func (s *Service) deliverEmail(ctx context.Context, row dbgen.NotificationOutbox, ev dbgen.NotificationEvent, msg Message) result {
-	if isApprovalEvent(ev.Event) || isAccessEvent(ev.Event) {
+	if isApprovalEvent(ev.Event) || isAccessEvent(ev.Event) || isGovernanceEvent(ev.Event) {
 		// Approval metadata stays private even if eligibility changes while an
 		// email waits in the outbox. Recheck without opening a fenced service tx.
+		// A governance notice names a server and a gateway: a person who left the
+		// team's owners or admins meanwhile does not get it.
 		resolve := s.approvalRecipients
 		if isAccessEvent(ev.Event) {
 			resolve = s.accessRecipients
+		}
+		if isGovernanceEvent(ev.Event) {
+			resolve = s.governanceRecipients
 		}
 		rs, err := resolve(ctx, s.q, ev)
 		if err != nil {

@@ -205,9 +205,12 @@ const (
 	AttentionKindNotificationFailures       AttentionKind = "notification_failures"
 	AttentionKindPersonalKeysExpiring       AttentionKind = "personal_keys_expiring"
 	AttentionKindRateLimited                AttentionKind = "rate_limited"
+	AttentionKindReviewDue                  AttentionKind = "review_due"
 	AttentionKindReviewPending              AttentionKind = "review_pending"
 	AttentionKindServerCertificateExpiring  AttentionKind = "server_certificate_expiring"
 	AttentionKindServerFailing              AttentionKind = "server_failing"
+	AttentionKindServerOwnerless            AttentionKind = "server_ownerless"
+	AttentionKindServerTransferPending      AttentionKind = "server_transfer_pending"
 	AttentionKindServiceAccountKeysExpiring AttentionKind = "service_account_keys_expiring"
 	AttentionKindUpstreamSigninLapsed       AttentionKind = "upstream_signin_lapsed"
 )
@@ -233,11 +236,17 @@ func (e AttentionKind) Valid() bool {
 		return true
 	case AttentionKindRateLimited:
 		return true
+	case AttentionKindReviewDue:
+		return true
 	case AttentionKindReviewPending:
 		return true
 	case AttentionKindServerCertificateExpiring:
 		return true
 	case AttentionKindServerFailing:
+		return true
+	case AttentionKindServerOwnerless:
+		return true
+	case AttentionKindServerTransferPending:
 		return true
 	case AttentionKindServiceAccountKeysExpiring:
 		return true
@@ -376,16 +385,16 @@ func (e AuthProviderScopeSeparator) Valid() bool {
 
 // Defines values for AuthProviderAccessMode.
 const (
-	Open       AuthProviderAccessMode = "open"
-	Restricted AuthProviderAccessMode = "restricted"
+	AuthProviderAccessModeOpen       AuthProviderAccessMode = "open"
+	AuthProviderAccessModeRestricted AuthProviderAccessMode = "restricted"
 )
 
 // Valid indicates whether the value is a known member of the AuthProviderAccessMode enum.
 func (e AuthProviderAccessMode) Valid() bool {
 	switch e {
-	case Open:
+	case AuthProviderAccessModeOpen:
 		return true
-	case Restricted:
+	case AuthProviderAccessModeRestricted:
 		return true
 	default:
 		return false
@@ -1015,13 +1024,15 @@ func (e GatewayOwnerKind) Valid() bool {
 
 // Defines values for GatewayUnavailableReason.
 const (
-	GatewayUnavailableReasonChanged        GatewayUnavailableReason = "changed"
-	GatewayUnavailableReasonCurationStale  GatewayUnavailableReason = "curation_stale"
-	GatewayUnavailableReasonGone           GatewayUnavailableReason = "gone"
-	GatewayUnavailableReasonNotApproved    GatewayUnavailableReason = "not_approved"
-	GatewayUnavailableReasonNotPublished   GatewayUnavailableReason = "not_published"
-	GatewayUnavailableReasonServerDisabled GatewayUnavailableReason = "server_disabled"
-	GatewayUnavailableReasonTeamArchived   GatewayUnavailableReason = "team_archived"
+	GatewayUnavailableReasonChanged                   GatewayUnavailableReason = "changed"
+	GatewayUnavailableReasonCurationStale             GatewayUnavailableReason = "curation_stale"
+	GatewayUnavailableReasonGone                      GatewayUnavailableReason = "gone"
+	GatewayUnavailableReasonNotApproved               GatewayUnavailableReason = "not_approved"
+	GatewayUnavailableReasonNotPublished              GatewayUnavailableReason = "not_published"
+	GatewayUnavailableReasonSensitivityExceedsGateway GatewayUnavailableReason = "sensitivity_exceeds_gateway"
+	GatewayUnavailableReasonServerDisabled            GatewayUnavailableReason = "server_disabled"
+	GatewayUnavailableReasonSunset                    GatewayUnavailableReason = "sunset"
+	GatewayUnavailableReasonTeamArchived              GatewayUnavailableReason = "team_archived"
 )
 
 // Valid indicates whether the value is a known member of the GatewayUnavailableReason enum.
@@ -1037,7 +1048,11 @@ func (e GatewayUnavailableReason) Valid() bool {
 		return true
 	case GatewayUnavailableReasonNotPublished:
 		return true
+	case GatewayUnavailableReasonSensitivityExceedsGateway:
+		return true
 	case GatewayUnavailableReasonServerDisabled:
+		return true
+	case GatewayUnavailableReasonSunset:
 		return true
 	case GatewayUnavailableReasonTeamArchived:
 		return true
@@ -1873,7 +1888,10 @@ const (
 	NotificationEventTypeKeyExpiring              NotificationEventType = "key.expiring"
 	NotificationEventTypePublishDecided           NotificationEventType = "publish.decided"
 	NotificationEventTypePublishRequested         NotificationEventType = "publish.requested"
+	NotificationEventTypeServerDeprecated         NotificationEventType = "server.deprecated"
 	NotificationEventTypeServerRecovered          NotificationEventType = "server.recovered"
+	NotificationEventTypeServerReviewDue          NotificationEventType = "server.review_due"
+	NotificationEventTypeServerSunsetSoon         NotificationEventType = "server.sunset_soon"
 	NotificationEventTypeServerUnhealthy          NotificationEventType = "server.unhealthy"
 	NotificationEventTypeUpstreamSigninLapsed     NotificationEventType = "upstream_signin.lapsed"
 )
@@ -1899,7 +1917,13 @@ func (e NotificationEventType) Valid() bool {
 		return true
 	case NotificationEventTypePublishRequested:
 		return true
+	case NotificationEventTypeServerDeprecated:
+		return true
 	case NotificationEventTypeServerRecovered:
+		return true
+	case NotificationEventTypeServerReviewDue:
+		return true
+	case NotificationEventTypeServerSunsetSoon:
 		return true
 	case NotificationEventTypeServerUnhealthy:
 		return true
@@ -1939,7 +1963,10 @@ const (
 	NotificationPayloadTypeKeyExpiring              NotificationPayloadType = "key.expiring"
 	NotificationPayloadTypePublishDecided           NotificationPayloadType = "publish.decided"
 	NotificationPayloadTypePublishRequested         NotificationPayloadType = "publish.requested"
+	NotificationPayloadTypeServerDeprecated         NotificationPayloadType = "server.deprecated"
 	NotificationPayloadTypeServerRecovered          NotificationPayloadType = "server.recovered"
+	NotificationPayloadTypeServerReviewDue          NotificationPayloadType = "server.review_due"
+	NotificationPayloadTypeServerSunsetSoon         NotificationPayloadType = "server.sunset_soon"
 	NotificationPayloadTypeServerUnhealthy          NotificationPayloadType = "server.unhealthy"
 	NotificationPayloadTypeTest                     NotificationPayloadType = "test"
 	NotificationPayloadTypeUpstreamSigninLapsed     NotificationPayloadType = "upstream_signin.lapsed"
@@ -1966,7 +1993,13 @@ func (e NotificationPayloadType) Valid() bool {
 		return true
 	case NotificationPayloadTypePublishRequested:
 		return true
+	case NotificationPayloadTypeServerDeprecated:
+		return true
 	case NotificationPayloadTypeServerRecovered:
+		return true
+	case NotificationPayloadTypeServerReviewDue:
+		return true
+	case NotificationPayloadTypeServerSunsetSoon:
 		return true
 	case NotificationPayloadTypeServerUnhealthy:
 		return true
@@ -2153,6 +2186,9 @@ const (
 	PublishRequestedDataReasonEndpointsChanged      PublishRequestedDataReason = "endpoints_changed"
 	PublishRequestedDataReasonNew                   PublishRequestedDataReason = "new"
 	PublishRequestedDataReasonRequirementChanged    PublishRequestedDataReason = "requirement_changed"
+	PublishRequestedDataReasonReviewDue             PublishRequestedDataReason = "review_due"
+	PublishRequestedDataReasonSensitivityRaised     PublishRequestedDataReason = "sensitivity_raised"
+	PublishRequestedDataReasonTransferred           PublishRequestedDataReason = "transferred"
 	PublishRequestedDataReasonUpstreamAuthChanged   PublishRequestedDataReason = "upstream_auth_changed"
 	PublishRequestedDataReasonUpstreamTlsChanged    PublishRequestedDataReason = "upstream_tls_changed"
 	PublishRequestedDataReasonUrlChanged            PublishRequestedDataReason = "url_changed"
@@ -2169,6 +2205,12 @@ func (e PublishRequestedDataReason) Valid() bool {
 		return true
 	case PublishRequestedDataReasonRequirementChanged:
 		return true
+	case PublishRequestedDataReasonReviewDue:
+		return true
+	case PublishRequestedDataReasonSensitivityRaised:
+		return true
+	case PublishRequestedDataReasonTransferred:
+		return true
 	case PublishRequestedDataReasonUpstreamAuthChanged:
 		return true
 	case PublishRequestedDataReasonUpstreamTlsChanged:
@@ -2183,6 +2225,7 @@ func (e PublishRequestedDataReason) Valid() bool {
 // Defines values for PublishRequestedDataRequestedByKind.
 const (
 	PublishRequestedDataRequestedByKindAutomationToken PublishRequestedDataRequestedByKind = "automation_token"
+	PublishRequestedDataRequestedByKindSystem          PublishRequestedDataRequestedByKind = "system"
 	PublishRequestedDataRequestedByKindUser            PublishRequestedDataRequestedByKind = "user"
 )
 
@@ -2190,6 +2233,8 @@ const (
 func (e PublishRequestedDataRequestedByKind) Valid() bool {
 	switch e {
 	case PublishRequestedDataRequestedByKindAutomationToken:
+		return true
+	case PublishRequestedDataRequestedByKindSystem:
 		return true
 	case PublishRequestedDataRequestedByKindUser:
 		return true
@@ -2291,6 +2336,30 @@ func (e SecretRequestReason) Valid() bool {
 	}
 }
 
+// Defines values for Sensitivity.
+const (
+	SensitivityConfidential Sensitivity = "confidential"
+	SensitivityInternal     Sensitivity = "internal"
+	SensitivityPublic       Sensitivity = "public"
+	SensitivityRestricted   Sensitivity = "restricted"
+)
+
+// Valid indicates whether the value is a known member of the Sensitivity enum.
+func (e Sensitivity) Valid() bool {
+	switch e {
+	case SensitivityConfidential:
+		return true
+	case SensitivityInternal:
+		return true
+	case SensitivityPublic:
+		return true
+	case SensitivityRestricted:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ServerHealthStatus.
 const (
 	ServerHealthStatusFailing ServerHealthStatus = "failing"
@@ -2312,6 +2381,27 @@ func (e ServerHealthStatus) Valid() bool {
 	}
 }
 
+// Defines values for ServerLifecycle.
+const (
+	ServerLifecycleActive     ServerLifecycle = "active"
+	ServerLifecycleDeprecated ServerLifecycle = "deprecated"
+	ServerLifecycleSunset     ServerLifecycle = "sunset"
+)
+
+// Valid indicates whether the value is a known member of the ServerLifecycle enum.
+func (e ServerLifecycle) Valid() bool {
+	switch e {
+	case ServerLifecycleActive:
+		return true
+	case ServerLifecycleDeprecated:
+		return true
+	case ServerLifecycleSunset:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ServerSecretStatus.
 const (
 	ServerSecretStatusActive   ServerSecretStatus = "active"
@@ -2324,6 +2414,33 @@ func (e ServerSecretStatus) Valid() bool {
 	case ServerSecretStatusActive:
 		return true
 	case ServerSecretStatusRejected:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ServerTransferState.
+const (
+	ServerTransferStateAccepted  ServerTransferState = "accepted"
+	ServerTransferStateCancelled ServerTransferState = "cancelled"
+	ServerTransferStateDeclined  ServerTransferState = "declined"
+	ServerTransferStateForced    ServerTransferState = "forced"
+	ServerTransferStatePending   ServerTransferState = "pending"
+)
+
+// Valid indicates whether the value is a known member of the ServerTransferState enum.
+func (e ServerTransferState) Valid() bool {
+	switch e {
+	case ServerTransferStateAccepted:
+		return true
+	case ServerTransferStateCancelled:
+		return true
+	case ServerTransferStateDeclined:
+		return true
+	case ServerTransferStateForced:
+		return true
+	case ServerTransferStatePending:
 		return true
 	default:
 		return false
@@ -3093,7 +3210,7 @@ type AttentionItem struct {
 	// Detail Optional non-sensitive context; for approval_pending, the exposed tool name, never arguments or previews
 	Detail *string `json:"detail,omitempty"`
 
-	// Kind approval_pending: one private receipt per exact call the current human can review; excludes self-approval, stale or expired requests, ineligible service-account admins and automation tokens. Totals count only that human's eligible receipts. server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within 14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
+	// Kind review_due: one item per published server whose re-review is overdue (at = the due date; the team asks again with publish, or a platform admin approves in place). server_ownerless: one item per published server nobody is accountable for (no owner named, or the owner left the team, lost their editor role, was suspended or deleted). server_transfer_pending: one item, count = transfers waiting for the team's owners to accept (team view, owners only). approval_pending: one private receipt per exact call the current human can review; excludes self-approval, stale or expired requests, ineligible service-account admins and automation tokens. Totals count only that human's eligible receipts. server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within 14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
 	Kind AttentionKind `json:"kind"`
 
 	// Link Where to go; null when there is nowhere useful (personal keys)
@@ -3106,7 +3223,7 @@ type AttentionItem struct {
 	Team    *TeamRef `json:"team,omitempty"`
 }
 
-// AttentionKind approval_pending: one private receipt per exact call the current human can review; excludes self-approval, stale or expired requests, ineligible service-account admins and automation tokens. Totals count only that human's eligible receipts. server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within 14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
+// AttentionKind review_due: one item per published server whose re-review is overdue (at = the due date; the team asks again with publish, or a platform admin approves in place). server_ownerless: one item per published server nobody is accountable for (no owner named, or the owner left the team, lost their editor role, was suspended or deleted). server_transfer_pending: one item, count = transfers waiting for the team's owners to accept (team view, owners only). approval_pending: one private receipt per exact call the current human can review; excludes self-approval, stale or expired requests, ineligible service-account admins and automation tokens. Totals count only that human's eligible receipts. server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within 14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
 type AttentionKind string
 
 // AttentionSeverity defines model for AttentionSeverity.
@@ -3811,6 +3928,9 @@ type CatalogServer struct {
 	Counts      CapabilityCounts `json:"counts"`
 	Description string           `json:"description"`
 
+	// Governance What anyone who can read the catalog sees of a server's governance (never its owner or on-call contact).
+	Governance *CatalogServerGovernance `json:"governance,omitempty"`
+
 	// Health The latest health check. unknown before the first one.
 	Health      ServerHealth       `json:"health"`
 	Id          openapi_types.UUID `json:"id"`
@@ -3827,6 +3947,21 @@ type CatalogServer struct {
 type CatalogServerDetail struct {
 	Capabilities []CatalogCapability `json:"capabilities"`
 	Server       CatalogServer       `json:"server"`
+}
+
+// CatalogServerGovernance What anyone who can read the catalog sees of a server's governance (never its owner or on-call contact).
+type CatalogServerGovernance struct {
+	DeprecatedAt *time.Time `json:"deprecatedAt,omitempty"`
+
+	// Lifecycle deprecated shows a banner and tells the owners of gateways that select the server; sunset (or a passed sunsetAt) stops serving it everywhere (unavailable reason sunset).
+	Lifecycle ServerLifecycle `json:"lifecycle"`
+
+	// Replacement Only a published replacement
+	Replacement *ServerReplacementRef `json:"replacement,omitempty"`
+
+	// Sensitivity A server's label (default internal) and a gateway's ceiling (default restricted: no ceiling). A gateway serves no capability of a server above its ceiling (unavailable reason sensitivity_exceeds_gateway). Public < internal < confidential < restricted.
+	Sensitivity Sensitivity `json:"sensitivity"`
+	SunsetAt    *time.Time  `json:"sunsetAt,omitempty"`
 }
 
 // CatalogServerPage defines model for CatalogServerPage.
@@ -4139,6 +4274,9 @@ type Gateway struct {
 	GrantCount int64              `json:"grantCount"`
 	Id         openapi_types.UUID `json:"id"`
 
+	// MaxSensitivity The gateway's ceiling (default restricted): a server above it is listed as unavailable with the reason sensitivity_exceeds_gateway and never served.
+	MaxSensitivity *Sensitivity `json:"maxSensitivity,omitempty"`
+
 	// Name Example: Support tools
 	Name      string           `json:"name"`
 	OwnerKind GatewayOwnerKind `json:"ownerKind"`
@@ -4237,7 +4375,7 @@ type GatewayCapability struct {
 	Title     string     `json:"title"`
 	ToolClass *ToolClass `json:"toolClass,omitempty"`
 
-	// UnavailableReason curation_stale: the curated definition changed and requires owner review. server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved / changed: the current definition isn't approved. gone: the server no longer lists it. team_archived: the team that owns its server, or the team gateway's own team, is archived (unarchiving restores it).
+	// UnavailableReason sensitivity_exceeds_gateway: the server's sensitivity is above this gateway's ceiling (maxSensitivity); raise the ceiling or have the server lowered. sunset: the server is retired (its lifecycle is sunset, or its sunset date has passed) and is served by no gateway. curation_stale: the curated definition changed and requires owner review. server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved / changed: the current definition isn't approved. gone: the server no longer lists it. team_archived: the team that owns its server, or the team gateway's own team, is archived (unarchiving restores it).
 	UnavailableReason *GatewayUnavailableReason `json:"unavailableReason,omitempty"`
 }
 
@@ -4261,7 +4399,10 @@ type GatewayCreate struct {
 	CapturePayloads *bool   `json:"capturePayloads,omitempty"`
 	Description     *string `json:"description,omitempty"`
 	Enabled         *bool   `json:"enabled,omitempty"`
-	Name            string  `json:"name"`
+
+	// MaxSensitivity Absent: restricted (no ceiling). An automation token can't set it (403 token_not_allowed, details.field maxSensitivity).
+	MaxSensitivity *Sensitivity `json:"maxSensitivity,omitempty"`
+	Name           string       `json:"name"`
 
 	// RateLimitPerMinute Absent or null: inherit. 422 invalid_limit (details.reason above_ceiling) above the ceiling of gateway_per_minute.
 	RateLimitPerMinute *int64 `json:"rateLimitPerMinute,omitempty"`
@@ -4371,7 +4512,7 @@ type GatewayToolCuration struct {
 	NameOverride *string `json:"nameOverride,omitempty"`
 }
 
-// GatewayUnavailableReason curation_stale: the curated definition changed and requires owner review. server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved / changed: the current definition isn't approved. gone: the server no longer lists it. team_archived: the team that owns its server, or the team gateway's own team, is archived (unarchiving restores it).
+// GatewayUnavailableReason sensitivity_exceeds_gateway: the server's sensitivity is above this gateway's ceiling (maxSensitivity); raise the ceiling or have the server lowered. sunset: the server is retired (its lifecycle is sunset, or its sunset date has passed) and is served by no gateway. curation_stale: the curated definition changed and requires owner review. server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved / changed: the current definition isn't approved. gone: the server no longer lists it. team_archived: the team that owns its server, or the team gateway's own team, is archived (unarchiving restores it).
 type GatewayUnavailableReason string
 
 // GatewayUpdate defines model for GatewayUpdate.
@@ -4380,10 +4521,42 @@ type GatewayUpdate struct {
 	CapturePayloads *bool   `json:"capturePayloads,omitempty"`
 	Description     *string `json:"description,omitempty"`
 	Enabled         *bool   `json:"enabled,omitempty"`
-	Name            *string `json:"name,omitempty"`
+
+	// MaxSensitivity Omit to keep. The ceiling lowers or widens what the gateway serves at once; audited in gateway.update. An automation token can't change it (403 token_not_allowed, details.field maxSensitivity), and platform admins can't on team gateways (403 team_gateway).
+	MaxSensitivity *Sensitivity `json:"maxSensitivity,omitempty"`
+	Name           *string      `json:"name,omitempty"`
 
 	// RateLimitPerMinute Omit to keep; null inherits. 422 invalid_limit (details.reason above_ceiling) above the ceiling. Platform admins can't change it on team gateways (403 team_gateway).
 	RateLimitPerMinute *int64 `json:"rateLimitPerMinute,omitempty"`
+}
+
+// GovernanceSettings defines model for GovernanceSettings.
+type GovernanceSettings struct {
+	// ReturnOverdueToReview Off by default: an overdue re-review only notifies the team and shows in attention lists. On: under approval_required the governance loop also sends the overdue published server back to review (reason review_due). Never unpublishes.
+	ReturnOverdueToReview bool `json:"returnOverdueToReview"`
+
+	// ReviewIntervalDays Days between re-reviews of a published server per sensitivity (0: none). A published server's next review is counted from its latest approval.
+	ReviewIntervalDays struct {
+		Confidential int32 `json:"confidential"`
+		Internal     int32 `json:"internal"`
+		Public       int32 `json:"public"`
+		Restricted   int32 `json:"restricted"`
+	} `json:"reviewIntervalDays"`
+
+	// Revision Increases on every change. Send it back in If-Match.
+	Revision  Revision  `json:"revision"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// GovernanceSettingsUpdate Omitted fields keep their values.
+type GovernanceSettingsUpdate struct {
+	ReturnOverdueToReview *bool `json:"returnOverdueToReview,omitempty"`
+	ReviewIntervalDays    *struct {
+		Confidential *int32 `json:"confidential,omitempty"`
+		Internal     *int32 `json:"internal,omitempty"`
+		Public       *int32 `json:"public,omitempty"`
+		Restricted   *int32 `json:"restricted,omitempty"`
+	} `json:"reviewIntervalDays,omitempty"`
 }
 
 // GrantTeam defines model for GrantTeam.
@@ -4488,7 +4661,7 @@ type LimitSettingsUpdate struct {
 	Items []PlatformRateLimitSetting `json:"items"`
 }
 
-// LinkTarget Where the web app goes for an item (docs/admin-overview.md, Link targets). server: the server page (team page for members, Admin > Servers for platform staff); servers: the team's server list; review_queue: Admin > Publishing; gateways: Admin > Gateways; service_account / service_accounts: the team's service accounts; automation_tokens: Admin > Automation tokens; team_automation_tokens: the team's Settings > Automation tokens; auth_providers: Admin > Auth providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team's Settings > Notifications; service_connections: the team's Service accounts > Connections tab; account_connections: Account > Connections; account_api_keys: Account > API keys; approval: the private receipt page.
+// LinkTarget Where the web app goes for an item (docs/admin-overview.md, Link targets). server: the server page (team page for members, Admin > Servers for platform staff); servers: the team's server list; review_queue: Admin > Publishing; gateways: Admin > Gateways (the team's Gateways when teamSlug is set); service_account / service_accounts: the team's service accounts; automation_tokens: Admin > Automation tokens; team_automation_tokens: the team's Settings > Automation tokens; auth_providers: Admin > Auth providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team's Settings > Notifications; service_connections: the team's Service accounts > Connections tab; account_connections: Account > Connections; account_api_keys: Account > API keys; approval: the private receipt page.
 type LinkTarget struct {
 	// Id The object's ID for singular types (server, service_account, approval)
 	Id *string `json:"id,omitempty"`
@@ -4695,6 +4868,9 @@ type McpServer struct {
 
 	// Endpoints Ordered additional replicas, not the canonical primary URL. None on existing servers. Governing approval/NoReplay calls use the primary only; ordinary failover is bounded by the same three-iteration deadline/quota budget. Values are never returned.
 	Endpoints *[]McpServerEndpoint `json:"endpoints,omitempty"`
+
+	// Governance Who is accountable for the server, how sensitive it is, when it is re-reviewed and whether it is being retired (decision 88). Always returned; absent from servers before the schema it needs.
+	Governance *McpServerGovernance `json:"governance,omitempty"`
 
 	// HasAuth Whether the server has any credential part (the single header or credentials)
 	HasAuth bool `json:"hasAuth"`
@@ -4907,6 +5083,66 @@ type McpServerEndpointInput struct {
 
 	// Url Each actual destination passes address/origin rules. A new origin requires every credential value again.
 	Url string `json:"url"`
+}
+
+// McpServerGovernance defines model for McpServerGovernance.
+type McpServerGovernance struct {
+	DeprecatedAt *time.Time `json:"deprecatedAt,omitempty"`
+
+	// LastReviewedAt The latest approval of a published server
+	LastReviewedAt *time.Time `json:"lastReviewedAt,omitempty"`
+
+	// Lifecycle As it is now, a deprecated server past its sunsetAt is sunset
+	Lifecycle ServerLifecycle `json:"lifecycle"`
+
+	// OncallContact Whom to page, an email address, an http(s) or tel link or a channel such as #oncall (team members and platform staff only)
+	OncallContact *string `json:"oncallContact,omitempty"`
+
+	// OwnerName The owner's name, for the team's members and platform staff
+	OwnerName *string `json:"ownerName,omitempty"`
+
+	// OwnerUserId The person accountable for the server (an active editor or above of its team when named)
+	OwnerUserId *openapi_types.UUID `json:"ownerUserId,omitempty"`
+
+	// Ownerless Nobody is accountable now: none named, or the owner left the team, lost their role or was suspended or deleted (the server shows in attention lists while published)
+	Ownerless bool `json:"ownerless"`
+
+	// PendingTransfer An open transfer to another team (the owning team's members only)
+	PendingTransfer *ServerTransferRef    `json:"pendingTransfer,omitempty"`
+	Replacement     *ServerReplacementRef `json:"replacement,omitempty"`
+
+	// ReviewDueAt When the next re-review is due (null: none; set from the platform's interval for its sensitivity)
+	ReviewDueAt *time.Time `json:"reviewDueAt,omitempty"`
+
+	// ReviewOverdue The re-review date has passed. The team asks again with publishTeamMcpServer (or a platform admin approves in place with adminReviewMcpServer)
+	ReviewOverdue bool `json:"reviewOverdue"`
+
+	// Sensitivity A server's label (default internal) and a gateway's ceiling (default restricted: no ceiling). A gateway serves no capability of a server above its ceiling (unavailable reason sensitivity_exceeds_gateway). Public < internal < confidential < restricted.
+	Sensitivity Sensitivity `json:"sensitivity"`
+
+	// SunsetAt The moment the server stops being served
+	SunsetAt *time.Time `json:"sunsetAt,omitempty"`
+}
+
+// McpServerGovernanceInput Omitted fields keep their values; null clears ownerUserId, oncallContact, sunsetAt and replacementServerId.
+type McpServerGovernanceInput struct {
+	// Lifecycle deprecated shows a banner and tells the owners of gateways that select the server; sunset (or a passed sunsetAt) stops serving it everywhere (unavailable reason sunset).
+	Lifecycle *ServerLifecycle `json:"lifecycle,omitempty"`
+
+	// OncallContact 422 invalid_oncall_contact unless an email address, an http(s) or tel link or a channel (#oncall, @team)
+	OncallContact *string `json:"oncallContact,omitempty"`
+
+	// OwnerUserId An active person who is an editor, admin or owner of the server's team (422 invalid_owner)
+	OwnerUserId *openapi_types.UUID `json:"ownerUserId,omitempty"`
+
+	// ReplacementServerId A published server (or one of this team) that is not retired itself and does not lead back here (422 invalid_replacement)
+	ReplacementServerId *openapi_types.UUID `json:"replacementServerId,omitempty"`
+
+	// Sensitivity A server's label (default internal) and a gateway's ceiling (default restricted: no ceiling). A gateway serves no capability of a server above its ceiling (unavailable reason sensitivity_exceeds_gateway). Public < internal < confidential < restricted.
+	Sensitivity *Sensitivity `json:"sensitivity,omitempty"`
+
+	// SunsetAt The moment a deprecated server stops being served; it must lie ahead (422 sunset_in_past). Moving to sunset without a date sunsets it now. 422 lifecycle_active on an active server.
+	SunsetAt *time.Time `json:"sunsetAt,omitempty"`
 }
 
 // McpServerMachineOAuth A server's machine OAuth client (decision 73, docs/machine-oauth.md). The portal gets a token with the client credentials grant from tokenUrl and sends it as Authorization: Bearer to the server's URL. The client secret is never returned
@@ -5204,6 +5440,9 @@ type McpServerUpdate struct {
 	// Endpoints Omit to retain, empty list clears; null is invalid. Ordered full replacement with stable IDs for retained entries, owner/admin browser sessions only. New origins require every static value re-entered. URL/order/enabled/credential shape changes require catalog re-review. Remove extras before selecting an unsupported mode/provider/TLS combination (422 failover_not_supported). Governed/NoReplay calls remain primary-only.
 	Endpoints *[]McpServerEndpointInput `json:"endpoints,omitempty"`
 
+	// Governance Omit to keep. Team owners and admins, in a browser session: an editor gets 403 governance_role and an automation token never changes owner, on-call contact, sensitivity, lifecycle or replacement (403 token_not_allowed, details.field governance). Raising the sensitivity of a published server sends it back to review under approval_required (mcp_server.publish_request, reason sensitivity_raised); lowering it does not. Audited as mcp_server.governance_update. Moving the server to another team is requestTeamMcpServerTransfer.
+	Governance *McpServerGovernanceInput `json:"governance,omitempty"`
+
 	// MachineOAuth Only with authMode machine_oauth (sent now or stored; 400 invalid_machine_oauth otherwise). Omitted fields keep their stored values; the first time (switching to the mode) tokenUrl, clientId and clientSecret are required. A new tokenUrl, a new clientId or a URL with another origin needs clientSecret in the same request (422 client_secret_required, details.reason token_url_changed, client_id_changed or origin_changed; nothing is stored and nothing is sent to the new endpoint)
 	MachineOAuth *McpServerMachineOAuthInput `json:"machineOAuth,omitempty"`
 
@@ -5418,7 +5657,7 @@ type NotificationDelivery struct {
 	CreatedAt  time.Time               `json:"createdAt"`
 	ErrorClass *NotificationErrorClass `json:"errorClass,omitempty"`
 
-	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
+	// Event server.review_due: a published server's re-review is overdue (its team's owners and admins and its named owner; once per due date). server.sunset_soon: a deprecated server stops being served within 14 days (its team and the owners of gateways that select it; once per sunset date). server.deprecated: a server that a gateway selects was deprecated (that gateway's owners; once per gateway and deprecation). These three are in-app and email only, never webhooks. server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
 	Event NotificationEventType `json:"event"`
 
 	// EventId The id of the event, as in the payload and X-OMP-Event-Id
@@ -5555,18 +5794,25 @@ type NotificationEmailStatusTls string
 // NotificationErrorClass not_allowed: the address isn't allowed (blocked or not in the internal-network allowlist, or a redirect). connect: unreachable. tls: certificate or handshake problem (or STARTTLS missing). timeout. auth: SMTP login refused. rejected: the destination answered 4xx (SMTP 5xx). server_error: it answered 5xx. address: the recipient address was refused. expired: still undelivered after 24 hours. internal.
 type NotificationErrorClass string
 
-// NotificationEventType server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
+// NotificationEventType server.review_due: a published server's re-review is overdue (its team's owners and admins and its named owner; once per due date). server.sunset_soon: a deprecated server stops being served within 14 days (its team and the owners of gateways that select it; once per sunset date). server.deprecated: a server that a gateway selects was deprecated (that gateway's owners; once per gateway and deprecation). These three are in-app and email only, never webhooks. server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
 type NotificationEventType string
 
 // NotificationFormat json: a signed JSON envelope (docs/notifications.md). slack: {"text": ...}, unsigned, for Slack-compatible incoming webhooks.
 type NotificationFormat string
+
+// NotificationGatewayRef A gateway, named only to its own owners
+type NotificationGatewayRef struct {
+	Id   openapi_types.UUID `json:"id"`
+	Name string             `json:"name"`
+	Slug string             `json:"slug"`
+}
 
 // NotificationItem defines model for NotificationItem.
 type NotificationItem struct {
 	Body      string    `json:"body"`
 	CreatedAt time.Time `json:"createdAt"`
 
-	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
+	// Event server.review_due: a published server's re-review is overdue (its team's owners and admins and its named owner; once per due date). server.sunset_soon: a deprecated server stops being served within 14 days (its team and the owners of gateways that select it; once per sunset date). server.deprecated: a server that a gateway selects was deprecated (that gateway's owners; once per gateway and deprecation). These three are in-app and email only, never webhooks. server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
 	Event  NotificationEventType `json:"event"`
 	Id     int64                 `json:"id"`
 	Link   *LinkTarget           `json:"link"`
@@ -5626,7 +5872,7 @@ type NotificationPreference struct {
 	Custom bool `json:"custom"`
 	Email  bool `json:"email"`
 
-	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
+	// Event server.review_due: a published server's re-review is overdue (its team's owners and admins and its named owner; once per due date). server.sunset_soon: a deprecated server stops being served within 14 days (its team and the owners of gateways that select it; once per sunset date). server.deprecated: a server that a gateway selects was deprecated (that gateway's owners; once per gateway and deprecation). These three are in-app and email only, never webhooks. server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
 	Event NotificationEventType `json:"event"`
 	InApp bool                  `json:"inApp"`
 }
@@ -5635,7 +5881,7 @@ type NotificationPreference struct {
 type NotificationPreferenceChange struct {
 	Email *bool `json:"email,omitempty"`
 
-	// Event server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
+	// Event server.review_due: a published server's re-review is overdue (its team's owners and admins and its named owner; once per due date). server.sunset_soon: a deprecated server stops being served within 14 days (its team and the owners of gateways that select it; once per sunset date). server.deprecated: a server that a gateway selects was deprecated (that gateway's owners; once per gateway and deprecation). These three are in-app and email only, never webhooks. server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
 	Event NotificationEventType `json:"event"`
 	InApp *bool                 `json:"inApp,omitempty"`
 }
@@ -6200,6 +6446,22 @@ type SecretRequest struct {
 // SecretRequestReason defines model for SecretRequest.Reason.
 type SecretRequestReason string
 
+// Sensitivity A server's label (default internal) and a gateway's ceiling (default restricted: no ceiling). A gateway serves no capability of a server above its ceiling (unavailable reason sensitivity_exceeds_gateway). Public < internal < confidential < restricted.
+type Sensitivity string
+
+// ServerDeprecatedData defines model for ServerDeprecatedData.
+type ServerDeprecatedData struct {
+	DeprecatedAt time.Time `json:"deprecatedAt"`
+
+	// Gateway A gateway, named only to its own owners
+	Gateway     NotificationGatewayRef `json:"gateway"`
+	Replacement *NotificationServerRef `json:"replacement,omitempty"`
+
+	// Server The server an event is about
+	Server   NotificationServerRef `json:"server"`
+	SunsetAt *time.Time            `json:"sunsetAt,omitempty"`
+}
+
 // ServerHealth The latest health check. unknown before the first one.
 type ServerHealth struct {
 	CheckedAt *time.Time `json:"checkedAt,omitempty"`
@@ -6223,6 +6485,9 @@ type ServerHealth struct {
 // ServerHealthStatus defines model for ServerHealth.Status.
 type ServerHealthStatus string
 
+// ServerLifecycle deprecated shows a banner and tells the owners of gateways that select the server; sunset (or a passed sunsetAt) stops serving it everywhere (unavailable reason sunset).
+type ServerLifecycle string
+
 // ServerRecoveredData defines model for ServerRecoveredData.
 type ServerRecoveredData struct {
 	DowntimeSeconds int64     `json:"downtimeSeconds"`
@@ -6231,6 +6496,29 @@ type ServerRecoveredData struct {
 	// Server The server an event is about
 	Server NotificationServerRef `json:"server"`
 	Since  time.Time             `json:"since"`
+}
+
+// ServerReplacementRef defines model for ServerReplacementRef.
+type ServerReplacementRef struct {
+	Id       openapi_types.UUID `json:"id"`
+	Name     string             `json:"name"`
+	Slug     string             `json:"slug"`
+	TeamName string             `json:"teamName"`
+	TeamSlug string             `json:"teamSlug"`
+}
+
+// ServerReviewDueData defines model for ServerReviewDueData.
+type ServerReviewDueData struct {
+	DueAt time.Time `json:"dueAt"`
+
+	// ReturnedToReview The governance loop also sent the server back to review (the platform setting is on)
+	ReturnedToReview bool `json:"returnedToReview"`
+
+	// Sensitivity A server's label (default internal) and a gateway's ceiling (default restricted: no ceiling). A gateway serves no capability of a server above its ceiling (unavailable reason sensitivity_exceeds_gateway). Public < internal < confidential < restricted.
+	Sensitivity Sensitivity `json:"sensitivity"`
+
+	// Server The server an event is about
+	Server NotificationServerRef `json:"server"`
 }
 
 // ServerSecret A server in person_secret mode with the caller's own key for it, if any. The key itself is never returned, only its last four characters when it has at least eight
@@ -6265,6 +6553,67 @@ type ServerSecret struct {
 
 // ServerSecretStatus The server answered 401 or 403 to a rejected key; it is not sent again until replaced
 type ServerSecretStatus string
+
+// ServerSunsetSoonData defines model for ServerSunsetSoonData.
+type ServerSunsetSoonData struct {
+	DaysLeft int32 `json:"daysLeft"`
+
+	// Gateway The gateway whose owners are told (null: the server's own team)
+	Gateway     *NotificationGatewayRef `json:"gateway,omitempty"`
+	Replacement *NotificationServerRef  `json:"replacement,omitempty"`
+
+	// Server The server an event is about
+	Server   NotificationServerRef `json:"server"`
+	SunsetAt time.Time             `json:"sunsetAt"`
+}
+
+// ServerTransfer A request to move a server to another team. Nothing moves until the receiving team's owner accepts.
+type ServerTransfer struct {
+	DecidedAt       *time.Time         `json:"decidedAt,omitempty"`
+	FromTeamName    string             `json:"fromTeamName"`
+	FromTeamSlug    string             `json:"fromTeamSlug"`
+	Id              openapi_types.UUID `json:"id"`
+	Note            *string            `json:"note,omitempty"`
+	RequestedAt     time.Time          `json:"requestedAt"`
+	RequestedByName *string            `json:"requestedByName,omitempty"`
+
+	// Revision Increases on every change. Send it back in If-Match.
+	Revision   Revision            `json:"revision"`
+	ServerId   openapi_types.UUID  `json:"serverId"`
+	ServerName string              `json:"serverName"`
+	ServerSlug string              `json:"serverSlug"`
+	State      ServerTransferState `json:"state"`
+	ToTeamName string              `json:"toTeamName"`
+	ToTeamSlug string              `json:"toTeamSlug"`
+}
+
+// ServerTransferForce defines model for ServerTransferForce.
+type ServerTransferForce struct {
+	Note   *string `json:"note,omitempty"`
+	ToTeam string  `json:"toTeam"`
+}
+
+// ServerTransferRef defines model for ServerTransferRef.
+type ServerTransferRef struct {
+	Id          openapi_types.UUID `json:"id"`
+	RequestedAt time.Time          `json:"requestedAt"`
+
+	// Revision Increases on every change. Send it back in If-Match.
+	Revision   Revision `json:"revision"`
+	ToTeamName string   `json:"toTeamName"`
+	ToTeamSlug string   `json:"toTeamSlug"`
+}
+
+// ServerTransferRequest defines model for ServerTransferRequest.
+type ServerTransferRequest struct {
+	Note *string `json:"note,omitempty"`
+
+	// ToTeam The receiving team's slug or ID. 422 invalid_team when it does not exist, is archived or is this team.
+	ToTeam string `json:"toTeam"`
+}
+
+// ServerTransferState defines model for ServerTransferState.
+type ServerTransferState string
 
 // ServerUnhealthyData defines model for ServerUnhealthyData.
 type ServerUnhealthyData struct {
@@ -6948,6 +7297,9 @@ type ServiceAccountIdParam = openapi_types.UUID
 // TeamParam defines model for TeamParam.
 type TeamParam = string
 
+// TransferIdParam defines model for TransferIdParam.
+type TransferIdParam = openapi_types.UUID
+
 // UsageCapabilityParam defines model for UsageCapabilityParam.
 type UsageCapabilityParam = openapi_types.UUID
 
@@ -7252,6 +7604,12 @@ type AdminListMcpCapabilitiesParams struct {
 	Kind *CapabilityKindParam `form:"kind,omitempty" json:"kind,omitempty"`
 }
 
+// AdminForceTransferMcpServerParams defines parameters for AdminForceTransferMcpServer.
+type AdminForceTransferMcpServerParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
 // AdminUpdateNotificationDestinationParams defines parameters for AdminUpdateNotificationDestination.
 type AdminUpdateNotificationDestinationParams struct {
 	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
@@ -7280,6 +7638,12 @@ type AdminListServiceConnectionsParams struct {
 
 // AdminUpdateCaptureSettingsParams defines parameters for AdminUpdateCaptureSettings.
 type AdminUpdateCaptureSettingsParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
+// AdminUpdateGovernanceSettingsParams defines parameters for AdminUpdateGovernanceSettings.
+type AdminUpdateGovernanceSettingsParams struct {
 	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
 	IfMatch IfMatchHeader `json:"If-Match"`
 }
@@ -7594,6 +7958,24 @@ type SetTeamGatewayCapabilitiesParams struct {
 	IfMatch IfMatchHeader `json:"If-Match"`
 }
 
+// ListTeamMcpServerTransfersParams defines parameters for ListTeamMcpServerTransfers.
+type ListTeamMcpServerTransfersParams struct {
+	// PendingOnly Only the transfers still waiting for an answer
+	PendingOnly *bool `form:"pendingOnly,omitempty" json:"pendingOnly,omitempty"`
+}
+
+// CancelMcpServerTransferParams defines parameters for CancelMcpServerTransfer.
+type CancelMcpServerTransferParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
+// AcceptMcpServerTransferParams defines parameters for AcceptMcpServerTransfer.
+type AcceptMcpServerTransferParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
 // ListTeamMcpServersParams defines parameters for ListTeamMcpServers.
 type ListTeamMcpServersParams struct {
 	// Q Case-insensitive substring match
@@ -7738,6 +8120,9 @@ type AdminApproveMcpCapabilityJSONRequestBody = McpCapabilityApproval
 // AdminReviewMcpServerJSONRequestBody defines body for AdminReviewMcpServer for application/json ContentType.
 type AdminReviewMcpServerJSONRequestBody = McpPublishReview
 
+// AdminForceTransferMcpServerJSONRequestBody defines body for AdminForceTransferMcpServer for application/json ContentType.
+type AdminForceTransferMcpServerJSONRequestBody = ServerTransferForce
+
 // AdminCreateNotificationDestinationJSONRequestBody defines body for AdminCreateNotificationDestination for application/json ContentType.
 type AdminCreateNotificationDestinationJSONRequestBody = NotificationDestinationCreate
 
@@ -7752,6 +8137,9 @@ type AdminUpdateCaptureSettingsJSONRequestBody = CaptureSettingsUpdate
 
 // AdminTestRedactionJSONRequestBody defines body for AdminTestRedaction for application/json ContentType.
 type AdminTestRedactionJSONRequestBody = RedactionTestRequest
+
+// AdminUpdateGovernanceSettingsJSONRequestBody defines body for AdminUpdateGovernanceSettings for application/json ContentType.
+type AdminUpdateGovernanceSettingsJSONRequestBody = GovernanceSettingsUpdate
 
 // AdminUpdateLimitSettingsJSONRequestBody defines body for AdminUpdateLimitSettings for application/json ContentType.
 type AdminUpdateLimitSettingsJSONRequestBody = LimitSettingsUpdate
@@ -7872,6 +8260,9 @@ type AuthorizeTeamMcpServerSetupJSONRequestBody = OAuthSetupStart
 
 // PublishTeamMcpServerJSONRequestBody defines body for PublishTeamMcpServer for application/json ContentType.
 type PublishTeamMcpServerJSONRequestBody = McpPublishRequest
+
+// RequestTeamMcpServerTransferJSONRequestBody defines body for RequestTeamMcpServerTransfer for application/json ContentType.
+type RequestTeamMcpServerTransferJSONRequestBody = ServerTransferRequest
 
 // AddMemberJSONRequestBody defines body for AddMember for application/json ContentType.
 type AddMemberJSONRequestBody = MemberAdd
@@ -8127,6 +8518,84 @@ func (t *NotificationPayload_Data) FromApprovalNotificationData(v ApprovalNotifi
 
 // MergeApprovalNotificationData performs a merge with any union data inside the NotificationPayload_Data, using the provided ApprovalNotificationData
 func (t *NotificationPayload_Data) MergeApprovalNotificationData(v ApprovalNotificationData) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsServerReviewDueData returns the union data inside the NotificationPayload_Data as a ServerReviewDueData
+func (t NotificationPayload_Data) AsServerReviewDueData() (ServerReviewDueData, error) {
+	var body ServerReviewDueData
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromServerReviewDueData overwrites any union data inside the NotificationPayload_Data as the provided ServerReviewDueData
+func (t *NotificationPayload_Data) FromServerReviewDueData(v ServerReviewDueData) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeServerReviewDueData performs a merge with any union data inside the NotificationPayload_Data, using the provided ServerReviewDueData
+func (t *NotificationPayload_Data) MergeServerReviewDueData(v ServerReviewDueData) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsServerSunsetSoonData returns the union data inside the NotificationPayload_Data as a ServerSunsetSoonData
+func (t NotificationPayload_Data) AsServerSunsetSoonData() (ServerSunsetSoonData, error) {
+	var body ServerSunsetSoonData
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromServerSunsetSoonData overwrites any union data inside the NotificationPayload_Data as the provided ServerSunsetSoonData
+func (t *NotificationPayload_Data) FromServerSunsetSoonData(v ServerSunsetSoonData) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeServerSunsetSoonData performs a merge with any union data inside the NotificationPayload_Data, using the provided ServerSunsetSoonData
+func (t *NotificationPayload_Data) MergeServerSunsetSoonData(v ServerSunsetSoonData) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsServerDeprecatedData returns the union data inside the NotificationPayload_Data as a ServerDeprecatedData
+func (t NotificationPayload_Data) AsServerDeprecatedData() (ServerDeprecatedData, error) {
+	var body ServerDeprecatedData
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromServerDeprecatedData overwrites any union data inside the NotificationPayload_Data as the provided ServerDeprecatedData
+func (t *NotificationPayload_Data) FromServerDeprecatedData(v ServerDeprecatedData) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeServerDeprecatedData performs a merge with any union data inside the NotificationPayload_Data, using the provided ServerDeprecatedData
+func (t *NotificationPayload_Data) MergeServerDeprecatedData(v ServerDeprecatedData) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

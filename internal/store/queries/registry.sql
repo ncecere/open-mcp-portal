@@ -34,10 +34,12 @@ RETURNING *;
 -- name: InsertMCPServer :one
 INSERT INTO mcp_servers (
     id, team_id, slug, name, description, url, auth_header_name, auth_value_cipher, auth_value_hint,
-    timeout_seconds, enabled, auth_provider_id, auth_scopes, auth_mode, send_identity, rate_limit_per_minute, max_concurrent, created_by, updated_by
+    timeout_seconds, enabled, auth_provider_id, auth_scopes, auth_mode, send_identity, rate_limit_per_minute, max_concurrent, created_by, updated_by,
+    owner_user_id
 ) VALUES (
     @id, @team_id, @slug, @name, @description, @url, @auth_header_name, @auth_value_cipher, @auth_value_hint,
-    @timeout_seconds, @enabled, @auth_provider_id, @auth_scopes, @auth_mode, @send_identity, sqlc.narg(rate_limit_per_minute)::bigint, sqlc.narg(max_concurrent)::integer, @created_by, @created_by
+    @timeout_seconds, @enabled, @auth_provider_id, @auth_scopes, @auth_mode, @send_identity, sqlc.narg(rate_limit_per_minute)::bigint, sqlc.narg(max_concurrent)::integer, @created_by, @created_by,
+    sqlc.narg(owner_user_id)::uuid
 )
 RETURNING *;
 
@@ -98,10 +100,21 @@ SET publish_state        = @publish_state,
     publish_reviewed_by  = CASE WHEN @reviewed::bool THEN sqlc.narg(actor)::uuid WHEN @requested::bool THEN NULL ELSE publish_reviewed_by END,
     publish_review_note  = CASE WHEN @reviewed::bool THEN sqlc.narg(note)::text WHEN @requested::bool THEN NULL ELSE publish_review_note END,
     published_at         = CASE WHEN @publish_state::text = 'published' THEN coalesce(published_at, now()) ELSE NULL END,
+    -- An approval (the state becoming published) is the re-review anchor; the
+    -- next one is due after the platform interval of the server's sensitivity
+    -- (decision 88). Leaving published clears the due date.
+    last_reviewed_at     = CASE WHEN @publish_state::text = 'published' THEN now() ELSE last_reviewed_at END,
+    review_due_at        = CASE WHEN @publish_state::text = 'published' THEN (
+        SELECT CASE WHEN d.days > 0 THEN now() + make_interval(days => d.days) END
+        FROM (SELECT CASE mcp_servers.sensitivity WHEN 'public' THEN ps.review_interval_days_public
+                                                  WHEN 'internal' THEN ps.review_interval_days_internal
+                                                  WHEN 'confidential' THEN ps.review_interval_days_confidential
+                                                  ELSE ps.review_interval_days_restricted END AS days
+              FROM platform_settings ps WHERE ps.id = 1) d) END,
     revision             = revision + 1,
     updated_by           = sqlc.narg(actor)::uuid,
     updated_at           = now()
-WHERE id = @id
+WHERE mcp_servers.id = @id
 RETURNING *;
 
 -- name: SetMCPServerRefreshed :exec

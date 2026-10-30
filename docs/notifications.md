@@ -74,6 +74,9 @@ Recipients are resolved **at fan-out from live roles** (like OMG), never stored:
 | `publish.decided` | A platform admin approves or rejects | `publish.decided:<server>:<reviewed_at>` | team owners, admins | team, platform* |
 | `connection.needs_reconsent` | A person's connection turns `needs_reconsent` (not a server's setup sign-in) | `…:<connection>:<marked_at>` | **that person** | never |
 | `upstream_signin.lapsed` | The setup sign-in of an `oauth` server turns `needs_reconsent` | `…:<server>:<marked_at>` | owners, admins, editors | team, platform* |
+| `server.review_due` | A **published** server's `review_due_at` has passed (decision 88); the governance loop, once per due date (`server.review_due:<server>:<due micro>`), also recorded in `server_governance_notices` | as left | the server team's owners and admins and its **named owner** (while an active editor or above) | **never** (private notice) |
+| `server.sunset_soon` | A deprecated server's `sunset_at` is within **14 days** and ahead; once per sunset date, for the server's team and once per gateway that selects it | `server.sunset_soon:<server>[:<gateway>]:<sunset micro>` | the server team's owners, admins and named owner; for a gateway's notice, **that gateway's** team owners and admins (platform admins for a platform gateway) | never |
+| `server.deprecated` | A server a gateway selects leaves `active`: in the transaction that deprecates it for every enabled selecting gateway, and by the loop for a gateway that selects it later; once per gateway and deprecation | `server.deprecated:<server>:<gateway>:<deprecated_at micro>` | that gateway's team owners and admins, or platform admins for a platform gateway | never |
 | `key.expiring` | The hourly scan finds an active key or token, **made for more than 7 days**, expiring within 7 days; or an enabled server whose **mTLS client certificate** (decision 74) expires within 14 days (not yet expired) | `key.expiring:<kind>:<id>`; for a certificate `key.expiring:server_certificate:<server>:<fingerprint prefix>` (a renewed certificate warns again) | personal key: the person. Service-account key, publisher token: team owners and admins. Platform-admin token: platform admins. **Server certificate: the team's owners, admins and editors** | team (service-account keys, publisher tokens, server certificates), platform (platform tokens; the others with `teamEvents`) |
 
 \* A platform destination gets the non-personal team events of every team only when its `teamEvents` switch is on. `notification.delivery_failed` is **not** an event: failures show in the UI
@@ -82,6 +85,10 @@ a failure is logged and counted (`omp_notification_emit_errors_total`) and never
 
 **Preferences** are per person, event and channel (`in_app`, `email`), listed only for events the person can receive; defaults: in-app on, email on. Off for a channel means no inbox row or no email row.
 Email also needs SMTP (`emailAvailable`). **Destinations** are webhooks: team destinations are managed by the team's owners and admins, platform destinations by platform admins; each chooses its events.
+
+### Governance notices (decision 88)
+
+The three governance events above are **private notices like approvals and access requests**: in-app and email only, never webhooks (`webhookRoute` has none, and no destination can subscribe). Audiences are resolved from live roles at fan-out **and again when an email is sent**, so a person who left the team's owners or admins in between gets nothing. A gateway's notice belongs to the *gateway's* team (its inbox row carries that team) and names the server (published, so already visible in the catalog, or the gateway's own team's) and that one gateway; it never carries the server team's owner, on-call contact or other gateways. The loop (`omp.governance`, every 5 minutes, at most 50 per kind per run) records each notice in `server_governance_notices` (kind, server, gateway, the date it was about) in the transaction that stores its event, because events are purged after 14 days and an overdue review or a deprecation lasts longer: a retry, a second replica or a purged event never tells anyone twice, and a new due or sunset date is a new notice. An event that cannot be stored takes its record back, so the next run tells them. Drain older replicas before the loop runs: a replica that predates the events fans them out to nobody.
 
 ## Delivery
 
@@ -108,6 +115,9 @@ Headers: `Content-Type: application/json`, `User-Agent: open-mcp-portal/<version
 | `publish.decided` | `server`, `decision`, `note≤300?`, `decidedBy {name}` |
 | `connection.needs_reconsent` | `provider {slug, name}`, `server?`, `reason` (`refresh_failed`, `upstream_rejected`); inbox and email only |
 | `upstream_signin.lapsed` | `server`, `since`, `readAsName?` |
+| `server.review_due` | `server`, `sensitivity`, `dueAt`, `returnedToReview`; inbox and email only |
+| `server.sunset_soon` | `server`, `sunsetAt`, `daysLeft`, `replacement?`, `gateway?` (the gateway whose owners are told; null for the server's own team); inbox and email only |
+| `server.deprecated` | `server`, `deprecatedAt`, `sunsetAt?`, `replacement?`, `gateway {id, slug, name}`; inbox and email only |
 | `key.expiring` | `keyKind` (`personal`, `service_account`, `publisher_token`, `platform_token`, `server_certificate`), `name` (a server certificate: the server's name), `expiresAt`, `daysLeft`, `serviceAccount?` (never a prefix), `server?` (for `server_certificate`; never the certificate or key) |
 
 **Email.** A plain text part and a simple HTML part (`multipart/alternative`; no images, remote content or tracking), one message per recipient, `From: SMTP_FROM`, `Subject: [<INSTANCE_NAME>] <title>`, `Auto-Submitted: auto-generated`, `X-OMP-Event`, a link `APP_URL/…`, and a footer saying why they got it and where to change it.

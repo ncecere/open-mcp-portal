@@ -570,7 +570,10 @@ func (a *api) tokenMayUpdateServer(w http.ResponseWriter, r *http.Request, actor
 		a.refuseToken(w, r, field)
 		return false
 	}
-	for _, field := range []string{"rateLimitPerMinute", "maxConcurrent", "endpoints"} {
+	// Who is accountable for a server, how sensitive it is and whether it is being
+	// retired are decisions about trust: a person's, never a token's, whatever
+	// the server holds (decision 88).
+	for _, field := range []string{"governance", "rateLimitPerMinute", "maxConcurrent", "endpoints"} {
 		if _, ok := keys[field]; ok {
 			return refuse(field)
 		}

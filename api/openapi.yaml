@@ -1127,6 +1127,160 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '404':
           $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/mcp-servers/{serverId}/transfer:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/ServerIdParam'
+    post:
+      tags:
+      - mcp-servers
+      operationId: requestTeamMcpServerTransfer
+      summary: Ask another team to take over a server (the server's team owners and admins; browser session only)
+      description: 'Nothing moves until an owner of the receiving team accepts (acceptMcpServerTransfer). One open transfer per
+        server: 409 transfer_pending. 422 invalid_team when the receiving team does not exist, is archived or is this team;
+        422 provider_not_allowed when the server requires a restricted auth provider that lists neither the receiving team nor
+        the server (the move would stop its calls). An editor gets 403 governance_role and an automation token 403
+        token_not_allowed. Audited as mcp_server.transfer_request.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServerTransferRequest'
+      responses:
+        '201':
+          description: The open transfer
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ServerTransfer'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/mcp-server-transfers:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    get:
+      tags:
+      - mcp-servers
+      operationId: listTeamMcpServerTransfers
+      summary: A team's transfers, out of it and into it, newest first (owners and admins; platform staff read any team)
+      parameters:
+      - name: pendingOnly
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: Only the transfers still waiting for an answer
+      responses:
+        '200':
+          description: At most 100 transfers
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServerTransfer'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/mcp-server-transfers/{transferId}:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/TransferIdParam'
+    delete:
+      tags:
+      - mcp-servers
+      operationId: cancelMcpServerTransfer
+      summary: Withdraw a transfer (the offering team) or decline it (the receiving team); owners and admins, browser session only
+      description: 'Moves nothing. The team in the path is the offering or the receiving one. 409 transfer_closed when it was
+        already decided; 412 when If-Match is not the transfer''s revision. Audited as mcp_server.transfer_cancel.'
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      responses:
+        '200':
+          description: The closed transfer
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ServerTransfer'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/mcp-server-transfers/{transferId}/accept:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/TransferIdParam'
+    post:
+      tags:
+      - mcp-servers
+      operationId: acceptMcpServerTransfer
+      summary: Accept a transfer (the receiving team's owners; browser session only)
+      description: 'The server moves to this team with its capabilities, gateway selections, people''s grants, sealed values
+        and approval rules; the accepting owner becomes its owner; under approval_required a published server goes back to review
+        (reason transferred). 403 owner_required for an admin; 409 transfer_closed (it was decided or withdrawn meanwhile);
+        409 changed_since_request (details.requestedRevision, currentRevision) when the server was edited after the request: the
+        offering team withdraws it and asks again; 412 when If-Match is not the transfer''s revision; 422 provider_not_allowed as for the request.
+        Audited as mcp_server.transfer.'
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      responses:
+        '200':
+          description: The accepted transfer
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ServerTransfer'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
   /v1/teams/{team}/mcp-servers/{serverId}/test:
     parameters:
     - $ref: '#/components/parameters/TeamParam'
@@ -1898,6 +2052,113 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/PublishingSettings'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/mcp-servers/{serverId}/transfer:
+    parameters:
+    - $ref: '#/components/parameters/ServerIdParam'
+    post:
+      tags:
+      - admin
+      operationId: adminForceTransferMcpServer
+      summary: Move a server to another team without that team's acceptance (platform admins; browser session only)
+      description: 'For a server whose team is gone or whose owners cannot be reached. Any open transfer is cancelled; the server
+        has no owner afterwards (it shows in the receiving team''s attention list until one is named); its capabilities, selections,
+        grants, sealed values and approval rules move with it and, under approval_required, a published server goes back to review.
+        If-Match is the server''s revision. 422 invalid_team, 422 provider_not_allowed as for the request. Audited as
+        mcp_server.transfer (kind forced).'
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServerTransferForce'
+      responses:
+        '200':
+          description: The server, now the receiving team's
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/McpServer'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/settings/governance:
+    get:
+      tags:
+      - admin
+      operationId: adminGetGovernanceSettings
+      summary: Re-review intervals and the overdue setting (platform admins and auditors; browser session only)
+      responses:
+        '200':
+          description: Settings
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/GovernanceSettings'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+    put:
+      tags:
+      - admin
+      operationId: adminUpdateGovernanceSettings
+      summary: Change the re-review intervals and whether an overdue re-review returns a server to review (platform admins; browser session only)
+      description: 'Every published server''s next review date is counted again from its latest approval. 400 invalid_interval.
+        Audited as settings.governance_update.'
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceSettingsUpdate'
+      responses:
+        '200':
+          description: Updated settings
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/GovernanceSettings'
         '400':
           $ref: '#/components/responses/ErrorReply'
         '403':
@@ -6543,6 +6804,13 @@ components:
       schema:
         type: string
         format: uuid
+    TransferIdParam:
+      name: transferId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     CapabilityIdParam:
       name: capabilityId
       in: path
@@ -8310,6 +8578,11 @@ components:
           description: Fail-fast concurrent forwarded operations per server and replica; null is unlimited. This is not a cluster-wide lease.
         enabled:
           type: boolean
+        governance:
+          allOf:
+          - $ref: '#/components/schemas/McpServerGovernance'
+          description: Who is accountable for the server, how sensitive it is, when it is re-reviewed and whether it is
+            being retired (decision 88). Always returned; absent from servers before the schema it needs.
         publishState:
           $ref: '#/components/schemas/PublishState'
         effectivePublishPolicy:
@@ -8841,6 +9114,14 @@ components:
           description: Omit to keep, null unlimited. Per-replica fail-fast cap; server team owners/admins only, never publisher tokens.
         enabled:
           type: boolean
+        governance:
+          allOf:
+          - $ref: '#/components/schemas/McpServerGovernanceInput'
+          description: 'Omit to keep. Team owners and admins, in a browser session: an editor gets 403 governance_role and
+            an automation token never changes owner, on-call contact, sensitivity, lifecycle or replacement (403 token_not_allowed,
+            details.field governance). Raising the sensitivity of a published server sends it back to review under approval_required
+            (mcp_server.publish_request, reason sensitivity_raised); lowering it does not. Audited as mcp_server.governance_update.
+            Moving the server to another team is requestTeamMcpServerTransfer.'
         requirement:
           allOf:
           - $ref: '#/components/schemas/McpServerRequirementInput'
@@ -9185,6 +9466,340 @@ components:
       properties:
         defaultPolicy:
           $ref: '#/components/schemas/PublishPolicy'
+    Sensitivity:
+      type: string
+      enum:
+      - public
+      - internal
+      - confidential
+      - restricted
+      description: 'A server''s label (default internal) and a gateway''s ceiling (default restricted: no ceiling). A gateway
+        serves no capability of a server above its ceiling (unavailable reason sensitivity_exceeds_gateway). Public
+        < internal < confidential < restricted.'
+    ServerLifecycle:
+      type: string
+      enum:
+      - active
+      - deprecated
+      - sunset
+      description: deprecated shows a banner and tells the owners of gateways that select the server; sunset (or a passed
+        sunsetAt) stops serving it everywhere (unavailable reason sunset).
+    ServerReplacementRef:
+      type: object
+      required:
+      - id
+      - slug
+      - name
+      - teamSlug
+      - teamName
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        teamSlug:
+          type: string
+        teamName:
+          type: string
+    McpServerGovernance:
+      type: object
+      required:
+      - sensitivity
+      - lifecycle
+      - ownerless
+      - reviewOverdue
+      properties:
+        ownerUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: The person accountable for the server (an active editor or above of its team when named)
+        ownerName:
+          type: string
+          description: The owner's name, for the team's members and platform staff
+        ownerless:
+          type: boolean
+          description: >-
+            Nobody is accountable now: none named, or the owner left the team, lost their role or was suspended or deleted (the server shows in attention lists while published)
+        oncallContact:
+          type: string
+          nullable: true
+          maxLength: 200
+          description: >-
+            Whom to page, an email address, an http(s) or tel link or a channel such as #oncall (team members and platform staff only)
+        sensitivity:
+          $ref: '#/components/schemas/Sensitivity'
+        lastReviewedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: The latest approval of a published server
+        reviewDueAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            When the next re-review is due (null: none; set from the platform's interval for its sensitivity)
+        reviewOverdue:
+          type: boolean
+          description: The re-review date has passed. The team asks again with publishTeamMcpServer (or a platform admin approves
+            in place with adminReviewMcpServer)
+        lifecycle:
+          allOf:
+          - $ref: '#/components/schemas/ServerLifecycle'
+          description: As it is now, a deprecated server past its sunsetAt is sunset
+        deprecatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        sunsetAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: The moment the server stops being served
+        replacement:
+          allOf:
+          - $ref: '#/components/schemas/ServerReplacementRef'
+          nullable: true
+        pendingTransfer:
+          allOf:
+          - $ref: '#/components/schemas/ServerTransferRef'
+          nullable: true
+          description: An open transfer to another team (the owning team's members only)
+    McpServerGovernanceInput:
+      type: object
+      description: Omitted fields keep their values; null clears ownerUserId, oncallContact, sunsetAt and replacementServerId.
+      properties:
+        ownerUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: An active person who is an editor, admin or owner of the server's team (422 invalid_owner)
+        oncallContact:
+          type: string
+          nullable: true
+          maxLength: 200
+          description: 422 invalid_oncall_contact unless an email address, an http(s) or tel link or a channel (#oncall, @team)
+        sensitivity:
+          $ref: '#/components/schemas/Sensitivity'
+        lifecycle:
+          $ref: '#/components/schemas/ServerLifecycle'
+        sunsetAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: The moment a deprecated server stops being served; it must lie ahead (422 sunset_in_past). Moving to
+            sunset without a date sunsets it now. 422 lifecycle_active on an active server.
+        replacementServerId:
+          type: string
+          format: uuid
+          nullable: true
+          description: A published server (or one of this team) that is not retired itself and does not lead back here
+            (422 invalid_replacement)
+    ServerTransferRef:
+      type: object
+      required:
+      - id
+      - toTeamSlug
+      - toTeamName
+      - requestedAt
+      - revision
+      properties:
+        id:
+          type: string
+          format: uuid
+        toTeamSlug:
+          type: string
+        toTeamName:
+          type: string
+        requestedAt:
+          type: string
+          format: date-time
+        revision:
+          $ref: '#/components/schemas/Revision'
+    ServerTransferState:
+      type: string
+      enum:
+      - pending
+      - accepted
+      - declined
+      - cancelled
+      - forced
+    ServerTransfer:
+      type: object
+      description: A request to move a server to another team. Nothing moves until the receiving team's owner accepts.
+      required:
+      - id
+      - serverId
+      - serverSlug
+      - serverName
+      - fromTeamSlug
+      - fromTeamName
+      - toTeamSlug
+      - toTeamName
+      - state
+      - requestedAt
+      - revision
+      properties:
+        id:
+          type: string
+          format: uuid
+        serverId:
+          type: string
+          format: uuid
+        serverSlug:
+          type: string
+        serverName:
+          type: string
+        fromTeamSlug:
+          type: string
+        fromTeamName:
+          type: string
+        toTeamSlug:
+          type: string
+        toTeamName:
+          type: string
+        state:
+          $ref: '#/components/schemas/ServerTransferState'
+        note:
+          type: string
+          nullable: true
+          maxLength: 500
+        requestedByName:
+          type: string
+        requestedAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        revision:
+          $ref: '#/components/schemas/Revision'
+    ServerTransferRequest:
+      type: object
+      required:
+      - toTeam
+      properties:
+        toTeam:
+          type: string
+          description: The receiving team's slug or ID. 422 invalid_team when it does not exist, is archived or is this team.
+        note:
+          type: string
+          maxLength: 500
+    ServerTransferForce:
+      type: object
+      required:
+      - toTeam
+      properties:
+        toTeam:
+          type: string
+        note:
+          type: string
+          maxLength: 500
+    GovernanceSettings:
+      type: object
+      required:
+      - reviewIntervalDays
+      - returnOverdueToReview
+      - revision
+      - updatedAt
+      properties:
+        reviewIntervalDays:
+          type: object
+          description: >-
+            Days between re-reviews of a published server per sensitivity (0: none). A published server's next review is counted from its latest approval.
+          required:
+          - public
+          - internal
+          - confidential
+          - restricted
+          properties:
+            public:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 3650
+            internal:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 3650
+            confidential:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 3650
+            restricted:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 3650
+        returnOverdueToReview:
+          type: boolean
+          description: 'Off by default: an overdue re-review only notifies the team and shows in attention lists. On: under approval_required
+            the governance loop also sends the overdue published server back to review (reason review_due). Never unpublishes.'
+        revision:
+          $ref: '#/components/schemas/Revision'
+        updatedAt:
+          type: string
+          format: date-time
+    GovernanceSettingsUpdate:
+      type: object
+      description: Omitted fields keep their values.
+      properties:
+        reviewIntervalDays:
+          type: object
+          properties:
+            public:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 3650
+            internal:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 3650
+            confidential:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 3650
+            restricted:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 3650
+        returnOverdueToReview:
+          type: boolean
+    CatalogServerGovernance:
+      type: object
+      description: What anyone who can read the catalog sees of a server's governance (never its owner or on-call contact).
+      required:
+      - sensitivity
+      - lifecycle
+      properties:
+        sensitivity:
+          $ref: '#/components/schemas/Sensitivity'
+        lifecycle:
+          $ref: '#/components/schemas/ServerLifecycle'
+        deprecatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        sunsetAt:
+          type: string
+          format: date-time
+          nullable: true
+        replacement:
+          allOf:
+          - $ref: '#/components/schemas/ServerReplacementRef'
+          nullable: true
+          description: Only a published replacement
     NetworkEntry:
       type: object
       description: One allowlist entry. A cidr entry allows private addresses inside it (literal or resolved); a
@@ -9425,6 +10040,8 @@ components:
           - $ref: '#/components/schemas/McpServerAuthMode'
           description: oauth means each person signs in to the server's own service before calling it. Absent from
             servers before Phase 7
+        governance:
+          $ref: '#/components/schemas/CatalogServerGovernance'
     CatalogServerPage:
       type: object
       required:
@@ -9552,6 +10169,11 @@ components:
           type: integer
           format: int64
           description: Selected capabilities not served right now (see GatewayCapability.unavailableReason)
+        maxSensitivity:
+          allOf:
+          - $ref: '#/components/schemas/Sensitivity'
+          description: >-
+            The gateway's ceiling (default restricted): a server above it is listed as unavailable with the reason sensitivity_exceeds_gateway and never served.
         accessRequestsEnabled:
           type: boolean
           readOnly: true
@@ -9620,6 +10242,10 @@ components:
         capturePayloads:
           type: boolean
           default: false
+        maxSensitivity:
+          allOf:
+          - $ref: '#/components/schemas/Sensitivity'
+          description: 'Absent: restricted (no ceiling). An automation token can''t set it (403 token_not_allowed, details.field maxSensitivity).'
         rateLimitPerMinute:
           type: integer
           format: int64
@@ -9644,6 +10270,12 @@ components:
           type: boolean
           description: Omit to keep. Platform admins can't change it on team gateways (403 team_gateway). Audited in
             gateway.update.
+        maxSensitivity:
+          allOf:
+          - $ref: '#/components/schemas/Sensitivity'
+          description: Omit to keep. The ceiling lowers or widens what the gateway serves at once; audited in gateway.update.
+            An automation token can't change it (403 token_not_allowed, details.field maxSensitivity), and platform admins
+            can't on team gateways (403 team_gateway).
         rateLimitPerMinute:
           type: integer
           format: int64
@@ -9662,7 +10294,11 @@ components:
       - gone
       - team_archived
       - curation_stale
-      description: 'curation_stale: the curated definition changed and requires owner review. server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved
+      - sensitivity_exceeds_gateway
+      - sunset
+      description: 'sensitivity_exceeds_gateway: the server''s sensitivity is above this gateway''s ceiling (maxSensitivity); raise
+        the ceiling or have the server lowered. sunset: the server is retired (its lifecycle is sunset, or its sunset date
+        has passed) and is served by no gateway. curation_stale: the curated definition changed and requires owner review. server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved
         / changed: the current definition isn''t approved. gone: the server no longer lists it. team_archived: the
         team that owns its server, or the team gateway''s own team, is archived (unarchiving restores it).'
     GatewayCapability:
@@ -13373,7 +14009,7 @@ components:
       type: object
       description: 'Where the web app goes for an item (docs/admin-overview.md, Link targets). server: the server page (team
         page for members, Admin > Servers for platform staff); servers: the team''s server list; review_queue: Admin > Publishing;
-        gateways: Admin > Gateways; service_account / service_accounts: the team''s service accounts; automation_tokens: Admin
+        gateways: Admin > Gateways (the team''s Gateways when teamSlug is set); service_account / service_accounts: the team''s service accounts; automation_tokens: Admin
         > Automation tokens; team_automation_tokens: the team''s Settings > Automation tokens; auth_providers: Admin > Auth
         providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team''s
         Settings > Notifications; service_connections: the team''s Service accounts > Connections tab;
@@ -13425,7 +14061,14 @@ components:
       - rate_limited
       - notification_failures
       - server_certificate_expiring
-      description: 'approval_pending: one private receipt per exact call the current human can review; excludes self-approval,
+      - review_due
+      - server_ownerless
+      - server_transfer_pending
+      description: 'review_due: one item per published server whose re-review is overdue (at = the due date; the team
+        asks again with publish, or a platform admin approves in place). server_ownerless: one item per published server nobody
+        is accountable for (no owner named, or the owner left the team, lost their editor role, was suspended or deleted).
+        server_transfer_pending: one item, count = transfers waiting for the team''s owners to accept (team view, owners only).
+        approval_pending: one private receipt per exact call the current human can review; excludes self-approval,
         stale or expired requests, ineligible service-account admins and automation tokens. Totals count only that human''s
         eligible receipts. server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within
         14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed:
@@ -13638,7 +14281,14 @@ components:
       - approval.decided
       - access.requested
       - access.decided
-      description: 'server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts.
+      - server.review_due
+      - server.sunset_soon
+      - server.deprecated
+      description: 'server.review_due: a published server''s re-review is overdue (its team''s owners and admins and its named
+        owner; once per due date). server.sunset_soon: a deprecated server stops being served within 14 days (its team and the
+        owners of gateways that select it; once per sunset date). server.deprecated: a server that a gateway selects was
+        deprecated (that gateway''s owners; once per gateway and deprecation). These three are in-app and email only, never webhooks.
+        server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts.
         server.recovered. capability.changed: a published server''s definition changed or grew and is held back. publish.requested:
         a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent:
         a person''s connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server''s
@@ -14287,6 +14937,9 @@ components:
           - endpoints_changed
           - requirement_changed
           - classification_changed
+          - sensitivity_raised
+          - review_due
+          - transferred
         note:
           type: string
           maxLength: 300
@@ -14301,6 +14954,7 @@ components:
               enum:
               - user
               - automation_token
+              - system
             name:
               type: string
     PublishDecidedData:
@@ -14426,6 +15080,86 @@ components:
           maxLength: 1100
         status:
           $ref: '#/components/schemas/ApprovalStatus'
+    NotificationGatewayRef:
+      type: object
+      description: A gateway, named only to its own owners
+      required:
+      - id
+      - slug
+      - name
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+    ServerReviewDueData:
+      type: object
+      required:
+      - server
+      - sensitivity
+      - dueAt
+      - returnedToReview
+      properties:
+        server:
+          $ref: '#/components/schemas/NotificationServerRef'
+        sensitivity:
+          $ref: '#/components/schemas/Sensitivity'
+        dueAt:
+          type: string
+          format: date-time
+        returnedToReview:
+          type: boolean
+          description: The governance loop also sent the server back to review (the platform setting is on)
+    ServerSunsetSoonData:
+      type: object
+      required:
+      - server
+      - sunsetAt
+      - daysLeft
+      properties:
+        server:
+          $ref: '#/components/schemas/NotificationServerRef'
+        sunsetAt:
+          type: string
+          format: date-time
+        daysLeft:
+          type: integer
+          format: int32
+        replacement:
+          allOf:
+          - $ref: '#/components/schemas/NotificationServerRef'
+          nullable: true
+        gateway:
+          allOf:
+          - $ref: '#/components/schemas/NotificationGatewayRef'
+          nullable: true
+          description: >-
+            The gateway whose owners are told (null: the server's own team)
+    ServerDeprecatedData:
+      type: object
+      required:
+      - server
+      - deprecatedAt
+      - gateway
+      properties:
+        server:
+          $ref: '#/components/schemas/NotificationServerRef'
+        deprecatedAt:
+          type: string
+          format: date-time
+        sunsetAt:
+          type: string
+          format: date-time
+          nullable: true
+        replacement:
+          allOf:
+          - $ref: '#/components/schemas/NotificationServerRef'
+          nullable: true
+        gateway:
+          $ref: '#/components/schemas/NotificationGatewayRef'
     NotificationTestData:
       type: object
       required:
@@ -14467,6 +15201,9 @@ components:
           - approval.decided
           - access.requested
           - access.decided
+          - server.review_due
+          - server.sunset_soon
+          - server.deprecated
           - test
         version:
           type: integer
@@ -14504,6 +15241,9 @@ components:
           - $ref: '#/components/schemas/UpstreamSigninLapsedData'
           - $ref: '#/components/schemas/KeyExpiringData'
           - $ref: '#/components/schemas/ApprovalNotificationData'
+          - $ref: '#/components/schemas/ServerReviewDueData'
+          - $ref: '#/components/schemas/ServerSunsetSoonData'
+          - $ref: '#/components/schemas/ServerDeprecatedData'
           - $ref: '#/components/schemas/NotificationTestData'
           description: The shape follows type
     AutomationTokenKind:

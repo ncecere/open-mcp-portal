@@ -16,7 +16,7 @@ import (
 const bumpGatewayRevision = `-- name: BumpGatewayRevision :one
 UPDATE gateways SET revision = revision + 1, updated_by = $1, updated_at = now()
 WHERE id = $2
-RETURNING id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled
+RETURNING id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled, max_sensitivity
 `
 
 type BumpGatewayRevisionParams struct {
@@ -43,6 +43,7 @@ func (q *Queries) BumpGatewayRevision(ctx context.Context, arg BumpGatewayRevisi
 		&i.UpdatedAt,
 		&i.RateLimitPerMinute,
 		&i.AccessRequestsEnabled,
+		&i.MaxSensitivity,
 	)
 	return i, err
 }
@@ -219,6 +220,9 @@ SELECT g.id AS gateway_id,
                                AND NOT EXISTS (SELECT 1 FROM jsonb_object_keys(gc.constraints) AS arg
                                                WHERE NOT COALESCE((c.definition->'inputSchema'->'properties') ? arg, false))))
                            AND st.status = 'active' AND COALESCE(gt.status, 'active') = 'active' AND s.enabled
+                           AND NOT (s.lifecycle = 'sunset' OR (s.sunset_at IS NOT NULL AND s.sunset_at <= clock_timestamp()))
+                           AND (CASE s.sensitivity WHEN 'public' THEN 0 WHEN 'internal' THEN 1 WHEN 'confidential' THEN 2 ELSE 3 END)
+                               <= (CASE g.max_sensitivity WHEN 'public' THEN 0 WHEN 'internal' THEN 1 WHEN 'confidential' THEN 2 ELSE 3 END)
                            AND ((g.owner_kind = 'team' AND s.team_id = g.team_id)
                                 OR (s.publish_state = 'published' AND c.approved_fingerprint = c.fingerprint)), false)
        )::bigint AS unavailable_count,
@@ -299,7 +303,7 @@ func (q *Queries) GetCapability(ctx context.Context, id uuid.UUID) (McpCapabilit
 }
 
 const getGateway = `-- name: GetGateway :one
-SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled FROM gateways WHERE id = $1
+SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled, max_sensitivity FROM gateways WHERE id = $1
 `
 
 func (q *Queries) GetGateway(ctx context.Context, id uuid.UUID) (Gateway, error) {
@@ -321,12 +325,13 @@ func (q *Queries) GetGateway(ctx context.Context, id uuid.UUID) (Gateway, error)
 		&i.UpdatedAt,
 		&i.RateLimitPerMinute,
 		&i.AccessRequestsEnabled,
+		&i.MaxSensitivity,
 	)
 	return i, err
 }
 
 const getGatewayBySlug = `-- name: GetGatewayBySlug :one
-SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled FROM gateways WHERE slug = $1
+SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled, max_sensitivity FROM gateways WHERE slug = $1
 `
 
 func (q *Queries) GetGatewayBySlug(ctx context.Context, slug string) (Gateway, error) {
@@ -348,12 +353,13 @@ func (q *Queries) GetGatewayBySlug(ctx context.Context, slug string) (Gateway, e
 		&i.UpdatedAt,
 		&i.RateLimitPerMinute,
 		&i.AccessRequestsEnabled,
+		&i.MaxSensitivity,
 	)
 	return i, err
 }
 
 const getGatewayView = `-- name: GetGatewayView :one
-SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, g.access_requests_enabled, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name
+SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, g.access_requests_enabled, g.max_sensitivity, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name
 FROM gateways g
 LEFT JOIN teams t ON t.id = g.team_id
 WHERE g.id = $1
@@ -384,6 +390,7 @@ func (q *Queries) GetGatewayView(ctx context.Context, id uuid.UUID) (GetGatewayV
 		&i.Gateway.UpdatedAt,
 		&i.Gateway.RateLimitPerMinute,
 		&i.Gateway.AccessRequestsEnabled,
+		&i.Gateway.MaxSensitivity,
 		&i.TeamSlug,
 		&i.TeamName,
 	)
@@ -393,10 +400,10 @@ func (q *Queries) GetGatewayView(ctx context.Context, id uuid.UUID) (GetGatewayV
 const insertGateway = `-- name: InsertGateway :one
 
 INSERT INTO gateways (id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, rate_limit_per_minute,
-                      created_by, updated_by)
+                      created_by, updated_by, max_sensitivity)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
-        $9, $10, $10)
-RETURNING id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled
+        $9, $10, $10, $11)
+RETURNING id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled, max_sensitivity
 `
 
 type InsertGatewayParams struct {
@@ -410,6 +417,7 @@ type InsertGatewayParams struct {
 	CapturePayloads    bool
 	RateLimitPerMinute *int64
 	CreatedBy          uuid.NullUUID
+	MaxSensitivity     string
 }
 
 // Gateways, their selected capabilities and grants (internal/gateways).
@@ -425,6 +433,7 @@ func (q *Queries) InsertGateway(ctx context.Context, arg InsertGatewayParams) (G
 		arg.CapturePayloads,
 		arg.RateLimitPerMinute,
 		arg.CreatedBy,
+		arg.MaxSensitivity,
 	)
 	var i Gateway
 	err := row.Scan(
@@ -443,6 +452,7 @@ func (q *Queries) InsertGateway(ctx context.Context, arg InsertGatewayParams) (G
 		&i.UpdatedAt,
 		&i.RateLimitPerMinute,
 		&i.AccessRequestsEnabled,
+		&i.MaxSensitivity,
 	)
 	return i, err
 }
@@ -675,7 +685,7 @@ func (q *Queries) ListGatewayOptions(ctx context.Context, arg ListGatewayOptions
 }
 
 const listGatewaySelection = `-- name: ListGatewaySelection :many
-SELECT c.id, c.server_id, c.kind, c.name, c.title, c.description, c.definition, c.fingerprint, c.approved_fingerprint, c.approved_by, c.approved_at, c.first_seen_at, c.last_seen_at, c.gone_at, c.requirement_mode, c.requirement_scopes, c.requires_present_person, c.tool_class, c.class_set_by, c.class_set_at, s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, s.rate_limit_per_minute, s.max_concurrent, s.supports_tasks, gc.gateway_id, gc.capability_id, gc.min_team_role, gc.added_by, gc.added_at, gc.name_override, gc.description_override, gc.constraints, gc.base_fingerprint, gc.curated_by, gc.curated_at, t.slug AS team_slug, t.name AS team_name, t.status AS team_status
+SELECT c.id, c.server_id, c.kind, c.name, c.title, c.description, c.definition, c.fingerprint, c.approved_fingerprint, c.approved_by, c.approved_at, c.first_seen_at, c.last_seen_at, c.gone_at, c.requirement_mode, c.requirement_scopes, c.requires_present_person, c.tool_class, c.class_set_by, c.class_set_at, s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, s.rate_limit_per_minute, s.max_concurrent, s.supports_tasks, s.owner_user_id, s.oncall_contact, s.sensitivity, s.last_reviewed_at, s.review_due_at, s.lifecycle, s.deprecated_at, s.sunset_at, s.replacement_server_id, gc.gateway_id, gc.capability_id, gc.min_team_role, gc.added_by, gc.added_at, gc.name_override, gc.description_override, gc.constraints, gc.base_fingerprint, gc.curated_by, gc.curated_at, t.slug AS team_slug, t.name AS team_name, t.status AS team_status
 FROM gateway_capabilities gc
 JOIN mcp_capabilities c ON c.id = gc.capability_id
 JOIN mcp_servers s ON s.id = c.server_id
@@ -774,6 +784,15 @@ func (q *Queries) ListGatewaySelection(ctx context.Context, gatewayID uuid.UUID)
 			&i.McpServer.RateLimitPerMinute,
 			&i.McpServer.MaxConcurrent,
 			&i.McpServer.SupportsTasks,
+			&i.McpServer.OwnerUserID,
+			&i.McpServer.OncallContact,
+			&i.McpServer.Sensitivity,
+			&i.McpServer.LastReviewedAt,
+			&i.McpServer.ReviewDueAt,
+			&i.McpServer.Lifecycle,
+			&i.McpServer.DeprecatedAt,
+			&i.McpServer.SunsetAt,
+			&i.McpServer.ReplacementServerID,
 			&i.GatewayCapability.GatewayID,
 			&i.GatewayCapability.CapabilityID,
 			&i.GatewayCapability.MinTeamRole,
@@ -800,7 +819,7 @@ func (q *Queries) ListGatewaySelection(ctx context.Context, gatewayID uuid.UUID)
 }
 
 const listGateways = `-- name: ListGateways :many
-SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, g.access_requests_enabled, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name
+SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, g.access_requests_enabled, g.max_sensitivity, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name
 FROM gateways g
 LEFT JOIN teams t ON t.id = g.team_id
 WHERE ($1::uuid IS NULL OR g.team_id = $1::uuid)
@@ -862,6 +881,7 @@ func (q *Queries) ListGateways(ctx context.Context, arg ListGatewaysParams) ([]L
 			&i.Gateway.UpdatedAt,
 			&i.Gateway.RateLimitPerMinute,
 			&i.Gateway.AccessRequestsEnabled,
+			&i.Gateway.MaxSensitivity,
 			&i.TeamSlug,
 			&i.TeamName,
 		); err != nil {
@@ -876,7 +896,7 @@ func (q *Queries) ListGateways(ctx context.Context, arg ListGatewaysParams) ([]L
 }
 
 const listGatewaysForServiceAccount = `-- name: ListGatewaysForServiceAccount :many
-SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, g.access_requests_enabled, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name
+SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, g.access_requests_enabled, g.max_sensitivity, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name
 FROM gateways g
 LEFT JOIN teams t ON t.id = g.team_id
 WHERE g.enabled
@@ -921,6 +941,7 @@ func (q *Queries) ListGatewaysForServiceAccount(ctx context.Context, teamID uuid
 			&i.Gateway.UpdatedAt,
 			&i.Gateway.RateLimitPerMinute,
 			&i.Gateway.AccessRequestsEnabled,
+			&i.Gateway.MaxSensitivity,
 			&i.TeamSlug,
 			&i.TeamName,
 		); err != nil {
@@ -935,7 +956,7 @@ func (q *Queries) ListGatewaysForServiceAccount(ctx context.Context, teamID uuid
 }
 
 const listGatewaysForUser = `-- name: ListGatewaysForUser :many
-SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, g.access_requests_enabled, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name,
+SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, g.access_requests_enabled, g.max_sensitivity, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name,
        COALESCE(m.role, '')::text AS member_role,
        ARRAY(SELECT DISTINCT gg.subject_kind FROM gateway_grants gg
              WHERE gg.gateway_id = g.id
@@ -1004,6 +1025,7 @@ func (q *Queries) ListGatewaysForUser(ctx context.Context, arg ListGatewaysForUs
 			&i.Gateway.UpdatedAt,
 			&i.Gateway.RateLimitPerMinute,
 			&i.Gateway.AccessRequestsEnabled,
+			&i.Gateway.MaxSensitivity,
 			&i.TeamSlug,
 			&i.TeamName,
 			&i.MemberRole,
@@ -1021,7 +1043,7 @@ func (q *Queries) ListGatewaysForUser(ctx context.Context, arg ListGatewaysForUs
 }
 
 const listUsableGatewayCandidates = `-- name: ListUsableGatewayCandidates :many
-SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled FROM gateways WHERE id = ANY($1::uuid[])
+SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled, max_sensitivity FROM gateways WHERE id = ANY($1::uuid[])
 `
 
 // Gateways by ID, for checking which a person may use (API key scopes).
@@ -1050,6 +1072,7 @@ func (q *Queries) ListUsableGatewayCandidates(ctx context.Context, ids []uuid.UU
 			&i.UpdatedAt,
 			&i.RateLimitPerMinute,
 			&i.AccessRequestsEnabled,
+			&i.MaxSensitivity,
 		); err != nil {
 			return nil, err
 		}
@@ -1094,7 +1117,7 @@ func (q *Queries) LockCapabilityForCuration(ctx context.Context, id uuid.UUID) (
 }
 
 const lockGateway = `-- name: LockGateway :one
-SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled FROM gateways WHERE id = $1 FOR UPDATE
+SELECT id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled, max_sensitivity FROM gateways WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockGateway(ctx context.Context, id uuid.UUID) (Gateway, error) {
@@ -1116,6 +1139,7 @@ func (q *Queries) LockGateway(ctx context.Context, id uuid.UUID) (Gateway, error
 		&i.UpdatedAt,
 		&i.RateLimitPerMinute,
 		&i.AccessRequestsEnabled,
+		&i.MaxSensitivity,
 	)
 	return i, err
 }
@@ -1171,10 +1195,10 @@ func (q *Queries) SetGatewayCapabilityCuration(ctx context.Context, arg SetGatew
 const updateGateway = `-- name: UpdateGateway :one
 UPDATE gateways
 SET name = $1, description = $2, enabled = $3, capture_payloads = $4,
-    rate_limit_per_minute = $5,
-    revision = revision + 1, updated_by = $6, updated_at = now()
-WHERE id = $7
-RETURNING id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled
+    rate_limit_per_minute = $5, max_sensitivity = $6,
+    revision = revision + 1, updated_by = $7, updated_at = now()
+WHERE id = $8
+RETURNING id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled, max_sensitivity
 `
 
 type UpdateGatewayParams struct {
@@ -1183,6 +1207,7 @@ type UpdateGatewayParams struct {
 	Enabled            bool
 	CapturePayloads    bool
 	RateLimitPerMinute *int64
+	MaxSensitivity     string
 	UpdatedBy          uuid.NullUUID
 	ID                 uuid.UUID
 }
@@ -1194,6 +1219,7 @@ func (q *Queries) UpdateGateway(ctx context.Context, arg UpdateGatewayParams) (G
 		arg.Enabled,
 		arg.CapturePayloads,
 		arg.RateLimitPerMinute,
+		arg.MaxSensitivity,
 		arg.UpdatedBy,
 		arg.ID,
 	)
@@ -1214,6 +1240,7 @@ func (q *Queries) UpdateGateway(ctx context.Context, arg UpdateGatewayParams) (G
 		&i.UpdatedAt,
 		&i.RateLimitPerMinute,
 		&i.AccessRequestsEnabled,
+		&i.MaxSensitivity,
 	)
 	return i, err
 }

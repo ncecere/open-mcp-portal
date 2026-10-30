@@ -14,6 +14,8 @@ import { PageSkeleton } from "../../components/page-skeleton";
 import { serviceAccountsCant } from "../../components/providers/labels";
 import { RequiresBadge } from "../../components/providers/requires";
 import { HealthBadge, SignInBadge } from "../../components/servers/badges";
+import { RetirementBanner } from "../../components/servers/governance-card";
+import { sensitivityHelp, sensitivityLabels, sensitivityTone } from "../../components/servers/governance";
 import { CapabilityItem } from "../../components/servers/capability-item";
 import { countsText, kindOrder, kindTitle, untrustedText } from "../../components/servers/labels";
 import m from "../../components/servers/servers.module.css";
@@ -21,6 +23,7 @@ import { PageActions } from "../../components/templates/page-actions";
 import { useCurrentUser } from "../../session";
 import { CaptureBadge, captureWho } from "../../components/capture";
 import { Alert, ErrorAlert } from "@/components/ui/alert/alert";
+import { Badge } from "@/components/ui/badge/badge";
 import { Card } from "@/components/ui/card/card";
 import { FactsLine } from "@/components/ui/description-list/description-list";
 import { EmptyState } from "@/components/ui/empty-state/empty-state";
@@ -48,6 +51,11 @@ export function CatalogServerPage() {
             <HealthBadge health={server.health} />
             {server.capturePayloads && <CaptureBadge />}
             <SignInBadge authMode={server.authMode} />
+            {server.governance && (
+              <Badge tone={sensitivityTone[server.governance.sensitivity]} title={sensitivityHelp[server.governance.sensitivity]}>
+                {sensitivityLabels[server.governance.sensitivity]}
+              </Badge>
+            )}
           </span>
         }
         description={server.description || undefined}
@@ -68,6 +76,7 @@ export function CatalogServerPage() {
           ) : undefined
         }
       />
+      <RetirementBanner server={server} />
       <Alert tone="info">{gatewaysNote}</Alert>
       {server.authMode === "oauth" && (
         <Alert tone="info" title={`Each person signs in to ${server.name}`}>
