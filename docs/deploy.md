@@ -640,7 +640,7 @@ must start with `omp-smoke`), `SMOKE_NODE_IMAGE`.
 - The portal is stateless, so scale the Deployment horizontally. All shared state is in PostgreSQL.
 - Background loops:
   - The MCP server health checks (`HEALTH_CHECK_INTERVAL`, default 5m), the signing-key rotation, the retention loop
-    (`RETENTION_INTERVAL`, default 15m), the usage rollup (every 5 minutes) and the optional background refresh of
+    (`RETENTION_INTERVAL`, default 15m), the usage rollup (every 5 minutes), the server governance loop (advisory lock `omp.governance`, every 5 minutes, `omp_loop_leader{loop="governance"}`; decision 88) and the optional background refresh of
     connected accounts' tokens (`PROVIDER_REFRESH_INTERVAL`, default `0`: off) take a PostgreSQL advisory lock, so one
     replica runs each at a time (`omp_loop_leader` is 1 on a replica whose latest run held the lock; runs are short,
     so it can be 1 on several replicas at once, and 0 on all of them only when nothing is running the loop).

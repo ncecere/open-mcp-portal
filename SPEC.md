@@ -126,6 +126,15 @@ annotations (read-only/destructive hints shown in UI, never trusted for authoriz
 version is held (`changed`) and gateways keep serving nothing for that tool until a platform admin (or the
 team, under `self_publish`) approves the change.
 
+**Server governance** (decision 88, unreleased #40): each server has an accountable owner (an active editor or
+above of its team), an on-call contact, a sensitivity label (`public`, `internal` default, `confidential`,
+`restricted`), a lifecycle (`active`, `deprecated`, `sunset` with a sunset date and replacement) and re-review
+dates; a gateway has a sensitivity ceiling. A server above a gateway's ceiling, or at or past its sunset, is
+unavailable (`sensitivity_exceeds_gateway`, `sunset`) and never served. Raising a published server's sensitivity
+returns it to review; the platform sets review intervals; overdue reviews notify and show in attention lists and
+never unpublish. A server moves between teams only when the receiving team's owner accepts. Owner, sensitivity,
+lifecycle, transfers and ceilings are never changed by automation tokens. See [registry](docs/registry.md#governance).
+
 **Publishing policy**: platform setting `approval_required` | `self_publish` with per-team override.
 
 **Gateway**: owner (team or platform), slug, name, description, enabled, selected capabilities (each with an
