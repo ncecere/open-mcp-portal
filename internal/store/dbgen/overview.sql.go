@@ -397,6 +397,68 @@ func (q *Queries) AttentionLapsedSignins(ctx context.Context, arg AttentionLapse
 	return items, nil
 }
 
+const attentionOwnerlessServers = `-- name: AttentionOwnerlessServers :many
+SELECT s.id, s.slug, s.name, t.id AS team_id, t.slug AS team_slug, t.name AS team_name, (s.owner_user_id IS NOT NULL)::boolean AS owner_left,
+       (count(*) OVER ())::bigint AS total
+FROM mcp_servers s
+JOIN teams t ON t.id = s.team_id AND t.status = 'active'
+WHERE s.publish_state = 'published'
+  AND NOT EXISTS (SELECT 1 FROM users u
+                  JOIN team_members m ON m.user_id = u.id AND m.team_id = s.team_id AND m.role IN ('owner', 'admin', 'editor')
+                  WHERE u.id = s.owner_user_id AND u.status = 'active')
+  AND ($1::uuid IS NULL OR s.team_id = $1::uuid)
+ORDER BY (s.owner_user_id IS NULL), s.name, s.id
+LIMIT $2
+`
+
+type AttentionOwnerlessServersParams struct {
+	TeamID   uuid.NullUUID
+	PageSize int32
+}
+
+type AttentionOwnerlessServersRow struct {
+	ID        uuid.UUID
+	Slug      string
+	Name      string
+	TeamID    uuid.UUID
+	TeamSlug  string
+	TeamName  string
+	OwnerLeft bool
+	Total     int64
+}
+
+// Published servers of active teams nobody is accountable for: no owner is
+// named, or the owner is no longer an active editor or above of the team (they
+// left it, lost their role, were suspended or deleted).
+func (q *Queries) AttentionOwnerlessServers(ctx context.Context, arg AttentionOwnerlessServersParams) ([]AttentionOwnerlessServersRow, error) {
+	rows, err := q.db.Query(ctx, attentionOwnerlessServers, arg.TeamID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AttentionOwnerlessServersRow{}
+	for rows.Next() {
+		var i AttentionOwnerlessServersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.TeamID,
+			&i.TeamSlug,
+			&i.TeamName,
+			&i.OwnerLeft,
+			&i.Total,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const attentionPendingReviews = `-- name: AttentionPendingReviews :one
 SELECT count(*)::bigint AS pending, COALESCE(min(s.publish_requested_at), 'epoch'::timestamptz)::timestamptz AS oldest
 FROM mcp_servers s JOIN teams t ON t.id = s.team_id AND t.status = 'active'
@@ -412,6 +474,26 @@ type AttentionPendingReviewsRow struct {
 func (q *Queries) AttentionPendingReviews(ctx context.Context, teamID uuid.NullUUID) (AttentionPendingReviewsRow, error) {
 	row := q.db.QueryRow(ctx, attentionPendingReviews, teamID)
 	var i AttentionPendingReviewsRow
+	err := row.Scan(&i.Pending, &i.Oldest)
+	return i, err
+}
+
+const attentionPendingTransfers = `-- name: AttentionPendingTransfers :one
+SELECT count(*)::bigint AS pending, COALESCE(min(t.requested_at), 'epoch'::timestamptz)::timestamptz AS oldest
+FROM server_transfers t
+JOIN mcp_servers s ON s.id = t.server_id
+WHERE t.state = 'pending' AND t.to_team_id = $1
+`
+
+type AttentionPendingTransfersRow struct {
+	Pending int64
+	Oldest  time.Time
+}
+
+// Transfers waiting for a team's owners to accept, and the oldest request.
+func (q *Queries) AttentionPendingTransfers(ctx context.Context, teamID uuid.UUID) (AttentionPendingTransfersRow, error) {
+	row := q.db.QueryRow(ctx, attentionPendingTransfers, teamID)
+	var i AttentionPendingTransfersRow
 	err := row.Scan(&i.Pending, &i.Oldest)
 	return i, err
 }
@@ -433,6 +515,65 @@ func (q *Queries) AttentionPersonalKeys(ctx context.Context) (AttentionPersonalK
 	var i AttentionPersonalKeysRow
 	err := row.Scan(&i.Keys, &i.Earliest)
 	return i, err
+}
+
+const attentionReviewDue = `-- name: AttentionReviewDue :many
+SELECT s.id, s.slug, s.name, t.id AS team_id, t.slug AS team_slug, t.name AS team_name, s.review_due_at,
+       (count(*) OVER ())::bigint AS total
+FROM mcp_servers s
+JOIN teams t ON t.id = s.team_id AND t.status = 'active'
+WHERE s.publish_state = 'published' AND s.review_due_at IS NOT NULL AND s.review_due_at <= $1::timestamptz
+  AND ($2::uuid IS NULL OR s.team_id = $2::uuid)
+ORDER BY s.review_due_at, s.name, s.id
+LIMIT $3
+`
+
+type AttentionReviewDueParams struct {
+	Now      time.Time
+	TeamID   uuid.NullUUID
+	PageSize int32
+}
+
+type AttentionReviewDueRow struct {
+	ID          uuid.UUID
+	Slug        string
+	Name        string
+	TeamID      uuid.UUID
+	TeamSlug    string
+	TeamName    string
+	ReviewDueAt *time.Time
+	Total       int64
+}
+
+// Published servers of active teams whose re-review is due (decision 88); at
+// is the due date. team_id narrows to one team's.
+func (q *Queries) AttentionReviewDue(ctx context.Context, arg AttentionReviewDueParams) ([]AttentionReviewDueRow, error) {
+	rows, err := q.db.Query(ctx, attentionReviewDue, arg.Now, arg.TeamID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AttentionReviewDueRow{}
+	for rows.Next() {
+		var i AttentionReviewDueRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.TeamID,
+			&i.TeamSlug,
+			&i.TeamName,
+			&i.ReviewDueAt,
+			&i.Total,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const attentionServiceAccountKeys = `-- name: AttentionServiceAccountKeys :many

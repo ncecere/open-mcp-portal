@@ -468,7 +468,7 @@ func (q *Queries) PendingAccessRequestsForUser(ctx context.Context, userID uuid.
 const setGatewayAccessRequests = `-- name: SetGatewayAccessRequests :one
 UPDATE gateways SET access_requests_enabled = $1, revision = revision + 1,
     updated_by = $2, updated_at = clock_timestamp()
-WHERE id = $3 RETURNING id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled
+WHERE id = $3 RETURNING id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, revision, created_by, created_at, updated_by, updated_at, rate_limit_per_minute, access_requests_enabled, max_sensitivity
 `
 
 type SetGatewayAccessRequestsParams struct {
@@ -496,6 +496,7 @@ func (q *Queries) SetGatewayAccessRequests(ctx context.Context, arg SetGatewayAc
 		&i.UpdatedAt,
 		&i.RateLimitPerMinute,
 		&i.AccessRequestsEnabled,
+		&i.MaxSensitivity,
 	)
 	return i, err
 }

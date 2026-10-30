@@ -247,6 +247,7 @@ type Gateway struct {
 	UpdatedAt             time.Time
 	RateLimitPerMinute    *int64
 	AccessRequestsEnabled bool
+	MaxSensitivity        string
 }
 
 type GatewayCapability struct {
@@ -447,6 +448,15 @@ type McpServer struct {
 	RateLimitPerMinute    *int64
 	MaxConcurrent         *int32
 	SupportsTasks         bool
+	OwnerUserID           uuid.NullUUID
+	OncallContact         *string
+	Sensitivity           string
+	LastReviewedAt        *time.Time
+	ReviewDueAt           *time.Time
+	Lifecycle             string
+	DeprecatedAt          *time.Time
+	SunsetAt              *time.Time
+	ReplacementServerID   uuid.NullUUID
 }
 
 type McpServerCredential struct {
@@ -729,11 +739,19 @@ type PlatformBootstrap struct {
 }
 
 type PlatformSetting struct {
-	ID                   int16
-	PublishDefaultPolicy string
-	Revision             int64
-	UpdatedBy            uuid.NullUUID
-	UpdatedAt            time.Time
+	ID                             int16
+	PublishDefaultPolicy           string
+	Revision                       int64
+	UpdatedBy                      uuid.NullUUID
+	UpdatedAt                      time.Time
+	ReviewIntervalDaysPublic       int32
+	ReviewIntervalDaysInternal     int32
+	ReviewIntervalDaysConfidential int32
+	ReviewIntervalDaysRestricted   int32
+	GovernanceReturnOverdue        bool
+	GovernanceRevision             int64
+	GovernanceUpdatedBy            uuid.NullUUID
+	GovernanceUpdatedAt            time.Time
 }
 
 type ProviderAuthState struct {
@@ -830,6 +848,31 @@ type SecretRequest struct {
 	CreatedAt       time.Time
 	ExpiresAt       time.Time
 	UsedAt          *time.Time
+}
+
+type ServerGovernanceNotice struct {
+	ID         int64
+	Kind       string
+	ServerID   uuid.UUID
+	GatewayID  uuid.NullUUID
+	Stamp      time.Time
+	NotifiedAt time.Time
+}
+
+type ServerTransfer struct {
+	ID             uuid.UUID
+	ServerID       uuid.UUID
+	FromTeamID     uuid.UUID
+	ToTeamID       uuid.UUID
+	State          string
+	ServerRevision int64
+	Note           *string
+	RequestedBy    uuid.NullUUID
+	RequestedAt    time.Time
+	AcceptedBy     uuid.NullUUID
+	DecidedBy      uuid.NullUUID
+	DecidedAt      *time.Time
+	Revision       int64
 }
 
 type ServiceAccount struct {

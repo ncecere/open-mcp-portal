@@ -2,9 +2,9 @@
 
 -- name: InsertGateway :one
 INSERT INTO gateways (id, slug, name, description, owner_kind, team_id, enabled, capture_payloads, rate_limit_per_minute,
-                      created_by, updated_by)
+                      created_by, updated_by, max_sensitivity)
 VALUES (@id, @slug, @name, @description, @owner_kind, sqlc.narg(team_id), @enabled, @capture_payloads,
-        sqlc.narg(rate_limit_per_minute), @created_by, @created_by)
+        sqlc.narg(rate_limit_per_minute), @created_by, @created_by, @max_sensitivity)
 RETURNING *;
 
 -- name: GetGateway :one
@@ -19,7 +19,7 @@ SELECT * FROM gateways WHERE id = $1 FOR UPDATE;
 -- name: UpdateGateway :one
 UPDATE gateways
 SET name = @name, description = @description, enabled = @enabled, capture_payloads = @capture_payloads,
-    rate_limit_per_minute = sqlc.narg(rate_limit_per_minute),
+    rate_limit_per_minute = sqlc.narg(rate_limit_per_minute), max_sensitivity = @max_sensitivity,
     revision = revision + 1, updated_by = @updated_by, updated_at = now()
 WHERE id = @id
 RETURNING *;
@@ -73,6 +73,9 @@ SELECT g.id AS gateway_id,
                                AND NOT EXISTS (SELECT 1 FROM jsonb_object_keys(gc.constraints) AS arg
                                                WHERE NOT COALESCE((c.definition->'inputSchema'->'properties') ? arg, false))))
                            AND st.status = 'active' AND COALESCE(gt.status, 'active') = 'active' AND s.enabled
+                           AND NOT (s.lifecycle = 'sunset' OR (s.sunset_at IS NOT NULL AND s.sunset_at <= clock_timestamp()))
+                           AND (CASE s.sensitivity WHEN 'public' THEN 0 WHEN 'internal' THEN 1 WHEN 'confidential' THEN 2 ELSE 3 END)
+                               <= (CASE g.max_sensitivity WHEN 'public' THEN 0 WHEN 'internal' THEN 1 WHEN 'confidential' THEN 2 ELSE 3 END)
                            AND ((g.owner_kind = 'team' AND s.team_id = g.team_id)
                                 OR (s.publish_state = 'published' AND c.approved_fingerprint = c.fingerprint)), false)
        )::bigint AS unavailable_count,
