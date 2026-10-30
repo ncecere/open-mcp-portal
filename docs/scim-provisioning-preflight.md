@@ -33,7 +33,25 @@ The issue's historical suggestion of verified-email linking is **not accepted**:
 - Keep adopted links, unadopted directory resources, pending enrollment and tombstones separate. User and directory-resource identifiers need not be equal and are not credentials.
 - Make requiring active provisioning for new identities an explicit enablement operation, after unmanaged break-glass administration is established. Enabling it needs a preview and a clear failure mode for a missing resource; it must not be inferred from the presence of a bearer token.
 
-Still to decide: the supported binding profiles, the result for a newly authenticated identity matching a pending inactive resource when required provisioning is off, and how re-POST/re-enrollment interacts with tombstones without silently reactivating an old local principal. No Entra/authentik interoperability is established by these recommendations.
+### Proposed login eligibility matrix
+
+The following recommendation resolves the ordering ambiguity in the older drafts; it still needs review and deterministic tests before acceptance:
+
+- **SCIM disabled:** retain current issuer/subject login behavior. Merely storing a directory token or draft mapping does not enable enforcement.
+- **Existing unmanaged issuer/subject:** retain normal login and manual status checks. A matching unadopted resource/tombstone does not seize authority over the account. Adoption remains an explicit operation, not a side effect of email or claim matching.
+- **Existing adopted identity, matching immutable link:** require both manual and directory eligibility. Directory inactivity or a DELETE/cleanup marker refuses sign-in. An active directory resource cannot override manual suspension.
+- **Existing adopted identity, changed/missing/ambiguous verified selector:** refuse managed sign-in before updating profile, bootstrap, invitations or sessions. Do not relink the account or fall back to an unmanaged login.
+- **New issuer/subject, active matching pending resource:** allow enrollment only after uniqueness/collision checks and protected-principal checks. Record the exact issuer/subject association atomically with enrollment; it remains the authentication key.
+- **New issuer/subject, inactive matching pending resource:** refuse before `UpsertLoginUser`, even when optional unmanaged JIT enrollment is enabled. An inactive pending record must not become an unmanaged owner/admin through bootstrap or an invitation.
+- **New issuer/subject, matching tombstone or incomplete DELETE cleanup:** refuse before upsert. Neither `active:true` nor re-POST silently restores the deleted principal's authority. An explicit separately defined re-enrollment operation is required after stable cleanup.
+- **New issuer/subject, no matching resource and required provisioning enabled:** refuse before upsert. This policy must be deliberately enabled, not inferred from a missing record.
+- **New issuer/subject, no matching resource and optional unmanaged JIT enabled:** retain unmanaged JIT, visibly outside SCIM control. Document the race boundary: if login creates an unmanaged account before a later directory push, that push cannot retroactively adopt it without approval. Optional JIT is not complete directory enforcement.
+- **New enrollment would become a platform admin or team owner:** refuse the managed transition; never silently unlink or grant a protected role. Bootstrap must not bypass an inactive/missing enrollment gate. Before enabling required provisioning, establish an existing unmanaged break-glass administrator. Any later recovery exception must be explicit, not an accidental fallback.
+- **Concurrent provisioning change:** eligibility and link creation must use one serialized directory/identity snapshot. A stale pre-check is not permission to create a user or session after a reducing update commits.
+
+A denied new enrollment must leave no user, bootstrap marker, membership, session or new credential behind. Existing-user denial auditing is distinct from granting authority. Protected accounts and optional unmanaged JIT must be displayed as outside the managed population rather than reported as successfully offboarded.
+
+Still to decide: the supported binding profiles and exact explicit re-enrollment protocol. No Entra/authentik interoperability is established by this matrix.
 
 ## 3. Supported managed population
 
