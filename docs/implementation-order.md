@@ -7,7 +7,7 @@ numbers and file paths are suggestions, not instructions to overwrite existing c
 
 ## Current batch
 
-**Integrated v0.10.0 candidate, not yet released:** #40 server governance (decision88, immutable expand-only migrations49/50, including explicit label confirmation) and #46 CLI/public client (decision89). Combined focused both-role races and early source browser/runtime checks passed; full combined release gates, final browser/runtime, actual previous-image/schema50 compatibility and verified publication remain. Neither issue is closed yet. See [registry](registry.md#governance), [CLI](cli.md), [candidate notes](releases/v0.10.0.md) and [status](status.md). #36 SCIM follows after its unaccepted identity-linking/deprovisioning draft is corrected and decided.
+**Integrated v0.10.0 candidate, not yet released:** #40 server governance (decision88, immutable expand-only migrations49/50, including explicit label confirmation) and #46 CLI/public client (decision89). All four complete mandatory-DB normal/race suites,896 web tests, local deployment/advisory checks, final source browser/runtime and actual previous-image/schema50 compatibility passed with scoped caveats; exact-source GitHub gates and independently verified publication remain. Neither issue is closed yet. See [registry](registry.md#governance), [CLI](cli.md), [candidate notes](releases/v0.10.0.md) and [status](status.md). #36 SCIM follows after its unaccepted identity-linking/deprovisioning draft is corrected and decided.
 
 **Shipped in v0.3.3:** #28 owner-set tool classification (migration `00027`) and #37 browser sessions
 (migration `00028`, idle expiry off by default). Both issues are closed. See [classification](tool-classification.md),
