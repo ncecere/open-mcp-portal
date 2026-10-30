@@ -82,6 +82,10 @@ type Service struct {
 	// machine_oauth mode (machine.go).
 	machine *upstream.MachineTokens
 	limits  *limits.Service
+	// now is the clock of the governance loop (SetClock; tests).
+	now func() time.Time
+	// ObserveLeader is told whether this replica led the latest governance run.
+	ObserveLeader func(leader bool)
 }
 
 // New returns a Service. client reaches the servers (its AllowPrivate is the
@@ -233,6 +237,9 @@ type ServerView struct {
 	// Warnings are things that aren't failures yet (a client certificate about
 	// to expire), shown with the health.
 	Warnings []HealthWarning
+	// Governance is who is accountable for the server, how sensitive it is and
+	// whether it is being retired (decision 88).
+	Governance GovernanceView
 }
 
 // HasAuth reports whether the server has a stored credential.
@@ -318,6 +325,9 @@ func views(ctx context.Context, q *dbgen.Queries, rows []dbgen.ListMCPServersRow
 		return nil, err
 	}
 	if err := secretViews(ctx, q, out, index); err != nil {
+		return nil, err
+	}
+	if err := governanceViews(ctx, q, out, index, now); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -505,6 +515,10 @@ type UpdateInput struct {
 	// TLS changes the server's CA bundle and client certificate (nil keeps
 	// them; see TLSInput).
 	TLS *TLSInput
+	// Governance changes the server's owner, on-call contact, sensitivity,
+	// lifecycle and replacement (nil keeps them; team owners and admins in a
+	// browser session only, decision 88).
+	Governance *GovernanceInput
 }
 
 // errCaptureRole: only the server team's owners and admins switch capture.
@@ -837,7 +851,7 @@ func (s *Service) insertParams(ctx context.Context, id, teamID uuid.UUID, a auth
 		return dbgen.InsertMCPServerParams{}, err
 	}
 	p := dbgen.InsertMCPServerParams{ID: id, TeamID: teamID, Slug: in.Slug, Name: in.Name, Description: in.Description, URL: u,
-		TimeoutSeconds: in.TimeoutSeconds, Enabled: in.Enabled, CreatedBy: by(a), AuthScopes: []string{},
+		TimeoutSeconds: in.TimeoutSeconds, Enabled: in.Enabled, CreatedBy: by(a), AuthScopes: []string{}, OwnerUserID: creatorOwner(a),
 		RateLimitPerMinute: in.RateLimitPerMinute, MaxConcurrent: in.MaxConcurrent}
 	if len(in.Credentials) == 0 && (in.AuthHeaderName != "" || in.AuthValue != "") {
 		if err := checkHeader(in.AuthHeaderName, in.AuthValue); err != nil {
@@ -864,6 +878,9 @@ func (s *Service) insertParams(ctx context.Context, id, teamID uuid.UUID, a auth
 // current value) writes nothing: no revision bump and no audit entry, as a
 // member role change to the same role.
 func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid.UUID, in UpdateInput, expectedRevision int64) (ServerView, error) {
+	if in.Governance != nil && a.IsToken() {
+		return ServerView{}, errGovernanceToken
+	}
 	// Upstream OAuth changes need the network (discovery, registration,
 	// revocation): that happens first, against the server as read now; the
 	// transaction then checks the revision again.
@@ -886,6 +903,10 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 		}
 		if cur.Revision != expectedRevision {
 			return apperr.Stale()
+		}
+		gp, err := planGovernance(ctx, q, a, ta.role, cur, in.Governance, s.clock())
+		if err != nil {
+			return err
 		}
 		if err := s.checkProtection(ctx, q, ta.role, in.RateLimitPerMinute, in.MaxConcurrent, in.SetRateLimit || in.SetMaxConcurrent); err != nil {
 			return err
@@ -943,6 +964,17 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 		secretChanged := pre.secret != nil && !samePersonSecret(cur, *pre.secret)
 		machineChanged := machine != nil && machine.changed
 		if unchanged(cur, p, valueChanged || ap.rewrites() || tp.changed(), in.CapturePayloads) && !planChanged && !machineChanged && pre.mode == AuthModeOf(cur) && !secretChanged && !ep.changed {
+			if !gp.changed {
+				return nil
+			}
+			// Only the governance changed: it moves the revision itself.
+			row, err := s.applyGovernance(ctx, q, a, ta.team, cur, gp, true)
+			if err != nil {
+				return err
+			}
+			if gp.raised {
+				return s.resubmit(ctx, q, a, ta.team, row, "sensitivity_raised", noteSensitivityRaised)
+			}
 			return nil
 		}
 		ps, err := LoadProviders(ctx, q)
@@ -1026,6 +1058,11 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 		if err := audit.Record(ctx, q, e); err != nil {
 			return err
 		}
+		if gp.changed {
+			if row, err = s.applyGovernance(ctx, q, a, ta.team, cur, gp, false); err != nil {
+				return err
+			}
+		}
 		authChanged, err := s.applyOAuth(ctx, q, a, cur, row, pre)
 		if err != nil {
 			return err
@@ -1052,6 +1089,8 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, ref string, id uuid
 			err = s.resubmit(ctx, q, a, ta.team, cur, "upstream_tls_changed", noteUpstreamTLSChanged)
 		case widened(before, after):
 			err = s.resubmit(ctx, q, a, ta.team, cur, "requirement_changed", noteRequirementChanged)
+		case gp.raised:
+			err = s.resubmit(ctx, q, a, ta.team, cur, "sensitivity_raised", noteSensitivityRaised)
 		}
 		if err != nil {
 			return err

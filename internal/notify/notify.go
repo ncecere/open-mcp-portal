@@ -39,13 +39,18 @@ const (
 	ApprovalDecided          = "approval.decided"
 	AccessRequested          = "access.requested"
 	AccessDecided            = "access.decided"
+	// Governance notices (decision 88): private, never webhooks.
+	ServerReviewDue  = "server.review_due"
+	ServerSunsetSoon = "server.sunset_soon"
+	ServerDeprecated = "server.deprecated"
 	// Test is the type of a destination's test payload; it is not an event.
 	Test = "test"
 )
 
 // Events lists every event in the order the API shows them.
 var Events = []string{ServerUnhealthy, ServerRecovered, CapabilityChanged, PublishRequested, PublishDecided,
-	ConnectionNeedsReconsent, UpstreamSigninLapsed, KeyExpiring, ApprovalRequested, ApprovalDecided, AccessRequested, AccessDecided}
+	ConnectionNeedsReconsent, UpstreamSigninLapsed, KeyExpiring, ApprovalRequested, ApprovalDecided, AccessRequested, AccessDecided,
+	ServerReviewDue, ServerSunsetSoon, ServerDeprecated}
 
 // ValidEvent reports whether e is a supported event.
 func ValidEvent(e string) bool {

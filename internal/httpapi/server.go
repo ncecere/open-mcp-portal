@@ -130,7 +130,7 @@ func apiRoutes(d Deps) []route {
 	for _, group := range [][]route{a.authRoutes(), a.teamRoutes(), a.platformAdminRoutes(), a.mcpServerRoutes(), a.mcpAdminRoutes(),
 		a.gatewayRoutes(), a.gatewayAdminRoutes(), a.meGatewayRoutes(), a.mcpRoutes(), a.oauthRoutes(), a.oauthRESTRoutes(),
 		a.serviceAccountRoutes(), a.serviceAccountAdminRoutes(), a.serviceConnectionRoutes(), a.providerRoutes(), a.operationsRoutes(), a.operationsAdminRoutes(),
-		a.upstreamOAuthRoutes(), a.v02Routes(), a.classificationRoutes(), a.personSecretRoutes(), a.sessionRoutes(), a.approvalRoutes(), a.accessRequestRoutes()} {
+		a.upstreamOAuthRoutes(), a.v02Routes(), a.classificationRoutes(), a.personSecretRoutes(), a.sessionRoutes(), a.approvalRoutes(), a.accessRequestRoutes(), a.governanceRoutes(), a.governanceAdminRoutes()} {
 		routes = append(routes, group...)
 	}
 	return routes

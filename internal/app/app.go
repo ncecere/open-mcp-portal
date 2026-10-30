@@ -128,6 +128,7 @@ func Run(ctx context.Context, mode string, cfg config.Config, log *slog.Logger) 
 	go cleanupLoop(loopCtx, deps.Auth, deps.Providers, deps.Automation, log)
 	go deps.Notify.Loop(loopCtx)
 	go deps.Registry.HealthLoop(loopCtx, cfg.HealthCheckInterval, log)
+	go deps.Registry.GovernanceLoop(loopCtx, log)
 	go deps.Providers.RefreshLoop(loopCtx, cfg.ProviderRefreshInterval, log)
 	go deps.Identity.RotationLoop(loopCtx, log)
 	go deps.Retention.Loop(loopCtx)
@@ -356,6 +357,7 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 	}
 	notifier.ObserveLeader = func(leader bool) { observability.SetLeader("notifications", leader) }
 	reg.SetNotifier(notifier)
+	reg.ObserveLeader = func(leader bool) { observability.SetLeader("governance", leader) }
 	provs.Notify = notifier
 	gws.AccessNotice = notify.AccessNotice
 	callSvc := calls.New(pool)

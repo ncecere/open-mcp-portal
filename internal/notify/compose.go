@@ -28,6 +28,7 @@ const (
 	LinkAccountAPIKeys       = "account_api_keys"
 	LinkApproval             = "approval"
 	LinkAccessRequest        = "access_request"
+	LinkGateways             = "gateways"
 )
 
 // Link is where an inbox row goes.
@@ -132,6 +133,10 @@ func compose(ev dbgen.NotificationEvent, team *teamInfo) Message {
 			}
 			m.Title = fmt.Sprintf("Approval for %s was %s", nm(d.ExposedName), d.Status)
 			m.Body = "Open the receipt for its current status. Approval authorizes one attempt; it does not confirm execution."
+		}
+	case ServerReviewDue, ServerSunsetSoon, ServerDeprecated:
+		if g, ok := composeGovernance(ev, slug); ok {
+			m = g
 		}
 	case ServerUnhealthy:
 		var d apitypes.ServerUnhealthyData
@@ -298,6 +303,11 @@ func (l *Link) path() string {
 		return team + "/servers/" + url.PathEscape(l.ID)
 	case LinkServers:
 		return team + "/servers?publishState=pending"
+	case LinkGateways:
+		if l.TeamSlug != "" {
+			return team + "/gateways"
+		}
+		return "/admin/gateways"
 	case LinkReviewQueue:
 		return "/admin/publishing"
 	case LinkServiceAccount:

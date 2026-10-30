@@ -111,6 +111,8 @@ func (s *Service) recipients(ctx context.Context, q *dbgen.Queries, ev dbgen.Not
 		out, err = s.approvalRecipients(ctx, q, ev)
 	case AccessRequested, AccessDecided:
 		out, err = s.accessRecipients(ctx, q, ev)
+	case ServerReviewDue, ServerSunsetSoon, ServerDeprecated:
+		out, err = s.governanceRecipients(ctx, q, ev)
 	case ServerUnhealthy, ServerRecovered, CapabilityChanged, UpstreamSigninLapsed:
 		err = team(editorsUp)
 	case PublishDecided:
@@ -216,6 +218,17 @@ func (s *Service) receivable(ctx context.Context, userID uuid.UUID, platformRole
 			}
 		case PublishRequested:
 			if platformRole != authz.PlatformAdmin {
+				continue
+			}
+		case ServerReviewDue, ServerSunsetSoon:
+			// A team's owners and admins, a named owner who is an editor, and
+			// platform admins (owners of platform gateways).
+			if !held(editorsUp...) && platformRole != authz.PlatformAdmin {
+				continue
+			}
+		case ServerDeprecated:
+			// Told to a gateway's owners: its team's owners and admins, or platform admins.
+			if !held(adminsUp...) && platformRole != authz.PlatformAdmin {
 				continue
 			}
 		}

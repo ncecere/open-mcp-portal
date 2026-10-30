@@ -264,6 +264,10 @@ func (a *api) updateTeamMcpServer(w http.ResponseWriter, r *http.Request) {
 	if !a.endpointPayload(w, r, keys) {
 		return
 	}
+	gov, ok := governanceInput(w, in, keys)
+	if !ok {
+		return
+	}
 	_, setRequirement := keys["requirement"]
 	_, setRate := keys["rateLimitPerMinute"]
 	_, setConcurrent := keys["maxConcurrent"]
@@ -275,7 +279,7 @@ func (a *api) updateTeamMcpServer(w http.ResponseWriter, r *http.Request) {
 		TimeoutSeconds: in.TimeoutSeconds, Enabled: in.Enabled, SetRequirement: setRequirement, Requirement: fromAPIRequirement(in.Requirement),
 		CapturePayloads: in.CapturePayloads, AuthMode: strPtr(in.AuthMode), OAuth: fromAPIOAuthInput(in.Oauth), SendIdentity: in.SendIdentity,
 		PersonSecret: fromAPIPersonSecretInput(in.PersonSecret),
-		MachineOAuth: fromAPIMachineInput(in.MachineOAuth), TLS: fromAPITLS(in.Tls),
+		MachineOAuth: fromAPIMachineInput(in.MachineOAuth), TLS: fromAPITLS(in.Tls), Governance: gov,
 	}, rev)
 	if failed(w, r, err) {
 		return

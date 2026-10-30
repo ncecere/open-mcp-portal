@@ -32,7 +32,10 @@ func applyCuration(it *Selected, row dbgen.GatewayCapability) {
 		it.EffectiveDefinition = projected
 		it.Curation = normalized
 	}
-	if it.CurationStale && it.Reason != ReasonGone && it.Reason != ReasonTeamArchived && it.Reason != ReasonServerDisabled {
+	// A retired server or one above the gateway's ceiling says so rather than
+	// that its policy is stale: nothing the owner does to the policy serves it.
+	if it.CurationStale && it.Reason != ReasonGone && it.Reason != ReasonTeamArchived && it.Reason != ReasonServerDisabled &&
+		it.Reason != ReasonSunset && it.Reason != ReasonSensitivityExceedsGateway {
 		it.Available, it.Reason = false, ReasonCurationStale
 	}
 }

@@ -158,7 +158,16 @@ func createInput(in apitypes.GatewayCreate) gateways.CreateInput {
 	setIf(&ci.Description, in.Description)
 	setIf(&ci.Enabled, in.Enabled)
 	setIf(&ci.CapturePayloads, in.CapturePayloads)
+	ci.MaxSensitivity = ceilingPtr(in.MaxSensitivity)
 	return ci
+}
+
+func ceilingPtr(v *apitypes.Sensitivity) *string {
+	if v == nil {
+		return nil
+	}
+	s := string(*v)
+	return &s
 }
 
 // decodeGatewayUpdate reads a gateway update; rateLimitPerMinute
@@ -174,7 +183,7 @@ func decodeGatewayUpdate(w http.ResponseWriter, r *http.Request) (gateways.Updat
 	}
 	_, setLimit := keys["rateLimitPerMinute"]
 	return gateways.UpdateInput{Name: in.Name, Description: in.Description, Enabled: in.Enabled, CapturePayloads: in.CapturePayloads,
-		SetRateLimit: setLimit, RateLimit: in.RateLimitPerMinute}, rev, true
+		SetRateLimit: setLimit, RateLimit: in.RateLimitPerMinute, MaxSensitivity: ceilingPtr(in.MaxSensitivity)}, rev, true
 }
 
 // gatewayLimits are the gateways' effective rate limits now (nil:
