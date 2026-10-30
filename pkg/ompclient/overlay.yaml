@@ -1,0 +1,9 @@
+overlay: 1.0.0
+x-speakeasy-jsonpath: rfc9535
+info:
+  title: Operations that accept automation tokens
+  version: 1.0.0
+actions:
+  # Keep only the operations a token may call (x-omp-token-scopes).
+  - target: $.paths[*][?@.operationId && !@['x-omp-token-scopes']]
+    remove: true

@@ -31,3 +31,5 @@ Tests cover projection and exact equality, policy preservation/clearing, collisi
 ## Compatibility and limits
 
 Migration `00030_gateway_tool_curation` is expand-only. Older binaries ignore policy columns and therefore do not enforce curation: do not route curated gateways through an older binary during rollback or mixed-version deployment. Constraints are guardrails over named arguments, not a guarantee that a server has no alternate way to access the same resource. No nested argument paths, regex/range authoring, per-person values, prompt/resource curation or tool grouping is included. Credential tool scopes (#29) must match the effective exposed name, not the original catalog name.
+
+The `omp` command line ([cli.md](cli.md#curation)) exports a platform gateway's policy in the `omp/v1` file and compares a declared one with the portal's, but cannot write it: an automation token gets `403 session_required`, so `omp import` keeps a selected tool's policy through every selection change, refuses a declaration that differs from the portal's before writing anything, and never sends `curation` or `expectedFingerprint`.

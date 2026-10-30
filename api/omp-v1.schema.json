@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ncecere/open-mcp-portal/blob/main/api/omp-v1.schema.json",
+  "title": "omp/v1: declarative Open MCP Portal configuration",
+  "description": "The file format of `omp export` and `omp import` (docs/cli.md), shared with the GitHub Action and the Terraform provider (issue 47). Every optional field means \"leave it alone\" when absent. Secrets are never in the file: a static header's value is read from the environment variable named by authValueEnv. Servers need a team publisher token; teams, gateways and limits need a platform-admin token with platform:write. Team gateways and members are not reachable by tokens and are not part of v1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema"],
+  "properties": {
+    "schema": { "const": "omp/v1" },
+    "servers": {
+      "type": "array",
+      "description": "A team's MCP servers. The natural key is slug (unique across the portal, immutable). Needs a team publisher token for that team.",
+      "items": { "$ref": "#/$defs/server" }
+    },
+    "teams": {
+      "type": "array",
+      "description": "Platform teams. The natural key is slug.",
+      "items": { "$ref": "#/$defs/team" }
+    },
+    "gateways": {
+      "type": "array",
+      "description": "Platform gateways. The natural key is slug.",
+      "items": { "$ref": "#/$defs/gateway" }
+    },
+    "limits": {
+      "type": "object",
+      "description": "Platform rate limits by key. A listed key declares both its default and its ceiling; one that is absent or null is unlimited (default) or has no ceiling.",
+      "propertyNames": { "$ref": "#/$defs/rateLimitKey" },
+      "additionalProperties": { "$ref": "#/$defs/platformLimit" }
+    }
+  },
+  "$defs": {
+    "serverSlug": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,46}[a-z0-9])?$" },
+    "teamSlug": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$" },
+    "rateLimitKey": { "enum": ["person_per_minute", "credential_per_minute", "service_account_per_minute", "gateway_per_minute", "server_per_minute"] },
+    "rateLimitValue": { "type": ["integer", "null"], "minimum": 1, "maximum": 1000000 },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["team", "slug", "name", "url"],
+      "properties": {
+        "team": { "$ref": "#/$defs/teamSlug" },
+        "slug": { "$ref": "#/$defs/serverSlug" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "url": { "type": "string", "format": "uri", "pattern": "^https?://" },
+        "enabled": { "type": "boolean" },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 600 },
+        "authMode": { "enum": ["none", "static_header"], "description": "Absent leaves the mode alone (a new server gets none). oauth, machine_oauth and person_secret need a browser session." },
+        "authHeaderName": { "type": "string", "minLength": 1, "description": "The header of a static_header server." },
+        "authValueEnv": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "The NAME of the environment variable that holds the header's value. Never the secret itself. Read when the server is created, when authMode or authHeaderName changes, or with --replace-secrets; never exported." },
+        "publish": { "enum": ["none", "request"], "description": "none: private. request: published, or pending review under the approval policy. Absent leaves the publication alone." }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "authMode": { "const": "static_header" } }, "required": ["authMode"] },
+          "then": { "required": ["authHeaderName"] },
+          "else": { "not": { "anyOf": [{ "required": ["authHeaderName"] }, { "required": ["authValueEnv"] }] } }
+        }
+      ]
+    },
+    "team": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slug", "name"],
+      "properties": {
+        "slug": { "$ref": "#/$defs/teamSlug" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "status": { "enum": ["active", "archived"] },
+        "ownerEmail": { "type": "string", "description": "Used only to create the team; not compared and not exported." },
+        "limits": {
+          "type": "object",
+          "description": "The team's rate-limit overrides by key; null inherits the platform default.",
+          "propertyNames": { "$ref": "#/$defs/rateLimitKey" },
+          "additionalProperties": { "$ref": "#/$defs/rateLimitValue" }
+        }
+      }
+    },
+    "gateway": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slug", "name"],
+      "properties": {
+        "slug": { "$ref": "#/$defs/serverSlug" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "capabilities": {
+          "type": "array",
+          "description": "The gateway's whole selection. Present: authoritative (an empty list selects nothing). Absent: left alone.",
+          "items": { "$ref": "#/$defs/capability" }
+        },
+        "grants": {
+          "type": "array",
+          "description": "Who may use the gateway. Present: authoritative. Absent: left alone. A listed grant's omitted toolScope and expiresAt leave an existing grant's ceiling and deadline alone.",
+          "items": { "$ref": "#/$defs/grant" }
+        }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["server", "kind", "name"],
+      "properties": {
+        "server": { "$ref": "#/$defs/serverSlug", "description": "The slug of the capability's server." },
+        "kind": { "enum": ["tool", "prompt", "resource", "resource_template"] },
+        "name": { "type": "string", "minLength": 1, "description": "The name the server uses (a resource's URI)." },
+        "curation": { "$ref": "#/$defs/curation" }
+      },
+      "if": { "properties": { "kind": { "const": "tool" } }, "required": ["kind"] },
+      "else": { "not": { "required": ["curation"] } }
+    },
+    "curation": {
+      "type": ["object", "null"],
+      "description": "A tool's policy in this gateway (docs/gateway-curation.md): the portal's own policy object, validated by the portal's own rules. Absent: leave the selection's policy alone. null: declared to have none. An object: declared to equal the portal's, compared as the portal normalizes it. omp cannot write curation (an automation token may not edit it), so a declaration that differs from the portal's is refused before any change; a selection that is not yet selected cannot be declared with a curation. Only tools can be curated. Constraint values can be sensitive.",
+      "additionalProperties": false,
+      "properties": {
+        "nameOverride": { "type": ["string", "null"], "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_.-]+$", "description": "The complete model-facing exposed tool name." },
+        "descriptionOverride": { "type": ["string", "null"], "maxLength": 2000 },
+        "constraints": {
+          "type": "object",
+          "description": "Top-level arguments by name, each with exactly one fixed JSON value (null is a value) or one to 100 allowed values. Numbers must be finite, round-trip exactly through binary64 and, when integral, be safe integers.",
+          "maxProperties": 50,
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "fixed": true,
+              "allowed": { "type": "array", "minItems": 1, "maxItems": 100 }
+            },
+            "oneOf": [{ "required": ["fixed"] }, { "required": ["allowed"] }]
+          }
+        }
+      }
+    },
+    "grant": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "team": { "$ref": "#/$defs/teamSlug" },
+        "group": { "type": "string", "minLength": 1 },
+        "userEmail": { "type": "string", "minLength": 3 },
+        "toolScope": {
+          "type": ["object", "null"],
+          "description": "An optional ceiling on tools. Absent: a new grant is unrestricted and an existing grant keeps its ceiling. null: declared unrestricted. Empty: no tools. Classes or exact exposed tool names match within a scope.",
+          "additionalProperties": false,
+          "properties": {
+            "classes": { "type": "array", "maxItems": 3, "items": { "enum": ["read", "write", "destructive"] } },
+            "tools": { "type": "array", "maxItems": 500, "items": { "type": "string", "minLength": 1, "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F*?\\[\\]{}\\\\]+$", "description": "An exact, case-sensitive exposed name of at most 1100 UTF-8 bytes (the CLI checks the byte bound); no control characters or glob operators." } }
+          }
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?([Zz]|[+-][0-9]{2}:[0-9]{2})$",
+          "description": "The grant's authoritative deadline (RFC 3339), comparison-only in CLI v1. Absent: a new grant is permanent and an existing grant keeps its deadline. A declared timestamp must exactly match an existing unchanged grant. New deadlines, temporary-grant scope changes and renewal are refused before any write: the API accepts only relative day counts, so the CLI cannot preserve an absolute deadline independently of clock skew. Change temporary grants in the web UI. Expired grants are exported with their past deadline. null is not allowed."
+        }
+      },
+      "oneOf": [{ "required": ["team"] }, { "required": ["group"] }, { "required": ["userEmail"] }]
+    },
+    "platformLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": { "$ref": "#/$defs/rateLimitValue" },
+        "ceiling": { "$ref": "#/$defs/rateLimitValue" }
+      }
+    }
+  }
+}

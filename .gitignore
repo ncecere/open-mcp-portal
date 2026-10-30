@@ -13,3 +13,6 @@ coverage.*
 
 # scratch directories of deploy/kubernetes/scripts/validate.sh and scripts/k8s-smoke.sh
 /deploy/kubernetes/.tmp.*
+
+# Python bytecode from scripts/tests
+__pycache__/

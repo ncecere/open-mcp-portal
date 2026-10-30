@@ -74,6 +74,42 @@ annotation lists only the minimum and the check is "the token holds any listed s
 **Decisions to review:** the platform write list is "provisioning that is reversible and doesn't widen trust or who is trusted" (teams, gateways, grants, limits, revoking a person's consent); trust-widening settings and deletes wait for a separate scope in v0.3/v0.5 (Terraform).
 `adminAssignOwner` is excluded although team provisioning wants it; a platform token creates an ownerless team and a person assigns the owner. A platform token dies with its creator's platform-admin role; team tokens don't.
 
+## Examples
+
+Plain HTTP, with a team publisher token (`omppub_…`) in a CI secret:
+
+```sh
+curl -s -H "Authorization: Bearer $OMP_TOKEN" "$OMP_URL/v1/token"                       # who am I (any token)
+curl -s -H "Authorization: Bearer $OMP_TOKEN" "$OMP_URL/v1/teams/bravo/mcp-servers"       # servers:read
+```
+
+With the [`omp` command line](cli.md), the same token registers, checks and publishes a server from a clean CI job. A
+GitHub Actions step:
+
+```yaml
+- name: Register and publish the MCP server
+  env:
+    OMP_URL: https://portal.example.com
+    OMP_TOKEN: ${{ secrets.OMP_PUBLISHER_TOKEN }}   # omppub_…, scopes servers:read and servers:write
+  run: |
+    omp servers register --slug status --name "Service status" --url https://status.example.com/mcp
+    omp servers test status
+    omp servers refresh status --fail-on-changes     # exit 10 if a tool definition changed (needs approval)
+    omp servers publish status
+```
+
+Or keep the server in a file and let CI converge it (`omp import --plan` exits 10 when the portal differs, and never
+prints a secret; the header value comes from the environment):
+
+```sh
+omp import -f omp.yaml --plan                       # a pull request check
+STATUS_API_KEY=$KEY omp import -f omp.yaml --refresh --fail-on-changes
+```
+
+A platform-admin token (`ompadm_…`, `platform:write`) provisions teams, platform gateways, grants and limits from the same
+`omp/v1` file (`omp import -f platform.yaml`); it cannot touch team servers. Every exit code, and what `omp` refuses to
+print, is in [cli.md](cli.md).
+
 ## Data model (`00015_automation_tokens.sql`, expand-only)
 
 | Table / column | Contents |

@@ -1,0 +1,8 @@
+~ team bravo
+    name: "Bravo Renamed" -> "Bravo"
+~ gateway support
+    enabled: false -> true
+    grant: (none) -> "user:ann@example.com"
+~ limits platform
+    person_per_minute.default: 10 -> 600
+Plan: 0 to create, 3 to update.

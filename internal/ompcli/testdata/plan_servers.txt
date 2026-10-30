@@ -1,0 +1,14 @@
+~ server bravo/billing
+    publish: "private" -> "request"
++ server bravo/newone
+    name: "New one"
+    url: "https://new.example.com/mcp"
+    authMode: "static_header"
+    authHeaderName: "Authorization"
+    authValue: "(secret)" (read from $NEWONE_TOKEN)
+    publish: "request"
+~ server bravo/status
+    name: "Renamed" -> "Service status"
+    url: "https://other.example.com/mcp" -> "https://status.example.com/mcp"
+    enabled: false -> true
+Plan: 1 to create, 2 to update.

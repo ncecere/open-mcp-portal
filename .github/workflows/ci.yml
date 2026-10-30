@@ -144,8 +144,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Both targets build; nothing is pushed (image.yml publishes v* tags).
+      # All three targets build; nothing is pushed (image.yml publishes v* tags).
       - name: Portal image
         run: docker build --build-arg VERSION="${GITHUB_SHA::12}" --build-arg COMMIT="${GITHUB_SHA::12}" -t open-mcp-portal:ci .
       - name: Fake MCP server image (demo)
         run: docker build --target fakemcp -t open-mcp-portal-fakemcp:ci .
+      - name: omp command line image
+        run: docker build --target omp --build-arg VERSION="${GITHUB_SHA::12}" --build-arg COMMIT="${GITHUB_SHA::12}" -t omp-cli:ci .

@@ -1,0 +1,29 @@
+{
+  "schema": "omp/v1",
+  "servers": [
+    {
+      "team": "bravo",
+      "slug": "billing",
+      "name": "Billing",
+      "description": "",
+      "url": "https://billing.example.com/mcp",
+      "enabled": true,
+      "timeoutSeconds": 45,
+      "authMode": "static_header",
+      "authHeaderName": "X-API-Key",
+      "authValueEnv": "OMP_BILLING_AUTH_VALUE",
+      "publish": "request"
+    },
+    {
+      "team": "bravo",
+      "slug": "status",
+      "name": "Service status",
+      "description": "Is it up",
+      "url": "https://status.example.com/mcp",
+      "enabled": true,
+      "timeoutSeconds": 30,
+      "authMode": "none",
+      "publish": "none"
+    }
+  ]
+}

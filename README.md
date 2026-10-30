@@ -93,10 +93,19 @@ generate your own `ENCRYPTION_KEY` and `API_KEY_PEPPER` (`openssl rand -base64 3
 [deploying](docs/deploy.md#required-settings-and-secrets). To try it locally without installing anything, run
 `make demo` (Docker builds the image itself).
 
+## The `omp` command line
+
+`omp` is a small CLI for people and CI, built on the public Go client [`pkg/ompclient`](pkg/ompclient): print the snippet
+that connects Claude Code, VS Code, Cursor or curl to a gateway, and register, test, refresh and publish a team's servers
+from a pipeline with an [automation token](docs/automation-tokens.md) (`omp servers register …`, `omp import --plan`).
+Releases attach signed binaries for linux, darwin and windows; `make build-omp` builds one from a checkout. See the
+[CLI page](docs/cli.md).
+
 ## Documentation
 
 - [Specification](SPEC.md) and [product decisions](docs/decisions.md)
 - [Status and handoff](docs/status.md)
+- [The `omp` command line](docs/cli.md) and its [declarative file schema](api/omp-v1.schema.json)
 - [Roadmap](docs/roadmap.md): what comes after v0.9.0, in order, with an [issue and implementation plan](https://github.com/ncecere/open-mcp-portal/milestones) for each item
 - Phase designs: [registry](docs/registry.md), [gateways](docs/phase3-gateways.md),
   [client sign-in](docs/phase4-client-auth.md), [delegated credentials](docs/phase5-delegated-credentials.md),

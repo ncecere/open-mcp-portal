@@ -16,7 +16,7 @@ K8S_TOOLS   := $(CURDIR)/bin/k8s-tools
 KUSTOMIZE   := $(K8S_TOOLS)/kustomize-$(KUSTOMIZE_VERSION)/kustomize
 KUBECONFORM := $(K8S_TOOLS)/kubeconform-$(KUBECONFORM_VERSION)/kubeconform
 
-.PHONY: shellcheck smoke-selftest dev-seed help deps-up deps-down generate check-generated build run migrate fake-mcp fake-oauth example-mail example-mail-fake example-mail-smoke test test-integration test-ci lint actionlint fmt web web-test web-dev docker demo demo-down k8s-validate k8s-smoke prom-check
+.PHONY: build-omp docker-omp shellcheck smoke-selftest dev-seed help deps-up deps-down generate check-generated build run migrate fake-mcp fake-oauth example-mail example-mail-fake example-mail-smoke test test-integration test-ci lint actionlint fmt web web-test web-dev docker demo demo-down k8s-validate k8s-smoke prom-check
 
 help: ## Show targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -27,19 +27,22 @@ deps-up: ## Start local Postgres (127.0.0.1:55442); it restarts with Docker
 deps-down: ## Stop local Postgres (keeps data)
 	docker compose down
 
-generate: ## Regenerate sqlc queries and OpenAPI types (Go, and TypeScript when web/ exists)
+generate: ## Regenerate sqlc queries, OpenAPI types and the public client pkg/ompclient (Go, and TypeScript when web/ exists)
 	$(SQLC) generate
 	$(GO) generate ./...
 	@if [ -f web/package.json ]; then cd web && npm run gen; else echo "web/package.json not found; skipping TypeScript generation"; fi
 
 check-generated: generate ## Fail if generated code is stale
-	@git diff --exit-code -- internal/store/dbgen internal/httpapi/apitypes web/src/api/schema.gen.ts || \
+	@git diff --exit-code -- internal/store/dbgen internal/httpapi/apitypes pkg/ompclient web/src/api/schema.gen.ts || \
 		(echo "generated code is stale: run 'make generate' and commit" && exit 1)
-	@test -z "$$(git ls-files --others --exclude-standard -- internal/store/dbgen internal/httpapi/apitypes web/src/api)" || \
+	@test -z "$$(git ls-files --others --exclude-standard -- internal/store/dbgen internal/httpapi/apitypes pkg/ompclient web/src/api)" || \
 		(echo "untracked generated files: run 'make generate' and commit" && exit 1)
 
 build: ## Build bin/open-mcp-portal (run `make web` first to include the UI)
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o bin/open-mcp-portal ./cmd/open-mcp-portal
+
+build-omp: ## Build bin/omp, the command line (docs/cli.md)
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o bin/omp ./cmd/omp
 
 run: ## Run `serve` locally on 127.0.0.1:8088 using .env (created from .env.example)
 	@test -f .env || cp .env.example .env
@@ -84,7 +87,7 @@ test-ci: ## test-integration without deps-up (CI's Postgres service; OMP_TEST_DA
 
 lint: ## go vet and gofmt check
 	$(GO) vet ./...
-	@test -z "$$(gofmt -l cmd internal examples migrations web/embed.go)" || (gofmt -l cmd internal examples migrations web/embed.go && echo "run 'make fmt'" && exit 1)
+	@test -z "$$(gofmt -l cmd internal pkg examples migrations web/embed.go)" || (gofmt -l cmd internal pkg examples migrations web/embed.go && echo "run 'make fmt'" && exit 1)
 
 ACTIONLINT_VERSION ?= v1.7.12
 
@@ -92,7 +95,7 @@ actionlint: ## Check the GitHub Actions workflows
 	$(GO) run github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
 
 fmt: ## Format Go code
-	gofmt -w cmd internal examples migrations web/embed.go
+	gofmt -w cmd internal pkg examples migrations web/embed.go
 
 web: ## Build the web UI into web/dist (embedded by `make build`)
 	cd web && npm ci --ignore-scripts && npm run build
@@ -105,6 +108,9 @@ web-dev: ## Run the Vite dev server on :5175 (proxies the API to `make run` on :
 
 docker: ## Build the container image open-mcp-portal:<git describe>
 	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) -t open-mcp-portal:$(VERSION) .
+
+docker-omp: ## Build the container image omp-cli:<git describe> (the Dockerfile's omp target)
+	docker build --target omp --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) -t omp-cli:$(VERSION) .
 
 demo: ## Try it in Docker: portal + Postgres + fake MCP server on http://localhost:8090 (OMP_DEMO_PORT; dev sign-in)
 	docker compose -f compose.demo.yaml up --build

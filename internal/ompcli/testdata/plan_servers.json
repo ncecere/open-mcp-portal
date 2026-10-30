@@ -1,0 +1,79 @@
+{
+  "changes": [
+    {
+      "kind": "server",
+      "key": "bravo/billing",
+      "action": "update",
+      "fields": [
+        {
+          "field": "publish",
+          "from": "private",
+          "to": "request"
+        }
+      ]
+    },
+    {
+      "kind": "server",
+      "key": "bravo/newone",
+      "action": "create",
+      "fields": [
+        {
+          "field": "name",
+          "from": null,
+          "to": "New one"
+        },
+        {
+          "field": "url",
+          "from": null,
+          "to": "https://new.example.com/mcp"
+        },
+        {
+          "field": "authMode",
+          "from": null,
+          "to": "static_header"
+        },
+        {
+          "field": "authHeaderName",
+          "from": null,
+          "to": "Authorization"
+        },
+        {
+          "field": "authValue",
+          "from": null,
+          "to": "(secret)",
+          "note": "read from $NEWONE_TOKEN"
+        },
+        {
+          "field": "publish",
+          "from": null,
+          "to": "request"
+        }
+      ]
+    },
+    {
+      "kind": "server",
+      "key": "bravo/status",
+      "action": "update",
+      "fields": [
+        {
+          "field": "name",
+          "from": "Renamed",
+          "to": "Service status"
+        },
+        {
+          "field": "url",
+          "from": "https://other.example.com/mcp",
+          "to": "https://status.example.com/mcp"
+        },
+        {
+          "field": "enabled",
+          "from": false,
+          "to": true
+        }
+      ]
+    }
+  ],
+  "drift": true,
+  "schema": "omp/v1",
+  "warnings": []
+}
