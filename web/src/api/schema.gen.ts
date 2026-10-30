@@ -550,6 +550,98 @@ export interface paths {
         patch: operations["updateTeamMcpServer"];
         trace?: never;
     };
+    "/v1/teams/{team}/mcp-servers/{serverId}/transfer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                serverId: components["parameters"]["ServerIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask another team to take over a server (the server's team owners and admins; browser session only)
+         * @description Nothing moves until an owner of the receiving team accepts (acceptMcpServerTransfer). One open transfer per server: 409 transfer_pending. 422 invalid_team when the receiving team does not exist, is archived or is this team; 422 provider_not_allowed when the server requires a restricted auth provider that lists neither the receiving team nor the server (the move would stop its calls). An editor gets 403 governance_role and an automation token 403 token_not_allowed. Audited as mcp_server.transfer_request.
+         */
+        post: operations["requestTeamMcpServerTransfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teams/{team}/mcp-server-transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+            };
+            cookie?: never;
+        };
+        /** A team's transfers, out of it and into it, newest first (owners and admins; platform staff read any team) */
+        get: operations["listTeamMcpServerTransfers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teams/{team}/mcp-server-transfers/{transferId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                transferId: components["parameters"]["TransferIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Withdraw a transfer (the offering team) or decline it (the receiving team); owners and admins, browser session only
+         * @description Moves nothing. The team in the path is the offering or the receiving one. 409 transfer_closed when it was already decided; 412 when If-Match is not the transfer's revision. Audited as mcp_server.transfer_cancel.
+         */
+        delete: operations["cancelMcpServerTransfer"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teams/{team}/mcp-server-transfers/{transferId}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                transferId: components["parameters"]["TransferIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept a transfer (the receiving team's owners; browser session only)
+         * @description The server moves to this team with its capabilities, gateway selections, people's grants, sealed values and approval rules; the accepting owner becomes its owner; under approval_required a published server goes back to review (reason transferred). 403 owner_required for an admin; 409 transfer_closed (it was decided or withdrawn meanwhile); 409 changed_since_request (details.requestedRevision, currentRevision) when the server was edited after the request: the offering team withdraws it and asks again; 412 when If-Match is not the transfer's revision; 422 provider_not_allowed as for the request. Audited as mcp_server.transfer.
+         */
+        post: operations["acceptMcpServerTransfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teams/{team}/mcp-servers/{serverId}/test": {
         parameters: {
             query?: never;
@@ -994,6 +1086,49 @@ export interface paths {
         get: operations["adminGetPublishingSettings"];
         /** Change the default publishing policy (platform admins) */
         put: operations["adminUpdatePublishingSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/mcp-servers/{serverId}/transfer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serverId: components["parameters"]["ServerIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a server to another team without that team's acceptance (platform admins; browser session only)
+         * @description For a server whose team is gone or whose owners cannot be reached. Any open transfer is cancelled; the server has no owner afterwards (it shows in the receiving team's attention list until one is named); its capabilities, selections, grants, sealed values and approval rules move with it and, under approval_required, a published server goes back to review. If-Match is the server's revision. 422 invalid_team, 422 provider_not_allowed as for the request. Audited as mcp_server.transfer (kind forced).
+         */
+        post: operations["adminForceTransferMcpServer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/settings/governance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Re-review intervals and the overdue setting (platform admins and auditors; browser session only) */
+        get: operations["adminGetGovernanceSettings"];
+        /**
+         * Change the re-review intervals and whether an overdue re-review returns a server to review (platform admins; browser session only)
+         * @description Every published server's next review date is counted again from its latest approval. 400 invalid_interval. Audited as settings.governance_update.
+         */
+        put: operations["adminUpdateGovernanceSettings"];
         post?: never;
         delete?: never;
         options?: never;
@@ -4141,6 +4276,8 @@ export interface components {
              */
             maxConcurrent?: number | null;
             enabled: boolean;
+            /** @description Who is accountable for the server, how sensitive it is, when it is re-reviewed and whether it is being retired (decision 88). Always returned; absent from servers before the schema it needs. */
+            governance?: components["schemas"]["McpServerGovernance"];
             publishState: components["schemas"]["PublishState"];
             effectivePublishPolicy: components["schemas"]["PublishPolicy"];
             /** Format: date-time */
@@ -4391,6 +4528,8 @@ export interface components {
              */
             maxConcurrent?: number | null;
             enabled?: boolean;
+            /** @description Omit to keep. Team owners and admins, in a browser session: an editor gets 403 governance_role and an automation token never changes owner, on-call contact, sensitivity, lifecycle or replacement (403 token_not_allowed, details.field governance). Raising the sensitivity of a published server sends it back to review under approval_required (mcp_server.publish_request, reason sensitivity_raised); lowering it does not. Audited as mcp_server.governance_update. Moving the server to another team is requestTeamMcpServerTransfer. */
+            governance?: components["schemas"]["McpServerGovernanceInput"];
             /** @description Omit to keep; null removes it. A widening change sends a published server back to review under approval_required */
             requirement?: components["schemas"]["McpServerRequirementInput"] | null;
             /** @description Omit to keep. Only team owners and admins may change it (403 capture_role; sending the current value is allowed). Not a review trigger. Audited in mcp_server.update. */
@@ -4551,6 +4690,168 @@ export interface components {
         PublishingSettingsUpdate: {
             defaultPolicy: components["schemas"]["PublishPolicy"];
         };
+        /**
+         * @description A server's label (default internal) and a gateway's ceiling (default restricted: no ceiling). A gateway serves no capability of a server above its ceiling (unavailable reason sensitivity_exceeds_gateway). Public < internal < confidential < restricted.
+         * @enum {string}
+         */
+        Sensitivity: "public" | "internal" | "confidential" | "restricted";
+        /**
+         * @description deprecated shows a banner and tells the owners of gateways that select the server; sunset (or a passed sunsetAt) stops serving it everywhere (unavailable reason sunset).
+         * @enum {string}
+         */
+        ServerLifecycle: "active" | "deprecated" | "sunset";
+        ServerReplacementRef: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            name: string;
+            teamSlug: string;
+            teamName: string;
+        };
+        McpServerGovernance: {
+            /**
+             * Format: uuid
+             * @description The person accountable for the server (an active editor or above of its team when named)
+             */
+            ownerUserId?: string | null;
+            /** @description The owner's name, for the team's members and platform staff */
+            ownerName?: string;
+            /** @description Nobody is accountable now: none named, or the owner left the team, lost their role or was suspended or deleted (the server shows in attention lists while published) */
+            ownerless: boolean;
+            /** @description Whom to page, an email address, an http(s) or tel link or a channel such as #oncall (team members and platform staff only) */
+            oncallContact?: string | null;
+            sensitivity: components["schemas"]["Sensitivity"];
+            /**
+             * Format: date-time
+             * @description The latest approval of a published server
+             */
+            lastReviewedAt?: string | null;
+            /**
+             * Format: date-time
+             * @description When the next re-review is due (null: none; set from the platform's interval for its sensitivity)
+             */
+            reviewDueAt?: string | null;
+            /** @description The re-review date has passed. The team asks again with publishTeamMcpServer (or a platform admin approves in place with adminReviewMcpServer) */
+            reviewOverdue: boolean;
+            /** @description As it is now, a deprecated server past its sunsetAt is sunset */
+            lifecycle: components["schemas"]["ServerLifecycle"];
+            /** Format: date-time */
+            deprecatedAt?: string | null;
+            /**
+             * Format: date-time
+             * @description The moment the server stops being served
+             */
+            sunsetAt?: string | null;
+            replacement?: components["schemas"]["ServerReplacementRef"] | null;
+            /** @description An open transfer to another team (the owning team's members only) */
+            pendingTransfer?: components["schemas"]["ServerTransferRef"] | null;
+        };
+        /** @description Omitted fields keep their values; null clears ownerUserId, oncallContact, sunsetAt and replacementServerId. */
+        McpServerGovernanceInput: {
+            /**
+             * Format: uuid
+             * @description An active person who is an editor, admin or owner of the server's team (422 invalid_owner)
+             */
+            ownerUserId?: string | null;
+            /** @description 422 invalid_oncall_contact unless an email address, an http(s) or tel link or a channel (#oncall, @team) */
+            oncallContact?: string | null;
+            sensitivity?: components["schemas"]["Sensitivity"];
+            lifecycle?: components["schemas"]["ServerLifecycle"];
+            /**
+             * Format: date-time
+             * @description The moment a deprecated server stops being served; it must lie ahead (422 sunset_in_past). Moving to sunset without a date sunsets it now. 422 lifecycle_active on an active server.
+             */
+            sunsetAt?: string | null;
+            /**
+             * Format: uuid
+             * @description A published server (or one of this team) that is not retired itself and does not lead back here (422 invalid_replacement)
+             */
+            replacementServerId?: string | null;
+        };
+        ServerTransferRef: {
+            /** Format: uuid */
+            id: string;
+            toTeamSlug: string;
+            toTeamName: string;
+            /** Format: date-time */
+            requestedAt: string;
+            revision: components["schemas"]["Revision"];
+        };
+        /** @enum {string} */
+        ServerTransferState: "pending" | "accepted" | "declined" | "cancelled" | "forced";
+        /** @description A request to move a server to another team. Nothing moves until the receiving team's owner accepts. */
+        ServerTransfer: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            serverId: string;
+            serverSlug: string;
+            serverName: string;
+            fromTeamSlug: string;
+            fromTeamName: string;
+            toTeamSlug: string;
+            toTeamName: string;
+            state: components["schemas"]["ServerTransferState"];
+            note?: string | null;
+            requestedByName?: string;
+            /** Format: date-time */
+            requestedAt: string;
+            /** Format: date-time */
+            decidedAt?: string | null;
+            revision: components["schemas"]["Revision"];
+        };
+        ServerTransferRequest: {
+            /** @description The receiving team's slug or ID. 422 invalid_team when it does not exist, is archived or is this team. */
+            toTeam: string;
+            note?: string;
+        };
+        ServerTransferForce: {
+            toTeam: string;
+            note?: string;
+        };
+        GovernanceSettings: {
+            /** @description Days between re-reviews of a published server per sensitivity (0: none). A published server's next review is counted from its latest approval. */
+            reviewIntervalDays: {
+                /** Format: int32 */
+                public: number;
+                /** Format: int32 */
+                internal: number;
+                /** Format: int32 */
+                confidential: number;
+                /** Format: int32 */
+                restricted: number;
+            };
+            /** @description Off by default: an overdue re-review only notifies the team and shows in attention lists. On: under approval_required the governance loop also sends the overdue published server back to review (reason review_due). Never unpublishes. */
+            returnOverdueToReview: boolean;
+            revision: components["schemas"]["Revision"];
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @description Omitted fields keep their values. */
+        GovernanceSettingsUpdate: {
+            reviewIntervalDays?: {
+                /** Format: int32 */
+                public?: number;
+                /** Format: int32 */
+                internal?: number;
+                /** Format: int32 */
+                confidential?: number;
+                /** Format: int32 */
+                restricted?: number;
+            };
+            returnOverdueToReview?: boolean;
+        };
+        /** @description What anyone who can read the catalog sees of a server's governance (never its owner or on-call contact). */
+        CatalogServerGovernance: {
+            sensitivity: components["schemas"]["Sensitivity"];
+            lifecycle: components["schemas"]["ServerLifecycle"];
+            /** Format: date-time */
+            deprecatedAt?: string | null;
+            /** Format: date-time */
+            sunsetAt?: string | null;
+            /** @description Only a published replacement */
+            replacement?: components["schemas"]["ServerReplacementRef"] | null;
+        };
         /** @description One allowlist entry. A cidr entry allows private addresses inside it (literal or resolved); a host entry allows the private addresses a matching host resolves to. allowHttp also allows plain http for URLs whose host matches (a host entry, or a literal address inside a cidr entry). */
         NetworkEntry: {
             /** @enum {string} */
@@ -4638,6 +4939,7 @@ export interface components {
             capturePayloads?: boolean;
             /** @description oauth means each person signs in to the server's own service before calling it. Absent from servers before Phase 7 */
             authMode?: components["schemas"]["McpServerAuthMode"];
+            governance?: components["schemas"]["CatalogServerGovernance"];
         };
         CatalogServerPage: {
             items: components["schemas"]["CatalogServer"][];
@@ -4704,6 +5006,8 @@ export interface components {
              * @description Selected capabilities not served right now (see GatewayCapability.unavailableReason)
              */
             unavailableCount: number;
+            /** @description The gateway's ceiling (default restricted): a server above it is listed as unavailable with the reason sensitivity_exceeds_gateway and never served. */
+            maxSensitivity?: components["schemas"]["Sensitivity"];
             /** @description Platform gateways only; change through the browser-only access-settings operation. */
             readonly accessRequestsEnabled?: boolean;
             /**
@@ -4742,6 +5046,8 @@ export interface components {
             enabled: boolean;
             /** @default false */
             capturePayloads: boolean;
+            /** @description Absent: restricted (no ceiling). An automation token can't set it (403 token_not_allowed, details.field maxSensitivity). */
+            maxSensitivity?: components["schemas"]["Sensitivity"];
             /**
              * Format: int64
              * @description Absent or null: inherit. 422 invalid_limit (details.reason above_ceiling) above the ceiling of gateway_per_minute.
@@ -4754,6 +5060,8 @@ export interface components {
             enabled?: boolean;
             /** @description Omit to keep. Platform admins can't change it on team gateways (403 team_gateway). Audited in gateway.update. */
             capturePayloads?: boolean;
+            /** @description Omit to keep. The ceiling lowers or widens what the gateway serves at once; audited in gateway.update. An automation token can't change it (403 token_not_allowed, details.field maxSensitivity), and platform admins can't on team gateways (403 team_gateway). */
+            maxSensitivity?: components["schemas"]["Sensitivity"];
             /**
              * Format: int64
              * @description Omit to keep; null inherits. 422 invalid_limit (details.reason above_ceiling) above the ceiling. Platform admins can't change it on team gateways (403 team_gateway).
@@ -4761,10 +5069,10 @@ export interface components {
             rateLimitPerMinute?: number | null;
         };
         /**
-         * @description curation_stale: the curated definition changed and requires owner review. server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved / changed: the current definition isn't approved. gone: the server no longer lists it. team_archived: the team that owns its server, or the team gateway's own team, is archived (unarchiving restores it).
+         * @description sensitivity_exceeds_gateway: the server's sensitivity is above this gateway's ceiling (maxSensitivity); raise the ceiling or have the server lowered. sunset: the server is retired (its lifecycle is sunset, or its sunset date has passed) and is served by no gateway. curation_stale: the curated definition changed and requires owner review. server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved / changed: the current definition isn't approved. gone: the server no longer lists it. team_archived: the team that owns its server, or the team gateway's own team, is archived (unarchiving restores it).
          * @enum {string}
          */
-        GatewayUnavailableReason: "server_disabled" | "not_published" | "not_approved" | "changed" | "gone" | "team_archived" | "curation_stale";
+        GatewayUnavailableReason: "server_disabled" | "not_published" | "not_approved" | "changed" | "gone" | "team_archived" | "curation_stale" | "sensitivity_exceeds_gateway" | "sunset";
         GatewayCapability: {
             fingerprint?: string;
             originalDefinition?: {
@@ -6512,7 +6820,7 @@ export interface components {
             slug: string;
             name: string;
         };
-        /** @description Where the web app goes for an item (docs/admin-overview.md, Link targets). server: the server page (team page for members, Admin > Servers for platform staff); servers: the team's server list; review_queue: Admin > Publishing; gateways: Admin > Gateways; service_account / service_accounts: the team's service accounts; automation_tokens: Admin > Automation tokens; team_automation_tokens: the team's Settings > Automation tokens; auth_providers: Admin > Auth providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team's Settings > Notifications; service_connections: the team's Service accounts > Connections tab; account_connections: Account > Connections; account_api_keys: Account > API keys; approval: the private receipt page. */
+        /** @description Where the web app goes for an item (docs/admin-overview.md, Link targets). server: the server page (team page for members, Admin > Servers for platform staff); servers: the team's server list; review_queue: Admin > Publishing; gateways: Admin > Gateways (the team's Gateways when teamSlug is set); service_account / service_accounts: the team's service accounts; automation_tokens: Admin > Automation tokens; team_automation_tokens: the team's Settings > Automation tokens; auth_providers: Admin > Auth providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team's Settings > Notifications; service_connections: the team's Service accounts > Connections tab; account_connections: Account > Connections; account_api_keys: Account > API keys; approval: the private receipt page. */
         LinkTarget: {
             /** @enum {string} */
             type: "server" | "servers" | "review_queue" | "gateways" | "service_account" | "service_accounts" | "automation_tokens" | "team_automation_tokens" | "auth_providers" | "usage" | "notification_settings" | "team_notification_settings" | "service_connections" | "account_connections" | "account_api_keys" | "approval" | "access_request" | "access_requests";
@@ -6522,10 +6830,10 @@ export interface components {
             teamSlug?: string;
         };
         /**
-         * @description approval_pending: one private receipt per exact call the current human can review; excludes self-approval, stale or expired requests, ineligible service-account admins and automation tokens. Totals count only that human's eligible receipts. server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within 14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
+         * @description review_due: one item per published server whose re-review is overdue (at = the due date; the team asks again with publish, or a platform admin approves in place). server_ownerless: one item per published server nobody is accountable for (no owner named, or the owner left the team, lost their editor role, was suspended or deleted). server_transfer_pending: one item, count = transfers waiting for the team's owners to accept (team view, owners only). approval_pending: one private receipt per exact call the current human can review; excludes self-approval, stale or expired requests, ineligible service-account admins and automation tokens. Totals count only that human's eligible receipts. server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within 14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed: one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal API keys expiring within 14 days (platform overview only; no link: they belong to individuals). service_account_keys_expiring: one per team, count = keys expiring within 14 days (at = the earliest expiry). automation_tokens_expiring: one for platform tokens and one per team, count within 14 days. connections_reconsent: count of people's connections that need re-consent (setup sign-ins of servers are upstream_signin_lapsed instead). gateways_disabled: count of switched-off gateways of active teams. rate_limited: calls refused by a rate limit in the last 24 hours. notification_failures: failing webhook destinations (stopped automatically, or 3 or more failures in a row) plus one if email had a failed delivery in the last 24 hours.
          * @enum {string}
          */
-        AttentionKind: "server_failing" | "upstream_signin_lapsed" | "review_pending" | "approval_pending" | "access_requests_pending" | "capabilities_changed" | "personal_keys_expiring" | "service_account_keys_expiring" | "automation_tokens_expiring" | "connections_reconsent" | "gateways_disabled" | "rate_limited" | "notification_failures" | "server_certificate_expiring";
+        AttentionKind: "server_failing" | "upstream_signin_lapsed" | "review_pending" | "approval_pending" | "access_requests_pending" | "capabilities_changed" | "personal_keys_expiring" | "service_account_keys_expiring" | "automation_tokens_expiring" | "connections_reconsent" | "gateways_disabled" | "rate_limited" | "notification_failures" | "server_certificate_expiring" | "review_due" | "server_ownerless" | "server_transfer_pending";
         /** @enum {string} */
         AttentionSeverity: "critical" | "warning" | "info";
         /** @description The server (or gateway) an item is about */
@@ -6632,10 +6940,10 @@ export interface components {
             truncated: boolean;
         };
         /**
-         * @description server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
+         * @description server.review_due: a published server's re-review is overdue (its team's owners and admins and its named owner; once per due date). server.sunset_soon: a deprecated server stops being served within 14 days (its team and the owners of gateways that select it; once per sunset date). server.deprecated: a server that a gateway selects was deprecated (that gateway's owners; once per gateway and deprecation). These three are in-app and email only, never webhooks. server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts. server.recovered. capability.changed: a published server's definition changed or grew and is held back. publish.requested: a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent: a person's connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server's setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can't subscribe to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys. Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.
          * @enum {string}
          */
-        NotificationEventType: "server.unhealthy" | "server.recovered" | "capability.changed" | "publish.requested" | "publish.decided" | "connection.needs_reconsent" | "upstream_signin.lapsed" | "key.expiring" | "approval.requested" | "approval.decided" | "access.requested" | "access.decided";
+        NotificationEventType: "server.unhealthy" | "server.recovered" | "capability.changed" | "publish.requested" | "publish.decided" | "connection.needs_reconsent" | "upstream_signin.lapsed" | "key.expiring" | "approval.requested" | "approval.decided" | "access.requested" | "access.decided" | "server.review_due" | "server.sunset_soon" | "server.deprecated";
         NotificationItem: {
             /** Format: int64 */
             id: number;
@@ -6921,11 +7229,11 @@ export interface components {
         PublishRequestedData: {
             server: components["schemas"]["NotificationServerRef"];
             /** @enum {string} */
-            reason: "new" | "url_changed" | "upstream_auth_changed" | "upstream_tls_changed" | "endpoints_changed" | "requirement_changed" | "classification_changed";
+            reason: "new" | "url_changed" | "upstream_auth_changed" | "upstream_tls_changed" | "endpoints_changed" | "requirement_changed" | "classification_changed" | "sensitivity_raised" | "review_due" | "transferred";
             note?: string;
             requestedBy: {
                 /** @enum {string} */
-                kind: "user" | "automation_token";
+                kind: "user" | "automation_token" | "system";
                 name: string;
             };
         };
@@ -6978,6 +7286,40 @@ export interface components {
             exposedName: string;
             status: components["schemas"]["ApprovalStatus"];
         };
+        /** @description A gateway, named only to its own owners */
+        NotificationGatewayRef: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            name: string;
+        };
+        ServerReviewDueData: {
+            server: components["schemas"]["NotificationServerRef"];
+            sensitivity: components["schemas"]["Sensitivity"];
+            /** Format: date-time */
+            dueAt: string;
+            /** @description The governance loop also sent the server back to review (the platform setting is on) */
+            returnedToReview: boolean;
+        };
+        ServerSunsetSoonData: {
+            server: components["schemas"]["NotificationServerRef"];
+            /** Format: date-time */
+            sunsetAt: string;
+            /** Format: int32 */
+            daysLeft: number;
+            replacement?: components["schemas"]["NotificationServerRef"] | null;
+            /** @description The gateway whose owners are told (null: the server's own team) */
+            gateway?: components["schemas"]["NotificationGatewayRef"] | null;
+        };
+        ServerDeprecatedData: {
+            server: components["schemas"]["NotificationServerRef"];
+            /** Format: date-time */
+            deprecatedAt: string;
+            /** Format: date-time */
+            sunsetAt?: string | null;
+            replacement?: components["schemas"]["NotificationServerRef"] | null;
+            gateway: components["schemas"]["NotificationGatewayRef"];
+        };
         NotificationTestData: {
             message: string;
         };
@@ -6989,7 +7331,7 @@ export interface components {
              */
             id: string;
             /** @enum {string} */
-            type: "server.unhealthy" | "server.recovered" | "capability.changed" | "publish.requested" | "publish.decided" | "connection.needs_reconsent" | "upstream_signin.lapsed" | "key.expiring" | "approval.requested" | "approval.decided" | "access.requested" | "access.decided" | "test";
+            type: "server.unhealthy" | "server.recovered" | "capability.changed" | "publish.requested" | "publish.decided" | "connection.needs_reconsent" | "upstream_signin.lapsed" | "key.expiring" | "approval.requested" | "approval.decided" | "access.requested" | "access.decided" | "server.review_due" | "server.sunset_soon" | "server.deprecated" | "test";
             /** @enum {integer} */
             version: 1;
             /** Format: date-time */
@@ -7003,7 +7345,7 @@ export interface components {
             /** @description A link to the item in the web app (never contains a secret) */
             url: string;
             /** @description The shape follows type */
-            data: components["schemas"]["ServerUnhealthyData"] | components["schemas"]["ServerRecoveredData"] | components["schemas"]["CapabilityChangedData"] | components["schemas"]["PublishRequestedData"] | components["schemas"]["PublishDecidedData"] | components["schemas"]["ConnectionNeedsReconsentData"] | components["schemas"]["UpstreamSigninLapsedData"] | components["schemas"]["KeyExpiringData"] | components["schemas"]["ApprovalNotificationData"] | components["schemas"]["NotificationTestData"];
+            data: components["schemas"]["ServerUnhealthyData"] | components["schemas"]["ServerRecoveredData"] | components["schemas"]["CapabilityChangedData"] | components["schemas"]["PublishRequestedData"] | components["schemas"]["PublishDecidedData"] | components["schemas"]["ConnectionNeedsReconsentData"] | components["schemas"]["UpstreamSigninLapsedData"] | components["schemas"]["KeyExpiringData"] | components["schemas"]["ApprovalNotificationData"] | components["schemas"]["ServerReviewDueData"] | components["schemas"]["ServerSunsetSoonData"] | components["schemas"]["ServerDeprecatedData"] | components["schemas"]["NotificationTestData"];
         };
         /** @enum {string} */
         AutomationTokenKind: "platform_admin" | "team_publisher";
@@ -7344,6 +7686,7 @@ export interface components {
         TeamParam: string;
         UserIdParam: string;
         ServerIdParam: string;
+        TransferIdParam: string;
         CapabilityIdParam: string;
         CapabilityKindParam: components["schemas"]["CapabilityKind"];
         GatewayOptionKindParam: components["schemas"]["GatewayCapabilityKind"];
@@ -8358,6 +8701,141 @@ export interface operations {
             428: components["responses"]["ErrorReply"];
         };
     };
+    requestTeamMcpServerTransfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                serverId: components["parameters"]["ServerIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServerTransferRequest"];
+            };
+        };
+        responses: {
+            /** @description The open transfer */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ServerTransfer"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            422: components["responses"]["ErrorReply"];
+        };
+    };
+    listTeamMcpServerTransfers: {
+        parameters: {
+            query?: {
+                /** @description Only the transfers still waiting for an answer */
+                pendingOnly?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description At most 100 transfers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ServerTransfer"][];
+                    };
+                };
+            };
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+        };
+    };
+    cancelMcpServerTransfer: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                transferId: components["parameters"]["TransferIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The closed transfer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ServerTransfer"];
+                    };
+                };
+            };
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            412: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+        };
+    };
+    acceptMcpServerTransfer: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                /** @description Team slug or ID */
+                team: components["parameters"]["TeamParam"];
+                transferId: components["parameters"]["TransferIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The accepted transfer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ServerTransfer"];
+                    };
+                };
+            };
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            412: components["responses"]["ErrorReply"];
+            422: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+        };
+    };
     testTeamMcpServer: {
         parameters: {
             query?: never;
@@ -9041,6 +9519,101 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["PublishingSettings"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            412: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+        };
+    };
+    adminForceTransferMcpServer: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                serverId: components["parameters"]["ServerIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServerTransferForce"];
+            };
+        };
+        responses: {
+            /** @description The server, now the receiving team's */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["McpServer"];
+                    };
+                };
+            };
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            412: components["responses"]["ErrorReply"];
+            422: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+        };
+    };
+    adminGetGovernanceSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Settings */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["GovernanceSettings"];
+                    };
+                };
+            };
+            403: components["responses"]["ErrorReply"];
+        };
+    };
+    adminUpdateGovernanceSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GovernanceSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated settings */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["GovernanceSettings"];
                     };
                 };
             };
