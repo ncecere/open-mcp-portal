@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **2026-10-30.** v0.10.0 is published and independently verified; #32, #33, #35, #40, #43, #46 and #52 are closed. Governance and the token-only CLI/public client shipped after all local/GitHub/publication/independent artifact/published runtime gates passed; evidence/example-pin follow-up CI is tracked separately. SCIM (#36) is still an unaccepted design draft. Work continues through [the implementation order](implementation-order.md); v1.0.0 remains the owner's decision.
+Status: **2026-10-30.** v0.10.1's sign-in invite lock-order patch is published and independently verified, without SCIM implementation or a schema change; its evidence/example-pin follow-up is validated separately. v0.10.0 shipped governance and CLI; #32, #33, #35, #40, #43, #46 and #52 are closed. Governance and the token-only CLI/public client shipped after all local/GitHub/publication/independent artifact/published runtime gates passed; evidence/example-pin follow-up CI is tracked separately. SCIM (#36) is still an unaccepted design draft. Work continues through [the implementation order](implementation-order.md); v1.0.0 remains the owner's decision.
 Each remaining issue has an implementation plan (data model, API, packages to change, tests, acceptance criteria and open questions):
 [all roadmap issues](https://github.com/ncecere/open-mcp-portal/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap), grouped by
 [milestone](https://github.com/ncecere/open-mcp-portal/milestones). Sizes are relative effort: **S** a few days, **M** a week or two, **L** several weeks. Each item that needs a
@@ -41,6 +41,7 @@ Decided out of scope:
 | [v0.7.0](releases/v0.7.0.md) | 2026-10-29 | Shared server quotas, replica-local concurrency, bounded trusted-read retries and circuit breaking. The first #33 stage. |
 | [v0.8.0](releases/v0.8.0.md) | 2026-10-29 | Ordered endpoint failover with independently entered origin-bound static credentials, actual-URL identity/definition parity, primary-only exact approvals and endpoint-aware review/health/rotation. #33 is closed. |
 | [v0.9.0](releases/v0.9.0.md) | 2026-10-30 | First bounded ungoverned modern Tasks relay, Kubernetes release gates and content-scanning design only. #35/#43/#52 are closed; no scanner or governed async lifecycle is claimed. |
+| [v0.10.1](releases/v0.10.1.md) | 2026-10-30 | Sign-in invite acceptance/revocation lock inversion fixed with sorted team-first locking and current invite/expiry rechecks. No migration or SCIM implementation; full local/GitHub/native artifact/published-runtime checks passed. |
 | [v0.10.0](releases/v0.10.0.md) | 2026-10-30 | Accountable governance, human label confirmation, gateway ceilings, review/lifecycle/transfer and final transport cutoffs; token-only omp CLI/public client and policy-preserving plans. #40/#46 are closed. |
 
 Proven on a real deployment (one Talos cluster, Authentik sign-in, CloudNativePG with continuous archiving and daily backups, a restore tested twice):
