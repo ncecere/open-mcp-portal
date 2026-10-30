@@ -196,7 +196,10 @@ func planGovernance(ctx context.Context, q *dbgen.Queries, a authz.Actor, role s
 	if in.SetOwner {
 		if in.OwnerUserID == nil {
 			next.OwnerUserID = uuid.NullUUID{}
-		} else if !(cur.OwnerUserID.Valid && cur.OwnerUserID.UUID == *in.OwnerUserID) {
+		} else {
+			// Explicit assignment always validates live eligibility, even if the
+			// UUID is unchanged. Omission, not an invalid repeated assignment,
+			// is how unrelated edits retain an owner who has since left.
 			ok, err := ownerEligible(ctx, q, cur.TeamID, *in.OwnerUserID)
 			if err != nil {
 				return p, err
