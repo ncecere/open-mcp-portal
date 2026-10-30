@@ -139,7 +139,10 @@ func ParseFile(raw []byte) (*File, error) {
 		return nil, usageErr("invalid %s file: %v", SchemaID, err)
 	}
 	var extra yaml.Node
-	if err := dec.Decode(&extra); err == nil {
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+		if err != nil {
+			return nil, usageErr("invalid %s file: malformed trailing YAML", SchemaID)
+		}
 		return nil, usageErr("invalid %s file: more than one YAML document", SchemaID)
 	}
 	if problems := f.Validate(); len(problems) > 0 {

@@ -276,6 +276,9 @@ func (a *App) cmdServersRegister(ctx context.Context, args []string) error {
 			f := false
 			body.Enabled = &f
 		}
+		if *timeoutSec < 0 || *timeoutSec > 600 {
+			return usageErr("--timeout-seconds must be between 1 and 600 (or 0 to use the portal's default)")
+		}
 		if *timeoutSec != 0 {
 			v := int32(*timeoutSec)
 			body.TimeoutSeconds = &v

@@ -192,6 +192,12 @@ func (p *planner) planServers(ctx context.Context, desired []Server) error {
 	for _, d := range sorted {
 		d := d
 		cur := bySlug[d.Slug]
+		// An absent env name is permitted when preserving an existing static
+		// credential, not when creating one. Validate the entire plan before
+		// any step is applied so a later bad declaration cannot partially apply.
+		if p.opts.apply && d.AuthMode == "static_header" && d.AuthValueEnv == "" && (cur == nil || serverMode(cur) != "static_header") {
+			return usageErr("server %s: creating or switching to static_header needs authValueEnv", d.Slug)
+		}
 		if cur == nil {
 			p.planServerCreate(d)
 			continue
