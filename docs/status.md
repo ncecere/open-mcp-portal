@@ -3,6 +3,16 @@
 Last updated: 2026-10-30. Open MCP Portal (formerly Open MCP Gateway, decision 46): **v0.9.0 is published and independently verified** (#35's first task-relay stage, #43's Kubernetes release gates and #52's content-scanning design). #35's first-stage acceptance is complete and the issue is closed. The owner directed continued ordered work through every development issue, delegated subagents (Sonnet 5.5) and pre-1.0 releases; **v1.0.0 remains the owner's explicit decision**. #32, #33, #35, #43 and #52 are closed with evidence. A fresh agent should read [agent-handoff.md](agent-handoff.md).
 (release notes: [releases/v0.9.0.md](releases/v0.9.0.md), [v0.8.0](releases/v0.8.0.md); earlier: [v0.7.0](releases/v0.7.0.md), [v0.6.0](releases/v0.6.0.md), [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
+## v0.10.0 candidate: governance and CLI, not yet released
+
+The reviewed #40 governance and #46 CLI implementations are integrated in the local candidate, including explicit sensitivity confirmation (immutable migrations49/50), parent transfer-lock/batch-fairness/current-owner fixes, and comparison-only CLI policy preservation. The sunset-admission regression first reproduced late dispatch in all six legacy/modern tool/prompt/resource paths; the frozen earliest credential/grant/sunset guard fixed it without restoring committed spend. Real-API regressions also reproduced and fixed CLI clones losing ceilings or sensitivity/retirement policy. An independent Sonnet review found no high/critical issue; its Unicode contact mismatch is fixed and atomic export semantics are explicit.
+
+Combined focused races passed in both actual database-role modes with mandatory PostgreSQL: registry, overview and HTTP confirmation/governance/transfer/CLI checks, plus full CLI/client races, generation, lint/build, web typecheck and 33 focused web tests/styling/size. Earlier isolated full suites are not combined-release acceptance. One wrapper's success exit masked a failed new test (invalid Unicode-channel fixture); that result was discarded and the entire focused gate rerun with strict fail-fast handling and valid Unicode email/URL boundaries.
+
+An early source/schema49 real-browser/runtime check passed all six desktop/mobile states with zero axe violations, incompletes or overflow, plus real transfer/ciphertext preservation and ceiling/sunset/overdue flows. That predates confirmation integration and is not final candidate acceptance. **Full combined normal/race suites in both role modes, complete web/deployment/advisory checks, final confirmation browser/runtime and actual published-v0.9.0/schema50 compatibility remain required.** No new tag, publication or issue closure is implied. See [candidate notes](releases/v0.10.0.md).
+
+The v0.9.0 evidence/image-pin follow-up `bcfb5e7` is complete: all seven CI jobs40998064377 and five Kubernetes jobs40998064220 passed. [Final confirmation](https://github.com/ncecere/open-mcp-portal/issues/35#issuecomment-6514713744). #40/#46 remain open; 26 issues remain (18 development, eight real-world). SCIM remains an unaccepted design draft, with no code or DDL.
+
 ## v0.9.0 (2026-10-30): #35 first stage, #43 release gates, #52 design
 
 #43 closed after every new job passed on GitHub-hosted runners at `f3e4c75` (CI 40940744356, k8s-smoke
@@ -58,8 +68,7 @@ The release is now **published and independently verified**:
 [Tag CI40993956605](https://github.com/ncecere/open-mcp-portal/actions/runs/40993956605) passed all seven
 jobs, and [tag upgrade40993956611](https://github.com/ncecere/open-mcp-portal/actions/runs/40993956611)
 passed. **[#35 is closed with scoped acceptance](https://github.com/ncecere/open-mcp-portal/issues/35#issuecomment-6514201092)**.
-The example image pin now uses the independently verified index. Its evidence/pin follow-up passed
-local generation/freshness/lint/build/Kubernetes/actionlint checks; the follow-up's GitHub checks are next.
+The v0.9.0 evidence/pin follow-up `bcfb5e7` passed local checks, all seven CI jobs40998064377 and five Kubernetes jobs40998064220; [final confirmation](https://github.com/ncecere/open-mcp-portal/issues/35#issuecomment-6514713744). That follow-up pinned the independently verified index. A later candidate's zero digest is deliberately not deployable until its own publication is verified.
 Release tags are immutable. See [releases/v0.9.0.md](releases/v0.9.0.md).
 
 ### History: #35 development notes
@@ -828,12 +837,9 @@ server allow-list).
 
 - Clone `git@github.com:ncecere/open-mcp-portal.git`, check out `main` and fetch tags. All required source,
   migrations and generated code for the released baseline are on the remote. The immutable shipped source is
-  `v0.9.0`; main's evidence/pin follow-up is recorded above. Unmerged #40/#46 branches and the #36 design
-  draft still need separate Git transfer if changing machines; do not assume a clone of main contains them.
+  `v0.9.0`; main's completed evidence/pin follow-up is recorded above. The local #40/#46 v0.10.0 integration candidate and separate #36 design draft need explicit Git transfer until pushed; do not assume a clone of main contains them.
 - Read this release section, `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md) and
-  [implementation order](implementation-order.md). #35 shipped in v0.9.0 and is closed. Finish the
-  evidence/pin follow-up checks, then complete #40 governance review/integration and #46 CLI integration;
-  #36 SCIM follows #40 and its identity/deprovisioning preflight. Do not restart already shipped features.
+  [implementation order](implementation-order.md). #35 shipped in v0.9.0 and is closed. Finish the integrated #40/#46 v0.10.0 candidate's complete release acceptance; #36 SCIM follows after its identity/deprovisioning draft is corrected and decided. Do not restart already shipped features.
 - Install Go 1.26.10+, Node 22+, Docker, Python 3 and sqlc 1.31.1; run `npm ci` in `web/`.
   Use owned disposable PostgreSQL for integration tests and actual split-role verification.
 - Git does **not** transfer `.env`, encryption/signing keys, provider credentials or the existing development
@@ -860,9 +866,7 @@ blind restart/seed of an existing one. The historical dev-database migration hel
    Use the new binary's rotation utility for the new ciphertext columns. Keep production autovacuum enabled;
    governed transitions intentionally fail closed during conflicting writes/reads/maintenance.
 3. **v0.9.0/#35 is published, verified and closed**, after #32 in v0.6.0 and #33 in v0.7.0/v0.8.0.
-   Finish the evidence/pin follow-up's checks, then complete the isolated #40 governance and #46 CLI reviews
-   and integration; they are not part of v0.9.0. #40's applied migration49 is immutable; its explicit-label
-   follow-up owns migration50. #36 SCIM comes next, after its linking/deprovisioning design is reviewed.
+   The evidence/pin follow-up is complete. Finish the integrated #40 governance/#46 CLI v0.10.0 candidate's full release gates; it is not part of v0.9.0 and neither issue is closed yet. Applied migrations49/50 are immutable. #36 SCIM comes next after its linking/deprovisioning design is corrected and decided.
    Continue [implementation order](implementation-order.md), serializing migration writers. #43's upgrade,
    ingress, restore and load gates are proven and closed; Helm packaging still depends on #41's actual
    KMS handling. #52 was design-only and #70–#73 track its first implementation slice.

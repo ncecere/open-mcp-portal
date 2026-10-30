@@ -1,4 +1,4 @@
-# Agent handoff: verified v0.9.0, next #40 governance and #36 SCIM
+# Agent handoff: verified v0.9.0, governance/CLI v0.10.0 candidate
 
 The original stop point was the verified v0.5.1 machine transfer. On 2026-10-29 the owner resumed ordered
 backlog work, authorized releases when ready and delegated incidental decisions. **Do not cut v1.0.0 without
@@ -30,13 +30,9 @@ publication and independent signature/checksum/SPDX/SLSAv1/source/architecture v
 published read-only restricted runtime reopened a pre-publication authenticated task handle and passed
 the full real-HTTP/browser smoke. Final tag CI/upgrade passed and
 [#35 is closed](https://github.com/ncecere/open-mcp-portal/issues/35#issuecomment-6514201092). The example
-image-pin/evidence follow-up passed local checks; push it and confirm its GitHub checks before further
-main pushes. Both source and published editor-mobile contrast checks remain incomplete. See [status](status.md).
+image-pin/evidence follow-up `bcfb5e7` passed all seven CI jobs40998064377 and five Kubernetes jobs40998064220; [final confirmation](https://github.com/ncecere/open-mcp-portal/issues/35#issuecomment-6514713744). Both source and published editor-mobile contrast checks remain incomplete. See [status](status.md).
 #43's Kubernetes gates and #52's scanning design are closed (decision87); scanner follow-ups #70–#73
-are development work, not implemented scanning. #40 governance and #46 CLI have isolated unmerged
-implementations under review. Do not discard them or treat them as releases. The CLI's curation/expiry/
-concurrency fixes passed focused both-role checks; combined-tree release gates remain. #40's migration49
-was applied by its tests and is immutable; its explicit-label follow-up owns migration50. The #36 SCIM
+are development work, not implemented scanning. #40 governance and #46 CLI are reviewed and integrated in the local v0.10.0 candidate, not released. Parent regressions cover transfer lock order, notification batch fairness, live owner eligibility, frozen final dispatch deadlines and CLI preservation of curation, exact expiry, governance/confirmation and ceilings. Focused combined both-role gates passed; full combined-tree release gates, final browser/runtime and actual prior-published-image/schema50 checks remain. Migrations49 and50 were applied by tests and are immutable; future DDL is51+ only after inspecting the integrated state. See [candidate notes](releases/v0.10.0.md). The #36 SCIM
 preflight is a draft with unresolved parent-review objections, not accepted policy or implementation. Never move/reuse an existing tag.
 
 ## Start here
@@ -45,10 +41,10 @@ preflight is a draft with unresolved parent-review objections, not accepted poli
    `main`, not an old approval/refresh/upstream-protection branch, for the released baseline. Inspect
    any active work before changing branches; do not discard an in-progress patch.
 2. Read `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md), [status](status.md) and
-   [implementation order](implementation-order.md). Preserve active v0.9.0 release validation, completed
-   suite logs and owned compatibility/runtime fixtures (with their matching keys); verify actual current
-   gates before pushing the evidence/pin follow-up. The v0.9.0 tag exists and is immutable. #33 is
-   complete/closed and so is #35. Next review/integrate #40 governance and #46 CLI, then #36 SCIM;
+   [implementation order](implementation-order.md). Preserve completed suite logs and owned
+   compatibility/runtime fixtures with their matching keys. The v0.9.0 evidence/pin follow-up is complete
+   and its tag is immutable. #33 and #35 are closed. Finish the local #40/#46 v0.10.0 candidate's complete
+   acceptance and publication gates, then correct/decide #36 SCIM's draft before implementation;
    do not restart shipped task implementation. Preserve approvals and access checks on every task operation.
    Do not restart old failover work or treat fixture results as real-client/provider/pilot evidence.
 3. Git transfers source, migrations, generated contracts, tests and docs—not `.env`, encryption/signing keys,

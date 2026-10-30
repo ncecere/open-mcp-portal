@@ -123,16 +123,17 @@ expect_fail "probe too short" "did not run" check_probe roll 4 0 20
 expect_fail "probe without summary" "reported no total" check_probe roll "" "" 20
 
 # ---------------------------------------------------------------- Prometheus text
-leader_file() { # FILE RETENTION ROLLUP NOTIFICATIONS
+leader_file() { # FILE RETENTION ROLLUP NOTIFICATIONS [GOVERNANCE]
   cat >"$1" <<EOF
 # HELP omp_loop_leader 1 when this replica led the loop's latest run
 omp_loop_leader{loop="notifications"} $4
 omp_loop_leader{loop="retention"} $2
 omp_loop_leader{loop="usage_rollup"} $3
+omp_loop_leader{loop="governance"} ${5:-0}
 omp_http_requests_total{code="2xx",method="POST",route="POST /mcp/{slug}"} 40
 EOF
 }
-leader_file "$SELF_TMP/m1.txt" 1 0 0
+leader_file "$SELF_TMP/m1.txt" 1 0 0 1
 leader_file "$SELF_TMP/m2.txt" 0 1 1
 leader_file "$SELF_TMP/m3.txt" 0 0 0
 leader_file "$SELF_TMP/m-two.txt" 1 0 0
@@ -141,11 +142,12 @@ expect_out "prom_sum label" 1 prom_sum "$SELF_TMP/m1.txt" omp_loop_leader 'loop=
 expect_out "prom_sum none" 0 prom_sum "$SELF_TMP/m1.txt" omp_nothing
 expect_out "loop_leaders sums the replicas" 1 loop_leaders retention "$SELF_TMP/m1.txt" "$SELF_TMP/m2.txt" "$SELF_TMP/m3.txt"
 expect_out "loop_leaders missing" missing loop_leaders health "$SELF_TMP/m1.txt"
-expect_ok "every loop has a leader" check_loop_leaders "retention usage_rollup notifications" "$SELF_TMP/m1.txt" "$SELF_TMP/m2.txt" "$SELF_TMP/m3.txt"
+expect_out "governance leader is counted" 1 loop_leaders governance "$SELF_TMP/m1.txt" "$SELF_TMP/m2.txt" "$SELF_TMP/m3.txt"
+expect_ok "every loop has a leader" check_loop_leaders "retention usage_rollup notifications governance" "$SELF_TMP/m1.txt" "$SELF_TMP/m2.txt" "$SELF_TMP/m3.txt"
 expect_ok "several replicas may report leading" check_loop_leaders "retention" "$SELF_TMP/m1.txt" "$SELF_TMP/m-two.txt"
 expect_fail "no leader" 'loop="notifications"\} adds up to 0' check_loop_leaders "notifications" "$SELF_TMP/m3.txt" "$SELF_TMP/m3.txt"
 expect_fail "loop not reported" 'no replica reports omp_loop_leader\{loop="health"\}' check_loop_leaders "health" "$SELF_TMP/m1.txt"
-expect_ok "no leader while the lock is held elsewhere" check_no_leader_while_locked "retention usage_rollup notifications" "$SELF_TMP/m3.txt" "$SELF_TMP/m3.txt"
+expect_ok "no leader while the lock is held elsewhere" check_no_leader_while_locked "retention usage_rollup notifications governance" "$SELF_TMP/m3.txt" "$SELF_TMP/m3.txt"
 expect_fail "a leader although the lock is held" 'adds up to 1 while its advisory lock was held elsewhere' check_no_leader_while_locked "retention" "$SELF_TMP/m1.txt" "$SELF_TMP/m3.txt"
 
 # ---------------------------------------------------------------- streaming

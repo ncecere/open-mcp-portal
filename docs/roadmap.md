@@ -1,7 +1,7 @@
 # Roadmap
 
-Status: **2026-10-30.** v0.8.0 is published and independently verified; v0.9.0 is in preparation with #35's first task-relay stage, #43's Kubernetes release gates and #52's content-scanning design (decision 87). #32, #33, #43 and #52 are closed. Work continues through [the implementation order](implementation-order.md); v1.0.0 remains the owner's decision.
-issue with its implementation plan (data model, API, packages to change, tests, acceptance criteria, open questions):
+Status: **2026-10-30.** v0.9.0 is published and independently verified; #32, #33, #35, #43 and #52 are closed. Governance (#40) and CLI (#46) are integrated in an unreleased v0.10.0 candidate; complete acceptance/publication gates remain. SCIM (#36) is still an unaccepted design draft. Work continues through [the implementation order](implementation-order.md); v1.0.0 remains the owner's decision.
+Each remaining issue has an implementation plan (data model, API, packages to change, tests, acceptance criteria and open questions):
 [all roadmap issues](https://github.com/ncecere/open-mcp-portal/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap), grouped by
 [milestone](https://github.com/ncecere/open-mcp-portal/milestones). Sizes are relative effort: **S** a few days, **M** a week or two, **L** several weeks. Each item that needs a
 design gets one in `docs/` before code, as the earlier phases did. The decisions behind the work are in [decisions.md](decisions.md).

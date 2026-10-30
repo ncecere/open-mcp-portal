@@ -7,9 +7,7 @@ numbers and file paths are suggestions, not instructions to overwrite existing c
 
 ## Current batch
 
-**In development (unreleased, on `feature/server-governance`):** #40 server governance, decision 88, expand-only
-migration `00049`: owner, on-call contact, sensitivity and lifecycle on servers, a gateway ceiling, re-review
-intervals and the leader-elected `omp.governance` loop, transfers between teams. See [registry](registry.md#governance).
+**Integrated v0.10.0 candidate, not yet released:** #40 server governance (decision88, immutable expand-only migrations49/50, including explicit label confirmation) and #46 CLI/public client (decision89). Combined focused both-role races and early source browser/runtime checks passed; full combined release gates, final browser/runtime, actual previous-image/schema50 compatibility and verified publication remain. Neither issue is closed yet. See [registry](registry.md#governance), [CLI](cli.md), [candidate notes](releases/v0.10.0.md) and [status](status.md). #36 SCIM follows after its unaccepted identity-linking/deprovisioning draft is corrected and decided.
 
 **Shipped in v0.3.3:** #28 owner-set tool classification (migration `00027`) and #37 browser sessions
 (migration `00028`, idle expiry off by default). Both issues are closed. See [classification](tool-classification.md),

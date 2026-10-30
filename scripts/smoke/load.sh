@@ -29,7 +29,10 @@ LOAD_LIMIT_SENT=120    # requests sent against it
 LOAD_P95_MS="${SMOKE_LOAD_P95_MS:-3000}"
 LOAD_STAGES='[{"duration":"20s","target":8},{"duration":"30s","target":24},{"duration":"40s","target":24},{"duration":"10s","target":0}]'
 LOAD_MIN_REQUESTS=800
-LOOPS="notifications retention usage_rollup"
+# Governance is sampled at startup and every five minutes. Include its live
+# leader signal here; the short external-lock exclusion below deliberately
+# exercises notifications/retention only (governance exclusion is DB-tested).
+LOOPS="notifications retention usage_rollup governance"
 
 # start_load_client: a pod in the client namespace with the k6 binary and script.
 start_load_client() {
