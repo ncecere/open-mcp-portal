@@ -35,7 +35,16 @@ violations and no horizontal overflow; **editor-mobile color-contrast remains in
 upstream evidence, not real Tasks-client/server interoperability, a natural-expiry soak or independent
 whole-product accessibility acceptance.
 
-Web/deployment/advisory checks and exact-source GitHub/native publication verification remain pending.
+All **853 web tests**, typecheck/build/styling/size and full npm audit passed (zero vulnerabilities).
+Generation/freshness, lint and all-package build passed on the final checkout. Kubernetes validation,
+actionlint, pinned ShellCheck, 71 smoke assertion self-tests and 15 Python tests passed; govulncheck found
+zero reachable or imported-package vulnerabilities (two module-only advisories). The snapshot had no
+`.git`, so actionlint initially refused to discover the project; it and the remaining deployment/advisory
+gates were rerun successfully in the real checkout with identical source/workflow bytes. All 1,469 tracked
+files were compared to the tested snapshot: only four evidence documents differ, not runtime, tests,
+SQL, migrations, generated contracts, web or deployment code.
+
+Exact-source GitHub CI/smoke and native publication/independent artifact/runtime verification are next.
 **No task-support claim is made for a published image** until publication and independent runtime
 verification exist. See [releases/v0.9.0.md](releases/v0.9.0.md).
 

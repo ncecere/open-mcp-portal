@@ -23,9 +23,9 @@ explicit; they are not whole-product accessibility acceptance. The evidence/imag
 **Current override:** v0.9.0 is being prepared on `feature/mcp-tasks`. #35's released specification was
 confirmed before design and its conservative first stage is implemented (decision86, migration48).
 All four mandatory-PostgreSQL normal/race suites in both actual role modes passed on a frozen candidate,
-as did actual published v0.8.0/schema48 compatibility and source runtime/browser/restart smoke. Remaining
-web/deployment/advisory, exact-source GitHub and publication verification gates must finish before tagging
-or closing #35. The source editor-mobile contrast check is incomplete. See [status](status.md).
+as did actual published v0.8.0/schema48 compatibility and source runtime/browser/restart smoke. All853
+web tests, generated freshness, lint/build, deployment/workflow/self-tests and advisory gates passed.
+Exact-source GitHub and publication verification gates must finish before tagging or closing #35. The source editor-mobile contrast check is incomplete. See [status](status.md).
 #43's Kubernetes gates and #52's scanning design are closed (decision87); scanner follow-ups #70–#73
 are development work, not implemented scanning. #40 governance and #46 CLI have isolated unmerged
 implementations under review. Do not discard them or treat them as releases. The CLI needs curation/
