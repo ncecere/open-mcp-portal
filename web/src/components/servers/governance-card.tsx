@@ -16,7 +16,6 @@ import { Badge } from "@/components/ui/badge/badge";
 import { Button } from "@/components/ui/button/button";
 import { Card } from "@/components/ui/card/card";
 import { DescriptionList } from "@/components/ui/description-list/description-list";
-import { TextLink } from "@/components/ui/text-link/text-link";
 import { Time } from "@/components/ui/time/time";
 import { toast } from "@/components/ui/toast/toast";
 import s from "../../pages/shared.module.css";
@@ -28,13 +27,6 @@ import m from "./servers.module.css";
 import { CancelTransferDialog, RequestTransferDialog } from "./transfer-dialogs";
 
 type Props = { server: McpServer; scope: ServerScope; abilities: ServerAbilities };
-
-/** The on-call contact: a link when it is one, else the text. */
-function Contact({ value }: { value: string }) {
-  if (/^https?:\/\//.test(value)) return <TextLink href={value}>{value}</TextLink>;
-  if (/^[^\s@]+@[^\s@]+$/.test(value)) return <TextLink href={`mailto:${value}`}>{value}</TextLink>;
-  return <span>{value}</span>;
-}
 
 /** The banner of a deprecated or retired server, on every tab and in the catalog. */
 export function RetirementBanner({ server }: { server: { name: string; governance?: { lifecycle: ServerLifecycle; sunsetAt?: string | null; replacement?: { name: string } | null } } }) {
@@ -119,7 +111,7 @@ export function GovernanceCard({ server, scope, abilities }: Props) {
               label: "Owner",
               value: g.ownerUserId ? <span className={g.ownerless ? m.danger : undefined}>{g.ownerName ?? "Unknown"}{g.ownerless ? " (no longer an editor of the team)" : ""}</span> : <span className={s.muted}>Nobody</span>,
             },
-            { label: "On call", value: g.oncallContact ? <Contact value={g.oncallContact} /> : <span className={s.muted}>Not set</span> },
+            { label: "On call", value: g.oncallContact ? <span>{g.oncallContact}</span> : <span className={s.muted}>Not set</span> },
             {
               label: "Sensitivity",
               value: (

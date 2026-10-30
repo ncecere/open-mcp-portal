@@ -49,10 +49,12 @@ describe("Governance card", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it("is read-only for editors and members, and an email contact is a link", async () => {
-    mockApi(routes("editor", () => mcpServer({ governance: gov({ oncallContact: "oncall@example.com" }) })));
+  it.each(["oncall@example.com", "https://support.example.com/login", "tel:+123456789", "#status-oncall"])("is read-only for editors and renders contact %s as selectable text, never a link", async (oncallContact) => {
+    mockApi(routes("editor", () => mcpServer({ governance: gov({ oncallContact }) })));
     renderApp(record);
-    expect(await screen.findByRole("link", { name: "oncall@example.com" })).toHaveAttribute("href", "mailto:oncall@example.com");
+    const contact = await screen.findByText(oncallContact);
+    expect(contact.closest("a")).toBeNull();
+    expect(screen.queryByRole("link", { name: oncallContact })).toBeNull();
     expect(screen.queryByRole("button", { name: "Edit governance" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Offer to another team" })).toBeNull();
   });
