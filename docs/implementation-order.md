@@ -7,7 +7,7 @@ numbers and file paths are suggestions, not instructions to overwrite existing c
 
 ## Current batch
 
-**Integrated v0.10.0 candidate, not yet released:** #40 server governance (decision88, immutable expand-only migrations49/50, including explicit label confirmation) and #46 CLI/public client (decision89). All four complete mandatory-DB normal/race suites,896 web tests, local deployment/advisory checks, final source browser/runtime and actual previous-image/schema50 compatibility passed with scoped caveats; exact-source GitHub gates and independently verified publication remain. Neither issue is closed yet. See [registry](registry.md#governance), [CLI](cli.md), [candidate notes](releases/v0.10.0.md) and [status](status.md). #36 SCIM follows after its unaccepted identity-linking/deprovisioning draft is corrected and decided.
+**Shipped, independently verified and closed in v0.10.0:** #40 server governance (decision88, immutable migrations49/50, explicit human label confirmation) and #46 token-only CLI/public client (decision89). All four complete mandatory-DB normal/race suites,896 web tests, local and exact-source main/tag/deployment/upgrade/canary/load gates, actual previous-image/schema50 compatibility, independent image and six genuine CLI signature/byte-identical-rebuild verification, and actual published runtime/browser/signed-Linux-CLI checks passed with scoped caveats. Evidence/example-pin follow-up CI is verified separately. See [registry](registry.md#governance), [CLI](cli.md), [release notes](releases/v0.10.0.md) and [status](status.md). #36 SCIM follows after its unaccepted identity-linking/deprovisioning draft is corrected and decided.
 
 **Shipped in v0.3.3:** #28 owner-set tool classification (migration `00027`) and #37 browser sessions
 (migration `00028`, idle expiry off by default). Both issues are closed. See [classification](tool-classification.md),
@@ -47,9 +47,7 @@ actual v0.8.0/schema48 compatibility, source/published runtime/browser, main CI,
 rollback/canary, load and native publication/artifact verification passed. Final tag CI/upgrade passed and
 [#35 is closed with scoped acceptance](https://github.com/ncecere/open-mcp-portal/issues/35#issuecomment-6514201092). #43's Kubernetes gates and #52's scanning design are closed; #70–#73 track the first scanning
 implementation slice. Inspect current Git/CI rather than resuming an old feature branch.
-There are 26 open issues: 18 development and eight real-world verification issues. #40 governance and
-#46 CLI have isolated implementations under review, not merged or released; #46 import/export must
-preserve curation and grant expiry before integration.
+There are 24 open issues:16 development and eight real-world verification issues. #40/#46 are shipped in verified v0.10.0 and closed. Preserve CLI curation/governance/marker/ceiling comparison-only semantics and exact grant-expiry refusals; #47 must not widen token authority implicitly.
 The owner authorized ready pre-1.0 releases; v1.0.0 remains their explicit decision. Follow the order below
 without closing evidence-gated issues on fixture results or claiming unfinished branch work is released.
 
@@ -71,10 +69,10 @@ security boundary before building on it; do not start every large issue at once.
 | 2, shipped v0.4.0 | **#44** split database roles | Independent security foundation. Preserve append-only retention through narrowly privileged definer functions; test runtime-role denial and normal operations. |
 | 3, operations lane | **#43** upgrade/ingress/OIDC/restore/load gates (closed; shipped v0.9.0); **#41** envelope encryption | #43 builds on #44. #41 also follows #44; select/test an actual KMS target without changing existing static-key installs by default. |
 | 4, operations lane | **#42** Helm packaging | Only after #43 proves upgrade/restore and #44/#41 establish credential handling. Test parity with Kustomize rather than duplicating unverified assumptions. |
-| 7 | **#40**, then **#36** lifecycle | #40 needs classification/approvals. Implement accountable ownership and safe transfer first; then SCIM uses that ownership model plus sessions and service connections to deprovision. Group-mapping refinements to #40 can follow #36. |
+| 7, #40 shipped/closed v0.10.0 | **#36** lifecycle next | Governance ownership/transfer is verified. Correct/decide SCIM's identity-linking/deprovisioning draft against sessions, manual ownership, provider refresh and final-writer serialization before implementation. Group-mapping refinements can follow that decision. |
 | 7, audit lane | **#38**, then **#39** | Start #38's export/sink/cursor and retention-floor foundations after #44. Add #39 hold-aware retention after a durable audit tail exists; integrate #38's hold semantics before #39 erasure. Erasure also waits for #36. This staged split resolves the roadmap's apparent #38 ↔ #39 cycle. |
 | 8, evidence-gated | **#45** subscriptions/listen | Wait for a real client that uses it. Require live access revocation and replica fan-out tests. |
-| 9 | **#46**, then **#47** developer tooling | #46 follows #29 and needs a CLI sign-in decision. #47 reuses its public client; new delete scopes need explicit review, not a hidden expansion of publisher authority. |
+| 9, #46 shipped/closed v0.10.0 | **#47** developer tooling | Reuse the token-only CLI/public client/schema under decision89. New delete scopes need explicit review, not a hidden expansion of publisher authority; no CLI sign-in or keys are implemented. |
 | 9, independent DX | **#49**, **#51** | Catalog governance follows #40. Chargeback follows #38 and needs unambiguous calling-team attribution recorded before claiming historic billing accuracy. |
 | 10 | **#48**, **#50** | Console follows classification and approvals; search-mode dispatch follows classification, curation and catalog search. Both must use the normal governed call path. |
 | Later, design only | **#52** (designed, decision 87), **#53** | Scanning design follows #28/#31; identity research follows #36/#37 and a concrete pilot need. No content scanning or extra IdP support is implied by this batch. |

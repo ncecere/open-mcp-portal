@@ -1,4 +1,4 @@
-# Agent handoff: verified v0.9.0, governance/CLI v0.10.0 candidate
+# Agent handoff: verified v0.10.0, governance and CLI shipped
 
 The original stop point was the verified v0.5.1 machine transfer. On 2026-10-29 the owner resumed ordered
 backlog work, authorized releases when ready and delegated incidental decisions. **Do not cut v1.0.0 without
@@ -20,7 +20,7 @@ runtime verification passed at immutable source `c36ed3c6bbb8765004d243d1fc0bb37
 Keep published owner-mobile/health-mobile contrast and review-dialog aria-hidden-focus/contrast incompletes
 explicit; they are not whole-product accessibility acceptance. The evidence/image-pin follow-up passed.
 
-**Current override:** v0.9.0 is published at immutable source `f829b93bd90b2ea1536b9c997978a8f8affd737b`,
+**Previous baseline (historical):** v0.9.0 is published at immutable source `f829b93bd90b2ea1536b9c997978a8f8affd737b`,
 verified image `8a620e21c84786b9d8f6c326c19003a118456f17c322898174f008122f46f115`. #35's released
 specification was confirmed before design and its conservative first stage shipped (decision86, migration48).
 All four mandatory-PostgreSQL normal/race suites, 853 web tests, actual v0.8.0/schema48 compatibility,
@@ -32,7 +32,7 @@ the full real-HTTP/browser smoke. Final tag CI/upgrade passed and
 [#35 is closed](https://github.com/ncecere/open-mcp-portal/issues/35#issuecomment-6514201092). The example
 image-pin/evidence follow-up `bcfb5e7` passed all seven CI jobs40998064377 and five Kubernetes jobs40998064220; [final confirmation](https://github.com/ncecere/open-mcp-portal/issues/35#issuecomment-6514713744). Both source and published editor-mobile contrast checks remain incomplete. See [status](status.md).
 #43's Kubernetes gates and #52's scanning design are closed (decision87); scanner follow-ups #70–#73
-are development work, not implemented scanning. #40 governance and #46 CLI are reviewed and integrated in the local v0.10.0 candidate, not released. Parent regressions cover transfer lock order, notification batch fairness, live owner eligibility, frozen final dispatch deadlines and CLI preservation of curation, exact expiry, governance/confirmation and ceilings. All four full combined normal/race PostgreSQL suites,896 web tests and local deployment/advisory gates passed, as did final source/schema50 browser/runtime and actual prior-published-image compatibility (with the explicitly scoped original-upstream-task gap in the release notes). Fourteen browser states have zero violations/overflow; the two open confirmation dialogs retain aria-hidden-focus/contrast incompletes. Exact-source GitHub, publication, six signed CLI artifact verification and actual published runtime gates remain. Migrations49 and50 were applied by tests and are immutable; future DDL is51+ only after inspecting the integrated state. See [candidate notes](releases/v0.10.0.md). The #36 SCIM
+are development work, not implemented scanning. **Current override: v0.10.0 is published and independently verified.** #40 governance and #46 CLI are closed with scoped acceptance at immutable source `875ef01caf94254882d5d08b23c6fb7924594043`, tag object `1b86ddd5d435502c9f9d18644d1eadc57a594c42`, index `b6060f98b8efc256f76ecae23a0174eaa95de5116c4ba41687f7d7b37785bf13`. Four complete normal/race PostgreSQL suites in actual role modes,896 web tests, all local/main/tag/deployment/upgrade/canary/load gates and actual prior-published-image compatibility passed. Independent image/source/OIDC/SPDX/SLSAv1 verification and all six genuine CLI signatures/checksums/byte-identical rebuilds passed. Actual published read-only restricted runtime reopened a pre-publication task and preserved old ciphertext/confirmation; the signed Linux CLI passed the clean-home token-only workflow. Fourteen source and fourteen published browser states had zero violations/overflow; two open confirmation dialogs retain aria-hidden-focus/contrast incompletes. Other-OS execution, real client/provider/pilot, natural-expiry soak and whole-product security/accessibility are not claimed. See [release notes](releases/v0.10.0.md) for the interrupted original pre-schema50 upstream-task gap and completed separate proofs. The evidence/example-pin follow-up is validated separately; do not move the tag. Migrations49/50 are immutable; future DDL is51+ only after inspecting integrated state. There are24 open issues:16 development/eight real-world. The #36 SCIM
 preflight is a draft with unresolved parent-review objections, not accepted policy or implementation. Never move/reuse an existing tag.
 
 ## Start here
@@ -43,8 +43,8 @@ preflight is a draft with unresolved parent-review objections, not accepted poli
 2. Read `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md), [status](status.md) and
    [implementation order](implementation-order.md). Preserve completed suite logs and owned
    compatibility/runtime fixtures with their matching keys. The v0.9.0 evidence/pin follow-up is complete
-   and its tag is immutable. #33 and #35 are closed. Finish the local #40/#46 v0.10.0 candidate's complete
-   acceptance and publication gates, then correct/decide #36 SCIM's draft before implementation;
+   and its tag is immutable. #33/#35/#40/#46 are closed; v0.10.0 is verified. Validate its evidence/pin
+   follow-up CI, then correct/decide #36 SCIM's draft before implementation;
    do not restart shipped task implementation. Preserve approvals and access checks on every task operation.
    Do not restart old failover work or treat fixture results as real-client/provider/pilot evidence.
 3. Git transfers source, migrations, generated contracts, tests and docs—not `.env`, encryption/signing keys,
@@ -85,6 +85,8 @@ preflight is a draft with unresolved parent-review objections, not accepted poli
   artifact verification and actual-published restricted-runtime task/browser/pre-publication-handle checks
   passed. #35 is closed. Editor-mobile contrast remains incomplete; real Tasks-client/server interoperability
   and governed async lifecycle approval are not claimed. No scanner is implemented by #52.
+
+- v0.10.0: #40 accountable ownership, human label confirmation, gateway ceilings, private review/lifecycle/transfer/attention/notifications and frozen transport cutoffs; #46 token-only CLI/public client/declarative policy-preserving plans, decisions88/89 and immutable migrations49/50. Full local/GitHub/native publication/independent image and six-binary verification plus actual published runtime/browser/signed-Linux-CLI checks passed. No CLI sign-in/keys/new scope, SCIM or whole-product accessibility claim.
 
 See the release sections in [status](status.md) for actual publication/verification rather than interpreting
 this list or a local version string as evidence. Release tags are immutable. Main may contain unreleased
