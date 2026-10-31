@@ -227,18 +227,20 @@ func (s *Service) AdminRevoke(ctx context.Context, a authz.Actor, userID, id uui
 	return s.disconnect(ctx, a, userID, id, "admin")
 }
 
-// disconnect erases a connection's tokens and deletes it, then revokes the
-// tokens at the provider (best effort, within the transaction so the audit
-// records the result). Audited as provider_connection.revoke.
+// disconnect commits local deletion and its initiating audit before any
+// irreversible best-effort provider request. The result is a separate bounded
+// system event, as with shared service connections.
 func (s *Service) disconnect(ctx context.Context, a authz.Actor, userID, id uuid.UUID, reason string) error {
-	return store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
+	var p dbgen.AuthProvider
+	var token, hint string
+	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
 		c, err := q.LockProviderConnectionByID(ctx, id)
 		if errors.Is(store.NotFound(err), store.ErrNotFound) || (err == nil && c.UserID != userID) {
 			return errNoConnection
 		} else if err != nil {
 			return err
 		}
-		p, err := q.GetAuthProvider(ctx, c.ProviderID)
+		p, err = q.GetAuthProvider(ctx, c.ProviderID)
 		if err != nil {
 			return err
 		}
@@ -249,16 +251,37 @@ func (s *Service) disconnect(ctx context.Context, a authz.Actor, userID, id uuid
 		if err := q.DeleteProviderConnection(ctx, id); err != nil {
 			return err
 		}
-		result := any(false)
-		if c.AccessTokenCipher != nil {
-			result = s.revokeAtProvider(ctx, p, c)
-		} else if p.RevocationUrl == nil {
-			result = revokeNotSupported
+		// Retain only the material needed for the post-commit request. Preserve
+		// the existing refresh-first fallback and no-credentials behavior.
+		if p.RevocationUrl != nil && c.AccessTokenCipher != nil {
+			token, _ = s.open(c.ID, "refresh", c.RefreshTokenCipher)
+			hint = "refresh_token"
+			if token == "" {
+				token, _ = s.open(c.ID, "access", c.AccessTokenCipher)
+				hint = "access_token"
+			}
 		}
 		e := a.Audit("provider_connection.revoke", "provider_connection", id.String())
 		e.Before = connectionSnapshot(c)
-		e.Metadata = map[string]any{"name": displayName(u) + " · " + p.Name, "reason": reason, "providerRevoked": result,
+		e.Metadata = map[string]any{"name": displayName(u) + " · " + p.Name, "reason": reason, "providerRevocation": "best_effort_after_commit",
 			"userId": c.UserID.String(), "provider": p.Slug}
 		return audit.Record(ctx, q, e)
 	})
+	if err != nil {
+		return err // including an uncertain commit: never send/retry revocation
+	}
+	result := any(revokeNotSupported)
+	if p.RevocationUrl != nil {
+		result = token != "" && s.revoke(ctx, p, token, hint)
+	}
+	// Cancellation, demotion or provider failure cannot undo committed local
+	// success. Do not add an initiating-user FK or provider error to this event.
+	outcomeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+	defer cancel()
+	if err := audit.Record(outcomeCtx, s.q, audit.Entry{ActorKind: audit.ActorSystem,
+		Action: "provider_connection.revocation_result", TargetType: "provider_connection", TargetID: id.String(),
+		Metadata: map[string]any{"providerRevoked": result}}); err != nil {
+		s.Log.Error("personal connection revocation outcome audit failed", "connection_id", id)
+	}
+	return nil
 }

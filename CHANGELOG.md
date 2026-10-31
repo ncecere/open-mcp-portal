@@ -6,6 +6,10 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
+## [Unreleased]
+
+- **Personal disconnect commit ordering.** Personal connection deletion and its initiating audit now commit before best-effort provider revocation, matching shared service connections. Failed or uncertain local commits send no irreversible revocation request. A separate bounded system outcome records the result without retaining an initiating-user foreign key; remote failure cannot roll back local success. The initiating `provider_connection.revoke` records `providerRevocation: best_effort_after_commit`; consumers of its former result field should read `provider_connection.revocation_result` instead. No SCIM support, schema or new authority is added by this prerequisite.
+
 ## [0.11.0] - 2026-10-31
 
 - **Personal credential final writes.** API-key creation rechecks current user status after its user-row lock wait. Personal OAuth connection callbacks revalidate the original active browser session after the provider exchange and existing-connection wait, before storing or replacing tokens. Ended, expired, idle or contended authority ends the flow with the existing expired-consent hint; consumed state/code is never restored or automatically retried. Nonblocking user/session locks avoid adding a connection-to-user wait cycle or holding authority locks while waiting on provider work. Existing unrevoked keys/connections remain preserved through reversible suspension. No migration, route, token scope, credential class or SCIM support is added.

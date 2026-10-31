@@ -544,9 +544,13 @@ func TestDelegatedCredentialsEndToEnd(t *testing.T) {
 	if rv := e.oauth.Revoked(); len(rv) != 1 || rv[0] != refreshTokens[len(refreshTokens)-1] {
 		t.Fatalf("revoked = %d tokens", len(rv))
 	}
-	if v := e.scalar(`SELECT metadata->>'providerRevoked' || ' ' || (metadata->>'reason') FROM audit_log WHERE action = 'provider_connection.revoke'
-		AND target_id = $1`, connID); v != "true user" {
-		t.Fatalf("revoke audit = %s", v)
+	if v := e.scalar(`SELECT metadata->>'providerRevocation' || ' ' || (metadata->>'reason') FROM audit_log WHERE action = 'provider_connection.revoke'
+		AND target_id = $1`, connID); v != "best_effort_after_commit user" {
+		t.Fatalf("revoke intent audit = %s", v)
+	}
+	if v := e.scalar(`SELECT metadata->>'providerRevoked' FROM audit_log WHERE action = 'provider_connection.revocation_result'
+		AND target_id = $1 AND actor_kind = 'system' AND actor_user_id IS NULL`, connID); v != "true" {
+		t.Fatalf("post-commit revoke result audit = %s", v)
 	}
 	e.consentURL(e.callTool(e.key, "status__provider_token"), "not_connected")
 

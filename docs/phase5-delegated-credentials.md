@@ -312,7 +312,11 @@ Client          Gateway /mcp/{slug}            Browser (person)          Provide
 - `needs_reconsent` erases the tokens but keeps the row, scopes and label, so the person sees what to reconnect.
 - Disconnect (Account › My connections, or a platform admin on the person's page) erases the tokens and deletes the
   row, and with it the person's grants for that account (the servers are asked again after reconnecting). Where `revocationUrl` exists, it then calls RFC 7009 with the refresh token (else the access token) on a
-  best-effort basis. The audit records `providerRevoked` (`true`, `false` or `not_supported`).
+  best-effort basis **after local deletion and its initiating audit commit**. The initiating
+  `provider_connection.revoke` records `providerRevocation: best_effort_after_commit`; a separate bounded system
+  `provider_connection.revocation_result` records `providerRevoked` (`true`, `false` or `not_supported`), without an
+  initiating-user foreign key, token or raw provider error. A failed/uncertain local commit sends no revocation;
+  remote failure or cancellation cannot roll back local success.
 - A suspended person keeps their connections; their requests are refused at authentication as today. Leaving a team
   changes nothing, because connections are personal.
 
@@ -337,7 +341,9 @@ Client          Gateway /mcp/{slug}            Browser (person)          Provide
 - `auth_provider.create/update/delete` (target `auth_provider`; before/after without the secret; `clientSecretChanged`,
   `connectionsReset`, `connectionCount`).
 - `provider_connection.create` (`scopes`, `reconnect`, `viaRequest`), `provider_connection.refresh_failed` (system
-  actor; `reason`), and `provider_connection.revoke` (`reason` `user`/`admin`/`provider_deleted`, `providerRevoked`).
+  actor; `reason`), and `provider_connection.revoke` (`reason` `user`/`admin`/`provider_deleted`). Personal user/admin
+  disconnects record post-commit intent and a separate system `provider_connection.revocation_result`; provider
+  deletion/reset flows that already obtained a best-effort result retain `providerRevoked` on their initiating event.
   These use target `provider_connection` with label "person · provider". `provider_connection.server_allow` (F-3:
   `server`, `serverId`, `origin`, `scopes`, `viaRequest`: true for a consent link's confirm or callback, false from My connections)
   records a person allowing a server and `provider_connection.server_revoke` (`server`, `serverId`, `origin`, `scopes`)
