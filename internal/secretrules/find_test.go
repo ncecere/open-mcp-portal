@@ -187,3 +187,13 @@ func TestPlaceholderInsideToken(t *testing.T) {
 		}
 	}
 }
+
+func TestExactFindDoesNotCountSyntheticText(t *testing.T) {
+	r := NewRedactor(nil, "abcdef", "\x00bcdef")
+	if got := r.Find("abcdefbcdef"); !reflect.DeepEqual(got, []Finding{{RuleID: "secret.call_secrets", Count: 1}}) {
+		t.Fatal("synthetic exact match")
+	}
+	if got := r.Find(strings.Repeat("abcdef ", MaxFindCount+1)); got[0].Count != MaxFindCount {
+		t.Fatal("exact count unbounded")
+	}
+}

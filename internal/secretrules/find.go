@@ -80,10 +80,27 @@ func (r *Redactor) FindWithProfile(text string, profile DetectProfile) []Finding
 	}
 	// Reuse the exact-value normalization/order, not redaction output.
 	count := 0
+	remaining := []string{text}
 	for _, secret := range r.secrets {
-		n := strings.Count(text, secret)
-		count = min(MaxFindCount, count+n)
-		text = strings.ReplaceAll(text, secret, "\x00")
+		var next []string
+		for _, part := range remaining {
+			n := strings.Count(part, secret)
+			count = min(MaxFindCount, count+n)
+			if count == MaxFindCount {
+				break
+			}
+			if n == 0 {
+				next = append(next, part)
+			} else {
+				// Keep boundaries rather than inserting a synthetic marker:
+				// a marker could itself match another known exact value.
+				next = append(next, strings.Split(part, secret)...)
+			}
+		}
+		if count == MaxFindCount {
+			break
+		}
+		remaining = next
 	}
 	if count > 0 {
 		out = append(out, Finding{RuleID: "secret." + RuleCallSecrets, Count: count})
