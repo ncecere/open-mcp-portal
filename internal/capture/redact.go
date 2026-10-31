@@ -1,8 +1,9 @@
 package capture
 
 import (
-	"github.com/ncecere/open-mcp-portal/internal/secretrules"
 	"regexp"
+
+	"github.com/ncecere/open-mcp-portal/internal/secretrules"
 )
 
 const (

@@ -20,7 +20,7 @@ Open MCP Portal is pre-1.0 development software. Security fixes are made on `mai
 
 | Version | Supported |
 |---|---|
-| `main` and the latest release (v0.10.1) | Yes |
+| `main` and the latest release (v0.11.0) | Yes |
 
 ## Scope
 
