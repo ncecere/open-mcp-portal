@@ -11,6 +11,11 @@ with an AI agent on this repository. For a fresh machine/session, start with
   credentials. Agents must not spawn further agents, push, merge or publish unless separately authorized. Review actual
   diffs and completed test evidence before integrating, then validate the merged tree. This supersedes older
   main-thread-only handoff notes; it does not authorize arbitrary providers or unbounded fan-out.
+- **Reusable Boat workers.** Keep newly created coding sandboxes up after assignments and artifact export; the owner
+  wants to reuse them for future issues. Do not automatically stop or delete them. Record and share their names when
+  created, then use clean per-issue branches and fresh conversations with one writer per sandbox. Make provider expiry,
+  idle-stop and plan limits explicit rather than silently losing a reusable worker; stop only on the owner's request
+  or a genuine safety incident, with an explanation.
 - **Names.** The product is Open MCP Portal (OMP only after the full name). "Gateway" is the feature (a curated set
   of capabilities at `/mcp/{slug}`): write "the portal" for the product. Keep the `MCP-Gateway-*` header names.
 - **A dev instance may be running.** `make run` (or `bin/open-mcp-portal serve`) on :8088, `make fake-mcp` on :8091,
