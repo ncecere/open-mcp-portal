@@ -1,0 +1,15 @@
+{
+  "repository": "ethz-spylab/agentdojo",
+  "revision": "089ed468cf3ed0322acc66b0211f26d9d90dbf60",
+  "license": "MIT",
+  "declared_license": "MIT",
+  "gated": false,
+  "license_file": {
+    "path": "LICENSE",
+    "sha256": "4285a071f2d382338e52b4fb0a186d952984a34d43a33d8872e1a1d8cb43401e"
+  },
+  "text_file": {
+    "path": "src/agentdojo/attacks/baseline_attacks.py",
+    "sha256": "0e3f3cec2173524989d67bd3d934d032774ad3fc5995969c9565613efaa21c6d"
+  }
+}

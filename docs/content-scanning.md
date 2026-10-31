@@ -953,3 +953,68 @@ source are limited to what its abstract or text states.
 Recorded as **decision 87** in [decisions.md](decisions.md) (86 is the in-development tasks relay, #35). The text:
 
 | N | Content scanning: go for shadow-mode detection, no for a hosted model *(#52; owner delegated defaults to the assistant, 2026-10-30)* | Decision 50's "design before building" is satisfied by [content-scanning.md](content-scanning.md). **Go, narrowly.** The first build is static scanning of tool definitions when they are refreshed, in **shadow mode**, with findings shown beside the capabilities and in the review and publish dialogs (rule id, severity, count, location pointer, ruleset version; never "safe"); it adds no code to the call path. Argument secret detection follows in shadow mode, then per-gateway and per-server policies under platform ceilings that default to `shadow`; **blocking, redaction, result withholding and scan-triggered approvals each need measured false positives and a decision row of their own.** Definition findings never change a definition, never enter the review digest and never auto-act. **The portal hosts no model and calls no LLM as a scanner.** An **external scanning service** is optional, off by default, available only on explicit per-gateway opt-in enabled by a platform admin and not vetoed by the server's team, never receives identity, receives content redacted by the portal's rules first, and returns only rule ids and counts (SSRF-guarded like notification webhooks, with its own allowlist). Evidence is rule id, stage, severity, count, action and (definitions only) a pointer: **never matched text, excerpts, offsets, or hashes of matched values**; call findings are kept with call metadata retention. Fail open by default; an incomplete scan is recorded as incomplete, never clean. Argument scans see curation-merged arguments minus fixed members and run before approval `Begin`, so a block never creates or spends an approval; a scan that requires approval is additive and reuses the exact-call path, and no later stage restores a spent approval; results of write, destructive and unclassified tools are not withheld by default because the effect has already happened. Personal-data detectors are not proposed. The proposed defaults are the issue's recommendations (detection-only first, external only by explicit opt-in, review-time checks before argument DLP); the owner may override any of them. **Nothing is implemented**; threat model 7.5 says so. Owner input still needed: the relationship to OMG's guardrails design and the data-protection review |
+
+### #70 bounded primitive corpus implementation and local evidence
+
+`internal/scancorpus` is a test/evaluation harness for the current shared `Find`
+primitive, not a stage scanner. `make test-scanning-corpus` runs original generated
+credential positives and placeholders for every current rule, prose/JSON-key
+negatives, exact-value length/URL-encoding/overlap cases, count saturation,
+runtime Unicode controls, and generated pathological inputs. No token/control
+literal or third-party fixture text is added. The pinned set in
+`TestKnownMissLedger` and `internal/scancorpus/testdata/known-misses.md` must both
+change when a miss is removed or begins producing a finding. Empty results in
+benign controls mean only that secret heuristics found nothing. They do not test
+Unicode severity. Unicode, phrasing, normalization, JSON traversal, binary,
+personal-data and all stage/deadline/completeness behaviour remain unsupported.
+Severity, A1's scanner-level assertions, A2 resource/deadline gates, A3 persistence
+and A7 interplay are **not** implemented by this foundation.
+
+The weekly/manual `.github/workflows/scanning-corpus.yml` runs the same tests,
+primitive benchmarks and a deliberately small public sample. Actions are pinned,
+checkout credentials are not persisted, permissions are read-only, and only
+aggregate JSON and benchmark numbers are uploaded. No hosted run is claimed here.
+`public.json` pins AgentDojo revision
+`089ed468cf3ed0322acc66b0211f26d9d90dbf60`, the MIT `LICENSE` and
+`src/agentdojo/attacks/baseline_attacks.py` by SHA-256. Provenance:
+[AgentDojo at that revision](https://github.com/ethz-spylab/agentdojo/tree/089ed468cf3ed0322acc66b0211f26d9d90dbf60).
+The licence was checked at that revision; no environment, tool execution or model
+is run. This is one raw Python source file containing baseline attack templates,
+**not** a labelled dataset, MCP-definition corpus or broad recall evaluation.
+The authored confusion matrix excludes the explicitly counted known-miss ledger;
+it is not recall across all threat categories. Public per-rule counts are
+exploratory and gate nothing; TP/FP/FN/TN in that
+report are not evaluated (zero), unlike the authored corpus. The manifest and
+code constrain the source/path, immutable revision, matching explicit permissive
+licence declarations and content/licence hashes. Missing/inconsistent/gated
+licences, redirects, missing files, size/hash/read/network errors are refused with
+fixed error classes. Downloader tests are offline and include all refusals. No
+identity scraping, login or gated dataset access occurs. Verified text lives in
+memory and a mode-0600 temporary scratch file removed before exit; neither the
+checkout nor report directory receives downloaded text. Broader public corpora in
+10.3 still require separate pinned file/licensing reviews.
+
+**Actual local baseline (2026-10-31, not CI):** Linux amd64 KVM, 8 vCPUs,
+AMD Ryzen 7 9700X, Go 1.26.10, `GOFLAGS=-p=2`, default GOMAXPROCS 8.
+Reproduce from the repository root:
+
+```sh
+GOFLAGS=-p=2 go test -count=1 -timeout=20m ./internal/scancorpus/...
+GOFLAGS=-p=2 go test -timeout=20m -run '^$' -bench BenchmarkPrimitive -benchmem -benchtime=200ms -count=3 ./internal/scancorpus
+GOFLAGS=-p=2 go run ./internal/scancorpus/cmd/corpus
+GOFLAGS=-p=2 go run ./internal/scancorpus/cmd/corpus -public
+```
+
+Across three benchmark repetitions, averages were: synthetic 64 KiB definition
+9.58–9.93 ms/op; 500 × 2 KiB primitive calls 170.09–190.51 ms/op; 16 KiB
+argument text 2.74–3.20 ms/op; 64 KiB result text 12.60–13.26 ms/op; generated
+approximately 1 MiB near-matches 154.06–164.92 ms/op (580–3712 B/op).
+These are **benchmark averages, not p95/p99**, measured on synthetic raw text
+with no JSON parsing, stage bookkeeping, concurrency control or persistence.
+They cannot establish the proposed 25 ms definition p99, 250 ms refresh CPU,
+2 ms argument p95, 5 ms result p95, 8× memory or 2,000-definition refresh gates.
+In particular result/argument primitive averages already exceed the proposed
+stage latency targets; no policy was weakened and no gate is asserted. Follow-up
+scanners need budget/deadline handling and actual tail/whole-stage measurements
+with at least 2× headroom before acceptance. A no-finding result never proves
+safety or completeness.

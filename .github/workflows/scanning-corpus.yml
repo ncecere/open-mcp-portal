@@ -1,0 +1,48 @@
+# Informational primitive evidence, not scanner/enforcement/release acceptance.
+name: scanning-corpus
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: scanning-corpus-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  corpus:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GOFLAGS: -p=2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.10'
+      - name: Authored corpus, ledger, offline download refusals and unchanged registry
+        # Existing compatibility tests may print runtime fixture text on failure.
+        # Keep their diagnostic output scratch-only, never in scheduled reports.
+        shell: bash
+        run: |
+          if ! make test-scanning-corpus > "$RUNNER_TEMP/corpus-tests.log" 2>&1; then
+            echo 'corpus_tests_incomplete'
+            exit 1
+          fi
+          echo 'corpus_tests_completed'
+      - name: Bounded aggregate evidence only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/corpus-report"
+          go run ./internal/scancorpus/cmd/corpus > "$RUNNER_TEMP/corpus-report/synthetic.json"
+          go run ./internal/scancorpus/cmd/corpus -public > "$RUNNER_TEMP/corpus-report/public.json"
+          go test -timeout=20m -run '^$' -bench BenchmarkPrimitive -benchmem -benchtime=200ms -count=3 ./internal/scancorpus > "$RUNNER_TEMP/corpus-report/primitive-bench.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scanning-primitive-evidence
+          path: ${{ runner.temp }}/corpus-report/
+          retention-days: 14
+          if-no-files-found: error

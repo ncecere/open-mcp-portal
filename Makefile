@@ -162,3 +162,7 @@ shellcheck: ## ShellCheck the deployment and smoke scripts with the pinned relea
 smoke-selftest: ## The smoke scripts' assertion helpers against stubs, and the script tests in scripts/tests (no cluster, no Docker)
 	SMOKE_SELFTEST=1 scripts/k8s-smoke.sh
 	python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
+.PHONY: test-scanning-corpus
+test-scanning-corpus: ## Original scanning corpus/known misses, offline downloader refusals and unchanged registry/capture tests
+	$(GO) test -count=1 -timeout=20m ./internal/scancorpus/... ./internal/secretrules ./internal/capture
