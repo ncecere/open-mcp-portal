@@ -111,6 +111,14 @@ CI (`.github/workflows/ci.yml`) runs `make lint` and `make actionlint`, `make ch
 
 Commit generated files with the change that caused them, and never edit them by hand. CI fails if they are stale (`make check-generated`).
 
+Use `npm run gen`, not a direct generator invocation: it runs the compatibility tests and prepares the pinned
+Redocly1.34.22/minimatch11.0.1 pair. This tooling-only security override fixes GHSA-g3hv-75wg-m249 while
+retaining openapi-typescript7.13.0. A version/import-guarded, idempotent one-line CJS adapter preserves the
+legacy callable matcher; actual URL/header-matching probes check that sibling origins receive no header.
+It runs explicitly during generation, not as an install script (`npm ci --ignore-scripts` stays supported).
+Unexpected versions/import shapes fail rather than silently patching. Remove the bridge when the generator
+supports a patched dependency natively; generated types must remain reviewed and reproducible.
+
 ## API changes: OpenAPI first
 
 1. Change [`api/openapi.yaml`](api/openapi.yaml) first: paths, schemas, error codes and examples.
