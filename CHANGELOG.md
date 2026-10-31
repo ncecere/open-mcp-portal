@@ -6,6 +6,10 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
+## Unreleased
+
+- **Personal credential final writes.** API-key creation rechecks current user status after its user-row lock wait. Personal OAuth connection callbacks revalidate the original active browser session after the provider exchange and existing-connection wait, before storing or replacing tokens. Ended, expired, idle or contended authority ends the flow with the existing expired-consent hint; consumed state/code is never restored or automatically retried. Nonblocking user/session locks avoid adding a connection-to-user wait cycle or holding authority locks while waiting on provider work. Existing unrevoked keys/connections remain preserved through reversible suspension. No migration, route, token scope, credential class or SCIM support is added.
+
 ## [0.10.1] - 2026-10-30
 
 - **Invite acceptance lock order.** Sign-in now locks all candidate teams in stable UUID order before locking or consuming their invites, matching manual invite/membership writers. A deterministic PostgreSQL barrier reproduced the previous acceptance-versus-revocation deadlock (`40P01`); retained regressions cover it in both database-role modes. Current revocation, role changes and expiry are rechecked after lock waits, while existing memberships keep their roles. No new migration, credential, authority or SCIM endpoint is added.

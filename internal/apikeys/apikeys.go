@@ -224,6 +224,11 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, in CreateInput) (Cr
 		if err != nil {
 			return err
 		}
+		// Authentication may have preceded a wait for this row. Do not mint
+		// new authority for a person suspended while the request was queued.
+		if u.Status != "active" {
+			return apperr.Forbidden("This account is suspended")
+		}
 		var scope []dbgen.Gateway
 		if len(gatewayIDs) > 0 {
 			if s.gateways == nil {

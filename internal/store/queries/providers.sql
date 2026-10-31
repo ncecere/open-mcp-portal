@@ -344,6 +344,17 @@ WHERE id_digest IN (
 -- Requests that expired before before (they answer 410 until then).
 DELETE FROM provider_connect_requests WHERE expires_at < @before;
 
+-- name: LockPersonalConsentUser :one
+-- Personal callbacks have already locked their connection: never wait here
+-- against suspension's USER -> SESSION order or a future cleanup barrier.
+SELECT status FROM users WHERE id = $1 FOR KEY SHARE NOWAIT;
+
+-- name: LockPersonalConsentSession :one
+-- Ended or contended browser authority requires fresh consent, not a retry
+-- of the consumed authorization state. No network runs with these locks held.
+SELECT id FROM sessions WHERE id = @id AND user_id = @user_id
+AND expires_at > @as_of::timestamptz AND last_seen_at > @idle_since::timestamptz FOR UPDATE NOWAIT;
+
 -- name: InsertProviderAuthState :exec
 INSERT INTO provider_auth_states (state_digest, user_id, session_digest, provider_id, scopes, required_scopes,
                                   code_verifier_cipher, request_digest, return_to, expires_at, setup_server_id, resource)

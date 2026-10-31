@@ -1502,6 +1502,45 @@ func (q *Queries) LockAuthProvider(ctx context.Context, id uuid.UUID) (AuthProvi
 	return i, err
 }
 
+const lockPersonalConsentSession = `-- name: LockPersonalConsentSession :one
+SELECT id FROM sessions WHERE id = $1 AND user_id = $2
+AND expires_at > $3::timestamptz AND last_seen_at > $4::timestamptz FOR UPDATE NOWAIT
+`
+
+type LockPersonalConsentSessionParams struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	AsOf      time.Time
+	IdleSince time.Time
+}
+
+// Ended or contended browser authority requires fresh consent, not a retry
+// of the consumed authorization state. No network runs with these locks held.
+func (q *Queries) LockPersonalConsentSession(ctx context.Context, arg LockPersonalConsentSessionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockPersonalConsentSession,
+		arg.ID,
+		arg.UserID,
+		arg.AsOf,
+		arg.IdleSince,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockPersonalConsentUser = `-- name: LockPersonalConsentUser :one
+SELECT status FROM users WHERE id = $1 FOR KEY SHARE NOWAIT
+`
+
+// Personal callbacks have already locked their connection: never wait here
+// against suspension's USER -> SESSION order or a future cleanup barrier.
+func (q *Queries) LockPersonalConsentUser(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, lockPersonalConsentUser, id)
+	var status string
+	err := row.Scan(&status)
+	return status, err
+}
+
 const lockProviderConnection = `-- name: LockProviderConnection :one
 SELECT id, user_id, provider_id, status, scopes, account_label, access_token_cipher, refresh_token_cipher, expires_at, connected_at, refreshed_at, last_used_at, last_error_class FROM provider_connections WHERE user_id = $1 AND provider_id = $2 FOR UPDATE
 `

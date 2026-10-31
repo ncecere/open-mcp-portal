@@ -550,7 +550,7 @@ func (s *Service) Callback(ctx context.Context, in CallbackInput) (string, error
 	actor := authz.Actor{UserID: in.User.ID, PlatformRole: in.User.PlatformRole, RequestID: in.RequestID, ClientIP: in.ClientIP}
 	setup, grantSkipped, notAllowed := false, false, false
 	err = store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
-		row, viaRequest, err := s.store(ctx, q, actor, in.User, p, st, tok, granted, label, expires)
+		row, viaRequest, err := s.store(ctx, q, actor, in.User, p, st, tok, granted, label, expires, in.SessionID)
 		if err != nil {
 			return err
 		}
@@ -578,6 +578,9 @@ func (s *Service) Callback(ctx context.Context, in CallbackInput) (string, error
 		setup = true
 		return nil
 	})
+	if errors.Is(err, errPersonalConsentEnded) {
+		return done(p.Slug, ResultExpired, nil), nil
+	}
 	if err != nil {
 		return "", err
 	}
@@ -644,7 +647,7 @@ func (s *Service) grantFromRequest(ctx context.Context, q *dbgen.Queries, a auth
 // store saves new tokens as the person's active connection and uses up the
 // request (viaRequest: this call did).
 func (s *Service) store(ctx context.Context, q *dbgen.Queries, a authz.Actor, u dbgen.User, p dbgen.AuthProvider, st dbgen.ProviderAuthState,
-	tok tokenSet, granted []string, label string, expires *time.Time) (dbgen.ProviderConnection, bool, error) {
+	tok tokenSet, granted []string, label string, expires *time.Time, sessionID string) (dbgen.ProviderConnection, bool, error) {
 	var row0 dbgen.ProviderConnection
 	var labelPtr *string
 	if label != "" {
@@ -653,6 +656,9 @@ func (s *Service) store(ctx context.Context, q *dbgen.Queries, a authz.Actor, u 
 	cur, err := q.LockProviderConnection(ctx, dbgen.LockProviderConnectionParams{UserID: u.ID, ProviderID: p.ID})
 	reconnect := err == nil
 	if err != nil && !errors.Is(store.NotFound(err), store.ErrNotFound) {
+		return row0, false, err
+	}
+	if err := s.lockPersonalSession(ctx, q, u.ID, sessionID); err != nil {
 		return row0, false, err
 	}
 	id := uuid.New()
