@@ -1051,7 +1051,16 @@ WHERE ($1::uuid IS NULL OR s.team_id = $1::uuid)
   AND ($7::text IS NULL
        OR s.name ILIKE '%' || $7::text || '%' ESCAPE '\'
        OR s.slug ILIKE '%' || $7::text || '%' ESCAPE '\'
-       OR ($5::bool AND s.description ILIKE '%' || $7::text || '%' ESCAPE '\'))
+       OR ($5::bool AND (
+           s.description ILIKE '%' || $7::text || '%' ESCAPE '\'
+           OR t.name ILIKE '%' || $7::text || '%' ESCAPE '\'
+           -- Same eligibility as ListApprovedMCPCapabilities below: never
+           -- search a changed candidate against its stale approval.
+           OR EXISTS (SELECT 1 FROM mcp_capabilities c
+               WHERE c.server_id = s.id AND c.gone_at IS NULL AND c.approved_fingerprint = c.fingerprint
+                 AND (c.name ILIKE '%' || $7::text || '%' ESCAPE '\'
+                   OR c.title ILIKE '%' || $7::text || '%' ESCAPE '\'
+                   OR c.description ILIKE '%' || $7::text || '%' ESCAPE '\')))))
   AND ($8::text IS NULL OR (s.name, s.id) > ($8::text, $9::uuid))
 ORDER BY s.name, s.id
 LIMIT $10

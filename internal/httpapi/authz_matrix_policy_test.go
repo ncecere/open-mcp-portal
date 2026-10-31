@@ -265,7 +265,7 @@ var matrixPolicies = map[string]policy{
 	}},
 
 	// The catalog: anyone signed in.
-	"listCatalogServers": {own: signedIn, build: func(*mctx) request { return get("/v1/catalog/servers") }},
+	"listCatalogServers": {own: signedIn, build: func(*mctx) request { return get("/v1/catalog/servers?q=check_outage&limit=1") }},
 	"getCatalogServer":   {own: signedIn, build: func(c *mctx) request { return get("/v1/catalog/servers/" + c.e.b.server) }},
 
 	// Registry administration.

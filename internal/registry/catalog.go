@@ -18,7 +18,8 @@ import (
 
 // ListCatalog lists published, enabled servers of active teams by (name,
 // id). Their counts are of approved, listed capabilities
-// (ServerView.Approved).
+// (ServerView.Approved). Search additionally matches only the currently
+// approved, listed capability metadata, in the same visibility-filtered query.
 func (s *Service) ListCatalog(ctx context.Context, _ authz.Actor, p ListParams) ([]ServerView, error) {
 	qp := p.query()
 	qp.Catalog, qp.PublishState, qp.ChangesOnly = true, nil, false

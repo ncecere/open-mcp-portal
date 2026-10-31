@@ -158,7 +158,16 @@ WHERE (sqlc.narg(team_id)::uuid IS NULL OR s.team_id = sqlc.narg(team_id)::uuid)
   AND (sqlc.narg(search)::text IS NULL
        OR s.name ILIKE '%' || sqlc.narg(search)::text || '%' ESCAPE '\'
        OR s.slug ILIKE '%' || sqlc.narg(search)::text || '%' ESCAPE '\'
-       OR (@catalog::bool AND s.description ILIKE '%' || sqlc.narg(search)::text || '%' ESCAPE '\'))
+       OR (@catalog::bool AND (
+           s.description ILIKE '%' || sqlc.narg(search)::text || '%' ESCAPE '\'
+           OR t.name ILIKE '%' || sqlc.narg(search)::text || '%' ESCAPE '\'
+           -- Same eligibility as ListApprovedMCPCapabilities below: never
+           -- search a changed candidate against its stale approval.
+           OR EXISTS (SELECT 1 FROM mcp_capabilities c
+               WHERE c.server_id = s.id AND c.gone_at IS NULL AND c.approved_fingerprint = c.fingerprint
+                 AND (c.name ILIKE '%' || sqlc.narg(search)::text || '%' ESCAPE '\'
+                   OR c.title ILIKE '%' || sqlc.narg(search)::text || '%' ESCAPE '\'
+                   OR c.description ILIKE '%' || sqlc.narg(search)::text || '%' ESCAPE '\')))))
   AND (sqlc.narg(after_name)::text IS NULL OR (s.name, s.id) > (sqlc.narg(after_name)::text, sqlc.narg(after_id)::uuid))
 ORDER BY s.name, s.id
 LIMIT @page_size;

@@ -276,3 +276,30 @@ See [`../api/openapi.yaml`](../api/openapi.yaml) (tags `mcp-servers`, `catalog`,
 - Governance (all browser-session only; see [Governance](#governance)): `PATCH …/{serverId}` with `governance`, `POST …/{serverId}/transfer`, `GET /v1/teams/{team}/mcp-server-transfers`, `DELETE`/`POST …/mcp-server-transfers/{transferId}[/accept]`, `POST /v1/admin/mcp-servers/{serverId}/transfer`, `GET`/`PUT /v1/admin/settings/governance`
 
 Audit actions: `mcp_server.create`, `.update`, `.auth_update`, `.delete`, `.refresh`, `.publish_request`, `.publish` (self-publish or approval), `.reject`, `.unpublish`, `mcp_capability.approve`, `mcp_capability.requirement_set`, `mcp_capability.presence_set`, `mcp_server.governance_update` (also the sensitivity confirmation), `.transfer_request`, `.transfer`, `.transfer_cancel`, `.review_confirm`, `settings.governance_update`, `settings.publishing_update`, `settings.network_update`, `team.publishing_override`.
+
+## Catalog search
+
+`GET /v1/catalog/servers?q=…` and the Catalog search box match a literal,
+case-insensitive substring of the server name, slug, description or owning team
+name, or the name, title or description of a **listed, currently approved**
+capability. The same catalog list query retains published/enabled/active-team
+filters before pagination; changed candidates with an older approved fingerprint,
+never-approved capabilities and gone capabilities cannot produce hits. The
+catalog remains readable by signed-in people (including people without a team),
+not automation tokens. Discovery grants no gateway, lifecycle, sensitivity-ceiling
+or invocation permission; existing catalog detail and gateway policies are unchanged.
+
+Whitespace is trimmed; an empty query lists the catalog. Queries are limited to
+200 UTF-8 bytes, with `%`, `_` and `\` treated literally. Pages contain at most
+`limit` servers (1–200, default 50), ordered deterministically by server name and
+ID using the existing keyset cursor. Reuse the same query with subsequent cursors.
+There are no relevance scores, totals, snippets, raw definition matches or HTML
+highlighting. Each request re-evaluates visibility; pagination is not a snapshot
+across concurrent publishing changes.
+
+This no-migration slice uses parameterized, escaped `ILIKE`/`EXISTS`, not PostgreSQL
+full-text search or a GIN index. It bounds query length, returned rows and
+application work, not database scan cost. Corpus-scale query-plan/latency validation
+and an indexed search design are follow-ups, not performance acceptance here.
+Category, icon, README, badge and popularity enrichment from issue #49 remain out
+of scope; no metadata is fabricated.

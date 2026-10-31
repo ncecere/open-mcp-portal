@@ -1,7 +1,7 @@
 /*
  * Catalog (everyone signed in, with or without a team): the MCP servers
  * teams published, with the owning team, what each offers (approved
- * capabilities only) and its health. Search in ?q=, filtered by the server.
+ * capabilities only) and its health. Search in ?q=, including approved capability metadata.
  * On a phone, what a server offers moves under its name. A server whose team records call contents carries the
  * "Records call contents" badge, as on its page, and one whose people each
  * sign in to its own service (authMode oauth) the "Sign-in per person" badge.
@@ -105,7 +105,7 @@ export function CatalogPage() {
       data={items}
       getRowId={(x) => x.id}
       rowLabel={(x) => x.name}
-      search={{ label: "Search the catalog", placeholder: "Name, team or description" }}
+      search={{ label: "Search the catalog", placeholder: "Server, team or approved capability" }}
       manual
       loading={servers.isLoading}
       error={servers.error}

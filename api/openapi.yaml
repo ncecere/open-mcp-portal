@@ -1735,6 +1735,14 @@ paths:
       - catalog
       operationId: listCatalogServers
       summary: Published servers (any signed-in person)
+      description: >-
+        Case-insensitive literal substring search across server name, slug, description and team name,
+        or a listed capability's name, title or description whose CURRENT fingerprint is approved.
+        Changed, unapproved and gone capabilities cannot produce hits. Results retain the catalog's
+        published/enabled/active-team visibility and are ordered by (server name, id), not relevance.
+        q is trimmed and bounded to 200 UTF-8 bytes; %, _ and backslash are literal.
+        Pagination returns at most limit servers (1–200, default 50), without totals or snippets.
+        Search does not grant invocation access. No automation-token access is added.
       parameters:
       - $ref: '#/components/parameters/SearchParam'
       - $ref: '#/components/parameters/CursorParam'

@@ -39,6 +39,26 @@ describe("Catalog", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
+  it("finds a server from an approved capability and links to its catalog detail", async () => {
+    const calls = mockApi(routes(null, {
+      "GET /v1/catalog/servers": (_body, call) =>
+        call.search.get("q") === "check_outage" ? page([catalogServer({ name: "Operations", description: "<img src=x onerror=alert(1)>" })]) : page([]),
+    }));
+    renderApp("/catalog?q=check_outage");
+    expect(await screen.findByRole("link", { name: "Operations" })).toHaveAttribute("href", `/catalog/${serverId}`);
+    expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeInTheDocument();
+    expect(screen.queryByRole("img")).toBeNull();
+    expect(screen.getByRole("searchbox", { name: "Search the catalog" })).toHaveAttribute("placeholder", "Server, team or approved capability");
+    await waitFor(() => expect(calls.some((c) => c.search.get("q") === "check_outage")).toBe(true));
+  });
+
+  it("shows the filtered empty state without capability snippets", async () => {
+    mockApi(routes(null, { "GET /v1/catalog/servers": () => page([]) }));
+    renderApp("/catalog?q=hidden_capability");
+    expect(await screen.findByText(/No results for “hidden_capability”/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Service status" })).toBeNull();
+  });
+
   it("says when nothing is published yet", async () => {
     mockApi(routes(null, { "GET /v1/catalog/servers": () => page([]) }));
     renderApp("/catalog");
