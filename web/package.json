@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
-    "gen": "node --test scripts/prepare-openapi.test.mjs && node scripts/prepare-openapi.mjs && openapi-typescript ../api/openapi.yaml -o src/api/schema.gen.ts",
-    "test": "vitest run",
+    "gen": "node --test scripts/prepare-openapi.node-check.mjs && node scripts/prepare-openapi.mjs && openapi-typescript ../api/openapi.yaml -o src/api/schema.gen.ts",
+    "test": "node --test scripts/prepare-openapi.node-check.mjs && vitest run",
     "check:styling": "node scripts/check-styling.mjs",
     "check:size": "node scripts/check-size.mjs",
     "ui:check": "bitop diff --check",
