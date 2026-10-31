@@ -5,10 +5,11 @@ Conventions for building and testing are in [CONTRIBUTING.md](CONTRIBUTING.md), 
 with an AI agent on this repository. For a fresh machine/session, start with
 [docs/agent-handoff.md](docs/agent-handoff.md); confirm its release stop point against `docs/status.md` and GitHub.
 
-- **Owner pause (latest instruction).** Finish v0.11.0 publication/verification and its release bookkeeping, then pause.
-  Do not resume backlog work, integrate returned worker branches or start new assignments without the owner's request.
-  Preserve partial evidence and keep all four reusable Boat VMs up; pausing an agent is not stopping its sandbox.
-- **Execution mode.** When the owner resumes work, the main thread owns coordination, review, integration and releases. The owner has explicitly
+- **Current owner-approved batch.** The post-v0.11.0 pause was honored; the owner explicitly requested resumption.
+  SCIM lifecycle (#36) is primary, with existing catalog-search (#49) review as the one bounded side lane. Do not
+  integrate all returned foundations or expand authority implicitly. No decision90 or migration51 is allocated yet;
+  workers may not allocate either. Preserve partial evidence and keep all four reusable Boat VMs up.
+- **Execution mode.** The main thread owns coordination, review, integration and releases. The owner has explicitly
   re-authorized parallel Boat/Codex coding agents for bounded development issues. Give each writer an isolated
   sandbox/checkout, only the required model credentials, and a narrow task; never forward production or infrastructure
   credentials. Agents must not spawn further agents, push, merge or publish unless separately authorized. Review actual
