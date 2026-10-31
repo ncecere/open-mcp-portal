@@ -162,3 +162,10 @@ and never in a URL. Revocation applies on the next request. The access log recor
 - `keyrotation` and `doctor` count automation tokens among digests on the previous pepper (`automation_token` kind). `key.expiring` for platform tokens goes to platform admins, for publisher tokens to the team's owners and admins. `ompadm_` and `omppub_` (and the webhook secret prefix `ompwhs_`) join the capture redaction rule; `apikeys.LooksLikeKey` and `serviceaccounts.LooksLikeKey` are false for both.
 - Known and left as designed: `platform:write` still includes gateway grants and capability selection, limit changes and team archiving (a leaked platform token can widen access; every such change is audited as the token). Recommended for v0.3: a separate scope for grants and capability selection, tighten-only limits.
 - Tests: `TestTokenMatrix` (every operation x ten kinds of credential, built from the session matrix's builders: scope held, wrong scope, other team, token management, expired, revoked, creator demoted, MCP key, OAuth token, no `500` anywhere), `TestTokensNeverReachMCP`, `TestTokenCallsAreAuditedAsTheToken`, `TestTokenFieldRules`, `TestTokenStandingRules` (revocation, expiry boundary, demote and restore, suspended creator, creator deleted, archived team, deleted team), `TestTokenPreviousPepper`, `TestTokenRateLimits`, `TestAutomationTokenLifecycle`, `TestAutomationTokenLimits` (a race for the last slot), `TestPlatformWriteMutationsAreAuditedAsTheToken`, and the units in `internal/automation` and `internal/credentials`.
+
+## Terraform metadata reads (development)
+
+The [read-only Terraform provider slice](../integrations/terraform-provider-omp/README.md)
+uses existing environment tokens: an exact-team publisher for server metadata, and
+a separate platform reader for team metadata via adminGetTeam. No resources, new
+scopes, session fallback or destroy semantics; issue #47 remains unfinished.
