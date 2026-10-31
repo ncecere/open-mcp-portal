@@ -1,0 +1,62 @@
+name: Open MCP Portal server
+description: Converge and check one server with an existing team publisher token
+inputs:
+  url:
+    description: HTTPS portal URL
+    required: true
+  token:
+    description: Existing team publisher token (use a GitHub secret)
+    required: true
+  team:
+    description: Team slug
+    required: true
+  slug:
+    description: Server slug
+    required: true
+  config-file:
+    description: Workspace-relative omp/v1 JSON configuration for exactly one server
+    required: true
+  refresh:
+    description: Refresh capabilities after the connection test
+    default: 'true'
+  publish:
+    description: none (leave publication alone) or request
+    default: none
+  fail-on-changes:
+    description: Fail on changed capabilities or pending approval; false warns with review link
+    default: 'true'
+outputs:
+  server-id:
+    description: Portal server UUID
+    value: ${{ steps.converge.outputs.server-id }}
+  changed-capabilities:
+    description: Number changed on this refresh (not added/gone; zero when refresh disabled)
+    value: ${{ steps.converge.outputs.changed-capabilities }}
+  needs-approval:
+    description: Changed capabilities or pending publication/capability approval observed
+    value: ${{ steps.converge.outputs.needs-approval }}
+runs:
+  using: composite
+  steps:
+    - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      with:
+        cosign-release: v3.0.2
+    - id: install
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: python3 "$ACTION_PATH/install.py"
+    - id: converge
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        ACTION_CLI: ${{ steps.install.outputs.cli }}
+        ACTION_URL: ${{ inputs.url }}
+        ACTION_TOKEN: ${{ inputs.token }}
+        ACTION_TEAM: ${{ inputs.team }}
+        ACTION_SLUG: ${{ inputs.slug }}
+        ACTION_CONFIG: ${{ inputs.config-file }}
+        ACTION_REFRESH: ${{ inputs.refresh }}
+        ACTION_PUBLISH: ${{ inputs.publish }}
+        ACTION_FAIL_ON_CHANGES: ${{ inputs.fail-on-changes }}
+      run: python3 "$ACTION_PATH/run.py"

@@ -1,0 +1,24 @@
+name: Register service with Open MCP Portal
+on:
+  push:
+    branches: [main]
+    paths: [deploy/status.json]
+permissions:
+  contents: read
+jobs:
+  register:
+    runs-on: ubuntu-24.04
+    environment: portal-deployment
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./integrations/github-action
+        id: portal
+        with:
+          url: https://portal.example.com
+          token: ${{ secrets.OMP_PUBLISHER_TOKEN }}
+          team: bravo
+          slug: status
+          config-file: deploy/status.json
+          publish: request
+        env:
+          OMP_SECRET_STATUS_KEY: ${{ secrets.STATUS_API_KEY }}

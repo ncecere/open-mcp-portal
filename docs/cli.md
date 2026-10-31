@@ -138,7 +138,7 @@ Deleting servers is not possible with a token (`servers:delete` is proposed in #
 `omp export` writes the portal's configuration as an `omp/v1` document; `omp import -f FILE` applies one;
 `omp import --plan` prints what would change and **exits 10 when anything would** (0 when the portal already matches). The
 format is YAML (JSON is valid YAML) with a published JSON Schema, [`api/omp-v1.schema.json`](../api/omp-v1.schema.json),
-shared with the GitHub Action and Terraform provider planned in #47.
+used by the [GitHub Action integration](../integrations/github-action/README.md) and the Terraform provider planned in #47.
 
 ```yaml
 schema: omp/v1
