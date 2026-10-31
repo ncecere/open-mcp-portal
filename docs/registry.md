@@ -290,7 +290,8 @@ not automation tokens. Discovery grants no gateway, lifecycle, sensitivity-ceili
 or invocation permission; existing catalog detail and gateway policies are unchanged.
 
 Whitespace is trimmed; an empty query lists the catalog. Queries are limited to
-200 UTF-8 bytes, with `%`, `_` and `\` treated literally. Pages contain at most
+200 UTF-8 bytes, with `%`, `_` and `\` treated literally. Malformed UTF-8 and
+NUL characters are refused with `400 invalid_search` before database binding. Pages contain at most
 `limit` servers (1–200, default 50), ordered deterministically by server name and
 ID using the existing keyset cursor. Reuse the same query with subsequent cursors.
 There are no relevance scores, totals, snippets, raw definition matches or HTML
@@ -298,8 +299,10 @@ highlighting. Each request re-evaluates visibility; pagination is not a snapshot
 across concurrent publishing changes.
 
 This no-migration slice uses parameterized, escaped `ILIKE`/`EXISTS`, not PostgreSQL
-full-text search or a GIN index. It bounds query length, returned rows and
-application work, not database scan cost. Corpus-scale query-plan/latency validation
-and an indexed search design are follow-ups, not performance acceptance here.
+full-text search or a GIN index. It bounds query length and returned server rows,
+not database scan cost or all application CPU: associated metadata and digest
+processing still depend on the selected servers' capabilities. Corpus-scale
+query-plan/latency validation and an indexed search design are follow-ups, not
+performance acceptance here.
 Category, icon, README, badge and popularity enrichment from issue #49 remain out
 of scope; no metadata is fabricated.

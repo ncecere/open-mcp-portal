@@ -8,7 +8,7 @@ breaking changes; the entry says how to adapt.
 
 ## Unreleased
 
-- **Approved-capability catalog search (#49 slice).** Find servers by approved, listed capability metadata using literal matching and existing catalog visibility/session-only access. Search grants no invocation authority.
+- **Approved-capability catalog search (#49 slice).** Find servers by approved, listed capability metadata using literal matching and existing catalog visibility/session-only access. Search grants no invocation authority. Malformed UTF-8/NUL search text now returns `400 invalid_search` before database binding rather than an inherited server error; valid UTF-8 byte limits and literal escaping are preserved.
 
 ## [0.12.0] - 2026-11-01
 

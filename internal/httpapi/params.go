@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -91,6 +92,10 @@ func search(w http.ResponseWriter, r *http.Request) (*string, bool) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	if q == "" {
 		return nil, true
+	}
+	if !utf8.ValidString(q) || strings.IndexByte(q, 0) >= 0 {
+		httpx.Error(w, http.StatusBadRequest, "invalid_search", "Search text must be valid UTF-8 without NUL")
+		return nil, false
 	}
 	if len(q) > 200 {
 		httpx.Error(w, http.StatusBadRequest, "invalid_search", "Search text is too long")
