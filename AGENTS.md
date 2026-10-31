@@ -9,6 +9,10 @@ with an AI agent on this repository. For a fresh machine/session, start with
   SCIM lifecycle (#36) is primary, with existing catalog-search (#49) review as the one bounded side lane. Do not
   integrate all returned foundations or expand authority implicitly. No decision90 or migration51 is allocated yet;
   workers may not allocate either. Preserve partial evidence and keep all four reusable Boat VMs up.
+- **Next release stop point.** The owner requests one further pre-1.0 release after SCIM work, then a stop.
+  Finish the supported SCIM scope and required gates; include catalog only if independently accepted. After publishing,
+  independently verifying and documenting that release, stop development and worker assignments until explicitly
+  resumed. Do not expand the batch, infer v1.0.0 approval, or shut down the retained VMs.
 - **Execution mode.** The main thread owns coordination, review, integration and releases. The owner has explicitly
   re-authorized parallel Boat/Codex coding agents for bounded development issues. Give each writer an isolated
   sandbox/checkout, only the required model credentials, and a narrow task; never forward production or infrastructure

@@ -2,7 +2,7 @@
 
 **Status: draft review, not accepted policy or implementation.** This document advances [#36](https://github.com/ncecere/open-mcp-portal/issues/36); it does not close its acceptance criteria, allocate decision90 or reserve migration51. There is no SCIM endpoint, token, schema change or supported IdP integration in this change.
 
-Reviewed baseline: `cc44f0433c372785dd151f2425a222d812b364c6`, the evidence/image-pin follow-up to independently verified [v0.11.0](releases/v0.11.0.md). The owner resumed work after the release pause: SCIM lifecycle is the main-thread-owned primary task; an independent catalog-search review is the one side lane. Earlier isolated drafts are background research, not accepted specifications. The invite lock-order prerequisite shipped in v0.10.1, and API-key/personal-callback final-write hardening shipped in v0.11.0. Neither release implements SCIM.
+Reviewed baseline: `cc44f0433c372785dd151f2425a222d812b364c6`, the evidence/image-pin follow-up to independently verified [v0.11.0](releases/v0.11.0.md). The owner resumed work after the release pause: SCIM lifecycle is the main-thread-owned primary task; an independent catalog-search review is the one side lane. The latest owner boundary is to finish SCIM, cut one further independently verified pre-1.0 release, then stop development and worker assignments until explicitly resumed; retained VMs stay up. Earlier isolated drafts are background research, not accepted specifications. The invite lock-order prerequisite shipped in v0.10.1, and API-key/personal-callback final-write hardening shipped in v0.11.0. Neither release implements SCIM.
 
 Current-source rebase: the previously inspected auth/authz, platform, team, OAuth, person-secret, access-request, approval and task implementation packages are byte-unchanged from baseline4100 in the inspected diff. The API-key create and personal-callback paths changed in v0.11.0 and were reread directly below; their shipped status/session checks must not be described as missing. This comparison preserves earlier call-graph observations, not a claim that the proposed lifecycle protocol or total lock order is proved.
 
@@ -138,7 +138,7 @@ Separate new-connection creation from existing-row refresh. The design still nee
 
 ### Team-owned service connections
 
-The shared callback already revalidates USER KEY SHARE→SESSION→CONNECTION→STATE around an exchange performed outside its transactions. Its creator's departure does not make the team-owned connection a personal cleanup target. Current authorizer standing and original consent/session validation still matter for an in-flight change.
+The shared callback already revalidates USER KEY SHARE→SESSION→CONNECTION→STATE around an exchange performed outside its transactions. Its creator's departure does not make the team-owned connection a personal cleanup target. Current authorizer standing and original consent/session validation still matter for an in-flight change. A new blocking directory/user gate prepended to this path would be retained while it waits on a service connection held by network refresh, delaying a directory fence. Authorizer callbacks/start/reconnect need an explicit PRELOCK/TRY classification too, without turning team credentials into personal cleanup targets.
 
 ### Per-person secrets and one-use request links
 
@@ -152,7 +152,7 @@ Secret-request creation/reuse has its own bounded transactional path. Personal s
 
 ### Sensitive-call approvals
 
-Approval creation enters the approval-context transaction, checks deadline/current requester/rule/review audience, then requester advisory guard and request state. Human-decision transactions lock an active actor before the context and reread status/role. Nil-actor requester paths and human-decision paths are different lock entries; both must be accounted for.
+Approval creation enters the approval-context transaction, checks deadline/current requester/rule/review audience, then requester advisory guard and request state. Human-decision transactions lock ACTOR KEY SHARE before the context and afterward reread active status/role. Nil-actor requester paths and human-decision paths are different lock entries; both must be accounted for. The current migration47 context function takes EXCLUSIVE locks on authority tables NOWAIT; it is not a singleton context-row mutex. New participant/user guards must precede that fence, preserving its fail-fast behavior and original actor-FK protection.
 
 Cleanup cannot erase spent history, restore consumed approval availability or turn an uncertain commit into a dispatch permit. The existing context/revision/deadline/live-authority machinery remains in force.
 
@@ -160,11 +160,13 @@ Cleanup cannot erase spent history, restore consumed approval availability or tu
 
 Task reservation checks principal/credential association, takes the principal capacity guard, then inserts. Activation locks TASK before checking the root association and updating sealed state. The store deliberately delegates live authorization to the serving layer.
 
-`MCPTaskRootBelongsToPrincipal` explicitly checks association only, not current status, expiry or authorization. A new lifecycle guard inserted into that later lookup can invert USER→TASK cleanup. It must be placed consistently across reserve/activate/input/finish/lookup paths, with original root/generation binding. Service-account tasks are not the creator's personal tasks. Removing a local mapping is not proof of upstream cancellation.
+`MCPTaskRootBelongsToPrincipal` explicitly checks association only, not current status, expiry or authorization. A new lifecycle guard inserted into that later lookup can invert USER→TASK cleanup. It must be placed consistently across reserve/activate/input/finish/lookup paths, with original root/generation binding. `Finish(input_required)` itself adds input-ledger authority; it cannot be blanket-exempted as result-only persistence. An allowed terminal/status-only completion must exclude new input, insertion/rebinding and publication, or all Finish variants must remain gated. New root/lifetime fields require deliberate sealed-binding/envelope version compatibility, not reinterpretation of v1 ciphertext. Service-account tasks are not the creator's personal tasks. Removing a local mapping is not proof of upstream cancellation.
 
 ## 5. Lifecycle state and cleanup requirements
 
 The first irreversible fence should be a short, user-local commit containing adopted-link state, a new authority generation, tombstone/cleanup marker and audit. It must not lock all keys, grants, secrets, tasks or provider connections, and must not wait for provider I/O.
+
+Browser sessions need independent irreversible invalidation. Unlike preserved reusable credentials, an old cookie must not authenticate again after reactivation merely because its undeleted row can receive a fresh request epoch. Current login has no per-user session-count bound, and deleting sessions also touches pending service states. The minimal-fence contract must represent session revocation independently (for example, a captured session-revocation generation), with authentication and both original-session callback checks honoring it, before deferring physical deletion to bounded cleanup. This is a required design/proof choice, not an existing schema feature.
 
 ### Proposed lifetime and request-fence distinction
 
@@ -244,7 +246,7 @@ There is not yet one proved total order. Known entries include:
 - access requests: requester guard before current USER actors, TEAM/GATEWAY;
 - task activation: TASK before association lookup.
 
-A per-user advisory barrier before resource locks is a candidate, not an established invariant. Every actor and target identity, multi-user ordering, identity lookup race, database trigger/FK edge and mixed-version writer must be included. An independent cleanup transaction does not remove an inverse order if it still holds the same logical user guard while waiting on a resource.
+A per-user advisory barrier before resource locks is a candidate, not an established invariant. Every actor and target identity, multi-user ordering, identity lookup race, database trigger/FK edge and mixed-version writer must be included. An independent cleanup transaction does not remove an inverse order if it still holds the same logical user guard while waiting on a resource. The fresh exact432017d read-only review also traces cascading-child edges: a skipped-unlocked grant parent can still block deleting its locked task child, and a connection parent can have a locked server-grant child. Bounded cleanup requires child-aware nonblocking acquisition and a stable lifetime-bound recount. That review ran no tests; source-supported schedules are not newly reproduced races. See the expanded [writer matrix](scim-lifecycle-writer-matrix.md#concrete-review-blockers-and-additional-source-facts) for participant discovery, cache publication and callback refinements.
 
 ### Isolated refresh/cleanup lock-model experiment
 
