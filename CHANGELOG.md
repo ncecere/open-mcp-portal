@@ -10,6 +10,7 @@ breaking changes; the entry says how to adapt.
 
 - **Personal credential final writes.** API-key creation rechecks current user status after its user-row lock wait. Personal OAuth connection callbacks revalidate the original active browser session after the provider exchange and existing-connection wait, before storing or replacing tokens. Ended, expired, idle or contended authority ends the flow with the existing expired-consent hint; consumed state/code is never restored or automatically retried. Nonblocking user/session locks avoid adding a connection-to-user wait cycle or holding authority locks while waiting on provider work. Existing unrevoked keys/connections remain preserved through reversible suspension. No migration, route, token scope, credential class or SCIM support is added.
 - **GitHub Action integration (#47 slice).** Add a pinned, signature-verified token-only server deployment Action with conditional import, discovery checks, explicit pending-review failure/warning and secret-safe outputs; no new authority or delete scopes.
+- **Shared secret-rule registry** (#71). Capture redaction delegates to one internal registry with unchanged output; a separate detection profile exposes rule IDs and bounded counts only. No scanning is wired into refresh or calls.
 
 ## [0.10.1] - 2026-10-30
 

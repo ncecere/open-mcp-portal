@@ -1,7 +1,7 @@
 # Content scanning: design (#52, decision 50)
 
-**Status: design proposal. Nothing in this document is implemented.** No scanner, migration, API or setting exists
-in v0.8.0. The portal today fingerprints and withholds changed tool definitions, and redacts secret-looking values
+**Status: design with the shared secret-registry foundation implemented (#71).** No scanner, migration, API or
+setting is wired into refresh or call paths. The portal today fingerprints and withholds changed tool definitions, and redacts secret-looking values
 in *captured* payloads, but it does not read definitions, arguments or results for prompt injection, hidden
 Unicode or data loss ([threat model 7.5](threat-model.md#75-tool-poisoning-and-change-detection)). Everything below
 marked **proposed default (owner may override)** is the assistant's recommendation under the owner's delegation of
@@ -170,6 +170,31 @@ Admin-supplied patterns (the capture settings' RE2 expressions) are **not** reus
 are redaction patterns, written for a different purpose. A separate, bounded custom-rule list for scanning is a
 later follow-up (F13), with the same limits (`capture.MaxPatterns` = 50, 500 characters, no pattern that matches
 the empty string) and the metric label `pattern`.
+
+#### Shared-registry foundation (#71)
+
+`internal/secretrules` now owns the unchanged redaction implementation, built-in regexes,
+sensitive keys and exact-value normalization. `capture` retains compatibility aliases and wrappers;
+its output, rule names, ordering, binary handling, counts and truncation remain unchanged.
+
+The registry's `Redactor.Find(text)` is a text primitive, not a stage scanner. It returns only
+`Finding{RuleID, Count}`, in catalog order (`secret.<capture name>`), with counts saturating at
+100,000. Rules count independently, including overlaps; exact values count last, longest first,
+without overlapping each other. Known exact values retain the six-byte/encoded-form handling and
+are not suppressed as placeholders. Admin redaction patterns and sensitive-key names are not detected.
+A future JSON scanner must explicitly select and traverse strings and keys and track unscanned data.
+
+`DefaultDetectProfile()` returns separate data: bearer payloads require 20 characters and a
+non-letter character unless preceded by `Authorization:`; Google OAuth payloads require 20
+characters. Placeholder suppression excludes case-insensitive `example`, `xxxx`, angle brackets,
+single-character runs in token payloads, and URL userinfo `user:password`. These are initial
+heuristics, not calibrated enforcement thresholds. `FindWithProfile` changes detection only.
+JWT shapes are counted without assigning confidence: segment validation and severity remain future
+scanner work, and no result here can authorize enforcement.
+
+There is no JSON traversal, deadline, completeness status, persistence, metric, policy or network
+operation in this primitive. Callers must not interpret an empty result as safe, or an incomplete
+stage as clean. No caller uses detection in this slice.
 
 ### 3.2 Unicode and length heuristics
 
