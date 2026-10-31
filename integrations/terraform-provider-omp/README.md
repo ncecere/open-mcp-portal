@@ -118,3 +118,76 @@ Extraction (parent-owned, not performed):
 4. Decide versioning, registry identity, signing/releases and upgrade tests before
    publication. Resource/delete proposals require separate decisions; never map
    destroy to unpublish/disable.
+
+## Opt-in real-portal gate (CI and development)
+
+`acceptance/` is a separate nested Go module, under the parent's namespace only
+so it can use `app.NewDeps`, the production `httpapi.NewAPIHandler`, and the
+exported `testutil.NewDB`/`OwnerPool` setup helpers. Neither root `go test ./...`
+nor this provider module's ordinary tests traverse it. No new normal-test CLI,
+network, or PostgreSQL prerequisite is introduced.
+
+Provision a **new, owned PostgreSQL 17 cluster**, bound only to loopback, not the
+compose/dev database or any owner infrastructure. Provide its administrative
+`/postgres` URL privately in `OMP_TEST_DATABASE_URL` (never paste it into logs).
+Provide the absolute path of a previously signature/checksum-verified Terraform
+**1.13.5** binary in `OMP_TERRAFORM_CLI`, using the verification procedure above.
+From this directory, with those two environment variables already supplied:
+
+~~~sh
+TF_ACC=1 OMP_TEST_REQUIRE_DB=1 make test-acceptance
+~~~
+
+This is the dedicated CI/dev target: Go 1.26.10, `-p=2`, race detector, no cache,
+20-minute **per-package** timeout, both actual `OMP_TEST_SPLIT_ROLES=0` and `1`.
+Missing opt-ins, binary, PostgreSQL, non-loopback/non-`/postgres` URL, or wrong PG
+major fail, not skip. Direct invocation without `TF_ACC=1` skips intentionally;
+a skip is never acceptance. A CI runner must provision its own PG17 and verified
+Terraform before calling this target; no installation/download fallback exists.
+An optional `OMP_TERRAFORM_EVIDENCE_DIR` saves sentinel-checked plan/state JSON
+and method/path/status request records in `role-0` and `role-1` subdirectories.
+No tokens, database URL, private keys, or raw responses are exported.
+
+Each run creates a unique migrated scratch database (plus authenticated
+owner/runtime roles in split mode), random encryption key/pepper and a private
+CA/loopback server certificate. The actual handler is HTTPS-fronted directly;
+there is no response replacement or TLS bypass. An unrelated CA must first fail
+before HTTP reaches the handler. Only the Terraform child environment contains
+the existing fixture publisher `servers:read` and platform `platform:read`
+tokens, selected by separate aliases. No inherited owner Terraform home,
+proxy, credentials, or credential files are used. Fixture tokens are created
+through the real automation service as a synthetic session actor, never by the
+provider or a login/token-minting API call.
+
+Setup SQL creates synthetic users/teams and a disabled, never-refreshed server
+with a genuinely sealed static credential, private description/contact and
+user claims. Setup writes, revocation and a single name/revision drift edit do
+not traverse the provider recorder. The deliberately synthetic missing-read
+fixture removes the implied read scope from a write-scoped token while
+satisfying every existing database constraint. Forced expiry backdates both
+creation and expiry within the existing lifetime constraint; neither is a
+natural expiry soak. No schema/auth/permission changes are made.
+
+The gate checks real metadata and exact state allowlists, false/zero values,
+slug and UUID lookups, data-only apply, refresh-only drift, unchanged server
+revisions on all provider reads, foreign-team/foreign-object failures, actual
+403 missing scope, 401 revoked/forced-expired, and provider-local wrong-kind
+refusal. A separately labelled GET control probe proves the portal also denies
+wrong-kind tokens with 403. All provider HTTP requests must be GET on the
+metadata routes; authentication bookkeeping can still update last-use/rate
+counters, so GET-only is not a claim of zero database writes. Plans (binary and
+JSON), state/backups, TRACE and command stdout/stderr/diagnostics are scanned
+for token/key/secret/contact/ciphertext/claims sentinels before export.
+
+**Authoritative null limitation:** this portal's migration 48 makes
+`supports_tasks` NOT NULL, and `convert_registry.go` always returns a non-nil
+`supportsTasks` pointer. The real test therefore asserts **false**, not null,
+for an undiscovered server. Null/absent compatibility remains covered by the
+existing provider fixture/unit tests; no genuine-null claim is made and no
+portal schema or response is weakened to manufacture it. A metadata hit is
+not invocation, availability, publication, or access approval.
+
+Scratch databases/roles are cleaned by `testutil`; the independently owned PG
+cluster and verified tool cache can remain available for reuse. This gate does
+not close #47 or exercise resources, destroy, convergence, release gates,
+production services, or a human pilot.

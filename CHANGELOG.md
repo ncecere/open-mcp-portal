@@ -30,6 +30,8 @@ breaking changes; the entry says how to adapt.
 
 ## [0.11.0] - 2026-10-31
 
+- **Terraform read-only real-portal harness** (#47): opt-in verified-HTTPS/PG17/Terraform checks in both database-role modes; no resources or release acceptance.
+
 - **Terraform metadata reads (#47 slice, unreleased).** Add a standalone read-only provider for exact-team server and platform team metadata with environment-only auth; no resources or new authority.
 
 - **Personal credential final writes.** API-key creation rechecks current user status after its user-row lock wait. Personal OAuth connection callbacks revalidate the original active browser session after the provider exchange and existing-connection wait, before storing or replacing tokens. Ended, expired, idle or contended authority ends the flow with the existing expired-consent hint; consumed state/code is never restored or automatically retried. Nonblocking user/session locks avoid adding a connection-to-user wait cycle or holding authority locks while waiting on provider work. Existing unrevoked keys/connections remain preserved through reversible suspension. No migration, route, token scope, credential class or SCIM support is added.
