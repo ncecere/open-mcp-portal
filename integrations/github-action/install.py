@@ -8,6 +8,7 @@ import re
 import stat
 import subprocess
 import sys
+import tempfile
 import urllib.request
 
 VERSION = "v0.10.1"
@@ -23,8 +24,9 @@ def main():
             or not output.is_absolute() or output.is_symlink()
             or not stat.S_ISREG(output.stat().st_mode)):
         raise ValueError("unsafe runner paths")
-    root = temporary.resolve(strict=True) / "omp-action-cli"
-    root.mkdir(mode=0o700, exist_ok=False)
+    # A job may invoke the Action for several servers. Never reuse an earlier
+    # installation or fail merely because another invocation used RUNNER_TEMP.
+    root = Path(tempfile.mkdtemp(prefix="omp-action-cli-", dir=temporary.resolve(strict=True)))
     name = f"omp-{VERSION}-linux-{arch}"
     for asset in (name, name + ".sigstore.json", "checksums.txt"):
         request = urllib.request.Request(

@@ -38,10 +38,12 @@ class InstallTests(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         install.main()
                     self.assertEqual(output.read_text(), "")
-                    self.assertNotEqual((root / "omp-action-cli" / name).stat().st_mode & 0o111, 0o111)
+                    binary, = root.rglob(name)
+                    self.assertEqual(binary.stat().st_mode & 0o111, 0)
                 else:
                     install.main()
-                    self.assertEqual((root / "omp-action-cli" / name).stat().st_mode & 0o777, 0o700)
+                    binary, = root.rglob(name)
+                    self.assertEqual(binary.stat().st_mode & 0o777, 0o700)
                     args = verify.call_args.args[0]
                     self.assertIn("verify-blob", args)
                     self.assertIn("https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.10.1", args)

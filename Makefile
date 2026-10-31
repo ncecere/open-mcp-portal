@@ -16,7 +16,7 @@ K8S_TOOLS   := $(CURDIR)/bin/k8s-tools
 KUSTOMIZE   := $(K8S_TOOLS)/kustomize-$(KUSTOMIZE_VERSION)/kustomize
 KUBECONFORM := $(K8S_TOOLS)/kubeconform-$(KUBECONFORM_VERSION)/kubeconform
 
-.PHONY: build-omp docker-omp shellcheck smoke-selftest dev-seed help deps-up deps-down generate check-generated build run migrate fake-mcp fake-oauth example-mail example-mail-fake example-mail-smoke test test-integration test-ci lint actionlint fmt web web-test web-dev docker demo demo-down k8s-validate k8s-smoke prom-check
+.PHONY: build-omp docker-omp shellcheck smoke-selftest dev-seed help deps-up deps-down generate check-generated build run migrate fake-mcp fake-oauth example-mail example-mail-fake example-mail-smoke test test-action test-integration test-ci lint actionlint fmt web web-test web-dev docker demo demo-down k8s-validate k8s-smoke prom-check
 
 help: ## Show targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -78,6 +78,11 @@ example-mail-smoke: ## Set up provider google-dev, server and gateway "mail" in 
 test: ## All Go tests; integration tests skip when Postgres is unreachable
 	# The complete HTTP integration package needs CI's bounded budget in normal mode too.
 	$(GO) test -count=1 -timeout=20m ./...
+
+test-action: ## Test the GitHub Action adapter and signed-installer contract with a scratch CLI
+	@set -eu; tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
+		$(GO) build -o "$$tmp/omp" ./cmd/omp; \
+		OMP_ACTION_TEST_CLI="$$tmp/omp" python3 -m unittest discover -s integrations/github-action/tests -p 'test_*.py' -v
 
 test-integration: deps-up test-ci ## All Go tests with Postgres required (fails instead of skipping)
 
@@ -141,7 +146,7 @@ prom-check: ## promtool check rules and test rules on deploy/prometheus (local p
 k8s-smoke: ## Apply the Kubernetes base to a throwaway kind cluster and check it (docker, kind, kubectl, jq; SMOKE_CNI=calico enforces NetworkPolicy; SMOKE_SCENARIO=upgrade|ingress|restore|load)
 	scripts/k8s-smoke.sh
 
-SHELLCHECK_FILES := scripts/*.sh scripts/smoke/*.sh deploy/kubernetes/scripts/validate.sh
+SHELLCHECK_FILES := scripts/*.sh scripts/smoke/*.sh deploy/kubernetes/scripts/validate.sh integrations/github-action/tests/real-portal.sh
 
 # Always the pinned, checksum-verified release: a runner's preinstalled
 # ShellCheck is another version with other findings.

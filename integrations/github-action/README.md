@@ -2,7 +2,7 @@
 
 Linux (amd64/arm64) composite Action over the real token-only `omp` CLI.
 This directory is distributable as an Action; it has not been published as a separate
-repository. Pin the containing repository to a reviewed commit. Requires Python 3,
+repository. Pin the containing repository to a reviewed commit. Requires Python 3.9+,
 Bash, network access to GitHub releases and Sigstore, and HTTPS access to the portal.
 No Node dependencies, container image, login or GitHub OIDC authority are needed.
 
@@ -77,7 +77,8 @@ no curation, gateway, grant, expiry or ceiling writer in this Action.
 2. `omp import -f <private snapshot>` creates missing servers or conditionally
    updates changed fields. Identical config does not bump revisions. Existing
    TLS/SSRF/auth restrictions remain enforced. The child has a private empty HOME,
-   no ambient CLI config, and only explicitly forwarded upstream secret variables.
+   no ambient CLI config, and only the one `authValueEnv` secret explicitly referenced
+   by this declaration (unrelated `OMP_SECRET_*` values are not forwarded).
 3. `omp servers test` verifies connectivity/discovery, then optional
    `omp servers refresh` persists capability discovery. Test failure fails the job.
    This is a synchronous check, not an asynchronous health-polling guarantee.
@@ -113,21 +114,30 @@ owner/label confirmation, policy, member or administration writes exist.
 ## Validation
 
 ```sh
-go build -p=2 -o /tmp/omp-action-test ./cmd/omp
-OMP_ACTION_TEST_CLI=/tmp/omp-action-test python3 -m unittest discover -s integrations/github-action/tests -v
+make test-action
 go test -p=2 ./internal/ompcli ./pkg/ompclient
 ```
+
+CI runs `make test-action` with a scratch CLI binary; it never overwrites `bin/omp`.
+Installer tests cover independent repeated invocations in the same runner job and
+no executable permissions on checksum/signature failure. Unknown publication state
+is a refusal, not an inferred absence of approval work.
 
 The tests use the actual CLI against an in-memory HTTP mock, including conditional
 updates/no-op revisions, pending reviews, errors, injection and secret sentinels.
 The adapter's production HTTPS restriction is replaced only inside those tests so
 the CLI can talk to loopback. There is no production insecure option.
 
-For real-handler/PostgreSQL acceptance of the underlying supported operations,
-run `tests/real-portal.sh` **only with a NEW disposable local PostgreSQL**. It
-requires the supplied database URL and runs the existing CLI portal acceptance
-tests in both actual role modes. It does not contact a production portal, mint
-external credentials, or test this composite inside a hosted GitHub runner.
+For real-handler/PostgreSQL acceptance, run `tests/real-portal.sh` **only with a
+NEW disposable local PostgreSQL**. It requires the supplied database URL and runs
+both the existing CLI acceptance tests and `TestOmpActionWorkflowAgainstThePortal`
+in both actual role modes. The latter runs this production Python adapter and a
+scratch CLI through a certificate-verified HTTPS test front to the real portal
+handler, with synthetic identities and upstream credentials. It checks creation,
+no-op revisions, updates, read-only refusal, pending publication, changed-definition
+failure/warning and secret-free outputs without substituting the adapter's HTTPS
+checks. It does not contact a production portal, mint external credentials, or
+execute the composite step itself inside a hosted GitHub runner.
 
 Remaining #47 work: Terraform provider/resources and acceptance/state tests,
 any separately decided delete scope, vendor secret-scanning registration, separate

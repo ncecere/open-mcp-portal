@@ -33,6 +33,13 @@ def count(value):
     return value
 
 
+def publication_state(live):
+    require(isinstance(live, dict) and live.get("publishState") in
+            ("private", "pending", "published", "rejected"),
+            "Invalid publication state from portal; approval status is unknown.")
+    return live["publishState"]
+
+
 def pairs(items):
     result = {}
     for key, value in items:
@@ -102,7 +109,9 @@ def main():
             and stat.S_ISREG(output.stat().st_mode), "Unsafe GitHub output path.")
     # A minimal child environment: no ambient CLI config, GitHub tokens or auth files.
     env = {k: os.environ[k] for k in ("PATH", "SSL_CERT_FILE", "SSL_CERT_DIR") if k in os.environ}
-    env.update({k: v for k, v in os.environ.items() if re.fullmatch(r"OMP_SECRET_[A-Z0-9_]+", k)})
+    secret_name = server.get("authValueEnv")
+    if secret_name and secret_name in os.environ:
+        env[secret_name] = os.environ[secret_name]
     env.update(OMP_URL=url, OMP_TOKEN=os.environ["ACTION_TOKEN"])
     binary = str(Path(os.environ["ACTION_CLI"]).resolve(strict=True))
     with tempfile.TemporaryDirectory(prefix="omp-action-") as private:
@@ -118,21 +127,25 @@ def main():
         if refresh:
             changed = count(cli(binary, env, "servers", "refresh", slug, *args)["changed"])
         live = cli(binary, env, "servers", "get", slug, *args)
-        if publish == "request" and live["publishState"] in ("private", "rejected"):
+        state = publication_state(live)
+        if publish == "request" and state in ("private", "rejected"):
             digest = live.get("reviewDigest")
             require(isinstance(digest, str) and re.fullmatch(r"[A-Za-z0-9:_-]{1,256}", digest),
                     "Missing/invalid review digest; publication refused.")
             live = cli(binary, env, "servers", "publish", slug, *args, "--expected-digest", digest)
         # 'none' means no publication operation, NOT implicit withdrawal.
+        state = publication_state(live)
         server_id = str(uuid.UUID(live["id"]))
         pending = count(live["pendingChanges"])
-        needs = pending > 0 or live["publishState"] == "pending" or changed > 0
+        needs = pending > 0 or state == "pending" or changed > 0
         with output.open("a") as stream:
             stream.write(f"server-id={server_id}\nchanged-capabilities={changed}\nneeds-approval={str(needs).lower()}\n")
         if needs:
             # Link only validated origin/path and UUID, never names or portal messages.
             link = url.rstrip("/") + "/teams/" + team + "/servers/" + server_id
             message = "Human review needed; publication request is not approval. Review: " + link
+            # GitHub decodes workflow-command escapes; retain literal URL escapes.
+            message = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
             print(("::error::" if fail else "::warning::") + message)
             return 1 if fail else 0
         print("Server configuration applied and checked; no pending approval observed.")

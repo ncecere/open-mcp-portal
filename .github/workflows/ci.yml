@@ -25,6 +25,8 @@ jobs:
         run: make lint
       - name: Workflows
         run: make actionlint
+      - name: GitHub Action adapter and signed-installer contract
+        run: make test-action
 
   vulncheck:
     runs-on: ubuntu-latest

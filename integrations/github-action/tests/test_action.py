@@ -51,7 +51,8 @@ class Portal(BaseHTTPRequestHandler):
         elif path.endswith("/test"):
             data = {"ok": True, "latencyMs": 1}
         elif path.endswith("/refresh"):
-            state["server"]["pendingChanges"] = state.get("changed", 0)
+            # Re-listing the same candidate does not approve existing changes.
+            state["server"]["pendingChanges"] = max(state["server"].get("pendingChanges", 0), state.get("changed", 0))
             data = {"added": 0, "changed": state.get("changed", 0), "gone": 0, "listed": 1}
         elif path.endswith("/publish"):
             if state.get("stale"):
@@ -168,6 +169,11 @@ class ActionTests(unittest.TestCase):
             self.assertIn("Review: https://portal.example/", log)
             self.env["ACTION_FAIL_ON_CHANGES"] = "true"
 
+    def test_preexisting_pending_definition_survives_unchanged_refresh(self):
+        self.state["server"].update(pendingChanges=1, publishState="private")
+        self.assertEqual(self.run_action()[0], 1)
+        self.assertIn("needs-approval=true", self.output.read_text())
+
     def test_publication_is_only_request_and_digest_guarded(self):
         self.env["ACTION_PUBLISH"] = "request"
         self.assertEqual(self.run_action()[0], 1)
@@ -225,6 +231,28 @@ class ActionTests(unittest.TestCase):
         self.output.symlink_to(self.config)
         self.assertEqual(self.run_action()[0], 1)
         self.assertEqual(self.state["calls"], [])
+
+    def test_unknown_publication_state_is_not_treated_as_approved(self):
+        self.state["server"]["publishState"] = "unknown-from-portal"
+        self.assertEqual(self.run_action()[0], 1)
+        self.assertNotIn("needs-approval=false", self.output.read_text())
+
+    def test_only_referenced_secret_is_forwarded(self):
+        self.env["OMP_SECRET_UNRELATED"] = "unrelated-private-sentinel"
+        real = self.real_run
+        def inspect(argv, **kwargs):
+            self.assertNotIn("OMP_SECRET_UNRELATED", kwargs["env"])
+            self.assertNotIn("OMP_SECRET_HEADER", kwargs["env"])
+            return real(argv, **kwargs)
+        self.real_run = inspect
+        self.assertEqual(self.run_action()[0], 0)
+
+    def test_review_url_preserves_workflow_command_escapes(self):
+        self.env["ACTION_URL"] = "https://portal.example/encoded%0Apath"
+        self.state["server"]["pendingChanges"] = 1
+        code, log = self.run_action()
+        self.assertEqual(code, 1)
+        self.assertIn("encoded%250Apath", log)
 
     def test_static_secret_not_in_output_or_arguments(self):
         self.state["server"] = None
