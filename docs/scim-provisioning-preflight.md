@@ -37,6 +37,20 @@ The issue's historical suggestion of verified-email linking is **not accepted**:
 - Keep adopted links, unadopted directory resources, pending enrollment and tombstones separate. User and directory-resource identifiers need not be equal and are not credentials.
 - Make requiring active provisioning for new identities an explicit enablement operation, after unmanaged break-glass administration is established. Enabling it needs a preview and a clear failure mode for a missing resource; it must not be inferred from the presence of a bearer token.
 
+### Proposed binding contract
+
+The recommended first contract is an explicit directory-bound profile with **no default correlation claim**. It may select the verified OIDC `sub`, or an explicitly configured top-level scalar ID-token claim whose stability/non-reassignment contract the operator has confirmed. The profile is tied to the exact verified issuer and expected audience/client; provider-specific defaults are not guessed. Email, userName and display-name selectors are not supported identity fallbacks. Missing, array/object-valued, over-limit or ambiguous values refuse managed enrollment. Comparison is exact: no trimming, case folding or Unicode normalization may merge identifiers.
+
+This contract must keep three different things separate:
+
+- **OIDC authentication identity:** the verified `(issuer, subject)` remains the local user's authentication key. OIDC defines `sub` as case-sensitive, locally unique and never reassigned within its issuer.
+- **SCIM resource identity:** the server-issued resource `id` is stable, non-reassignable and not a local login credential.
+- **Client correlation data:** RFC7643 defines `externalId` as optional, case-exact, client-issued, provisioning-domain scoped and read/write. It must not silently become an immutable authentication key or a globally unique database identity column.
+
+Use `externalId` only as a candidate correlation value under the explicitly selected profile. Ambiguous candidates refuse enrollment/adoption rather than selecting the first record. Enforce uniqueness on the **adopted binding**, not by pretending the core `externalId` attribute has different RFC characteristics. Once bound, store the immutable authenticated issuer/subject, directory-resource identity and profile-version/selector association separately. Later `externalId` edits must never relink an authenticated account or transfer that binding to another principal. An enrollment selector already bound or tombstoned for another identity must not be recycled implicitly.
+
+Existing-user adoption requires a recent dedicated observation from a verified login under the current profile version, plus an explicit revision-bound administrative approval and protected-principal checks. Persisted arbitrary `users.claims`, a matching email or a user UUID alone is insufficient evidence. Profile edits invalidate unaccepted observation/preview state; migrating an adopted binding requires a separate audited operation, not an in-place configuration side effect. The exact observation lifetime and migration/re-enrollment procedure still need tests and acceptance.
+
 ### Proposed login eligibility matrix
 
 The following recommendation resolves the ordering ambiguity in the older drafts; it still needs review and deterministic tests before acceptance:
@@ -55,7 +69,7 @@ The following recommendation resolves the ordering ambiguity in the older drafts
 
 A denied new enrollment must leave no user, bootstrap marker, membership, session or new credential behind. Existing-user denial auditing is distinct from granting authority. Protected accounts and optional unmanaged JIT must be displayed as outside the managed population rather than reported as successfully offboarded.
 
-Still to decide: the supported binding profiles and exact explicit re-enrollment protocol. No Entra/authentik interoperability is established by this matrix.
+This is a proposed provider-neutral binding contract, not a claim that a provider's default `externalId` already matches its OIDC subject. The exact explicit re-enrollment and profile-migration protocol remains to be specified and tested. No Entra/authentik interoperability is established by this matrix.
 
 ## 3. Supported managed population
 
@@ -136,6 +150,18 @@ Task reservation checks principal/credential association, takes the principal ca
 
 The first irreversible fence should be a short, user-local commit containing adopted-link state, a new authority generation, tombstone/cleanup marker and audit. It must not lock all keys, grants, secrets, tasks or provider connections, and must not wait for provider I/O.
 
+### Proposed lifetime and request-fence distinction
+
+Use an explicit lifecycle state machine, not one overloaded suspension flag. Effective eligibility is the intersection of manual standing, directory standing and absence of an irreversible deletion fence. Directory `active:true` cannot write away the manual restriction. An unlinked protected/unmanaged person is not a successful directory offboarding target.
+
+A proposed monotonic **request-authority epoch** advances on adoption/unlink, reducing lifecycle transitions and re-enablement. Capture it at authentication/admission and validate it under the final writer barrier after waits. This prevents an old authenticated request from becoming valid again merely because a suspend/reactivate cycle finished before its final store. The exact actor/session propagation is an implementation requirement; current actor UUIDs and stored claims do not already provide it.
+
+Do not permanently bind preserved reusable credentials to a pre-suspension request epoch: reversible suspension is intended to permit a **new request** using an otherwise valid, unrevoked key/connection after reactivation. Conversely, old callback/consent/approval/task request state must not inherit that new epoch or regain consumed availability. Their session/root/lifetime binding must be validated separately, and the supported resume/invalidation semantics need explicit tests.
+
+Irreversible DELETE additionally needs an immutable deletion/cleanup identity. Workers must compare that identity, not a wall-clock cutoff, and re-enrollment must be a distinct post-cleanup transition with newly issued authority. Updating an unrelated status revision cannot redirect an old cleanup job onto a newly enrolled lifetime. This is still a proposed state protocol, not implemented generation fencing.
+
+### Cleanup target set
+
 Cleanup then needs an explicit complete target set and a stable final barrier:
 
 - sessions and personal API keys;
@@ -162,6 +188,20 @@ The baseline is now covered by `TestOIDCGroupSnapshotChangesOnLoginForAllSession
 
 Therefore removing a SCIM-derived team membership does **not** automatically remove access independently granted through a cached OIDC group. The design must explicitly choose whether managed-user direct group grants remain an independent OIDC authority or become SCIM-authoritative. If the latter, it needs a trusted group identifier namespace and a live fence that stale sign-in claims cannot overwrite. Do not claim complete group revocation while updating only team-role rows.
 
+### Recommended managed-group authority model
+
+The safer initial recommendation is an explicit authority transition at adoption, not a silent union of stale OIDC claims and directory groups:
+
+- Unmanaged people retain the current verified-login snapshot behavior, covered by the baseline test above.
+- For adopted managed people, directory group membership is the source of directory-derived team roles. New OIDC sign-ins may refresh profile/raw claim observations but cannot overwrite that effective directory membership.
+- A SCIM group must not acquire portal privileges because its mutable display name or client-supplied `externalId` happens to equal a privileged SSO-group string. Any bridge to an existing gateway group-grant key must be an explicitly reviewed administrative binding to the stable SCIM group resource ID and directory.
+- Default managed-user group bridges to legacy direct SSO-group grants are empty/fail-closed. Adoption/mapping preview must show resulting access losses and any newly proposed positive bridge. No automatic alias/backfill from an old claim snapshot is permitted.
+- Preserve independently authorized manual team memberships and explicit user/team grants. Removing one directory-derived source does not revoke another legitimate manual source; the UI and test evidence must identify the access provenance rather than call every group reduction complete offboarding.
+- Effective role/grant readers must join current directory/link/group/membership generations and enabled mappings. A stale materialized role row, cached claim, group rename or old mapping preview is not authority.
+- Adding/removing group-bridge authority is itself an audited, revision-bound administrative policy change, not something the SCIM bearer token can request by creating an arbitrary matching group name.
+
+RFC7643 leaves group authorization semantics to the service provider; it does not prescribe this model. This recommendation deliberately avoids silently widening or preserving stale group authority, but requires an explicit adoption preview and complete reader/epoch integration. It remains unimplemented and unaccepted until those proofs are complete.
+
 Large group reductions also need an immediate authority boundary. A size error is not successful offboarding, and asynchronous cleanup without a group generation/fence leaves stale derived authority. A complete bounded synchronous representation or an immediate logical group fence must be chosen and proven before acceptance. Additions can be bounded/refused before mutation; reductions cannot be reported as complete while stale access remains effective.
 
 Mapping previews must bind the whole mapping set, link set, manual provenance and relevant revisions, including absence. Hashing only currently returned rows or a maximum revision does not prevent phantoms.
@@ -182,6 +222,18 @@ There is not yet one proved total order. Known entries include:
 - task activation: TASK before association lookup.
 
 A per-user advisory barrier before resource locks is a candidate, not an established invariant. Every actor and target identity, multi-user ordering, identity lookup race, database trigger/FK edge and mixed-version writer must be included. An independent cleanup transaction does not remove an inverse order if it still holds the same logical user guard while waiting on a resource.
+
+### Isolated refresh/cleanup lock-model experiment
+
+A standalone PostgreSQL design experiment used a newly created disposable database, dummy person/connection rows, the race detector and a deterministic `pg_blocking_pids` barrier. It did not use the application schema, migrations, credentials or provider network I/O. The owned experiment database was destroyed afterwards.
+
+- The minimal user-local first fence committed while a simulated refresh still held its connection row.
+- **Negative control:** cleanup held the logical user guard and waited on the connection; refresh then tried to acquire the same user guard with a blocking call. PostgreSQL reported `40P01`. This is a deliberately constructed **proposed-order** deadlock, not a newly reproduced defect in the released application.
+- **Candidate:** refresh instead tried the user guard without waiting. On contention it updated only its already-locked existing dummy row as dormant state and published no credential. Cleanup then unblocked, deleted that late write and reached a zero-row barrier. No rotated-material restoration or new connection insertion was simulated.
+
+Both controls completed in4s. This supports investigating a distinct **existing-row-only, no-publication refresh completion class**, rather than forcing every network-held connection transaction through a blocking user guard. It does **not** prove correct application cache behavior, callback creation, split-role permissions, all final writers, provider interoperability or a total application lock order. Integrating the candidate requires a real service-level test with sealed rotating material and current lifecycle/generation checks; the model's `credentialPublished=false` was a property of the model, not a measurement of production transport.
+
+The common user-first protocol remains appropriate to investigate for **new artifact creation**, where the guard can be acquired before resource locks and outside network work. The refresh exception must not be generalized into permission for late inserts, an ignored lifecycle conflict or a retry of already-spent authorization.
 
 ## 8. Protocol and credential boundary to specify next
 
