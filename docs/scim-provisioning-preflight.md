@@ -4,6 +4,10 @@
 
 Reviewed baseline: `4100cdc4c05cf26e9b6d6199ec85789504645ba6`, the evidence follow-up to verified v0.10.1. Work is handled directly in the main thread. Earlier isolated drafts are background research, not accepted specifications. The invite-acceptance/revocation lock inversion found during review was independently fixed and released in [v0.10.1](releases/v0.10.1.md); that fix is not SCIM support.
 
+## Provider-neutral scope
+
+The implementation target is **SCIM 2.0 and standards-based OIDC**, not an Authentik-specific integration. Authentik is the owner's available interoperability test environment, not an architectural dependency or a source of vendor-specific authorization semantics. Identity/group correlation must use an explicit, issuer-bound verified-claim contract rather than guessed vendor defaults. Provider-specific configuration examples and observed deviations must stay separate from the protocol implementation; testing one provider does not establish interoperability with others. An Authentik management API integration is not required for the portal's SCIM server.
+
 ## 1. What must remain true
 
 1. A directory resource is not an authenticated identity. Existing users remain keyed by verified `(issuer, subject)`. Neither email, a local UUID, SCIM `userName`, nor an arbitrary stored claim is sufficient to link an account.
@@ -153,6 +157,8 @@ Remote revocation is deferred in the recommended initial design. A mutable provi
 A single `team_members.source` value cannot represent a manual grant and one or more directory grants simultaneously. Removing one source must not erase or silently recreate another. Recommended direction: explicit provenance layers with a defined effective role; every authorization/list/catalog/count reader must use the intended layer.
 
 There is a separate boundary beyond team roles: `internal/gateways/access.go:groupsOf` returns stored `users.groups` directly, and gateway group grants/list/catalog queries consume that slice. `UpsertLoginUser` overwrites it from OIDC at each sign-in.
+
+The baseline is now covered by `TestOIDCGroupSnapshotChangesOnLoginForAllSessions` in `internal/httpapi/oidc_group_snapshot_integration_test.go`: changing an owned fake IdP's claims alone leaves the stored snapshot/access unchanged; a fresh interactive login updates group-based gateway access for both new and older sessions of the same user. A missing groups claim clears the snapshot. The identity remains the same, and no platform role/team membership is manufactured. This test and existing group/login/grant tests passed three race-enabled repetitions in both actual database-role modes (48s), using owned disposable PostgreSQL. This is **not** live Authentik or SCIM interoperability evidence.
 
 Therefore removing a SCIM-derived team membership does **not** automatically remove access independently granted through a cached OIDC group. The design must explicitly choose whether managed-user direct group grants remain an independent OIDC authority or become SCIM-authoritative. If the latter, it needs a trusted group identifier namespace and a live fence that stale sign-in claims cannot overwrite. Do not claim complete group revocation while updating only team-role rows.
 
