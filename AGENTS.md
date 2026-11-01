@@ -5,12 +5,12 @@ Conventions for building and testing are in [CONTRIBUTING.md](CONTRIBUTING.md), 
 with an AI agent on this repository. For a fresh machine/session, start with
 [docs/agent-handoff.md](docs/agent-handoff.md); confirm its release stop point against `docs/status.md` and GitHub.
 
-- **Current owner-approved batch.** The post-v0.11.0 pause was honored; the owner explicitly requested resumption.
-  SCIM lifecycle (#36) is primary, with existing catalog-search (#49) review as the one bounded side lane. Do not
-  integrate all returned foundations or expand authority implicitly. The main thread allocated decision90/migrations51–52
-  only for the request-authority epoch prerequisite (first personal-key writer), and decision91/migration53 for a distinct
-  irreversible browser-session generation and its readers, and decision92/migrations54–56 for supported SCIM provisioning
-  (docs/scim.md). 57+ are unallocated. Workers may not allocate further decisions/migrations. Preserve partial evidence and keep all four reusable Boat VMs up.
+- **Current owner-approved batch.** SCIM 2.0 provisioning (#36) is implemented and in v0.12.0 release validation
+  (docs/scim.md, docs/releases/v0.12.0.md). Catalog search (#49) is excluded from this release. Do not integrate other
+  returned foundations or expand authority implicitly. The main thread allocated decision90/migrations51–52 (request
+  epochs), decision91/migration53 (browser-session generations) and decision92/migrations54–56 (SCIM provisioning).
+  57+ are unallocated. Workers may not allocate further decisions/migrations. Preserve partial evidence and keep all
+  four reusable Boat VMs up.
 - **Next release stop point.** The owner requests one further pre-1.0 release after SCIM work, then a stop.
   Finish the supported SCIM scope and required gates; include catalog only if independently accepted. After publishing,
   independently verifying and documenting that release, stop development and worker assignments until explicitly
