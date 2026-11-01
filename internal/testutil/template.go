@@ -31,11 +31,16 @@ type dbTemplate struct {
 	mu    sync.Mutex
 }
 
-var (
-	templateOnce sync.Once
-	templateVal  *dbTemplate
-	templateErr  error
-)
+// templates holds one migrated template per role mode and server: tests
+// may switch OMP_TEST_SPLIT_ROLES per subtest within one process, and the
+// two modes need differently owned templates.
+var templates sync.Map // key -> *templateEntry
+
+type templateEntry struct {
+	once sync.Once
+	val  *dbTemplate
+	err  error
+}
 
 // staleTemplateAge bounds how long a template can belong to a running test
 // process: far beyond any package's 20-minute budget.
@@ -43,11 +48,14 @@ const staleTemplateAge = time.Hour
 
 func migratedTemplate(t testing.TB, ctx context.Context, split bool) *dbTemplate {
 	t.Helper()
-	templateOnce.Do(func() { templateVal, templateErr = buildTemplate(ctx, split) })
-	if templateErr != nil {
-		t.Fatalf("migrated template database: %v", templateErr)
+	key := strconv.FormatBool(split) + " " + DatabaseURL()
+	v, _ := templates.LoadOrStore(key, &templateEntry{})
+	e := v.(*templateEntry)
+	e.once.Do(func() { e.val, e.err = buildTemplate(ctx, split) })
+	if e.err != nil {
+		t.Fatalf("migrated template database: %v", e.err)
 	}
-	return templateVal
+	return e.val
 }
 
 func buildTemplate(ctx context.Context, split bool) (*dbTemplate, error) {

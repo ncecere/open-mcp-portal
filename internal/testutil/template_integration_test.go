@@ -104,3 +104,18 @@ func first(s []string) []string {
 	}
 	return s
 }
+
+// Tests switch role modes per subtest within one process; each mode must get
+// its own correctly owned template.
+func TestTemplatePerRoleModeInOneProcess(t *testing.T) {
+	for _, split := range []string{"0", "1", "0", "1"} {
+		t.Run("split="+split, func(t *testing.T) {
+			t.Setenv("OMP_TEST_SPLIT_ROLES", split)
+			pool, _ := NewDB(t)
+			var n int
+			if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM users`).Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
