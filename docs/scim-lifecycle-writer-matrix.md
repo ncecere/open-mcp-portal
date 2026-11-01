@@ -1,5 +1,7 @@
 # SCIM lifecycle: current-source writer and reader matrix
 
+> **Design history.** Supported SCIM provisioning is implemented as [decision 92](decisions.md); see [SCIM provisioning](scim.md) for current behavior. This page records the preflight analysis and is not current instruction.
+
 **Working inventory, not a total-lock proof, provisioning schema allocation or SCIM support.** This accompanies [the preflight](scim-provisioning-preflight.md) for #36. Baseline is independently verified v0.11.0 plus evidence follow-up `cc44f0433c372785dd151f2425a222d812b364c6`. The owner resumed SCIM as the primary task; catalog-search review is the independent side lane. [Decision90/migrations51–52](request-authority-epochs.md) separately cover only the user request-epoch prerequisite and first personal-key writer. No SCIM router, token or provisioning-resource schema exists.
 
 ## Evidence terminology

@@ -59,14 +59,14 @@ Base URL `/scim/v2`, `application/scim+json`, bearer token.
 - **Filtering:** `attribute eq "value"` on `userName`, `externalId` and `id` (users) and `displayName`, `externalId` and `id` (groups). Other filters are `400 invalidFilter`.
 - **Pagination:** `startIndex` (below 1 means 1) and `count` (negative means 0, at most 200). No sorting.
 - **Versions:** each resource has a weak ETag (`W/"n"`); `If-Match` on `PUT`, `PATCH` and `DELETE` is honoured (`412` on mismatch).
-- `excludedAttributes=members` omits group members.
+- An empty group is returned with `"members": []`; `excludedAttributes=members` omits members.
 - Discovery: `/ServiceProviderConfig`, `/ResourceTypes`, `/Schemas`. Bulk, sorting and password change are not supported.
 
 A PATCH without the top-level `schemas` member is accepted (authentik 2025.x sends attribute updates that way); one that declares other schemas without PatchOp is refused.
 
 ### Provider notes
 
-- **authentik 2025.8** (tested with a real local push): users, enrollment by OIDC subject (set the OIDC provider's subject mode and the SCIM `externalId` mapping to the same value, for example the username), deactivation, reactivation and attribute updates work. Deleting a user in authentik did not send a SCIM `DELETE` in our test (authentik's own task looked the deleted user up again and stopped). **Deactivate a person in authentik before deleting them**, so the portal suspends them at once. A deactivated person stays suspended; their credentials are kept rather than cleaned up, because clean-up follows only a SCIM `DELETE`.
+- **authentik 2025.8** (tested with a real local push): users, enrollment by OIDC subject (set the OIDC provider's subject mode and the SCIM `externalId` mapping to the same value, for example the username), deactivation, reactivation, attribute updates, group membership changes and group-to-team-role mappings work. Deleting a user in authentik did not send a SCIM `DELETE` in our test (authentik's own task looked the deleted user up again and stopped). **Deactivate a person in authentik before deleting them**, so the portal suspends them at once. A deactivated person stays suspended; their credentials are kept rather than cleaned up, because clean-up follows only a SCIM `DELETE`.
 
 Errors use the SCIM error schema (`status`, `scimType`, `detail`). Requests count against the per-credential request limit (`REQUESTS_PER_MINUTE`).
 

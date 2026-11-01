@@ -225,8 +225,9 @@ func TestSCIMProtocolSurfaceAndCredentialIsolation(t *testing.T) {
 	e.mustSCIM(200, "PATCH", "/Groups/"+gid, map[string]any{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:PatchOp"},
 		"Operations": []any{map[string]any{"op": "remove", "path": `members[value eq "` + id + `"]`}, map[string]any{"op": "add", "path": "members", "value": []any{map[string]any{"value": id}}},
 			map[string]any{"op": "remove", "path": "members", "value": []any{map[string]any{"value": id}}}}})
-	// An empty multi-valued attribute may be omitted (RFC 7643 2.5).
-	if g := e.mustSCIM(200, "GET", "/Groups/"+gid, nil); g["members"] != nil && len(g["members"].([]any)) != 0 {
+	// An empty group still returns "members": [] (authentik needs it to
+	// compute additions); excludedAttributes alone omits it.
+	if g := e.mustSCIM(200, "GET", "/Groups/"+gid, nil); g["members"] == nil || len(g["members"].([]any)) != 0 {
 		t.Fatalf("ordered member operations ended with %v", g["members"])
 	}
 	// authentik 2025.8's attribute update: no top-level schemas, path-less

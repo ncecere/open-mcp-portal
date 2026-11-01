@@ -20,14 +20,17 @@ import (
 
 // groupResource is the representation of a Group (RFC 7643 4.2).
 type groupResource struct {
-	Schemas     []string         `json:"schemas"`
-	ID          string           `json:"id"`
-	ExternalID  *string          `json:"externalId,omitempty"`
-	DisplayName string           `json:"displayName"`
-	Members     []map[string]any `json:"members,omitempty"`
-	Meta        map[string]any   `json:"meta"`
-	version     int64
-	loc         string
+	Schemas     []string `json:"schemas"`
+	ID          string   `json:"id"`
+	ExternalID  *string  `json:"externalId,omitempty"`
+	DisplayName string   `json:"displayName"`
+	// Members is omitted only when excluded; an empty group returns
+	// "members": [] (equivalent per RFC 7643 2.5), which some clients
+	// (authentik 2025.x) need before they compute membership additions.
+	Members *[]map[string]any `json:"members,omitempty"`
+	Meta    map[string]any    `json:"meta"`
+	version int64
+	loc     string
 }
 
 func (g groupResource) etag() string     { return etag(g.version) }
@@ -38,16 +41,17 @@ func groupView(g dbgen.ScimGroup, members []dbgen.ListSCIMGroupMembersRow, withM
 	out := groupResource{Schemas: []string{SchemaGroup}, ID: g.ID.String(), ExternalID: g.ExternalID, DisplayName: g.DisplayName,
 		Meta: meta("Group", g.CreatedAt, g.UpdatedAt, loc, g.Version), version: g.Version, loc: loc}
 	if withMembers {
-		out.Members = []map[string]any{}
+		list := []map[string]any{}
 		for _, m := range members {
 			if m.GroupID == g.ID {
 				display := m.DisplayName
 				if display == "" {
 					display = m.UserName
 				}
-				out.Members = append(out.Members, map[string]any{"value": m.ID.String(), "display": display, "$ref": base + "/Users/" + m.ID.String(), "type": "User"})
+				list = append(list, map[string]any{"value": m.ID.String(), "display": display, "$ref": base + "/Users/" + m.ID.String(), "type": "User"})
 			}
 		}
+		out.Members = &list
 	}
 	return out
 }
