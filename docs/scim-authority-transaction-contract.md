@@ -1,0 +1,51 @@
+# SCIM: selected authority transaction protocol
+
+**Selected implementation direction, not accepted SCIM functionality or a proved application-wide lock graph.** This narrows the [preflight](scim-provisioning-preflight.md) and [writer census](scim-lifecycle-writer-matrix.md) to one protocol for #36. No decision90/migration51, persistent lifecycle fields, provisioner token, route or discovery support is allocated here. The owner requests completion of SCIM, one further independently verified pre-1.0 release, then a stop; retained workers stay up.
+
+The current `internal/authoritytx` implementation is an **unwired canonical-entry primitive only**. Its PostgreSQL tests are not service-level lifecycle proofs. It must not be put around a provider network operation or an existing resource transaction as a shortcut to the protocol below.
+
+## One logical gate, explicit transaction capability
+
+Use one portal-wide transaction-scoped advisory RW gate **G**, shared by all serving/background replicas on that database. Do not add the earlier candidate's new identity/email/admin-set/sorted-user logical lock families. Their discovery/order problem is avoided by exclusive serialization of the complete policy-writer class, not by assuming user UUIDs or email are unique authorization evidence.
+
+| Entry class | Selected mode and placement |
+| --- | --- |
+| Verified login completion, including user/email upsert, bootstrap and invite acceptance | Exclusive before eligibility/discovery and persistent writes; ID-token exchange/verification stays outside |
+| Manual/directory standing, protected role/owner/membership/invite changes, adoption/unlink/re-enrollment, group/mapping/bridge and shared access-policy changes | Exclusive before resources; no shared-to-exclusive upgrade |
+| New personal authority: keys, OAuth consent/code/token issuance and grace repeat, secret/consent links and grants, approval actions/spend, task reservation/activation/input/finish | Shared before ordinary resources; validate admitted request and current eligibility, not merely gate possession |
+| Human approval-rule policy changes | Exclusive selected at entry; preserve actor KEY SHARE before the actual approval EXCLUSIVE TABLE NOWAIT fence |
+| Nil-actor approval Begin/Consume/CancelBound | Explicit shared admission before context; nil audit actor is not a lifecycle exemption |
+| Existing connection wait/completion and authorizer reconsent/config paths | Full original resource prefix **before nonblocking TRY G**, followed by current original-binding validation; no G during provider I/O or its connection wait |
+| Bounded bulk provider/server reset | Complete bounded physical closure before TRY **exclusive** G, then fresh closure equality; busy/overflow/phantom means rollback/refusal, not successful reduction |
+| Exact-lifetime cleanup | Bounded shared batches with child-aware nonblocking acquisition; exclusive stable final-zero/re-enrollment transition |
+| Strict history/exact expiry/terminal-only result | Individually classified exception only: no new authority, input, activation, extension, rebind or private publication |
+
+All constituents use the **same actual registered pgx transaction and scoped queries**. Internal effective-role/reachability readers and mutation helpers take that capability; public pool-owning methods must not recursively acquire G. In particular the pool-backed provider `Reachable` callback must be replaced for transactional use. A context flag or a queries object from an arbitrary pool is not proof. Preserve existing UUID-sorted admin/TEAM/invite resource order, physical FK compatibility and last-admin/protected-role checks. G does not make email an identity or remove ambiguity.
+
+## Separate first fence from physical cleanup
+
+The first directory fence takes exclusive G before any resource. Its physical footprint is a compatible **non-key USER update**, adopted-link standing, request epoch, irreversible session-revocation generation, original enrollment lifetime and a fresh immutable cleanup-job identity and audit. It must commit while a real fake-provider exchange remains blocked. It must not reuse `platform.UpdateUser`'s active-admin FOR UPDATE set or session DELETE/cascade footprint, enumerate artifacts or call a provider.
+
+Pre-G shared reconnect can retain USER KEY SHARE/SESSION while waiting on a network-held connection. The first fence must remain compatible with those locks and must not delete that session. Protected checks use the nonlocking eligible set stabilized by exclusive G. Do not introduce unique-key-changing fence updates that silently require a stronger physical USER lock. A timeout of the fence is **not** a committed fence.
+
+Keep four values distinct: admitted request-authority epoch; session revocation generation; immutable deletion/enrollment lifetime; and current directory/group policy generation. A fresh request may use an otherwise eligible preserved reusable credential after reversible reactivation. An old cookie, admitted request, consumed code/state, receipt or input cannot inherit that epoch. Re-enrollment cannot redirect an old cleanup job or revive a former-admin creator-bound platform token. Team publisher/service identities retain their independent ownership; shared `connected_by` is nevertheless a live human consent authorizer, not merely history.
+
+OIDC login state predates knowing the user: the final contract also needs a profile/directory login-policy observation so a pre-fence pending sign-in cannot silently enroll a new lifetime after re-enrollment. Verified issuer/subject remains the identity; no email/stored-claim fallback. Disabled/legacy login-state handling and explicit post-cleanup enrollment require their own tests.
+
+## Wait, publication and bulk-closure conditions
+
+Canonical gated transactions are DB-only and have an explicit single total deadline and per-lock bound, including admission/implicit FK/unique/advisory waits. Numerical production bounds remain to be chosen and proved; the prototype tests' values are **not** a production SLO or a changed test budget. No helper resets the deadline. Existing network-held paths use the full original prefix then TRY G, never a blocking G after resources. Preserve SERVER-before-CONNECTION and original session/context ordering rather than drawing a convenient new inverse.
+
+The selected bulk treatment is refusal-capable full-closure prelocking, not simultaneous implementation of a new provider-generation scheme. Include linked providers, affected SERVERs, personal/shared CONNECTIONs, state/grant/assignment/cascade children and current reset triggers. TRY exclusive G stabilizes creators through the final fresh comparison. A shared-mode comparison would allow a new shared creator afterward. Reject an unknown, oversized, changed or busy closure without truncating it or claiming successful reduction. This deliberately does not promise that a config edit completes while an affected refresh is in flight.
+
+Refresh may preserve narrowly allowed rotated material only on the exact existing original-life row, never insert/reconnect/activate/rebind. A typed nonpublishable outcome must suppress real credential return, already-fresh shortcuts, narrow-cache hits/puts, retry/setup/identity and transport. A parent SKIP LOCKED does not skip locked cascading children. Cleanup reports incomplete, releases, and recounts every target-owned artifact at the stable lifetime barrier. No `created_at` cutoff or `affected=0` completion inference.
+
+Consumed/uncertain approval, OAuth code/state and task input are never restored or automatically retried. A failed/uncertain commit returns no publication permit. Already-admitted remote work cannot be recalled; no lock is held through a network response. Current personal disconnection now follows the existing shared post-commit best-effort revocation pattern; that prerequisite does not supply directory enforcement.
+
+## Implemented primitive and remaining acceptance
+
+`authoritytx.Run` currently supplies only canonical shared/exclusive admission, caller-supplied bounds, registered transaction queries, scope closure, rejection of nested public entries and a result released only after successful commit. It has **no callers**. The existing-resource prelock/TRY API, persistent eligibility/bindings, effective readers and publication handling are not implemented.
+
+Six real-PostgreSQL primitive tests passed normal/race in both actual required-database role modes: shared concurrency/exclusive contention and release; registered single-connection scope/no recursive pool entry/local-setting restoration; exact deferred commit failure after successful body; exact cancellation; callback refusal; and positive sub-millisecond lock bounds never becoming unlimited. Original test-package20-minute budgets were unchanged. These do not prove actual login/adoption/promotions, first-fence progress, provider/cache suppression, task/approval spend, groups, cleanup or interoperability.
+
+Before supported SCIM/enablement, implement and execute the actual-service barrier matrix in both authenticated modes, including transitive waits, nil-actor approvals, pool-backed nested readers, blocked-provider first-fence commit, all late authority/publication paths, session revocation, manual-plus-directory sources/direct group bridges, child-aware cleanup/final zero, protected principals, versioned legacy envelopes and actual old-image disabled-mode/ciphertext compatibility. Complete the RFC7643/7644 capability/token profile separately; no token-only/discovery foundation is supported SCIM. Drain older nonparticipating writers before enforcement. Schema/route allocation and acceptance remain separately reviewed gates, not consequences of a passing primitive.
