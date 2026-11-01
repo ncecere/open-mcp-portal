@@ -7,7 +7,7 @@ numbers and file paths are suggestions, not instructions to overwrite existing c
 
 ## Current batch
 
-**Paused after v0.13.0:** catalog search (#49 slice), #38/#70 groundwork and dependency updates shipped and were independently verified. Development is paused until the owner resumes it.
+**Paused after v0.13.1:** v0.13.0 shipped catalog search (#49 slice), #38/#70 groundwork and dependency updates; v0.13.1 refreshed the builder image. Development is paused until the owner resumes it. Parked: `parked/terraform-provider`, `parked/keyprovider-transit`.
 
 **v0.11.0 (previous release) is fully published and independently verified**, including final main/tag/follow-up CI, artifacts and actual runtime proofs; see [release notes](releases/v0.11.0.md). [#71 is closed with scoped acceptance](https://github.com/ncecere/open-mcp-portal/issues/71#issuecomment-6549256409). #47 remains partial: Action shipped, Terraform/resources/delete-scope/vendor gates unfinished. Other exported corpus/audit/key-provider branches remain unmerged and unaccepted, including preserved full-suite failures and partial diagnostic evidence. Keep all reusable Boat VMs up; do not automatically integrate those branches or broaden the approved batch.
 
