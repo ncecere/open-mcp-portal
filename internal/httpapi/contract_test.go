@@ -42,7 +42,7 @@ func TestRoutesMatchOpenAPI(t *testing.T) {
 		// The MCP endpoint, the identity keys and the OAuth endpoints are
 		// protocols of their own, outside the management API's contract.
 		if strings.HasPrefix(r.Path, "/mcp/") || strings.HasPrefix(r.Path, "/.well-known/") || strings.HasPrefix(r.Path, "/oauth/") ||
-			strings.HasPrefix(r.Path, "/connect/") {
+			strings.HasPrefix(r.Path, "/connect/") || strings.HasPrefix(r.Path, "/scim/") {
 			continue
 		}
 		if served[r.pattern()] {

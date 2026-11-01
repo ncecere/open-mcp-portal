@@ -31,6 +31,7 @@ describe("navigation lists", () => {
       "/admin",
       "/admin/users",
       "/admin/teams",
+      "/admin/provisioning",
       "/admin/servers",
       "/admin/publishing",
       "/admin/networks",

@@ -18,6 +18,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/auth"
 	"github.com/ncecere/open-mcp-portal/internal/capture"
 	"github.com/ncecere/open-mcp-portal/internal/config"
+	"github.com/ncecere/open-mcp-portal/internal/httpapi"
 	"github.com/ncecere/open-mcp-portal/internal/httpx"
 	"github.com/ncecere/open-mcp-portal/internal/registry"
 	"github.com/ncecere/open-mcp-portal/internal/secrets"
@@ -279,12 +280,12 @@ func newMatrixEnv(t *testing.T) *matrixEnv { return newMatrixEnvWith(t, nil) }
 // newMatrixEnvWith is newMatrixEnv with extra configuration.
 func newMatrixEnvWith(t *testing.T, mutate func(*testConfig)) *matrixEnv {
 	smtp := matrixSMTP(t)
-	e := &matrixEnv{t: t, n: new(int), app: newTestApp(t, func(c *config.Config) {
+	e := &matrixEnv{t: t, n: new(int), app: newTestAppDeps(t, func(c *config.Config) {
 		smtp(c)
 		if mutate != nil {
 			mutate(c)
 		}
-	}), fakeURL: testutil.NewFakeMCP(t).URL()}
+	}, testutil.Logger(), func(d *httpapi.Deps) { d.SCIM.Issuer = matrixSCIMIssuer }), fakeURL: testutil.NewFakeMCP(t).URL()}
 	if err := quiesceApprovalMatrix(context.Background(), testutil.OwnerPool(t, e.app.Pool)); err != nil {
 		t.Fatalf("quiesce matrix maintenance: %v", err)
 	}

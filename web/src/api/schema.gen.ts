@@ -3543,6 +3543,195 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/provisioning": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * SCIM provisioning setup (platform admins and auditors, browser session only)
+         * @description 404 directory_not_found until a platform admin sets it up. issuerMatches is false when single sign-on now uses another issuer than the one the directory was bound to; the directory then can't be enabled.
+         */
+        get: operations["adminGetProvisioning"];
+        put?: never;
+        /**
+         * Set up SCIM provisioning, bound to the configured OIDC issuer (platform admins, browser session only)
+         * @description 409 oidc_required without single sign-on; 412 revision_conflict when it already exists.
+         */
+        post: operations["adminCreateProvisioning"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Enable or disable provisioning and choose the enrollment policy (platform admins, browser session only)
+         * @description enrollment required refuses a new sign-in identity that has no active provisioned resource. Existing unmanaged people keep signing in. 409 issuer_changed when enabling a directory bound to another issuer.
+         */
+        patch: operations["adminUpdateProvisioning"];
+        trace?: never;
+    };
+    "/v1/admin/provisioning/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Provisioning tokens, newest first; never the secret (platform admins and auditors, browser session only) */
+        get: operations["adminListProvisioningTokens"];
+        put?: never;
+        /**
+         * Create a provisioning token for the identity provider (platform admins, browser session only); the secret is shown once
+         * @description Prefix ompscim_. It authenticates only /scim/v2 (never /v1 or /mcp), is bound to the directory rather than its creator, and always expires (expiresInDays 1-365, default 90). 409 too_many_tokens (at most 5 active).
+         */
+        post: operations["adminCreateProvisioningToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/provisioning/tokens/{tokenId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tokenId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke a provisioning token at once (platform admins, browser session only) */
+        delete: operations["adminRevokeProvisioningToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/provisioning/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Provisioned resources and the directory-managed people (platform admins and auditors, browser session only)
+         * @description A resource links to a portal person only when its externalId equals that person's verified sign-in subject. candidate is an existing unmanaged person with that subject, who an admin can adopt.
+         */
+        get: operations["adminListProvisionedUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/provisioning/users/{scimUserId}/adopt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scimUserId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Put an existing person under directory control, or re-enroll a deprovisioned one (platform admins, browser session only)
+         * @description The person must have signed in with the resource's externalId as subject. 409 protected_principal for platform admins and team owners, cleanup_pending while a deprovisioning clean-up runs, already_linked, no_match.
+         */
+        post: operations["adminAdoptProvisionedUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/provisioning/people/{userId}/unlink": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Return a directory-managed person to manual control (platform admins, browser session only)
+         * @description Only the manual status applies afterwards; memberships the directory created become manual. 409 not_linked, cleanup_pending.
+         */
+        post: operations["adminUnlinkProvisionedPerson"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/provisioning/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Directory groups (platform admins and auditors, browser session only) */
+        get: operations["adminListProvisionedGroups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/provisioning/mappings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Directory group to team role mappings (platform admins and auditors, browser session only) */
+        get: operations["adminListProvisioningMappings"];
+        put?: never;
+        /**
+         * Give members of a directory group a team role (platform admins, browser session only)
+         * @description Roles admin, editor or member; owners are never granted by a directory. Applied to linked members at once. Memberships someone added by hand are never changed. 409 mapping_exists.
+         */
+        post: operations["adminCreateProvisioningMapping"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/provisioning/mappings/{mappingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mappingId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a mapping and the memberships only it created (platform admins, browser session only) */
+        delete: operations["adminDeleteProvisioningMapping"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/automation-tokens": {
         parameters: {
             query?: never;
@@ -4163,6 +4352,8 @@ export interface components {
             displayName: string;
             platformRole: components["schemas"]["PlatformRole"];
             status: components["schemas"]["UserStatus"];
+            manualStatus?: components["schemas"]["UserStatus"];
+            directoryStanding?: components["schemas"]["DirectoryStanding"];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -7387,6 +7578,140 @@ export interface components {
              * @enum {string|null}
              */
             blockedReason?: "creator_not_platform_admin" | null;
+        };
+        /**
+         * @description optional keeps unmanaged sign-in for new identities without a resource; required refuses them
+         * @enum {string}
+         */
+        ProvisioningEnrollment: "optional" | "required";
+        /**
+         * @description none is not directory managed; inactive is a reversible directory deactivation; deleted ends that directory life until an admin re-enrolls the person after clean-up
+         * @enum {string}
+         */
+        DirectoryStanding: "none" | "active" | "inactive" | "deleted";
+        ProvisioningSettings: {
+            enabled: boolean;
+            enrollment: components["schemas"]["ProvisioningEnrollment"];
+        };
+        ProvisioningDirectory: {
+            /** Format: uuid */
+            id: string;
+            /** @description The verified OIDC issuer it is bound to; never changes */
+            issuer: string;
+            issuerMatches: boolean;
+            enabled: boolean;
+            enrollment: components["schemas"]["ProvisioningEnrollment"];
+            /** @description The SCIM 2.0 base URL to give the identity provider */
+            scimBaseUrl: string;
+            revision: components["schemas"]["Revision"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ProvisioningToken: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @example ompscim_AbCdEfGh */
+            prefix: string;
+            /** @enum {string} */
+            status: "active" | "expired" | "revoked";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            revokedAt?: string | null;
+            /** Format: date-time */
+            lastUsedAt?: string | null;
+            createdByName?: string | null;
+        };
+        ProvisioningTokenCreate: {
+            name: string;
+            /** Format: int32 */
+            expiresInDays?: number;
+        };
+        ProvisioningTokenCreated: components["schemas"]["ProvisioningToken"] & {
+            /** @description The token, shown once */
+            secret: string;
+        };
+        ProvisionedPersonRef: {
+            /** Format: uuid */
+            id: string;
+            email: string;
+            displayName: string;
+            status: components["schemas"]["UserStatus"];
+            directoryStanding: components["schemas"]["DirectoryStanding"];
+        };
+        ProvisionedUser: {
+            /** Format: uuid */
+            id: string;
+            userName: string;
+            externalId?: string | null;
+            active: boolean;
+            displayName: string;
+            email: string;
+            linked?: components["schemas"]["ProvisionedPersonRef"];
+            candidate?: {
+                /** Format: uuid */
+                id: string;
+                email: string;
+                adoptable: boolean;
+                /** @enum {string} */
+                reason?: "protected_principal" | "cleanup_pending" | "already_managed";
+            };
+        };
+        ManagedPerson: {
+            /** Format: uuid */
+            id: string;
+            email: string;
+            displayName: string;
+            status: components["schemas"]["UserStatus"];
+            manualStatus: components["schemas"]["UserStatus"];
+            directoryStanding: components["schemas"]["DirectoryStanding"];
+            /** Format: uuid */
+            scimUserId?: string | null;
+            cleanupPending: boolean;
+        };
+        ProvisionedUsers: {
+            resources: components["schemas"]["ProvisionedUser"][];
+            people: components["schemas"]["ManagedPerson"][];
+            /** @description More than 500 resources exist; the identity provider is the source of the full list */
+            truncated: boolean;
+        };
+        ProvisionedGroup: {
+            /** Format: uuid */
+            id: string;
+            displayName: string;
+            externalId?: string | null;
+            /** Format: int64 */
+            memberCount: number;
+        };
+        ProvisioningMapping: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            groupId: string;
+            groupName: string;
+            /** Format: uuid */
+            teamId: string;
+            teamSlug: string;
+            teamName: string;
+            /** @enum {string} */
+            role: "admin" | "editor" | "member";
+            /** Format: int64 */
+            memberCount: number;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ProvisioningMappingCreate: {
+            /** Format: uuid */
+            groupId: string;
+            /** Format: uuid */
+            teamId: string;
+            /** @enum {string} */
+            role: "admin" | "editor" | "member";
         };
         AutomationTokenCreate: {
             /** @example CI publisher */
@@ -13550,6 +13875,319 @@ export interface operations {
             };
             401: components["responses"]["ErrorReply"];
             429: components["responses"]["ErrorReply"];
+        };
+    };
+    adminGetProvisioning: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Directory */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ProvisioningDirectory"];
+                    };
+                };
+            };
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+        };
+    };
+    adminCreateProvisioning: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProvisioningSettings"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ProvisioningDirectory"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            412: components["responses"]["ErrorReply"];
+        };
+    };
+    adminUpdateProvisioning: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProvisioningSettings"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ProvisioningDirectory"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            412: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+        };
+    };
+    adminListProvisioningTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tokens */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ProvisioningToken"][];
+                    };
+                };
+            };
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+        };
+    };
+    adminCreateProvisioningToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProvisioningTokenCreate"];
+            };
+        };
+        responses: {
+            /** @description Created; the secret is shown only now */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ProvisioningTokenCreated"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+        };
+    };
+    adminRevokeProvisioningToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tokenId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+        };
+    };
+    adminListProvisionedUsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Provisioned people */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ProvisionedUsers"];
+                    };
+                };
+            };
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+        };
+    };
+    adminAdoptProvisionedUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scimUserId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+        };
+    };
+    adminUnlinkProvisionedPerson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+        };
+    };
+    adminListProvisionedGroups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Groups */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ProvisionedGroup"][];
+                    };
+                };
+            };
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+        };
+    };
+    adminListProvisioningMappings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Mappings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ProvisioningMapping"][];
+                    };
+                };
+            };
+            403: components["responses"]["ErrorReply"];
+        };
+    };
+    adminCreateProvisioningMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProvisioningMappingCreate"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ProvisioningMapping"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+        };
+    };
+    adminDeleteProvisioningMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mappingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OkReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
         };
     };
     adminListAutomationTokens: {

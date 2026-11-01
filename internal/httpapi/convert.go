@@ -13,7 +13,7 @@ import (
 // session digests) cannot leak by accident.
 
 func toAPIUser(u dbgen.User) apitypes.User {
-	return apitypes.User{
+	out := apitypes.User{
 		Id:           u.ID,
 		Email:        u.Email,
 		DisplayName:  u.DisplayName,
@@ -23,6 +23,11 @@ func toAPIUser(u dbgen.User) apitypes.User {
 		CreatedAt:    u.CreatedAt,
 		LastLoginAt:  u.LastLoginAt,
 	}
+	if u.ManualStatus != "" {
+		ms, ds := apitypes.UserStatus(u.ManualStatus), apitypes.DirectoryStanding(u.DirectoryStanding)
+		out.ManualStatus, out.DirectoryStanding = &ms, &ds
+	}
+	return out
 }
 
 func toAPITeam(t dbgen.Team) apitypes.Team {

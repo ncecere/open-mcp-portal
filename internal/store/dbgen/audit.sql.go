@@ -130,6 +130,13 @@ CROSS JOIN LATERAL (
         WHEN 'oauth_grant' THEN (SELECT og.client_name || ' · ' || g.name FROM oauth_grants og JOIN gateways g ON g.id = og.gateway_id
                                  WHERE og.id = ids.target_uuid)
         WHEN 'automation_token' THEN (SELECT at.name FROM automation_tokens at WHERE at.id = ids.target_uuid)
+        WHEN 'scim_directory' THEN 'Provisioning'
+        WHEN 'scim_token' THEN (SELECT st.name FROM scim_tokens st WHERE st.id = ids.target_uuid)
+        WHEN 'scim_user' THEN (SELECT su.user_name FROM scim_users su WHERE su.id = ids.target_uuid)
+        WHEN 'scim_group' THEN (SELECT sg.display_name FROM scim_groups sg WHERE sg.id = ids.target_uuid)
+        WHEN 'scim_group_mapping' THEN (SELECT sg.display_name || ' · ' || t.name FROM scim_group_mappings sm
+                                        JOIN scim_groups sg ON sg.id = sm.group_id JOIN teams t ON t.id = sm.team_id WHERE sm.id = ids.target_uuid)
+        WHEN 'oidc_identity' THEN 'Sign-in identity'
         WHEN 'notification_destination' THEN (SELECT nd.name FROM notification_destinations nd WHERE nd.id = ids.target_uuid)
         WHEN 'service_connection' THEN (SELECT sc.name FROM service_connections sc WHERE sc.id = ids.target_uuid)
         WHEN 'service_account' THEN (SELECT sa.name FROM service_accounts sa WHERE sa.id = ids.target_uuid)

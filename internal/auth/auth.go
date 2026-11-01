@@ -22,6 +22,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/config"
 	"github.com/ncecere/open-mcp-portal/internal/httpx"
 	"github.com/ncecere/open-mcp-portal/internal/ratelimit"
+	"github.com/ncecere/open-mcp-portal/internal/scim"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 )
@@ -82,6 +83,10 @@ type Service struct {
 	limiter ratelimit.Store
 	log     *slog.Logger
 	now     func() time.Time
+
+	// Provisioning, when set, gates sign-ins for directory enrollment
+	// (decision 92). It runs in the sign-in transaction.
+	Provisioning *scim.Service
 
 	oidcMu sync.Mutex
 	oidc   *oidcClient // discovered lazily so an IdP outage cannot stop the API from starting

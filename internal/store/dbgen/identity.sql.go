@@ -104,7 +104,7 @@ func (q *Queries) DeleteUserSessions(ctx context.Context, userID uuid.UUID) erro
 }
 
 const getSessionUser = `-- name: GetSessionUser :one
-SELECT sessions.id, sessions.user_id, sessions.token_digest, sessions.csrf_token, sessions.user_agent, sessions.client_ip, sessions.created_at, sessions.expires_at, sessions.last_seen_at, sessions.session_generation, users.id, users.oidc_issuer, users.oidc_subject, users.email, users.display_name, users.platform_role, users.status, users.claims, users.revision, users.created_at, users.updated_at, users.last_login_at, users.groups, users.email_verified, users.request_epoch, users.session_generation
+SELECT sessions.id, sessions.user_id, sessions.token_digest, sessions.csrf_token, sessions.user_agent, sessions.client_ip, sessions.created_at, sessions.expires_at, sessions.last_seen_at, sessions.session_generation, users.id, users.oidc_issuer, users.oidc_subject, users.email, users.display_name, users.platform_role, users.status, users.claims, users.revision, users.created_at, users.updated_at, users.last_login_at, users.groups, users.email_verified, users.request_epoch, users.session_generation, users.manual_status, users.directory_standing
 FROM sessions
 JOIN users ON users.id = sessions.user_id
 WHERE sessions.token_digest = $1
@@ -156,12 +156,14 @@ func (q *Queries) GetSessionUser(ctx context.Context, arg GetSessionUserParams) 
 		&i.User.EmailVerified,
 		&i.User.RequestEpoch,
 		&i.User.SessionGeneration,
+		&i.User.ManualStatus,
+		&i.User.DirectoryStanding,
 	)
 	return i, err
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation FROM users WHERE id = $1
+SELECT id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation, manual_status, directory_standing FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
@@ -184,6 +186,8 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.EmailVerified,
 		&i.RequestEpoch,
 		&i.SessionGeneration,
+		&i.ManualStatus,
+		&i.DirectoryStanding,
 	)
 	return i, err
 }
@@ -349,7 +353,7 @@ const setPlatformRole = `-- name: SetPlatformRole :one
 UPDATE users
 SET platform_role = $1, revision = revision + 1, updated_at = now()
 WHERE id = $2
-RETURNING id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation
+RETURNING id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation, manual_status, directory_standing
 `
 
 type SetPlatformRoleParams struct {
@@ -377,6 +381,8 @@ func (q *Queries) SetPlatformRole(ctx context.Context, arg SetPlatformRoleParams
 		&i.EmailVerified,
 		&i.RequestEpoch,
 		&i.SessionGeneration,
+		&i.ManualStatus,
+		&i.DirectoryStanding,
 	)
 	return i, err
 }
@@ -436,7 +442,7 @@ SET email         = EXCLUDED.email,
     groups        = EXCLUDED.groups,
     last_login_at = now(),
     updated_at    = now()
-RETURNING id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation
+RETURNING id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation, manual_status, directory_standing
 `
 
 type UpsertLoginUserParams struct {
@@ -476,6 +482,8 @@ func (q *Queries) UpsertLoginUser(ctx context.Context, arg UpsertLoginUserParams
 		&i.EmailVerified,
 		&i.RequestEpoch,
 		&i.SessionGeneration,
+		&i.ManualStatus,
+		&i.DirectoryStanding,
 	)
 	return i, err
 }

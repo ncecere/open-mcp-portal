@@ -181,6 +181,9 @@ func isTrusted(addr netip.Addr, trusted []netip.Prefix) bool {
 // Fail renders an *apperr.Error with its status and code; anything else is
 // logged and becomes a generic 500.
 func Fail(w http.ResponseWriter, r *http.Request, err error) {
+	if e, ok := apperr.DirectoryGuard(err); ok {
+		err = e
+	}
 	if e, ok := apperr.As(err); ok {
 		if e.RetryAfter > 0 {
 			secs := int((e.RetryAfter + time.Second - 1) / time.Second)

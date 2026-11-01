@@ -56,6 +56,8 @@ tags:
   description: Hourly usage rollups of calls through gateways
 - name: notifications
   description: In-app inbox, preferences, webhook destinations and email status (docs/notifications.md)
+- name: provisioning
+  description: SCIM 2.0 directory provisioning setup (docs/scim.md, decision 92); browser session only
 - name: automation-tokens
   description: Tokens for CI and scripts that call /v1 (docs/automation-tokens.md); never valid for /mcp
 - name: approvals
@@ -6500,6 +6502,355 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '429':
           $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning:
+    get:
+      tags:
+      - provisioning
+      operationId: adminGetProvisioning
+      summary: SCIM provisioning setup (platform admins and auditors, browser session only)
+      description: 404 directory_not_found until a platform admin sets it up. issuerMatches is false when single sign-on
+        now uses another issuer than the one the directory was bound to; the directory then can't be enabled.
+      responses:
+        '200':
+          description: Directory
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProvisioningDirectory'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags:
+      - provisioning
+      operationId: adminCreateProvisioning
+      summary: Set up SCIM provisioning, bound to the configured OIDC issuer (platform admins, browser session only)
+      description: 409 oidc_required without single sign-on; 412 revision_conflict when it already exists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisioningSettings'
+      responses:
+        '201':
+          description: Created
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProvisioningDirectory'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+    patch:
+      tags:
+      - provisioning
+      operationId: adminUpdateProvisioning
+      summary: Enable or disable provisioning and choose the enrollment policy (platform admins, browser session only)
+      description: enrollment required refuses a new sign-in identity that has no active provisioned resource. Existing
+        unmanaged people keep signing in. 409 issuer_changed when enabling a directory bound to another issuer.
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisioningSettings'
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProvisioningDirectory'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning/tokens:
+    get:
+      tags:
+      - provisioning
+      operationId: adminListProvisioningTokens
+      summary: Provisioning tokens, newest first; never the secret (platform admins and auditors, browser session only)
+      responses:
+        '200':
+          description: Tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProvisioningToken'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags:
+      - provisioning
+      operationId: adminCreateProvisioningToken
+      summary: Create a provisioning token for the identity provider (platform admins, browser session only); the secret is
+        shown once
+      description: 'Prefix ompscim_. It authenticates only /scim/v2 (never /v1 or /mcp), is bound to the directory rather
+        than its creator, and always expires (expiresInDays 1-365, default 90). 409 too_many_tokens (at most 5 active).'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisioningTokenCreate'
+      responses:
+        '201':
+          description: Created; the secret is shown only now
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProvisioningTokenCreated'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning/tokens/{tokenId}:
+    parameters:
+    - name: tokenId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    delete:
+      tags:
+      - provisioning
+      operationId: adminRevokeProvisioningToken
+      summary: Revoke a provisioning token at once (platform admins, browser session only)
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning/users:
+    get:
+      tags:
+      - provisioning
+      operationId: adminListProvisionedUsers
+      summary: Provisioned resources and the directory-managed people (platform admins and auditors, browser session only)
+      description: A resource links to a portal person only when its externalId equals that person's verified sign-in
+        subject. candidate is an existing unmanaged person with that subject, who an admin can adopt.
+      responses:
+        '200':
+          description: Provisioned people
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProvisionedUsers'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning/users/{scimUserId}/adopt:
+    parameters:
+    - name: scimUserId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      tags:
+      - provisioning
+      operationId: adminAdoptProvisionedUser
+      summary: Put an existing person under directory control, or re-enroll a deprovisioned one (platform admins, browser
+        session only)
+      description: The person must have signed in with the resource's externalId as subject. 409 protected_principal for
+        platform admins and team owners, cleanup_pending while a deprovisioning clean-up runs, already_linked, no_match.
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning/people/{userId}/unlink:
+    parameters:
+    - $ref: '#/components/parameters/UserIdParam'
+    post:
+      tags:
+      - provisioning
+      operationId: adminUnlinkProvisionedPerson
+      summary: Return a directory-managed person to manual control (platform admins, browser session only)
+      description: Only the manual status applies afterwards; memberships the directory created become manual. 409
+        not_linked, cleanup_pending.
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning/groups:
+    get:
+      tags:
+      - provisioning
+      operationId: adminListProvisionedGroups
+      summary: Directory groups (platform admins and auditors, browser session only)
+      responses:
+        '200':
+          description: Groups
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProvisionedGroup'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning/mappings:
+    get:
+      tags:
+      - provisioning
+      operationId: adminListProvisioningMappings
+      summary: Directory group to team role mappings (platform admins and auditors, browser session only)
+      responses:
+        '200':
+          description: Mappings
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProvisioningMapping'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags:
+      - provisioning
+      operationId: adminCreateProvisioningMapping
+      summary: Give members of a directory group a team role (platform admins, browser session only)
+      description: Roles admin, editor or member; owners are never granted by a directory. Applied to linked members at once.
+        Memberships someone added by hand are never changed. 409 mapping_exists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisioningMappingCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProvisioningMapping'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning/mappings/{mappingId}:
+    parameters:
+    - name: mappingId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    delete:
+      tags:
+      - provisioning
+      operationId: adminDeleteProvisioningMapping
+      summary: Remove a mapping and the memberships only it created (platform admins, browser session only)
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
   /v1/admin/automation-tokens:
     get:
       tags:
@@ -8334,6 +8685,10 @@ components:
           $ref: '#/components/schemas/PlatformRole'
         status:
           $ref: '#/components/schemas/UserStatus'
+        manualStatus:
+          $ref: '#/components/schemas/UserStatus'
+        directoryStanding:
+          $ref: '#/components/schemas/DirectoryStanding'
         createdAt:
           type: string
           format: date-time
@@ -15343,6 +15698,322 @@ components:
           - creator_not_platform_admin
           nullable: true
           description: A platform token is refused while its creator isn't an active platform admin
+    ProvisioningEnrollment:
+      type: string
+      enum:
+      - optional
+      - required
+      description: optional keeps unmanaged sign-in for new identities without a resource; required refuses them
+    DirectoryStanding:
+      type: string
+      enum:
+      - none
+      - active
+      - inactive
+      - deleted
+      description: none is not directory managed; inactive is a reversible directory deactivation; deleted ends that
+        directory life until an admin re-enrolls the person after clean-up
+    ProvisioningSettings:
+      type: object
+      required:
+      - enabled
+      - enrollment
+      properties:
+        enabled:
+          type: boolean
+        enrollment:
+          $ref: '#/components/schemas/ProvisioningEnrollment'
+    ProvisioningDirectory:
+      type: object
+      required:
+      - id
+      - issuer
+      - issuerMatches
+      - enabled
+      - enrollment
+      - scimBaseUrl
+      - revision
+      - createdAt
+      - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        issuer:
+          type: string
+          description: The verified OIDC issuer it is bound to; never changes
+        issuerMatches:
+          type: boolean
+        enabled:
+          type: boolean
+        enrollment:
+          $ref: '#/components/schemas/ProvisioningEnrollment'
+        scimBaseUrl:
+          type: string
+          description: The SCIM 2.0 base URL to give the identity provider
+        revision:
+          $ref: '#/components/schemas/Revision'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ProvisioningToken:
+      type: object
+      required:
+      - id
+      - name
+      - prefix
+      - status
+      - createdAt
+      - expiresAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        prefix:
+          type: string
+          example: ompscim_AbCdEfGh
+        status:
+          type: string
+          enum:
+          - active
+          - expired
+          - revoked
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdByName:
+          type: string
+          nullable: true
+    ProvisioningTokenCreate:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        expiresInDays:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 365
+    ProvisioningTokenCreated:
+      allOf:
+      - $ref: '#/components/schemas/ProvisioningToken'
+      - type: object
+        required:
+        - secret
+        properties:
+          secret:
+            type: string
+            description: The token, shown once
+    ProvisionedPersonRef:
+      type: object
+      required:
+      - id
+      - email
+      - displayName
+      - status
+      - directoryStanding
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        displayName:
+          type: string
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        directoryStanding:
+          $ref: '#/components/schemas/DirectoryStanding'
+    ProvisionedUser:
+      type: object
+      required:
+      - id
+      - userName
+      - active
+      - displayName
+      - email
+      properties:
+        id:
+          type: string
+          format: uuid
+        userName:
+          type: string
+        externalId:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+        displayName:
+          type: string
+        email:
+          type: string
+        linked:
+          $ref: '#/components/schemas/ProvisionedPersonRef'
+        candidate:
+          type: object
+          required:
+          - id
+          - email
+          - adoptable
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+            adoptable:
+              type: boolean
+            reason:
+              type: string
+              enum:
+              - protected_principal
+              - cleanup_pending
+              - already_managed
+    ManagedPerson:
+      type: object
+      required:
+      - id
+      - email
+      - displayName
+      - status
+      - manualStatus
+      - directoryStanding
+      - cleanupPending
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        displayName:
+          type: string
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        manualStatus:
+          $ref: '#/components/schemas/UserStatus'
+        directoryStanding:
+          $ref: '#/components/schemas/DirectoryStanding'
+        scimUserId:
+          type: string
+          format: uuid
+          nullable: true
+        cleanupPending:
+          type: boolean
+    ProvisionedUsers:
+      type: object
+      required:
+      - resources
+      - people
+      - truncated
+      properties:
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProvisionedUser'
+        people:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagedPerson'
+        truncated:
+          type: boolean
+          description: More than 500 resources exist; the identity provider is the source of the full list
+    ProvisionedGroup:
+      type: object
+      required:
+      - id
+      - displayName
+      - memberCount
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        externalId:
+          type: string
+          nullable: true
+        memberCount:
+          type: integer
+          format: int64
+    ProvisioningMapping:
+      type: object
+      required:
+      - id
+      - groupId
+      - groupName
+      - teamId
+      - teamSlug
+      - teamName
+      - role
+      - memberCount
+      - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        groupId:
+          type: string
+          format: uuid
+        groupName:
+          type: string
+        teamId:
+          type: string
+          format: uuid
+        teamSlug:
+          type: string
+        teamName:
+          type: string
+        role:
+          type: string
+          enum:
+          - admin
+          - editor
+          - member
+        memberCount:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+    ProvisioningMappingCreate:
+      type: object
+      required:
+      - groupId
+      - teamId
+      - role
+      properties:
+        groupId:
+          type: string
+          format: uuid
+        teamId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum:
+          - admin
+          - editor
+          - member
     AutomationTokenCreate:
       type: object
       required:

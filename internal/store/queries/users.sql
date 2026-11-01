@@ -24,9 +24,11 @@ ORDER BY id
 FOR UPDATE;
 
 -- name: UpdateUserAccess :one
+-- @status is the manual standing; users.status (effective) is derived by
+-- trigger with the directory standing (decision 92).
 UPDATE users
 SET platform_role = @platform_role,
-    status        = @status,
+    manual_status = @status,
     revision      = revision + 1,
     updated_at    = now()
 WHERE id = @id

@@ -405,7 +405,7 @@ func (q *Queries) LockAccessRequest(ctx context.Context, id uuid.UUID) (AccessRe
 }
 
 const lockAccessRequestActors = `-- name: LockAccessRequestActors :many
-SELECT id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation FROM users WHERE id = ANY($1::uuid[]) ORDER BY id FOR SHARE
+SELECT id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation, manual_status, directory_standing FROM users WHERE id = ANY($1::uuid[]) ORDER BY id FOR SHARE
 `
 
 // Access requests are session-only. Reads resolve eligibility from live rows.
@@ -435,6 +435,8 @@ func (q *Queries) LockAccessRequestActors(ctx context.Context, ids []uuid.UUID) 
 			&i.EmailVerified,
 			&i.RequestEpoch,
 			&i.SessionGeneration,
+			&i.ManualStatus,
+			&i.DirectoryStanding,
 		); err != nil {
 			return nil, err
 		}

@@ -9,7 +9,7 @@ import (
 func ptr(s string) *string { return &s }
 
 func TestUserAccessAndAction(t *testing.T) {
-	u := dbgen.User{PlatformRole: "none", Status: "active"}
+	u := dbgen.User{PlatformRole: "none", Status: "active", ManualStatus: "active"}
 	cases := []struct {
 		in             UserUpdate
 		role, status   string
@@ -37,7 +37,7 @@ func TestUserAccessAndAction(t *testing.T) {
 			t.Errorf("%+v: action %s, want %s", c.in, got, c.action)
 		}
 	}
-	suspended := dbgen.User{PlatformRole: "none", Status: "suspended"}
+	suspended := dbgen.User{PlatformRole: "none", Status: "suspended", ManualStatus: "suspended"}
 	if userAction(suspended, "none", "active") != "platform.user_reactivate" {
 		t.Error("reactivate action")
 	}

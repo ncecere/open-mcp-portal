@@ -429,6 +429,11 @@ func AcceptInvites(ctx context.Context, q *dbgen.Queries, user dbgen.User, reque
 
 func acceptTeamInvites(ctx context.Context, q *dbgen.Queries, user dbgen.User, invites []dbgen.ClaimTeamInvitesForEmailRow, requestID, clientIP string) error {
 	for _, inv := range invites {
+		if inv.Role == authz.RoleOwner && user.DirectoryStanding != "none" {
+			// Directory-managed people are never owners (decision 92): the
+			// invitation stays pending for an admin to resolve.
+			continue
+		}
 		n, err := q.InsertMemberIfAbsent(ctx, dbgen.InsertMemberIfAbsentParams{
 			TeamID: inv.TeamID, UserID: user.ID, Role: inv.Role, AddedBy: inv.InvitedBy,
 		})

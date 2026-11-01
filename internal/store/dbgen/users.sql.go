@@ -12,7 +12,7 @@ import (
 )
 
 const getUserForUpdate = `-- name: GetUserForUpdate :one
-SELECT id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation FROM users WHERE id = $1 FOR UPDATE
+SELECT id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation, manual_status, directory_standing FROM users WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, error) {
@@ -35,12 +35,14 @@ func (q *Queries) GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, err
 		&i.EmailVerified,
 		&i.RequestEpoch,
 		&i.SessionGeneration,
+		&i.ManualStatus,
+		&i.DirectoryStanding,
 	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation FROM users
+SELECT id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation, manual_status, directory_standing FROM users
 WHERE ($1::text IS NULL
        OR email::text ILIKE '%' || $1::text || '%' ESCAPE '\'
        OR display_name ILIKE '%' || $1::text || '%' ESCAPE '\')
@@ -94,6 +96,8 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 			&i.EmailVerified,
 			&i.RequestEpoch,
 			&i.SessionGeneration,
+			&i.ManualStatus,
+			&i.DirectoryStanding,
 		); err != nil {
 			return nil, err
 		}
@@ -106,7 +110,7 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 }
 
 const listUsersByEmail = `-- name: ListUsersByEmail :many
-SELECT id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation FROM users WHERE email = $1 ORDER BY created_at
+SELECT id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation, manual_status, directory_standing FROM users WHERE email = $1 ORDER BY created_at
 `
 
 func (q *Queries) ListUsersByEmail(ctx context.Context, email string) ([]User, error) {
@@ -135,6 +139,8 @@ func (q *Queries) ListUsersByEmail(ctx context.Context, email string) ([]User, e
 			&i.EmailVerified,
 			&i.RequestEpoch,
 			&i.SessionGeneration,
+			&i.ManualStatus,
+			&i.DirectoryStanding,
 		); err != nil {
 			return nil, err
 		}
@@ -177,11 +183,11 @@ func (q *Queries) LockActivePlatformAdmins(ctx context.Context) ([]uuid.UUID, er
 const updateUserAccess = `-- name: UpdateUserAccess :one
 UPDATE users
 SET platform_role = $1,
-    status        = $2,
+    manual_status = $2,
     revision      = revision + 1,
     updated_at    = now()
 WHERE id = $3
-RETURNING id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation
+RETURNING id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation, manual_status, directory_standing
 `
 
 type UpdateUserAccessParams struct {
@@ -190,6 +196,8 @@ type UpdateUserAccessParams struct {
 	ID           uuid.UUID
 }
 
+// @status is the manual standing; users.status (effective) is derived by
+// trigger with the directory standing (decision 92).
 func (q *Queries) UpdateUserAccess(ctx context.Context, arg UpdateUserAccessParams) (User, error) {
 	row := q.db.QueryRow(ctx, updateUserAccess, arg.PlatformRole, arg.Status, arg.ID)
 	var i User
@@ -210,6 +218,8 @@ func (q *Queries) UpdateUserAccess(ctx context.Context, arg UpdateUserAccessPara
 		&i.EmailVerified,
 		&i.RequestEpoch,
 		&i.SessionGeneration,
+		&i.ManualStatus,
+		&i.DirectoryStanding,
 	)
 	return i, err
 }

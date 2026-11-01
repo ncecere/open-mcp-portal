@@ -38,6 +38,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/ratelimit"
 	"github.com/ncecere/open-mcp-portal/internal/registry"
 	"github.com/ncecere/open-mcp-portal/internal/retention"
+	"github.com/ncecere/open-mcp-portal/internal/scim"
 	"github.com/ncecere/open-mcp-portal/internal/secrets"
 	"github.com/ncecere/open-mcp-portal/internal/serviceaccounts"
 	"github.com/ncecere/open-mcp-portal/internal/store"
@@ -125,7 +126,7 @@ func Run(ctx context.Context, mode string, cfg config.Config, log *slog.Logger) 
 	srv := newHTTPServer(ctx, cfg.ListenAddr, httpapi.NewAPIHandler(deps))
 	loopCtx, stopLoops := context.WithCancel(ctx)
 	defer stopLoops()
-	go cleanupLoop(loopCtx, deps.Auth, deps.Providers, deps.Automation, log)
+	go cleanupLoop(loopCtx, deps.Auth, deps.Providers, deps.Automation, deps.SCIM, log)
 	go deps.Notify.Loop(loopCtx)
 	go deps.Registry.HealthLoop(loopCtx, cfg.HealthCheckInterval, log)
 	go deps.Registry.GovernanceLoop(loopCtx, log)
@@ -412,6 +413,14 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 	overviewSvc.Approvals = approvalSvc.Attention
 	authSvc := auth.NewService(cfg, pool, log)
 	authSvc.SetRateStore(rates)
+	// SCIM provisioning (decision 92): bound to the configured OIDC issuer;
+	// it gates sign-ins only once an admin enables a directory.
+	scimSvc := scim.New(pool, pepper, cfg.OIDC.Issuer)
+	scimSvc.AppURL = cfg.AppURL
+	if pep.Previous != nil {
+		scimSvc.SetPreviousPepper(pep.Previous)
+	}
+	authSvc.Provisioning = scimSvc
 	return httpapi.Deps{
 		Config:          cfg,
 		Pool:            pool,
@@ -434,6 +443,7 @@ func NewDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (httpapi.D
 		Providers:       provs,
 		PersonSecrets:   pers,
 		Automation:      autoSvc,
+		SCIM:            scimSvc,
 		Notify:          notifier,
 		Approvals:       approvalSvc,
 		Overview:        overviewSvc,
@@ -486,7 +496,7 @@ func secretBox(cfg config.Config) (*secrets.Box, error) {
 // cleanupLoop deletes expired sessions and sign-in states, and expired
 // authorization states and consent links of delegated credentials. Deletes
 // are idempotent, so every replica may run it; no leader election is needed.
-func cleanupLoop(ctx context.Context, a *auth.Service, p *providers.Service, tokens *automation.Service, log *slog.Logger) {
+func cleanupLoop(ctx context.Context, a *auth.Service, p *providers.Service, tokens *automation.Service, prov *scim.Service, log *slog.Logger) {
 	t := time.NewTicker(cleanupInterval)
 	defer t.Stop()
 	for {
@@ -506,6 +516,15 @@ func cleanupLoop(ctx context.Context, a *auth.Service, p *providers.Service, tok
 			log.Warn("automation token clean-up failed", "err", err)
 		} else if n > 0 {
 			log.Debug("old automation tokens deleted", "count", n)
+		}
+		// Deprovisioning clean-up of deleted directory lives (decision 92):
+		// SKIP LOCKED claims, bounded passes; contention retries next tick.
+		if prov != nil {
+			if res, err := prov.Cleanup(ctx); err != nil && ctx.Err() == nil {
+				log.Warn("deprovisioning clean-up failed", "err", err)
+			} else if res.Completed+res.Incomplete > 0 {
+				log.Info("deprovisioning clean-up", "completed", res.Completed, "incomplete", res.Incomplete)
+			}
 		}
 		select {
 		case <-ctx.Done():

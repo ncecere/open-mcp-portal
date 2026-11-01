@@ -944,6 +944,30 @@ func (e DetectAuthStepResult) Valid() bool {
 	}
 }
 
+// Defines values for DirectoryStanding.
+const (
+	DirectoryStandingActive   DirectoryStanding = "active"
+	DirectoryStandingDeleted  DirectoryStanding = "deleted"
+	DirectoryStandingInactive DirectoryStanding = "inactive"
+	DirectoryStandingNone     DirectoryStanding = "none"
+)
+
+// Valid indicates whether the value is a known member of the DirectoryStanding enum.
+func (e DirectoryStanding) Valid() bool {
+	switch e {
+	case DirectoryStandingActive:
+		return true
+	case DirectoryStandingDeleted:
+		return true
+	case DirectoryStandingInactive:
+		return true
+	case DirectoryStandingNone:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GatewayCapabilityKind.
 const (
 	GatewayCapabilityKindPrompt           GatewayCapabilityKind = "prompt"
@@ -2141,6 +2165,129 @@ func (e ProviderConnectionStatus) Valid() bool {
 	case ProviderConnectionStatusActive:
 		return true
 	case ProviderConnectionStatusNeedsReconsent:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProvisionedUserCandidateReason.
+const (
+	AlreadyManaged     ProvisionedUserCandidateReason = "already_managed"
+	CleanupPending     ProvisionedUserCandidateReason = "cleanup_pending"
+	ProtectedPrincipal ProvisionedUserCandidateReason = "protected_principal"
+)
+
+// Valid indicates whether the value is a known member of the ProvisionedUserCandidateReason enum.
+func (e ProvisionedUserCandidateReason) Valid() bool {
+	switch e {
+	case AlreadyManaged:
+		return true
+	case CleanupPending:
+		return true
+	case ProtectedPrincipal:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProvisioningEnrollment.
+const (
+	Optional ProvisioningEnrollment = "optional"
+	Required ProvisioningEnrollment = "required"
+)
+
+// Valid indicates whether the value is a known member of the ProvisioningEnrollment enum.
+func (e ProvisioningEnrollment) Valid() bool {
+	switch e {
+	case Optional:
+		return true
+	case Required:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProvisioningMappingRole.
+const (
+	ProvisioningMappingRoleAdmin  ProvisioningMappingRole = "admin"
+	ProvisioningMappingRoleEditor ProvisioningMappingRole = "editor"
+	ProvisioningMappingRoleMember ProvisioningMappingRole = "member"
+)
+
+// Valid indicates whether the value is a known member of the ProvisioningMappingRole enum.
+func (e ProvisioningMappingRole) Valid() bool {
+	switch e {
+	case ProvisioningMappingRoleAdmin:
+		return true
+	case ProvisioningMappingRoleEditor:
+		return true
+	case ProvisioningMappingRoleMember:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProvisioningMappingCreateRole.
+const (
+	ProvisioningMappingCreateRoleAdmin  ProvisioningMappingCreateRole = "admin"
+	ProvisioningMappingCreateRoleEditor ProvisioningMappingCreateRole = "editor"
+	ProvisioningMappingCreateRoleMember ProvisioningMappingCreateRole = "member"
+)
+
+// Valid indicates whether the value is a known member of the ProvisioningMappingCreateRole enum.
+func (e ProvisioningMappingCreateRole) Valid() bool {
+	switch e {
+	case ProvisioningMappingCreateRoleAdmin:
+		return true
+	case ProvisioningMappingCreateRoleEditor:
+		return true
+	case ProvisioningMappingCreateRoleMember:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProvisioningTokenStatus.
+const (
+	ProvisioningTokenStatusActive  ProvisioningTokenStatus = "active"
+	ProvisioningTokenStatusExpired ProvisioningTokenStatus = "expired"
+	ProvisioningTokenStatusRevoked ProvisioningTokenStatus = "revoked"
+)
+
+// Valid indicates whether the value is a known member of the ProvisioningTokenStatus enum.
+func (e ProvisioningTokenStatus) Valid() bool {
+	switch e {
+	case ProvisioningTokenStatusActive:
+		return true
+	case ProvisioningTokenStatusExpired:
+		return true
+	case ProvisioningTokenStatusRevoked:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProvisioningTokenCreatedStatus.
+const (
+	ProvisioningTokenCreatedStatusActive  ProvisioningTokenCreatedStatus = "active"
+	ProvisioningTokenCreatedStatusExpired ProvisioningTokenCreatedStatus = "expired"
+	ProvisioningTokenCreatedStatusRevoked ProvisioningTokenCreatedStatus = "revoked"
+)
+
+// Valid indicates whether the value is a known member of the ProvisioningTokenCreatedStatus enum.
+func (e ProvisioningTokenCreatedStatus) Valid() bool {
+	switch e {
+	case ProvisioningTokenCreatedStatusActive:
+		return true
+	case ProvisioningTokenCreatedStatusExpired:
+		return true
+	case ProvisioningTokenCreatedStatusRevoked:
 		return true
 	default:
 		return false
@@ -4243,6 +4390,9 @@ type DevLoginRequest struct {
 	Account string `json:"account"`
 }
 
+// DirectoryStanding none is not directory managed; inactive is a reversible directory deactivation; deleted ends that directory life until an admin re-enrolls the person after clean-up
+type DirectoryStanding string
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Error struct {
@@ -4676,6 +4826,20 @@ type LinkTarget struct {
 
 // LinkTargetType defines model for LinkTarget.Type.
 type LinkTargetType string
+
+// ManagedPerson defines model for ManagedPerson.
+type ManagedPerson struct {
+	CleanupPending bool `json:"cleanupPending"`
+
+	// DirectoryStanding none is not directory managed; inactive is a reversible directory deactivation; deleted ends that directory life until an admin re-enrolls the person after clean-up
+	DirectoryStanding DirectoryStanding   `json:"directoryStanding"`
+	DisplayName       string              `json:"displayName"`
+	Email             string              `json:"email"`
+	Id                openapi_types.UUID  `json:"id"`
+	ManualStatus      UserStatus          `json:"manualStatus"`
+	ScimUserId        *openapi_types.UUID `json:"scimUserId,omitempty"`
+	Status            UserStatus          `json:"status"`
+}
 
 // McpCall defines model for McpCall.
 type McpCall struct {
@@ -6250,6 +6414,156 @@ type ProviderServerGrant struct {
 	Server ConnectServer `json:"server"`
 }
 
+// ProvisionedGroup defines model for ProvisionedGroup.
+type ProvisionedGroup struct {
+	DisplayName string             `json:"displayName"`
+	ExternalId  *string            `json:"externalId,omitempty"`
+	Id          openapi_types.UUID `json:"id"`
+	MemberCount int64              `json:"memberCount"`
+}
+
+// ProvisionedPersonRef defines model for ProvisionedPersonRef.
+type ProvisionedPersonRef struct {
+	// DirectoryStanding none is not directory managed; inactive is a reversible directory deactivation; deleted ends that directory life until an admin re-enrolls the person after clean-up
+	DirectoryStanding DirectoryStanding  `json:"directoryStanding"`
+	DisplayName       string             `json:"displayName"`
+	Email             string             `json:"email"`
+	Id                openapi_types.UUID `json:"id"`
+	Status            UserStatus         `json:"status"`
+}
+
+// ProvisionedUser defines model for ProvisionedUser.
+type ProvisionedUser struct {
+	Active    bool `json:"active"`
+	Candidate *struct {
+		Adoptable bool                            `json:"adoptable"`
+		Email     string                          `json:"email"`
+		Id        openapi_types.UUID              `json:"id"`
+		Reason    *ProvisionedUserCandidateReason `json:"reason,omitempty"`
+	} `json:"candidate,omitempty"`
+	DisplayName string                `json:"displayName"`
+	Email       string                `json:"email"`
+	ExternalId  *string               `json:"externalId,omitempty"`
+	Id          openapi_types.UUID    `json:"id"`
+	Linked      *ProvisionedPersonRef `json:"linked,omitempty"`
+	UserName    string                `json:"userName"`
+}
+
+// ProvisionedUserCandidateReason defines model for ProvisionedUser.Candidate.Reason.
+type ProvisionedUserCandidateReason string
+
+// ProvisionedUsers defines model for ProvisionedUsers.
+type ProvisionedUsers struct {
+	People    []ManagedPerson   `json:"people"`
+	Resources []ProvisionedUser `json:"resources"`
+
+	// Truncated More than 500 resources exist; the identity provider is the source of the full list
+	Truncated bool `json:"truncated"`
+}
+
+// ProvisioningDirectory defines model for ProvisioningDirectory.
+type ProvisioningDirectory struct {
+	CreatedAt time.Time `json:"createdAt"`
+	Enabled   bool      `json:"enabled"`
+
+	// Enrollment optional keeps unmanaged sign-in for new identities without a resource; required refuses them
+	Enrollment ProvisioningEnrollment `json:"enrollment"`
+	Id         openapi_types.UUID     `json:"id"`
+
+	// Issuer The verified OIDC issuer it is bound to; never changes
+	Issuer        string `json:"issuer"`
+	IssuerMatches bool   `json:"issuerMatches"`
+
+	// Revision Increases on every change. Send it back in If-Match.
+	Revision Revision `json:"revision"`
+
+	// ScimBaseUrl The SCIM 2.0 base URL to give the identity provider
+	ScimBaseUrl string    `json:"scimBaseUrl"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+// ProvisioningEnrollment optional keeps unmanaged sign-in for new identities without a resource; required refuses them
+type ProvisioningEnrollment string
+
+// ProvisioningMapping defines model for ProvisioningMapping.
+type ProvisioningMapping struct {
+	CreatedAt   time.Time               `json:"createdAt"`
+	GroupId     openapi_types.UUID      `json:"groupId"`
+	GroupName   string                  `json:"groupName"`
+	Id          openapi_types.UUID      `json:"id"`
+	MemberCount int64                   `json:"memberCount"`
+	Role        ProvisioningMappingRole `json:"role"`
+	TeamId      openapi_types.UUID      `json:"teamId"`
+	TeamName    string                  `json:"teamName"`
+	TeamSlug    string                  `json:"teamSlug"`
+}
+
+// ProvisioningMappingRole defines model for ProvisioningMapping.Role.
+type ProvisioningMappingRole string
+
+// ProvisioningMappingCreate defines model for ProvisioningMappingCreate.
+type ProvisioningMappingCreate struct {
+	GroupId openapi_types.UUID            `json:"groupId"`
+	Role    ProvisioningMappingCreateRole `json:"role"`
+	TeamId  openapi_types.UUID            `json:"teamId"`
+}
+
+// ProvisioningMappingCreateRole defines model for ProvisioningMappingCreate.Role.
+type ProvisioningMappingCreateRole string
+
+// ProvisioningSettings defines model for ProvisioningSettings.
+type ProvisioningSettings struct {
+	Enabled bool `json:"enabled"`
+
+	// Enrollment optional keeps unmanaged sign-in for new identities without a resource; required refuses them
+	Enrollment ProvisioningEnrollment `json:"enrollment"`
+}
+
+// ProvisioningToken defines model for ProvisioningToken.
+type ProvisioningToken struct {
+	CreatedAt     time.Time          `json:"createdAt"`
+	CreatedByName *string            `json:"createdByName,omitempty"`
+	ExpiresAt     time.Time          `json:"expiresAt"`
+	Id            openapi_types.UUID `json:"id"`
+	LastUsedAt    *time.Time         `json:"lastUsedAt,omitempty"`
+	Name          string             `json:"name"`
+
+	// Prefix Example: ompscim_AbCdEfGh
+	Prefix    string                  `json:"prefix"`
+	RevokedAt *time.Time              `json:"revokedAt,omitempty"`
+	Status    ProvisioningTokenStatus `json:"status"`
+}
+
+// ProvisioningTokenStatus defines model for ProvisioningToken.Status.
+type ProvisioningTokenStatus string
+
+// ProvisioningTokenCreate defines model for ProvisioningTokenCreate.
+type ProvisioningTokenCreate struct {
+	ExpiresInDays *int32 `json:"expiresInDays,omitempty"`
+	Name          string `json:"name"`
+}
+
+// ProvisioningTokenCreated defines model for ProvisioningTokenCreated.
+type ProvisioningTokenCreated struct {
+	CreatedAt     time.Time          `json:"createdAt"`
+	CreatedByName *string            `json:"createdByName,omitempty"`
+	ExpiresAt     time.Time          `json:"expiresAt"`
+	Id            openapi_types.UUID `json:"id"`
+	LastUsedAt    *time.Time         `json:"lastUsedAt,omitempty"`
+	Name          string             `json:"name"`
+
+	// Prefix Example: ompscim_AbCdEfGh
+	Prefix    string     `json:"prefix"`
+	RevokedAt *time.Time `json:"revokedAt,omitempty"`
+
+	// Secret The token, shown once
+	Secret string                         `json:"secret"`
+	Status ProvisioningTokenCreatedStatus `json:"status"`
+}
+
+// ProvisioningTokenCreatedStatus defines model for ProvisioningTokenCreated.Status.
+type ProvisioningTokenCreatedStatus string
+
 // PublishDecidedData defines model for PublishDecidedData.
 type PublishDecidedData struct {
 	DecidedBy struct {
@@ -7156,12 +7470,16 @@ type UsageRow struct {
 
 // User defines model for User.
 type User struct {
-	CreatedAt    time.Time          `json:"createdAt"`
-	DisplayName  string             `json:"displayName"`
-	Email        string             `json:"email"`
-	Id           openapi_types.UUID `json:"id"`
-	LastLoginAt  *time.Time         `json:"lastLoginAt,omitempty"`
-	PlatformRole PlatformRole       `json:"platformRole"`
+	CreatedAt time.Time `json:"createdAt"`
+
+	// DirectoryStanding none is not directory managed; inactive is a reversible directory deactivation; deleted ends that directory life until an admin re-enrolls the person after clean-up
+	DirectoryStanding *DirectoryStanding `json:"directoryStanding,omitempty"`
+	DisplayName       string             `json:"displayName"`
+	Email             string             `json:"email"`
+	Id                openapi_types.UUID `json:"id"`
+	LastLoginAt       *time.Time         `json:"lastLoginAt,omitempty"`
+	ManualStatus      *UserStatus        `json:"manualStatus,omitempty"`
+	PlatformRole      PlatformRole       `json:"platformRole"`
 
 	// Revision Increases on every change. Send it back in If-Match.
 	Revision Revision   `json:"revision"`
@@ -7618,6 +7936,12 @@ type AdminForceTransferMcpServerParams struct {
 
 // AdminUpdateNotificationDestinationParams defines parameters for AdminUpdateNotificationDestination.
 type AdminUpdateNotificationDestinationParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
+// AdminUpdateProvisioningParams defines parameters for AdminUpdateProvisioning.
+type AdminUpdateProvisioningParams struct {
 	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
 	IfMatch IfMatchHeader `json:"If-Match"`
 }
@@ -8137,6 +8461,18 @@ type AdminUpdateNotificationDestinationJSONRequestBody = NotificationDestination
 
 // AdminRotateNotificationDestinationSecretJSONRequestBody defines body for AdminRotateNotificationDestinationSecret for application/json ContentType.
 type AdminRotateNotificationDestinationSecretJSONRequestBody = NotificationSecretRotate
+
+// AdminUpdateProvisioningJSONRequestBody defines body for AdminUpdateProvisioning for application/json ContentType.
+type AdminUpdateProvisioningJSONRequestBody = ProvisioningSettings
+
+// AdminCreateProvisioningJSONRequestBody defines body for AdminCreateProvisioning for application/json ContentType.
+type AdminCreateProvisioningJSONRequestBody = ProvisioningSettings
+
+// AdminCreateProvisioningMappingJSONRequestBody defines body for AdminCreateProvisioningMapping for application/json ContentType.
+type AdminCreateProvisioningMappingJSONRequestBody = ProvisioningMappingCreate
+
+// AdminCreateProvisioningTokenJSONRequestBody defines body for AdminCreateProvisioningToken for application/json ContentType.
+type AdminCreateProvisioningTokenJSONRequestBody = ProvisioningTokenCreate
 
 // AdminUpdateCaptureSettingsJSONRequestBody defines body for AdminUpdateCaptureSettings for application/json ContentType.
 type AdminUpdateCaptureSettingsJSONRequestBody = CaptureSettingsUpdate

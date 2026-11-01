@@ -1,4 +1,6 @@
-# SCIM: selected authority transaction protocol
+# SCIM: selected authority transaction protocol (superseded)
+
+**Superseded by [decision 92](decisions.md) and [SCIM provisioning](scim.md).** The supported scope serialises with directory → resource → user → team row order and the existing effective standing, so no global gate was wired. The unwired `internal/authoritytx` primitives described below were removed before release; their tests remain in git history (`e84d9f3`, `5532039`). This page is kept as design history.
 
 **Selected implementation direction, not accepted SCIM functionality or a proved application-wide lock graph.** This narrows the [preflight](scim-provisioning-preflight.md) and [writer census](scim-lifecycle-writer-matrix.md) to one protocol for #36. [Decision90/migrations51–52](request-authority-epochs.md) separately allocate only the dedicated user request epoch and first personal-key writer prerequisite. They do not allocate provisioning resources, a directory token, session/deletion lifecycle schema, routes or discovery support. [Decision91/migration53](browser-session-generations.md) separately introduces session-generation fields/readers with application proofs pending; immutable enrollment/deletion life, directory resources and G service admission remain absent. The owner requests completion of SCIM, one further independently verified pre-1.0 release, then a stop; retained workers stay up.
 

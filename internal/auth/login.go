@@ -11,6 +11,8 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/audit"
 	"github.com/ncecere/open-mcp-portal/internal/httpapi/apitypes"
 	"github.com/ncecere/open-mcp-portal/internal/httpx"
+	"github.com/ncecere/open-mcp-portal/internal/scim"
+	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 	"github.com/ncecere/open-mcp-portal/internal/teams"
 )
@@ -42,9 +44,23 @@ func (s *Service) completeLogin(ctx context.Context, w http.ResponseWriter, r *h
 		suspended bool
 	)
 	reqID, ip := httpx.RequestID(ctx), s.clientIP(r)
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		q := dbgen.New(tx)
+	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
 		var err error
+		// Directory provisioning (decision 92) decides before any user,
+		// bootstrap, invite or session write. A refusal leaves nothing behind.
+		gate := scim.Gate{Kind: scim.GateUnmanaged}
+		if s.Provisioning != nil {
+			if gate, err = s.Provisioning.LoginGate(ctx, q, li.Issuer, li.Subject, li.BootstrapRole != ""); err != nil {
+				return err
+			}
+			if gate.Kind == scim.GateDeny {
+				suspended = true
+				return audit.Record(ctx, q, audit.Entry{
+					ActorKind: audit.ActorSystem, Action: "auth.login_denied", TargetType: "oidc_identity", TargetID: Digest(li.Issuer + "\x00" + li.Subject),
+					Metadata: map[string]any{"method": li.Method, "reason": gate.Reason}, RequestID: reqID, ClientIP: ip,
+				})
+			}
+		}
 		user, err = q.UpsertLoginUser(ctx, dbgen.UpsertLoginUserParams{
 			OIDCIssuer:  li.Issuer,
 			OIDCSubject: li.Subject,
@@ -59,12 +75,22 @@ func (s *Service) completeLogin(ctx context.Context, w http.ResponseWriter, r *h
 		if err := q.SetUserEmailVerified(ctx, dbgen.SetUserEmailVerifiedParams{ID: user.ID, Verified: li.EmailVerified}); err != nil {
 			return err // notification email goes to verified addresses only
 		}
+		if gate.Kind == scim.GateEnroll {
+			if user, err = s.Provisioning.Enroll(ctx, q, user, gate.Resource, reqID); err != nil {
+				return err
+			}
+		}
 		if user.Status != StatusActive {
 			suspended = true
 			return audit.Record(ctx, q, audit.Entry{
 				ActorUserID: user.ID, Action: "auth.login_denied", TargetType: "user", TargetID: user.ID.String(),
 				Metadata: map[string]any{"method": li.Method, "reason": "suspended"}, RequestID: reqID, ClientIP: ip,
 			})
+		}
+		// A directory-managed person is never a platform admin; bootstrap is
+		// for an unmanaged break-glass account.
+		if user.DirectoryStanding != scim.StandingNone {
+			li.BootstrapRole = ""
 		}
 		if user, err = applyBootstrapRole(ctx, q, user, li, reqID, ip); err != nil {
 			return err

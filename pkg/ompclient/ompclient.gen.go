@@ -630,6 +630,30 @@ func (e DetectAuthStepResult) Valid() bool {
 	}
 }
 
+// Defines values for DirectoryStanding.
+const (
+	DirectoryStandingActive   DirectoryStanding = "active"
+	DirectoryStandingDeleted  DirectoryStanding = "deleted"
+	DirectoryStandingInactive DirectoryStanding = "inactive"
+	DirectoryStandingNone     DirectoryStanding = "none"
+)
+
+// Valid indicates whether the value is a known member of the DirectoryStanding enum.
+func (e DirectoryStanding) Valid() bool {
+	switch e {
+	case DirectoryStandingActive:
+		return true
+	case DirectoryStandingDeleted:
+		return true
+	case DirectoryStandingInactive:
+		return true
+	case DirectoryStandingNone:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GatewayCapabilityKind.
 const (
 	GatewayCapabilityKindPrompt           GatewayCapabilityKind = "prompt"
@@ -2586,6 +2610,9 @@ type DetectAuthStepPurpose string
 
 // DetectAuthStepResult defines model for DetectAuthStep.Result.
 type DetectAuthStepResult string
+
+// DirectoryStanding none is not directory managed; inactive is a reversible directory deactivation; deleted ends that directory life until an admin re-enrolls the person after clean-up
+type DirectoryStanding string
 
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
@@ -4607,12 +4634,16 @@ type UsageRow struct {
 
 // User defines model for User.
 type User struct {
-	CreatedAt    time.Time          `json:"createdAt"`
-	DisplayName  string             `json:"displayName"`
-	Email        string             `json:"email"`
-	Id           openapi_types.UUID `json:"id"`
-	LastLoginAt  *time.Time         `json:"lastLoginAt,omitempty"`
-	PlatformRole PlatformRole       `json:"platformRole"`
+	CreatedAt time.Time `json:"createdAt"`
+
+	// DirectoryStanding none is not directory managed; inactive is a reversible directory deactivation; deleted ends that directory life until an admin re-enrolls the person after clean-up
+	DirectoryStanding *DirectoryStanding `json:"directoryStanding,omitempty"`
+	DisplayName       string             `json:"displayName"`
+	Email             string             `json:"email"`
+	Id                openapi_types.UUID `json:"id"`
+	LastLoginAt       *time.Time         `json:"lastLoginAt,omitempty"`
+	ManualStatus      *UserStatus        `json:"manualStatus,omitempty"`
+	PlatformRole      PlatformRole       `json:"platformRole"`
 
 	// Revision Increases on every change. Send it back in If-Match.
 	Revision Revision   `json:"revision"`

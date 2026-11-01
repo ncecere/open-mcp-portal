@@ -264,8 +264,14 @@ func (s *Service) Approve(ctx context.Context, a authz.Actor, c Client, g dbgen.
 		// raced with a human narrowing. The grant itself is immutable. Use a
 		// non-key lock: token issuance and revocation hold the grant first,
 		// then need KEY SHARE on the user for the audit actor foreign key.
-		if _, err := q.GetOAuthUserForApproval(ctx, a.UserID); err != nil {
+		u, err := q.GetOAuthUserForApproval(ctx, a.UserID)
+		if err != nil {
 			return err
+		}
+		// The lock may have waited on a suspension or directory fence: never
+		// mint a grant or code for someone no longer active (decision 92).
+		if u.Status != "active" {
+			return apperr.Forbidden("This account is suspended")
 		}
 		gr, err := s.grantFor(ctx, q, a, c, g, how, scope)
 		if err != nil {

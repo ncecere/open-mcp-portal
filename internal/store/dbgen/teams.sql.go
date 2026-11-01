@@ -346,7 +346,7 @@ func (q *Queries) ListInviteTeamsForEmail(ctx context.Context, email string) ([]
 }
 
 const listMembers = `-- name: ListMembers :many
-SELECT m.team_id, m.user_id, m.role, m.added_by, m.revision, m.created_at, m.updated_at, u.id, u.oidc_issuer, u.oidc_subject, u.email, u.display_name, u.platform_role, u.status, u.claims, u.revision, u.created_at, u.updated_at, u.last_login_at, u.groups, u.email_verified, u.request_epoch, u.session_generation
+SELECT m.team_id, m.user_id, m.role, m.added_by, m.revision, m.created_at, m.updated_at, u.id, u.oidc_issuer, u.oidc_subject, u.email, u.display_name, u.platform_role, u.status, u.claims, u.revision, u.created_at, u.updated_at, u.last_login_at, u.groups, u.email_verified, u.request_epoch, u.session_generation, u.manual_status, u.directory_standing
 FROM team_members m
 JOIN users u ON u.id = m.user_id
 WHERE m.team_id = $1
@@ -392,6 +392,8 @@ func (q *Queries) ListMembers(ctx context.Context, teamID uuid.UUID) ([]ListMemb
 			&i.User.EmailVerified,
 			&i.User.RequestEpoch,
 			&i.User.SessionGeneration,
+			&i.User.ManualStatus,
+			&i.User.DirectoryStanding,
 		); err != nil {
 			return nil, err
 		}

@@ -130,7 +130,7 @@ func (s *Service) UpdateUser(ctx context.Context, a authz.Actor, id uuid.UUID, i
 		if err != nil {
 			return err
 		}
-		if role == u.PlatformRole && status == u.Status {
+		if role == u.PlatformRole && status == u.ManualStatus {
 			out = u
 			return nil
 		}
@@ -148,16 +148,20 @@ func (s *Service) UpdateUser(ctx context.Context, a authz.Actor, id uuid.UUID, i
 			}
 		}
 		e := a.Audit(userAction(u, role, status), "user", id.String())
-		e.Before = map[string]any{"platformRole": u.PlatformRole, "status": u.Status}
-		e.After = map[string]any{"platformRole": out.PlatformRole, "status": out.Status}
+		e.Before = map[string]any{"platformRole": u.PlatformRole, "status": u.Status, "manualStatus": u.ManualStatus}
+		e.After = map[string]any{"platformRole": out.PlatformRole, "status": out.Status, "manualStatus": out.ManualStatus}
+		if u.DirectoryStanding != "none" {
+			e.Metadata = map[string]any{"directoryStanding": out.DirectoryStanding}
+		}
 		return audit.Record(ctx, q, e)
 	})
 	return out, err
 }
 
-// userAccess applies a role and status change to the user's current ones.
+// userAccess applies a role and manual-status change to the user's current
+// ones. A directory restriction is separate and never lifted here.
 func userAccess(u dbgen.User, in UserUpdate) (role, status string, err error) {
-	role, status = u.PlatformRole, u.Status
+	role, status = u.PlatformRole, u.ManualStatus
 	if in.PlatformRole != nil {
 		if !validPlatformRoles[*in.PlatformRole] {
 			return "", "", apperr.Invalid("invalid_role", "Platform role must be none, platform_admin or platform_auditor")
@@ -176,9 +180,9 @@ func userAccess(u dbgen.User, in UserUpdate) (role, status string, err error) {
 // userAction is the audit action of a user access change.
 func userAction(u dbgen.User, role, status string) string {
 	switch {
-	case u.Status != status && status == "suspended":
+	case u.ManualStatus != status && status == "suspended":
 		return "platform.user_suspend"
-	case u.Status != status:
+	case u.ManualStatus != status:
 		return "platform.user_reactivate"
 	case u.PlatformRole != role:
 		return "platform.user_role_change"

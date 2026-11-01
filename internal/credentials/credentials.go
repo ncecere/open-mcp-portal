@@ -21,12 +21,16 @@ const (
 	// an OAuth access token (ompat_) or a refresh token or authorization code
 	// (omprt_, ompac_): accepted by /mcp only.
 	MCPCredential
+	// SCIMToken: ompscim_ and 43 characters (directory provisioning token,
+	// decision 92): accepted by /scim/v2 only, never /v1 or /mcp.
+	SCIMToken
 )
 
 // Prefixes.
 const (
 	PlatformPrefix  = "ompadm_"
 	PublisherPrefix = "omppub_"
+	SCIMPrefix      = "ompscim_"
 	// TokenBodyLen is the length of the random part of an automation token.
 	TokenBodyLen = 43
 	// StoredPrefixLen is how much of a token is stored in the clear to
@@ -42,7 +46,7 @@ func Classify(s string) Kind {
 	for _, t := range []struct {
 		prefix string
 		kind   Kind
-	}{{PlatformPrefix, PlatformToken}, {PublisherPrefix, PublisherToken}} {
+	}{{PlatformPrefix, PlatformToken}, {PublisherPrefix, PublisherToken}, {SCIMPrefix, SCIMToken}} {
 		if strings.HasPrefix(s, t.prefix) {
 			if len(s) == len(t.prefix)+TokenBodyLen && urlSafe(s[len(t.prefix):]) {
 				return t.kind

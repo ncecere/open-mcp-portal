@@ -31,6 +31,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/ratelimit"
 	"github.com/ncecere/open-mcp-portal/internal/registry"
 	"github.com/ncecere/open-mcp-portal/internal/retention"
+	"github.com/ncecere/open-mcp-portal/internal/scim"
 	"github.com/ncecere/open-mcp-portal/internal/serviceaccounts"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 	"github.com/ncecere/open-mcp-portal/internal/teams"
@@ -61,6 +62,9 @@ type Deps struct {
 	// PersonSecrets is per-person secrets for servers in person_secret mode
 	// (internal/personsecrets).
 	PersonSecrets *personsecrets.Service
+	// SCIM manages directory provisioning and serves /scim/v2 (decision 92);
+	// nil serves neither.
+	SCIM *scim.Service
 	// Automation manages and authenticates automation tokens
 	// (docs/automation-tokens.md); Notify is the notification service
 	// (docs/notifications.md); Overview computes the admin overview and team
@@ -130,7 +134,7 @@ func apiRoutes(d Deps) []route {
 	for _, group := range [][]route{a.authRoutes(), a.teamRoutes(), a.platformAdminRoutes(), a.mcpServerRoutes(), a.mcpAdminRoutes(),
 		a.gatewayRoutes(), a.gatewayAdminRoutes(), a.meGatewayRoutes(), a.mcpRoutes(), a.oauthRoutes(), a.oauthRESTRoutes(),
 		a.serviceAccountRoutes(), a.serviceAccountAdminRoutes(), a.serviceConnectionRoutes(), a.providerRoutes(), a.operationsRoutes(), a.operationsAdminRoutes(),
-		a.upstreamOAuthRoutes(), a.v02Routes(), a.classificationRoutes(), a.personSecretRoutes(), a.sessionRoutes(), a.approvalRoutes(), a.accessRequestRoutes(), a.governanceRoutes(), a.governanceAdminRoutes()} {
+		a.upstreamOAuthRoutes(), a.v02Routes(), a.classificationRoutes(), a.personSecretRoutes(), a.sessionRoutes(), a.approvalRoutes(), a.accessRequestRoutes(), a.governanceRoutes(), a.governanceAdminRoutes(), a.provisioningRoutes()} {
 		routes = append(routes, group...)
 	}
 	return routes

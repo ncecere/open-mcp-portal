@@ -19,7 +19,7 @@ VALUES ($1,'session-gen-store@example.test','Session generation store','test','s
 		t.Fatal(err)
 	}
 	var schema int64
-	if err := pool.QueryRow(ctx, `SELECT max(version_id) FROM goose_db_version WHERE is_applied`).Scan(&schema); err != nil || schema != 53 {
+	if err := pool.QueryRow(ctx, `SELECT max(version_id) FROM goose_db_version WHERE is_applied`).Scan(&schema); err != nil || schema < 53 {
 		t.Fatal("session-generation proof requires expanded schema53")
 	}
 	t.Log("SESSION_GENERATION_SCHEMA53_APPLIED_OWNED_DB")

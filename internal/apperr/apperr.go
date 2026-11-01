@@ -70,6 +70,24 @@ func IsForeignKeyViolation(err error, constraint string) bool {
 	return isPG(err, pgForeignKeyViolation, constraint) || isPG(err, pgRestrictViolation, constraint)
 }
 
+// DirectoryGuard maps the database's directory-provisioning guards (decision
+// 92) to a 409, so every writer that trips one answers the same way.
+func DirectoryGuard(err error) (*Error, bool) {
+	var pg *pgconn.PgError
+	if !errors.As(err, &pg) || pg.Code != "23514" {
+		return nil, false
+	}
+	switch pg.ConstraintName {
+	case "users_directory_protected_admin":
+		return Conflict("protected_principal", "Directory-managed people can't be platform admins. Unlink them from provisioning first."), true
+	case "users_directory_protected_owner", "team_members_directory_protected_owner":
+		return Conflict("protected_principal", "Directory-managed people can't be team owners. Unlink them from provisioning first."), true
+	case "users_directory_cleanup_pending":
+		return Conflict("cleanup_pending", "This person's deprovisioning clean-up hasn't finished yet"), true
+	}
+	return nil, false
+}
+
 func isPG(err error, code, constraint string) bool {
 	var pg *pgconn.PgError
 	if !errors.As(err, &pg) || pg.Code != code {

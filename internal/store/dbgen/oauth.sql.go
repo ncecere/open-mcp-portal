@@ -201,7 +201,7 @@ func (q *Queries) GetOAuthSettings(ctx context.Context) (OauthSetting, error) {
 }
 
 const getOAuthToken = `-- name: GetOAuthToken :one
-SELECT t.id, t.grant_id, t.kind, t.token_hash, t.resource, t.expires_at, t.rotated_at, t.created_at, t.pepper_id, gr.id, gr.user_id, gr.gateway_id, gr.client_id, gr.client_kind, gr.client_name, gr.client_uri, gr.logo_uri, gr.resource, gr.created_at, gr.last_used_at, gr.revoked_at, gr.revoked_reason, gr.authorized_at, gr.tool_scope, u.id, u.oidc_issuer, u.oidc_subject, u.email, u.display_name, u.platform_role, u.status, u.claims, u.revision, u.created_at, u.updated_at, u.last_login_at, u.groups, u.email_verified, u.request_epoch, u.session_generation, g.slug AS gateway_slug
+SELECT t.id, t.grant_id, t.kind, t.token_hash, t.resource, t.expires_at, t.rotated_at, t.created_at, t.pepper_id, gr.id, gr.user_id, gr.gateway_id, gr.client_id, gr.client_kind, gr.client_name, gr.client_uri, gr.logo_uri, gr.resource, gr.created_at, gr.last_used_at, gr.revoked_at, gr.revoked_reason, gr.authorized_at, gr.tool_scope, u.id, u.oidc_issuer, u.oidc_subject, u.email, u.display_name, u.platform_role, u.status, u.claims, u.revision, u.created_at, u.updated_at, u.last_login_at, u.groups, u.email_verified, u.request_epoch, u.session_generation, u.manual_status, u.directory_standing, g.slug AS gateway_slug
 FROM oauth_tokens t
 JOIN oauth_grants gr ON gr.id = t.grant_id
 JOIN users u ON u.id = gr.user_id
@@ -266,13 +266,15 @@ func (q *Queries) GetOAuthToken(ctx context.Context, arg GetOAuthTokenParams) (G
 		&i.User.EmailVerified,
 		&i.User.RequestEpoch,
 		&i.User.SessionGeneration,
+		&i.User.ManualStatus,
+		&i.User.DirectoryStanding,
 		&i.GatewaySlug,
 	)
 	return i, err
 }
 
 const getOAuthUserForApproval = `-- name: GetOAuthUserForApproval :one
-SELECT id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation FROM users WHERE id = $1 FOR NO KEY UPDATE
+SELECT id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation, manual_status, directory_standing FROM users WHERE id = $1 FOR NO KEY UPDATE
 `
 
 // Serializes grant creation/replacement without blocking the user FK's KEY
@@ -297,6 +299,8 @@ func (q *Queries) GetOAuthUserForApproval(ctx context.Context, id uuid.UUID) (Us
 		&i.EmailVerified,
 		&i.RequestEpoch,
 		&i.SessionGeneration,
+		&i.ManualStatus,
+		&i.DirectoryStanding,
 	)
 	return i, err
 }

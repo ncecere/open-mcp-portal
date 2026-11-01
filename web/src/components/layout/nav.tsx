@@ -14,7 +14,7 @@
  *   3. add its breadcrumb in breadcrumbs.tsx.
  * Only list pages that exist: no placeholders or "coming soon" links.
  */
-import { Activity, BadgeCheck, BarChart3, Bell, Bot, Eraser, FileClock, Gauge, Home, KeySquare, LayoutDashboard, Library, Network, Server, Settings, ShieldCheck, Terminal, Timer, Users, UsersRound, Waypoints } from "lucide-react";
+import { Activity, BadgeCheck, BarChart3, Bell, Bot, Eraser, FileClock, Gauge, Home, KeySquare, LayoutDashboard, Library, Network, Server, Settings, ShieldCheck, Terminal, Timer, UserCog, Users, UsersRound, Waypoints } from "lucide-react";
 import { type ReactNode } from "react";
 import { terms } from "../../lib/terms";
 import { type Me } from "../../session";
@@ -145,6 +145,7 @@ export type AdminPath =
   | "/admin/trusted-clients"
   | "/admin/auth-providers"
   | "/admin/automation-tokens"
+  | "/admin/provisioning"
   | "/admin/audit"
   | "/admin/calls"
   | "/admin/usage"
@@ -168,6 +169,7 @@ export const adminSections: { label?: string; defaultOpen?: boolean; items: Admi
     items: [
       { to: "/admin/users", label: "Users", icon: icon(Users) },
       { to: "/admin/teams", label: "Teams", icon: icon(UsersRound) },
+      { to: "/admin/provisioning", label: "Provisioning", icon: icon(UserCog) },
     ],
   },
   {
@@ -222,6 +224,7 @@ export function activeAdminGroup(pathname: string): string | undefined {
 export const adminKeywords: Partial<Record<AdminPath, string[]>> = {
   "/admin": ["overview", "attention", "needs attention", "dashboard", "home", "health", "status", "errors", "failing", "summary"],
   "/admin/automation-tokens": ["automation", "token", "tokens", "ci", "pipeline", "script", "bearer", "ompadm", "omppub", "platform:read", "platform:write", "terraform", "api"],
+  "/admin/provisioning": ["scim", "provisioning", "directory", "entra", "okta", "authentik", "deprovision", "offboarding", "group mapping", "ompscim"],
   "/admin/notifications": ["notifications", "email", "smtp", "webhook", "webhooks", "slack", "alerts", "destinations", "test email", "deliveries"],
   "/admin/users": ["people", "person", "suspend", "reactivate", "platform role", "platform admin", "auditor"],
   "/admin/teams": ["team", "create team", "archive", "owner", "assign owner"],

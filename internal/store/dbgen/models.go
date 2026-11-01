@@ -231,6 +231,20 @@ type CaptureSetting struct {
 	UpdatedAt time.Time
 }
 
+type DirectoryCleanupJob struct {
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	CreatedAt   time.Time
+	CompletedAt *time.Time
+	Attempts    int32
+	LastError   *string
+}
+
+type DirectoryTeamMembership struct {
+	TeamID uuid.UUID
+	UserID uuid.UUID
+}
+
 type Gateway struct {
 	ID                    uuid.UUID
 	Slug                  string
@@ -832,6 +846,74 @@ type RetentionSetting struct {
 	LastRun   json.RawMessage
 }
 
+type ScimDirectory struct {
+	ID         uuid.UUID
+	Singleton  bool
+	Issuer     string
+	Enabled    bool
+	Enrollment string
+	Revision   int64
+	CreatedBy  uuid.NullUUID
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+type ScimGroup struct {
+	ID          uuid.UUID
+	DirectoryID uuid.UUID
+	DisplayName string
+	ExternalID  *string
+	Version     int64
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type ScimGroupMapping struct {
+	ID        uuid.UUID
+	GroupID   uuid.UUID
+	TeamID    uuid.UUID
+	Role      string
+	CreatedBy uuid.NullUUID
+	CreatedAt time.Time
+}
+
+type ScimGroupMember struct {
+	GroupID    uuid.UUID
+	ScimUserID uuid.UUID
+}
+
+type ScimToken struct {
+	ID            uuid.UUID
+	DirectoryID   uuid.UUID
+	Name          string
+	Prefix        string
+	Digest        string
+	PepperID      []byte
+	CreatedBy     uuid.NullUUID
+	CreatedByName *string
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	RevokedAt     *time.Time
+	RevokedBy     uuid.NullUUID
+	LastUsedAt    *time.Time
+}
+
+type ScimUser struct {
+	ID           uuid.UUID
+	DirectoryID  uuid.UUID
+	UserName     string
+	ExternalID   *string
+	Active       bool
+	DisplayName  string
+	GivenName    string
+	FamilyName   string
+	Email        string
+	LinkedUserID uuid.NullUUID
+	Version      int64
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
 type SecretRequest struct {
 	IDDigest        string
 	IDCipher        []byte
@@ -1085,4 +1167,6 @@ type User struct {
 	EmailVerified     bool
 	RequestEpoch      int64
 	SessionGeneration int64
+	ManualStatus      string
+	DirectoryStanding string
 }
