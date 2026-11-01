@@ -5,16 +5,11 @@ Conventions for building and testing are in [CONTRIBUTING.md](CONTRIBUTING.md), 
 with an AI agent on this repository. For a fresh machine/session, start with
 [docs/agent-handoff.md](docs/agent-handoff.md); confirm its release stop point against `docs/status.md` and GitHub.
 
-- **Current owner-approved batch.** SCIM 2.0 provisioning (#36) is implemented and in v0.12.0 release validation
-  (docs/scim.md, docs/releases/v0.12.0.md). Catalog search (#49) is excluded from this release. Do not integrate other
-  returned foundations or expand authority implicitly. The main thread allocated decision90/migrations51–52 (request
-  epochs), decision91/migration53 (browser-session generations) and decision92/migrations54–56 (SCIM provisioning).
-  57+ are unallocated. Workers may not allocate further decisions/migrations. Preserve partial evidence and keep all
-  four reusable Boat VMs up.
-- **Next release stop point.** The owner requests one further pre-1.0 release after SCIM work, then a stop.
-  Finish the supported SCIM scope and required gates; include catalog only if independently accepted. After publishing,
-  independently verifying and documenting that release, stop development and worker assignments until explicitly
-  resumed. Do not expand the batch, infer v1.0.0 approval, or shut down the retained VMs.
+- **Paused after v0.12.0.** The owner's instruction was to finish SCIM, publish one more pre-1.0 release, then stop.
+  v0.12.0 (SCIM 2.0 provisioning, #36) is published and independently verified (docs/releases/v0.12.0.md).
+  **Development and worker assignments are paused until the owner explicitly resumes them.** Do not start new work,
+  integrate returned foundations (catalog search #49 and others stay unmerged), allocate decisions/migrations (57+
+  are unallocated) or infer v1.0.0 approval. Keep all four reusable Boat VMs and their fixtures/evidence up.
 - **Execution mode.** The main thread owns coordination, review, integration and releases. The owner has explicitly
   re-authorized parallel Boat/Codex coding agents for bounded development issues. Give each writer an isolated
   sandbox/checkout, only the required model credentials, and a narrow task; never forward production or infrastructure

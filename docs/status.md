@@ -1,6 +1,6 @@
 # Status and handoff
 
-Last updated: 2026-11-01. Open MCP Portal (formerly Open MCP Gateway, decision46): **v0.12.0, [SCIM 2.0 provisioning](scim.md) (#36), passed frozen release validation** at `5e5c788` (four full PostgreSQL suites, 900 browser tests, static, security and deployment-script gates; exact-source CI) and is being integrated and published; [release notes](releases/v0.12.0.md). [v0.11.0](releases/v0.11.0.md) remains the latest published, independently verified release. Owner instruction: finish SCIM, publish and independently verify this one release, then stop development and worker assignments until explicitly resumed; retained VMs stay up. Catalog search (#49) is excluded from this release. v1.0.0 remains the owner's decision. A fresh agent should read [agent-handoff.md](agent-handoff.md).
+Last updated: 2026-11-01. Open MCP Portal (formerly Open MCP Gateway, decision46): **[v0.12.0](releases/v0.12.0.md), [SCIM 2.0 provisioning](scim.md) (#36), is published and independently verified; development is paused.** Source `bf5660d` (tested runtime `5e5c788`), image index `sha256:be6969216aa7972d333c6ad9cae6de8eaa875a38c3fb1153f63c2e0deb4072ef`, pinned in the example overlay. Evidence covers four frozen full PostgreSQL suites, 900 browser tests, main CI, Kubernetes smoke, upgrade from v0.11.0 with the breaking-migration canary, load, keyless signatures/provenance/SBOMs, six byte-identical CLI rebuilds, and a published-image runtime acceptance against a local authentik. Per the owner's instruction (finish SCIM, publish and verify one release, then stop), **development and worker assignments are paused until the owner explicitly resumes them**; the four reusable Boat VMs stay up. Catalog search (#49) and other returned foundations remain unmerged; decisions 93+ and migrations 57+ are unallocated. v1.0.0 remains the owner's decision. A fresh agent should read [agent-handoff.md](agent-handoff.md).
 (release notes: [releases/v0.10.0.md](releases/v0.10.0.md), [v0.9.0](releases/v0.9.0.md), [v0.8.0](releases/v0.8.0.md); earlier: [v0.7.0](releases/v0.7.0.md), [v0.6.0](releases/v0.6.0.md), [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
 ## Current batch: SCIM provisioning (#36) and one catalog-search side lane
@@ -886,19 +886,18 @@ server allow-list).
 ### Resume on another machine
 
 - Clone `git@github.com:ncecere/open-mcp-portal.git`, check out `main` and fetch tags. All required source,
-  migrations and generated code for the released baseline are on the remote. The immutable shipped source is
-  `v0.10.1`; #40/#46 shipped in v0.10.0 and remain closed with acceptance. Inspect the latest evidence/pin follow-up CI recorded above. The separate unaccepted #36 draft is not part of the release or main and needs explicit transfer if still needed.
+  migrations and generated code for the released baseline are on the remote. The latest immutable shipped source is
+  `v0.12.0` (#36 SCIM, closed with acceptance). Unmerged foundation branches (catalog #49, Terraform #47, #38, #41, #70) are not part of main.
 - Read this release section, `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md) and
-  [implementation order](implementation-order.md). #35 shipped in v0.9.0; #40/#46 shipped in verified v0.10.0 and are closed. Correct/decide #36 SCIM's identity/deprovisioning draft before implementation. Do not restart already shipped features.
+  [implementation order](implementation-order.md). Do not restart already shipped features.
 - Install Go 1.26.10+, Node 22+, Docker, Python 3 and sqlc 1.31.1; run `npm ci` in `web/`.
   Use owned disposable PostgreSQL for integration tests and actual split-role verification.
 - Git does **not** transfer `.env`, encryption/signing keys, provider credentials or the existing development
   database. They were deliberately not exported or committed. Use a fresh development instance, or securely
   transfer a consistent database backup and its required keys separately under explicit operator control.
   Do not regenerate encryption keys for an existing database or migrate/reset the old instance implicitly.
-- Development resumed on 2026-10-29 under owner authorization. There are 24 open issues (16 development,
-  eight real-world verification). #32/#33/#35/#40/#43/#46/#52 are closed. Inspect current Git/follow-up CI before
-  integrating the next features. v1.0.0 requires the owner's explicit decision.
+- **Development is paused after v0.12.0** until the owner explicitly resumes it. Inspect open issues and current
+  Git/CI before choosing work; v1.0.0 requires the owner's explicit decision.
 
 For a **new** development instance, use [development setup](../CONTRIBUTING.md#development-setup), not a
 blind restart/seed of an existing one. The historical dev-database migration helper remains
@@ -906,6 +905,9 @@ blind restart/seed of an existing one. The historical dev-database migration hel
 
 ## Next steps
 
+0. **Paused after verified v0.12.0 (#36 SCIM).** Wait for the owner's explicit resumption. Then re-read
+   [agent-handoff.md](agent-handoff.md); catalog search (#49) still needs an upstream bitop-ui DataTable contrast fix
+   before acceptance. The items below are historical.
 1. v0.4.0 is published and verified; #26/#29/#30/#44/#68 are closed with acceptance evidence. Its follow-up
    documentation/image-pin CI and both smoke jobs also passed. Keep the immutable release tag/digest intact.
 2. **Historical machine-transfer stop point completed:** #31 shipped in verified v0.5.0 and is closed. The

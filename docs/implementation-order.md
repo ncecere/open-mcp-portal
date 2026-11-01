@@ -7,9 +7,9 @@ numbers and file paths are suggestions, not instructions to overwrite existing c
 
 ## Current batch
 
-**Current batch:** [SCIM 2.0 provisioning](scim.md) (#36) is implemented and in v0.12.0 release validation; catalog search (#49) is excluded. After this release is published and verified, development stops until the owner resumes it.
+**Paused after v0.12.0:** [SCIM 2.0 provisioning](scim.md) (#36) shipped and was independently verified. Development is paused until the owner resumes it; catalog search (#49) remains unmerged.
 
-**v0.11.0 remains fully published and independently verified**, including final main/tag/follow-up CI, artifacts and actual runtime proofs; see [release notes](releases/v0.11.0.md). [#71 is closed with scoped acceptance](https://github.com/ncecere/open-mcp-portal/issues/71#issuecomment-6549256409). #47 remains partial: Action shipped, Terraform/resources/delete-scope/vendor gates unfinished. Other exported corpus/audit/key-provider branches remain unmerged and unaccepted, including preserved full-suite failures and partial diagnostic evidence. Keep all reusable Boat VMs up; do not automatically integrate those branches or broaden the approved batch.
+**v0.11.0 (previous release) is fully published and independently verified**, including final main/tag/follow-up CI, artifacts and actual runtime proofs; see [release notes](releases/v0.11.0.md). [#71 is closed with scoped acceptance](https://github.com/ncecere/open-mcp-portal/issues/71#issuecomment-6549256409). #47 remains partial: Action shipped, Terraform/resources/delete-scope/vendor gates unfinished. Other exported corpus/audit/key-provider branches remain unmerged and unaccepted, including preserved full-suite failures and partial diagnostic evidence. Keep all reusable Boat VMs up; do not automatically integrate those branches or broaden the approved batch.
 
 The owner explicitly re-authorized parallel Boat/Codex coding agents with main-thread review, integration and release authority. **Keep new coding sandboxes up for reuse after export**, share names immediately, use fresh scoped branches/conversations and one writer per sandbox, and expose provider TTL/idle-stop limits. Do not forward production/infrastructure credentials or start unbounded/recursive delegation. This supersedes historical main-thread-only mode.
 
