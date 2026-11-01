@@ -229,6 +229,14 @@ func TestSCIMProtocolSurfaceAndCredentialIsolation(t *testing.T) {
 	if g := e.mustSCIM(200, "GET", "/Groups/"+gid, nil); g["members"] != nil && len(g["members"].([]any)) != 0 {
 		t.Fatalf("ordered member operations ended with %v", g["members"])
 	}
+	// authentik 2025.8's attribute update: no top-level schemas, path-less
+	// replace carrying id/schemas in the value (observed against a real
+	// authentik push).
+	e.mustSCIM(200, "PATCH", "/Groups/"+gid, map[string]any{"Operations": []any{map[string]any{"op": "replace",
+		"value": map[string]any{"id": gid, "displayName": "eng-renamed", "schemas": []string{scim.SchemaGroup}, "externalId": "ak-pk"}}}})
+	if g := e.mustSCIM(200, "GET", "/Groups/"+gid, nil); g["displayName"] != "eng-renamed" || g["externalId"] != "ak-pk" {
+		t.Fatalf("authentik-style replace = %v", g)
+	}
 	e.mustSCIM(204, "DELETE", "/Groups/"+gid, nil)
 	e.mustSCIM(404, "GET", "/Groups/"+gid, nil)
 	e.mustSCIM(204, "DELETE", "/Users/"+id, nil)

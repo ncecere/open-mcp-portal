@@ -92,3 +92,17 @@ func TestFilterAndPagination(t *testing.T) {
 		t.Fatalf("pagination = %+v %v", lp, err)
 	}
 }
+
+// authentik 2025.8 sends attribute updates without the top-level PatchOp
+// schema, as a path-less replace carrying id and schemas in the value.
+func TestPatchAcceptsAuthentikDialectButNotWrongSchemas(t *testing.T) {
+	p := patchOf(t, `{"Operations": [{"op": "replace", "value": {"id": "f8224353-6c85-49d0-8377-841a2d1a926a", "displayName": "authentik Read-only", "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"], "externalId": "727f2bba-a283-436d-b08d-518ce46f9307"}}]}`)
+	c, err := p.group()
+	if err != nil || c.displayName == nil || *c.displayName != "authentik Read-only" || c.externalID == nil || *c.externalID == nil || **c.externalID != "727f2bba-a283-436d-b08d-518ce46f9307" {
+		t.Fatalf("authentik group replace = %+v %v", c, err)
+	}
+	r := httptest.NewRequest("PATCH", "/scim/v2/Groups/x", bytes.NewBufferString(`{"schemas":["urn:ietf:params:scim:schemas:core:2.0:Group"],"Operations":[{"op":"replace","path":"displayName","value":"x"}]}`))
+	if err := decodePatch(r, &patchRequest{}); err == nil {
+		t.Fatal("a PATCH declaring only a resource schema was accepted")
+	}
+}

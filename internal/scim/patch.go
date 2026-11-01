@@ -34,7 +34,10 @@ func decodePatch(r *http.Request, p *patchRequest) error {
 	if err := decode(r, p); err != nil {
 		return err
 	}
-	ok := false
+	// RFC 7644 requires the PatchOp schema. Some clients (authentik 2025.x
+	// attribute updates) omit the member entirely; accept that, but refuse a
+	// request that declares other schemas without PatchOp.
+	ok := len(p.Schemas) == 0
 	for _, s := range p.Schemas {
 		ok = ok || s == schemaPatch
 	}

@@ -32,6 +32,8 @@ A provisioned resource is **not** an identity. It links to a portal person only 
 | `DELETE` | Irreversible for that account life: the person is suspended at once, and a clean-up job deletes their sessions, OAuth grants, personal connections, personal secrets and team memberships and user grants, and revokes their API keys. Audit and call history are kept; team-owned credentials and servers they set up are not touched. Remote revocation at providers is not attempted. |
 | re-creating a deleted person | A new resource does not revive the old account. After clean-up completes, an admin **re-enrolls** the person on Admin › Provisioning. |
 
+Turning provisioning off refuses the identity provider's tokens and stops gating sign-in, but leaves each managed person's directory standing as it was: someone deactivated stays suspended. Unlink people on Admin › Provisioning to return them to manual control.
+
 Manual and directory standing are separate: an admin's suspension and the directory's deactivation each block on their own, and lifting one never lifts the other. The user's effective status is shown with both.
 
 Clean-up runs on every replica in bounded passes. When an artifact is locked (for example a provider connection in the middle of a token refresh), the pass stops, records `incomplete` and is retried; it completes only when a recount finds nothing left.
@@ -59,6 +61,12 @@ Base URL `/scim/v2`, `application/scim+json`, bearer token.
 - **Versions:** each resource has a weak ETag (`W/"n"`); `If-Match` on `PUT`, `PATCH` and `DELETE` is honoured (`412` on mismatch).
 - `excludedAttributes=members` omits group members.
 - Discovery: `/ServiceProviderConfig`, `/ResourceTypes`, `/Schemas`. Bulk, sorting and password change are not supported.
+
+A PATCH without the top-level `schemas` member is accepted (authentik 2025.x sends attribute updates that way); one that declares other schemas without PatchOp is refused.
+
+### Provider notes
+
+- **authentik 2025.8** (tested with a real local push): users, enrollment by OIDC subject (set the OIDC provider's subject mode and the SCIM `externalId` mapping to the same value, for example the username), deactivation, reactivation and attribute updates work. Deleting a user in authentik did not send a SCIM `DELETE` in our test (authentik's own task looked the deleted user up again and stopped). **Deactivate a person in authentik before deleting them**, so the portal suspends them at once. A deactivated person stays suspended; their credentials are kept rather than cleaned up, because clean-up follows only a SCIM `DELETE`.
 
 Errors use the SCIM error schema (`status`, `scimType`, `detail`). Requests count against the per-credential request limit (`REQUESTS_PER_MINUTE`).
 
