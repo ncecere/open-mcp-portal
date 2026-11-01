@@ -123,6 +123,37 @@ func standingFor(active bool) string {
 	return StandingInactive
 }
 
+// lockReconcile takes the per-person reconcile locks of users in UUID order
+// and returns the sorted, de-duplicated list. Lock order everywhere: these
+// locks, then teams. A writer that will touch a team row, even implicitly
+// through a foreign key (a mapping insert), takes them first.
+func lockReconcile(ctx context.Context, q *dbgen.Queries, users []uuid.UUID) ([]uuid.UUID, error) {
+	users = slices.Clone(users)
+	slices.SortFunc(users, compareUUID)
+	users = slices.Compact(users)
+	for _, u := range users {
+		if err := q.LockDirectoryReconcile(ctx, u.String()); err != nil {
+			return nil, err
+		}
+	}
+	return users, nil
+}
+
+// lockGroupReconcile takes the reconcile locks of a locked group's linked
+// members before a mapping row (and its team FK) is touched.
+func lockGroupReconcile(ctx context.Context, q *dbgen.Queries, group uuid.UUID) error {
+	members, err := q.SCIMMembersOfGroup(ctx, group)
+	if err != nil || len(members) == 0 {
+		return err
+	}
+	linked, err := q.LinkedUsersOf(ctx, members)
+	if err != nil {
+		return err
+	}
+	_, err = lockReconcile(ctx, q, linked)
+	return err
+}
+
 // roleRank orders the roles a directory can grant.
 func roleRank(role string) int {
 	switch role {
@@ -147,13 +178,9 @@ func reconcile(ctx context.Context, q *dbgen.Queries, users []uuid.UUID, request
 	}
 	// Serialise per person before reading: two writers changing different
 	// groups of the same person must not each apply a stale desired role.
-	users = slices.Clone(users)
-	slices.SortFunc(users, compareUUID)
-	users = slices.Compact(users)
-	for _, u := range users {
-		if err := q.LockDirectoryReconcile(ctx, u.String()); err != nil {
-			return err
-		}
+	users, err := lockReconcile(ctx, q, users)
+	if err != nil {
+		return err
 	}
 	desired, err := q.DirectoryDesiredMemberships(ctx, users)
 	if err != nil {
@@ -394,6 +421,10 @@ func (s *Service) CreateMapping(ctx context.Context, a authz.Actor, in MappingIn
 		} else if err != nil {
 			return err
 		}
+		// Before the insert's team FK lock: see lockReconcile.
+		if err := lockGroupReconcile(ctx, q, in.GroupID); err != nil {
+			return err
+		}
 		t, err := q.GetTeamByID(ctx, in.TeamID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return apperr.NotFound("team_not_found", "Team not found")
@@ -437,6 +468,9 @@ func (s *Service) DeleteMapping(ctx context.Context, a authz.Actor, id uuid.UUID
 			return err
 		}
 		if _, err := q.LockSCIMGroup(ctx, dbgen.LockSCIMGroupParams{ID: m.GroupID, DirectoryID: d.ID}); err != nil {
+			return err
+		}
+		if err := lockGroupReconcile(ctx, q, m.GroupID); err != nil {
 			return err
 		}
 		if err := q.DeleteSCIMGroupMapping(ctx, id); err != nil {

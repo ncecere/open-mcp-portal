@@ -203,3 +203,56 @@ func TestStatusOnlySuspensionIsManualWhileDirectoryInactive(t *testing.T) {
 		t.Fatalf("status-only reactivation: manual=%s effective=%s", manual, status)
 	}
 }
+
+// F4 (review follow-up): a mapping insert takes an implicit FK KEY SHARE lock
+// on the team. It must not do that before waiting for the reconcile locks a
+// concurrent group PATCH holds while it waits for the same team.
+func TestMappingCreateAndGroupPatchDoNotDeadlock(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	pool, _ := testutil.NewDB(t)
+	f := fixture{t, ctx, testutil.OwnerPool(t, pool)}
+	d := f.id(`INSERT INTO scim_directories(issuer,enabled) VALUES('review',true) RETURNING id`)
+	admin := f.id(`INSERT INTO users(oidc_issuer,oidc_subject,email,platform_role) VALUES('review','admin','admin@example.test','platform_admin') RETURNING id`)
+	u := f.id(`INSERT INTO users(oidc_issuer,oidc_subject,email,directory_standing) VALUES('review','subject','review@example.test','active') RETURNING id`)
+	su := f.id(`INSERT INTO scim_users(directory_id,user_name,external_id,linked_user_id) VALUES($1,'review','subject',$2) RETURNING id`, d, u)
+	team := f.id(`INSERT INTO teams(slug,name) VALUES('review','Review') RETURNING id`)
+	ga := f.id(`INSERT INTO scim_groups(directory_id,display_name) VALUES($1,'Admins') RETURNING id`, d)
+	gb := f.id(`INSERT INTO scim_groups(directory_id,display_name) VALUES($1,'Members') RETURNING id`, d)
+	f.id(`WITH a AS (INSERT INTO scim_group_members VALUES($1,$3),($2,$3) RETURNING group_id) SELECT group_id FROM a LIMIT 1`, ga, gb, su)
+	f.id(`INSERT INTO scim_group_mappings(group_id,team_id,role) VALUES($1,$2,'admin') RETURNING id`, ga, team)
+	f.id(`INSERT INTO team_members(team_id,user_id,role) VALUES($1,$2,'admin') RETURNING team_id`, team, u)
+	f.id(`INSERT INTO directory_team_memberships VALUES($1,$2) RETURNING team_id`, team, u)
+
+	block, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer block.Rollback(context.Background())
+	if err := dbgen.New(block).LockDirectoryReconcile(ctx, u.String()); err != nil {
+		t.Fatal(err)
+	}
+	svc := New(pool, []byte("review-test-only"), "review")
+	patched, mapped := make(chan error, 1), make(chan error, 1)
+	go func() {
+		r := httptest.NewRequest("PATCH", "/scim/v2/Groups/"+ga.String(), strings.NewReader(fmt.Sprintf(`{"Operations":[{"op":"remove","path":"members[value eq \"%s\"]"}]}`, su)))
+		_, err := svc.updateGroup(ctx, r, Principal{DirectoryID: d}, ga, "")
+		patched <- err
+	}()
+	waitBlocked(t, ctx, f, 1)
+	go func() {
+		_, err := svc.CreateMapping(ctx, authz.Actor{UserID: admin, PlatformRole: authz.PlatformAdmin}, MappingInput{GroupID: gb, TeamID: team, Role: "member"})
+		mapped <- err
+	}()
+	waitBlocked(t, ctx, f, 2)
+	if err := block.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if pe, me := <-patched, <-mapped; pe != nil || me != nil {
+		t.Fatalf("PATCH=%v CreateMapping=%v", pe, me)
+	}
+	var role string
+	if err := f.owner.QueryRow(ctx, `SELECT role FROM team_members WHERE team_id=$1 AND user_id=$2`, team, u).Scan(&role); err != nil || role != "member" {
+		t.Fatalf("after removal from Admins and mapping Members: role=%q err=%v", role, err)
+	}
+}

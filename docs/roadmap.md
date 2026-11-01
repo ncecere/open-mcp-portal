@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **2026-10-30.** v0.10.1's sign-in invite lock-order patch is published and independently verified, without SCIM implementation or a schema change; its evidence/example-pin follow-up is validated separately. v0.10.0 shipped governance and CLI; #32, #33, #35, #40, #43, #46 and #52 are closed. Governance and the token-only CLI/public client shipped after all local/GitHub/publication/independent artifact/published runtime gates passed; evidence/example-pin follow-up CI is tracked separately. SCIM (#36) is still an unaccepted design draft. Work continues through [the implementation order](implementation-order.md); v1.0.0 remains the owner's decision.
+Status: **2026-11-01.** v0.12.0 adds supported SCIM 2.0 provisioning (#36, decision 92) with request epochs and browser-session generations as prerequisites; see [SCIM provisioning](scim.md). v0.11.0 hardened personal credential final writes and shipped the shared secret rules (#71) and a GitHub Action slice (#47). Catalog search (#49) stays unmerged. Work continues through [the implementation order](implementation-order.md); v1.0.0 remains the owner's decision.
 Each remaining issue has an implementation plan (data model, API, packages to change, tests, acceptance criteria and open questions):
 [all roadmap issues](https://github.com/ncecere/open-mcp-portal/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap), grouped by
 [milestone](https://github.com/ncecere/open-mcp-portal/milestones). Sizes are relative effort: **S** a few days, **M** a week or two, **L** several weeks. Each item that needs a
@@ -43,6 +43,8 @@ Decided out of scope:
 | [v0.9.0](releases/v0.9.0.md) | 2026-10-30 | First bounded ungoverned modern Tasks relay, Kubernetes release gates and content-scanning design only. #35/#43/#52 are closed; no scanner or governed async lifecycle is claimed. |
 | [v0.10.1](releases/v0.10.1.md) | 2026-10-30 | Sign-in invite acceptance/revocation lock inversion fixed with sorted team-first locking and current invite/expiry rechecks. No migration or SCIM implementation; full local/GitHub/native artifact/published-runtime checks passed. |
 | [v0.10.0](releases/v0.10.0.md) | 2026-10-30 | Accountable governance, human label confirmation, gateway ceilings, review/lifecycle/transfer and final transport cutoffs; token-only omp CLI/public client and policy-preserving plans. #40/#46 are closed. |
+| [v0.11.0](releases/v0.11.0.md) | 2026-10-31 | Personal credential final-write hardening, shared secret-rule registry (#71) and a signed token-only GitHub Action slice (#47). |
+| [v0.12.0](releases/v0.12.0.md) | 2026-11-01 | SCIM 2.0 provisioning (#36): directory tokens, enrollment by verified OIDC subject, explicit adoption, protected admins/owners, deactivation fence, deletion clean-up and group-to-team-role mappings; request epochs and browser-session generations. |
 
 Proven on a real deployment (one Talos cluster, Authentik sign-in, CloudNativePG with continuous archiving and daily backups, a restore tested twice):
 Claude Code over OAuth and an API key on the 2026-07-28 revision; per-person OAuth to GitHub's hosted MCP server; DeepWiki through a gateway.
@@ -81,7 +83,7 @@ the fail-closed recommendation and keeps classification with team owners/admins 
 
 | Issue | Decision | Recommended |
 | --- | --- | --- |
-| [#36](https://github.com/ncecere/open-mcp-portal/issues/36) | How a SCIM user links to a login, and whether `active: false` suspends or destroys. | Link by a configurable claim (default `sub`), never bare email; `active: false` suspends, `DELETE` destroys. |
+| [#36](https://github.com/ncecere/open-mcp-portal/issues/36) (decided, decision 92) | How a SCIM user links to a login, and whether `active: false` suspends or destroys. | `externalId` must equal the verified OIDC `sub`, never email; `active: false` suspends reversibly, `DELETE` ends that life and cleans up. |
 | [#51](https://github.com/ncecere/open-mcp-portal/issues/51) / [#39](https://github.com/ncecere/open-mcp-portal/issues/39) | How usage is attributed to a calling team; whether erasure leaves audit snapshots. | The team of the grant that admitted the call (a billing team for user and group grants); erasure leaves audit snapshots, bounded by audit retention, documented. |
 
 ## v0.2.x: pilot follow-ups
@@ -149,7 +151,7 @@ Leavers lose access automatically, the audit trail leaves the database, and oper
 
 | Issue | Item | Size | What it does, and why | Depends on |
 | --- | --- | --- | --- | --- |
-| [#36](https://github.com/ncecere/open-mcp-portal/issues/36) | Add SCIM 2.0 provisioning and SSO-group to team-role mapping | L | Let the identity provider create, update and remove people in the portal over SCIM 2.0, and map IdP groups to team roles. Deprovisioning ends sessions and revokes API keys, connected apps and provider connections, closing threat-model gap TN-5, where a leaver's keys and refresh tokens keep working. | #37, #40, decision 38, decision 53, #22, #26 |
+| [#36](https://github.com/ncecere/open-mcp-portal/issues/36) (shipped v0.12.0) | Add SCIM 2.0 provisioning and SSO-group to team-role mapping | L | Let the identity provider create, update and remove people in the portal over SCIM 2.0, and map IdP groups to team roles. Deprovisioning ends sessions and revokes API keys, connected apps and provider connections, closing threat-model gap TN-5, where a leaver's keys and refresh tokens keep working. | #37, #40, decision 38, decision 53, #22, #26 |
 | [#37](https://github.com/ncecere/open-mcp-portal/issues/37) | ~~Add session list, sign out everywhere and an idle timeout~~ **done in v0.3.3** | S | Let people see and end their own browser sessions, let platform admins end anyone's, and sign out sessions that have been idle too long (threat-model H-12). The refresh-token absolute lifetime (H-8) is a different credential and gets its own issue. | decision 53 |
 | [#38](https://github.com/ncecere/open-mcp-portal/issues/38) | Stream the audit log to a SIEM with gap detection and tamper evidence | M | Send every audit entry to a SIEM by signed webhook, syslog over TLS or OTLP, with sequence numbers and a hash chain so a missing or altered entry is detectable. Also add server-side exports of the audit and call logs and a minimum audit retention an admin cannot lower (threat-model H-10). | #44, #39, decision 33 |
 | [#39](https://github.com/ncecere/open-mcp-portal/issues/39) | Add legal holds and per-person data export and erasure | M | Let platform admins place legal holds that suspend retention deletion for a scope, and give each person a data export and an erasure that anonymises them in place. Decision 33 and the `retention` package header currently say legal holds are out of scope. | #38, #36, #44, decision 33 |
