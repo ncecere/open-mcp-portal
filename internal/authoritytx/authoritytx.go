@@ -35,9 +35,10 @@ const (
 const gateKey int64 = 0x4f4d505f41555448
 
 var (
-	ErrInvalid = errors.New("invalid authority transaction options")
-	ErrNested  = errors.New("authority transaction already present: use its scoped helpers")
-	ErrClosed  = errors.New("authority transaction scope ended")
+	ErrInvalid      = errors.New("invalid authority transaction options")
+	ErrNested       = errors.New("authority transaction already present: use its scoped helpers")
+	ErrClosed       = errors.New("authority transaction scope ended")
+	ErrUnregistered = errors.New("authority prelock entry requires registered transaction queries")
 )
 
 // Bounds are one total DB-only deadline and a per-lock wait bound. Values are
@@ -82,7 +83,8 @@ func (s *Scope) Queries() (*dbgen.Queries, error) {
 //
 // Run is the canonical gate-before-resources entry only. It must NOT wrap a
 // connection wait, refresh HTTP exchange, or an existing prelocked transaction.
-// Those paths require a separately reviewed nonblocking prelock/TRY entry.
+// Existing-row paths use TryPrelocked in their registered owning transaction;
+// neither entry supplies eligibility or publication validation.
 func Run[T any](ctx context.Context, pool *pgxpool.Pool, mode Mode, bounds Bounds, fn func(context.Context, *Scope) (T, error)) (T, error) {
 	var zero T
 	if pool == nil || fn == nil || (mode != Shared && mode != Exclusive) || bounds.Total <= 0 || bounds.LockWait <= 0 || bounds.LockWait > bounds.Total {
