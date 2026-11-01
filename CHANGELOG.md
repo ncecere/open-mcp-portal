@@ -6,6 +6,12 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
+## Unreleased
+
+- **Terraform metadata reads (#47 slice, unreleased).** Add a standalone read-only provider for exact-team server and platform team metadata with environment-only auth; no resources or new authority.
+
+- **Terraform read-only real-portal harness** (#47): opt-in verified-HTTPS/PG17/Terraform checks in both database-role modes; no resources or release acceptance.
+
 ## [0.13.0] - 2026-11-01
 
 - **Approved-capability catalog search (#49 slice).** Find servers by approved, listed capability metadata using literal matching and existing catalog visibility/session-only access. Search grants no invocation authority. Malformed UTF-8/NUL search text now returns `400 invalid_search` before database binding rather than an inherited server error; valid UTF-8 byte limits and literal escaping are preserved.
@@ -29,10 +35,6 @@ breaking changes; the entry says how to adapt.
 - **Personal disconnect commit ordering.** Personal connection deletion and its initiating audit now commit before best-effort provider revocation, matching shared service connections. Failed or uncertain local commits send no irreversible revocation request. A separate bounded system outcome records the result without retaining an initiating-user foreign key; remote failure cannot roll back local success. The initiating `provider_connection.revoke` records `providerRevocation: best_effort_after_commit`; consumers of its former result field should read `provider_connection.revocation_result` instead. No SCIM support, schema or new authority is added by this prerequisite.
 
 ## [0.11.0] - 2026-10-31
-
-- **Terraform read-only real-portal harness** (#47): opt-in verified-HTTPS/PG17/Terraform checks in both database-role modes; no resources or release acceptance.
-
-- **Terraform metadata reads (#47 slice, unreleased).** Add a standalone read-only provider for exact-team server and platform team metadata with environment-only auth; no resources or new authority.
 
 - **Personal credential final writes.** API-key creation rechecks current user status after its user-row lock wait. Personal OAuth connection callbacks revalidate the original active browser session after the provider exchange and existing-connection wait, before storing or replacing tokens. Ended, expired, idle or contended authority ends the flow with the existing expired-consent hint; consumed state/code is never restored or automatically retried. Nonblocking user/session locks avoid adding a connection-to-user wait cycle or holding authority locks while waiting on provider work. Existing unrevoked keys/connections remain preserved through reversible suspension. No migration, route, token scope, credential class or SCIM support is added.
 - **GitHub Action integration (#47 slice).** Add a pinned, signature-verified token-only server deployment Action with conditional import, discovery checks, explicit pending-review failure/warning and secret-safe outputs; no new authority or delete scopes.
