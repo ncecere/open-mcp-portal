@@ -120,7 +120,7 @@ func Regrant(t testing.TB, pool *pgxpool.Pool) {
 // OMP_TEST_SPLIT_ROLES=1. Only unique new scratch databases/roles are touched.
 func NewDB(t testing.TB) (*pgxpool.Pool, string) {
 	t.Helper()
-	return NewDBWithMigration(t, func(ctx context.Context, owner *pgxpool.Pool, role string) error {
+	return newDB(t, true, func(ctx context.Context, owner *pgxpool.Pool, role string) error {
 		return store.Migrate(ctx, owner, Logger(), role)
 	})
 }
@@ -129,6 +129,20 @@ func NewDB(t testing.TB) (*pgxpool.Pool, string) {
 // pools as NewDB, but lets historical-schema fixtures migrate from empty using
 // the owner. The callback must also grant the runtime role access to its schema.
 func NewDBWithMigration(t testing.TB, migrate func(context.Context, *pgxpool.Pool, string) error) (*pgxpool.Pool, string) {
+	t.Helper()
+	return newDB(t, false, migrate)
+}
+
+// NewDBFromScratch is NewDB without the migrated template: every migration
+// runs on the empty database (template equivalence tests).
+func NewDBFromScratch(t testing.TB) (*pgxpool.Pool, string) {
+	t.Helper()
+	return newDB(t, false, func(ctx context.Context, owner *pgxpool.Pool, role string) error {
+		return store.Migrate(ctx, owner, Logger(), role)
+	})
+}
+
+func newDB(t testing.TB, fromTemplate bool, migrate func(context.Context, *pgxpool.Pool, string) error) (*pgxpool.Pool, string) {
 	t.Helper()
 	ctx := context.Background()
 	admin := adminConn(t, ctx)
@@ -174,11 +188,26 @@ func NewDBWithMigration(t testing.TB, migrate func(context.Context, *pgxpool.Poo
 			createdRoles = append(createdRoles, role)
 		}
 	}
+	var tmpl *dbTemplate
+	if fromTemplate {
+		tmpl = migratedTemplate(t, ctx, split)
+	}
 	create := "CREATE DATABASE " + pgx.Identifier{name}.Sanitize()
+	if tmpl != nil {
+		create += " TEMPLATE " + pgx.Identifier{tmpl.name}.Sanitize()
+	}
 	if split {
 		create += " OWNER " + pgx.Identifier{ownerName}.Sanitize()
 	}
-	if _, err := admin.Exec(ctx, create); err != nil {
+	if tmpl != nil {
+		// CREATE DATABASE ... TEMPLATE refuses while another copy is starting.
+		tmpl.mu.Lock()
+	}
+	_, err := admin.Exec(ctx, create)
+	if tmpl != nil {
+		tmpl.mu.Unlock()
+	}
+	if err != nil {
 		t.Fatalf("create database: %v", err)
 	}
 	u, err := url.Parse(DatabaseURL())
@@ -186,6 +215,12 @@ func NewDBWithMigration(t testing.TB, migrate func(context.Context, *pgxpool.Poo
 		t.Fatal(err)
 	}
 	u.Path = "/" + name
+	if tmpl != nil && tmpl.owner != "" {
+		// Make the copy exactly as if this test's owner had migrated it.
+		if err := reassign(ctx, u.String(), tmpl.owner, ownerName); err != nil {
+			t.Fatalf("reassign template objects: %v", err)
+		}
+	}
 	if split {
 		u.User = url.UserPassword(ownerName, password)
 	}
