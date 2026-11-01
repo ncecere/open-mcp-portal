@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/ncecere/open-mcp-portal/internal/apperr"
 	"github.com/ncecere/open-mcp-portal/internal/audit"
 	"github.com/ncecere/open-mcp-portal/internal/httpx"
 	"github.com/ncecere/open-mcp-portal/internal/store"
@@ -65,6 +66,15 @@ func excludesMembers(r *http.Request) bool {
 		}
 	}
 	return false
+}
+
+// groupUniqueness maps a duplicate displayName (unique per directory,
+// ignoring case) to RFC 7644's 409 uniqueness.
+func groupUniqueness(err error) error {
+	if apperr.IsUniqueViolation(err, "scim_groups_display_name_key") {
+		return &scimError{Status: http.StatusConflict, ScimType: "uniqueness", Detail: "A group with this displayName already exists"}
+	}
+	return err
 }
 
 func validGroupName(name string) error {
@@ -259,7 +269,7 @@ func (s *Service) createGroup(ctx context.Context, r *http.Request, p Principal,
 		}
 		var err error
 		if out, err = q.InsertSCIMGroup(ctx, dbgen.InsertSCIMGroupParams{DirectoryID: p.DirectoryID, DisplayName: b.DisplayName, ExternalID: b.ExternalID}); err != nil {
-			return err
+			return groupUniqueness(err)
 		}
 		added, err := addMembers(ctx, q, p, out.ID, ids)
 		if err != nil {
@@ -350,7 +360,7 @@ func (s *Service) updateGroup(ctx context.Context, r *http.Request, p Principal,
 			touched = append(touched, ids...)
 		}
 		if out, err = q.UpdateSCIMGroup(ctx, dbgen.UpdateSCIMGroupParams{ID: id, DisplayName: name, ExternalID: ext}); err != nil {
-			return err
+			return groupUniqueness(err)
 		}
 		e := p.audit("scim.group_update", "scim_group", id.String(), httpx.RequestID(ctx))
 		e.Before = map[string]any{"displayName": cur.DisplayName}

@@ -54,7 +54,7 @@ Directory groups carry memberships. A platform admin maps a group to a team with
 Base URL `/scim/v2`, `application/scim+json`, bearer token.
 
 - **Users:** `GET` (list, by id), `POST`, `PUT`, `PATCH`, `DELETE`. Attributes: `userName` (required, unique ignoring case), `externalId` (case-exact), `active`, `displayName`, `name.givenName`, `name.familyName`, `emails` (the primary one is kept); `groups` is read-only. Unknown and extension attributes are ignored.
-- **Groups:** the same verbs. `displayName` (required), `externalId`, `members` (must be provisioned users of this directory; one unknown member fails the request).
+- **Groups:** the same verbs. `displayName` (required, unique ignoring case; a duplicate create or rename gets `409 uniqueness`), `externalId`, `members` (must be provisioned users of this directory; one unknown member fails the request).
 - **PATCH** ([RFC 7644 §3.5.2](https://www.rfc-editor.org/rfc/rfc7644#section-3.5.2)) is atomic and applied in order; `op` is case-insensitive; `"True"`/`"False"` strings are accepted for `active`; paths include `members[value eq "…"]` and `emails[type eq "work"].value`. At most 100 operations and 1,000 members per operation.
 - **Filtering:** `attribute eq "value"` on `userName`, `externalId` and `id` (users) and `displayName`, `externalId` and `id` (groups). Other filters are `400 invalidFilter`.
 - **Pagination:** `startIndex` (below 1 means 1) and `count` (negative means 0, at most 200). No sorting.
@@ -72,6 +72,6 @@ Errors use the SCIM error schema (`status`, `scimType`, `detail`). Requests coun
 
 ## Upgrading and limits
 
-Migrations 51–54 are expand-only. The previous release keeps working against the expanded schema, and a status write by an older replica is treated as a manual decision, so it can't lift a directory restriction. Older replicas don't serve `/scim/v2` or apply the enrollment gate: **finish the rollout before enabling provisioning.**
+Migrations 51–55 are expand-only. The previous release keeps working against the expanded schema, and a status write by an older replica is treated as a manual decision, so it can't lift a directory restriction. Older replicas don't serve `/scim/v2` or apply the enrollment gate: **finish the rollout before enabling provisioning.**
 
 Not covered: real-time IdP sign-out (deactivation takes effect when the directory pushes it), remote token revocation at upstream providers, provisioning more than one directory, and identity correlation by any claim other than the OIDC subject. Interoperability is tested against RFC-shaped requests modelled on common clients; see [status](status.md) for the evidence behind this release.

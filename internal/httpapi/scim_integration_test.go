@@ -216,6 +216,27 @@ func TestSCIMProtocolSurfaceAndCredentialIsolation(t *testing.T) {
 	}
 	g := e.mustSCIM(201, "POST", "/Groups", map[string]any{"displayName": "eng", "members": []any{map[string]any{"value": id}}})
 	gid := g["id"].(string)
+	// displayName is unique per directory, ignoring case: a repeated or
+	// concurrent create (seen from authentik) gets 409, never a twin group.
+	if code, out, _ := e.scim("POST", "/Groups", map[string]any{"displayName": "ENG"}, nil); code != 409 || out["scimType"] != "uniqueness" {
+		t.Fatalf("duplicate group = %d %v", code, out)
+	}
+	codes := make(chan int, 2)
+	for range 2 {
+		go func() {
+			c, _, _ := e.scim("POST", "/Groups", map[string]any{"displayName": "racing", "externalId": "same"}, nil)
+			codes <- c
+		}()
+	}
+	if a, b := <-codes, <-codes; a+b != 201+409 {
+		t.Fatalf("concurrent duplicate creates = %d, %d", a, b)
+	}
+	if list := e.mustSCIM(200, "GET", `/Groups?filter=displayName%20eq%20%22racing%22`, nil); list["totalResults"].(float64) != 1 {
+		t.Fatalf("concurrent creates left %v groups", list["totalResults"])
+	}
+	if code, out, _ := e.scim("PATCH", "/Groups/"+gid, map[string]any{"Operations": []any{map[string]any{"op": "replace", "path": "displayName", "value": "Racing"}}}, nil); code != 409 || out["scimType"] != "uniqueness" {
+		t.Fatalf("rename onto an existing group = %d %v", code, out)
+	}
 	if len(g["members"].([]any)) != 1 {
 		t.Fatalf("group = %v", g)
 	}
