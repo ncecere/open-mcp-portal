@@ -26,8 +26,8 @@ WHERE id = @id
 RETURNING *;
 
 -- name: CreateSession :one
-INSERT INTO sessions (user_id, token_digest, csrf_token, user_agent, client_ip, expires_at, created_at, last_seen_at)
-VALUES (@user_id, @token_digest, @csrf_token, @user_agent, @client_ip, @expires_at, @as_of, @as_of)
+INSERT INTO sessions (user_id, session_generation, token_digest, csrf_token, user_agent, client_ip, expires_at, created_at, last_seen_at)
+VALUES (@user_id, @session_generation, @token_digest, @csrf_token, @user_agent, @client_ip, @expires_at, @as_of, @as_of)
 RETURNING id;
 
 -- name: GetSessionUser :one
@@ -35,19 +35,24 @@ SELECT sqlc.embed(sessions), sqlc.embed(users)
 FROM sessions
 JOIN users ON users.id = sessions.user_id
 WHERE sessions.token_digest = @token_digest
+  -- Preserve current suspended-account refusal, but never revive an old cookie
+  -- when status becomes active again or a directory fence leaves status alone.
+  AND (users.status <> 'active' OR sessions.session_generation = users.session_generation)
   AND sessions.expires_at > @as_of::timestamptz
   AND sessions.last_seen_at > @idle_since::timestamptz;
 
 -- name: TouchSession :exec
 UPDATE sessions SET last_seen_at = @as_of::timestamptz
-WHERE id = @id AND last_seen_at <= @touch_before::timestamptz
-  AND expires_at > @as_of::timestamptz AND last_seen_at > @idle_since::timestamptz;
+WHERE sessions.id = @id AND sessions.last_seen_at <= @touch_before::timestamptz
+  AND sessions.expires_at > @as_of::timestamptz AND sessions.last_seen_at > @idle_since::timestamptz
+  AND sessions.session_generation = (SELECT u.session_generation FROM users u WHERE u.id = sessions.user_id);
 
 -- name: ListUserSessions :many
-SELECT id, created_at, last_seen_at, expires_at, user_agent, client_ip
-FROM sessions WHERE user_id = @user_id
-  AND expires_at > @as_of::timestamptz AND last_seen_at > @idle_since::timestamptz
-ORDER BY created_at DESC, id DESC;
+SELECT sessions.id, sessions.created_at, sessions.last_seen_at, sessions.expires_at, sessions.user_agent, sessions.client_ip
+FROM sessions WHERE sessions.user_id = @user_id
+  AND sessions.session_generation = (SELECT u.session_generation FROM users u WHERE u.id = sessions.user_id)
+  AND sessions.expires_at > @as_of::timestamptz AND sessions.last_seen_at > @idle_since::timestamptz
+ORDER BY sessions.created_at DESC, sessions.id DESC;
 
 -- name: RevokeSessions :many
 DELETE FROM sessions WHERE user_id = @user_id

@@ -352,8 +352,9 @@ SELECT status FROM users WHERE id = $1 FOR KEY SHARE NOWAIT;
 -- name: LockPersonalConsentSession :one
 -- Ended or contended browser authority requires fresh consent, not a retry
 -- of the consumed authorization state. No network runs with these locks held.
-SELECT id FROM sessions WHERE id = @id AND user_id = @user_id
-AND expires_at > @as_of::timestamptz AND last_seen_at > @idle_since::timestamptz FOR UPDATE NOWAIT;
+SELECT s.id FROM sessions s JOIN users u ON u.id = s.user_id
+WHERE s.id = @id AND s.user_id = @user_id AND s.session_generation = u.session_generation
+AND s.expires_at > @as_of::timestamptz AND s.last_seen_at > @idle_since::timestamptz FOR UPDATE OF s NOWAIT;
 
 -- name: InsertProviderAuthState :exec
 INSERT INTO provider_auth_states (state_digest, user_id, session_digest, provider_id, scopes, required_scopes,

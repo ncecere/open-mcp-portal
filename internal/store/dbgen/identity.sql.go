@@ -14,24 +14,26 @@ import (
 )
 
 const createSession = `-- name: CreateSession :one
-INSERT INTO sessions (user_id, token_digest, csrf_token, user_agent, client_ip, expires_at, created_at, last_seen_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+INSERT INTO sessions (user_id, session_generation, token_digest, csrf_token, user_agent, client_ip, expires_at, created_at, last_seen_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
 RETURNING id
 `
 
 type CreateSessionParams struct {
-	UserID      uuid.UUID
-	TokenDigest string
-	CSRFToken   string
-	UserAgent   string
-	ClientIP    string
-	ExpiresAt   time.Time
-	AsOf        time.Time
+	UserID            uuid.UUID
+	SessionGeneration int64
+	TokenDigest       string
+	CSRFToken         string
+	UserAgent         string
+	ClientIP          string
+	ExpiresAt         time.Time
+	AsOf              time.Time
 }
 
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, createSession,
 		arg.UserID,
+		arg.SessionGeneration,
 		arg.TokenDigest,
 		arg.CSRFToken,
 		arg.UserAgent,
@@ -102,10 +104,13 @@ func (q *Queries) DeleteUserSessions(ctx context.Context, userID uuid.UUID) erro
 }
 
 const getSessionUser = `-- name: GetSessionUser :one
-SELECT sessions.id, sessions.user_id, sessions.token_digest, sessions.csrf_token, sessions.user_agent, sessions.client_ip, sessions.created_at, sessions.expires_at, sessions.last_seen_at, users.id, users.oidc_issuer, users.oidc_subject, users.email, users.display_name, users.platform_role, users.status, users.claims, users.revision, users.created_at, users.updated_at, users.last_login_at, users.groups, users.email_verified, users.request_epoch
+SELECT sessions.id, sessions.user_id, sessions.token_digest, sessions.csrf_token, sessions.user_agent, sessions.client_ip, sessions.created_at, sessions.expires_at, sessions.last_seen_at, sessions.session_generation, users.id, users.oidc_issuer, users.oidc_subject, users.email, users.display_name, users.platform_role, users.status, users.claims, users.revision, users.created_at, users.updated_at, users.last_login_at, users.groups, users.email_verified, users.request_epoch, users.session_generation
 FROM sessions
 JOIN users ON users.id = sessions.user_id
 WHERE sessions.token_digest = $1
+  -- Preserve current suspended-account refusal, but never revive an old cookie
+  -- when status becomes active again or a directory fence leaves status alone.
+  AND (users.status <> 'active' OR sessions.session_generation = users.session_generation)
   AND sessions.expires_at > $2::timestamptz
   AND sessions.last_seen_at > $3::timestamptz
 `
@@ -134,6 +139,7 @@ func (q *Queries) GetSessionUser(ctx context.Context, arg GetSessionUserParams) 
 		&i.Session.CreatedAt,
 		&i.Session.ExpiresAt,
 		&i.Session.LastSeenAt,
+		&i.Session.SessionGeneration,
 		&i.User.ID,
 		&i.User.OIDCIssuer,
 		&i.User.OIDCSubject,
@@ -149,12 +155,13 @@ func (q *Queries) GetSessionUser(ctx context.Context, arg GetSessionUserParams) 
 		&i.User.Groups,
 		&i.User.EmailVerified,
 		&i.User.RequestEpoch,
+		&i.User.SessionGeneration,
 	)
 	return i, err
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch FROM users WHERE id = $1
+SELECT id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
@@ -176,6 +183,7 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.Groups,
 		&i.EmailVerified,
 		&i.RequestEpoch,
+		&i.SessionGeneration,
 	)
 	return i, err
 }
@@ -255,10 +263,11 @@ func (q *Queries) ListIssuerUsers(ctx context.Context, oidcIssuer string) ([]Lis
 }
 
 const listUserSessions = `-- name: ListUserSessions :many
-SELECT id, created_at, last_seen_at, expires_at, user_agent, client_ip
-FROM sessions WHERE user_id = $1
-  AND expires_at > $2::timestamptz AND last_seen_at > $3::timestamptz
-ORDER BY created_at DESC, id DESC
+SELECT sessions.id, sessions.created_at, sessions.last_seen_at, sessions.expires_at, sessions.user_agent, sessions.client_ip
+FROM sessions WHERE sessions.user_id = $1
+  AND sessions.session_generation = (SELECT u.session_generation FROM users u WHERE u.id = sessions.user_id)
+  AND sessions.expires_at > $2::timestamptz AND sessions.last_seen_at > $3::timestamptz
+ORDER BY sessions.created_at DESC, sessions.id DESC
 `
 
 type ListUserSessionsParams struct {
@@ -340,7 +349,7 @@ const setPlatformRole = `-- name: SetPlatformRole :one
 UPDATE users
 SET platform_role = $1, revision = revision + 1, updated_at = now()
 WHERE id = $2
-RETURNING id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch
+RETURNING id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation
 `
 
 type SetPlatformRoleParams struct {
@@ -367,6 +376,7 @@ func (q *Queries) SetPlatformRole(ctx context.Context, arg SetPlatformRoleParams
 		&i.Groups,
 		&i.EmailVerified,
 		&i.RequestEpoch,
+		&i.SessionGeneration,
 	)
 	return i, err
 }
@@ -394,8 +404,9 @@ func (q *Queries) TakeLoginState(ctx context.Context, stateDigest string) (Login
 
 const touchSession = `-- name: TouchSession :exec
 UPDATE sessions SET last_seen_at = $1::timestamptz
-WHERE id = $2 AND last_seen_at <= $3::timestamptz
-  AND expires_at > $1::timestamptz AND last_seen_at > $4::timestamptz
+WHERE sessions.id = $2 AND sessions.last_seen_at <= $3::timestamptz
+  AND sessions.expires_at > $1::timestamptz AND sessions.last_seen_at > $4::timestamptz
+  AND sessions.session_generation = (SELECT u.session_generation FROM users u WHERE u.id = sessions.user_id)
 `
 
 type TouchSessionParams struct {
@@ -425,7 +436,7 @@ SET email         = EXCLUDED.email,
     groups        = EXCLUDED.groups,
     last_login_at = now(),
     updated_at    = now()
-RETURNING id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch
+RETURNING id, oidc_issuer, oidc_subject, email, display_name, platform_role, status, claims, revision, created_at, updated_at, last_login_at, groups, email_verified, request_epoch, session_generation
 `
 
 type UpsertLoginUserParams struct {
@@ -464,6 +475,7 @@ func (q *Queries) UpsertLoginUser(ctx context.Context, arg UpsertLoginUserParams
 		&i.Groups,
 		&i.EmailVerified,
 		&i.RequestEpoch,
+		&i.SessionGeneration,
 	)
 	return i, err
 }

@@ -974,15 +974,16 @@ type ServiceConnectionServerGrant struct {
 }
 
 type Session struct {
-	ID          uuid.UUID
-	UserID      uuid.UUID
-	TokenDigest string
-	CSRFToken   string
-	UserAgent   string
-	ClientIP    string
-	CreatedAt   time.Time
-	ExpiresAt   time.Time
-	LastSeenAt  time.Time
+	ID                uuid.UUID
+	UserID            uuid.UUID
+	TokenDigest       string
+	CSRFToken         string
+	UserAgent         string
+	ClientIP          string
+	CreatedAt         time.Time
+	ExpiresAt         time.Time
+	LastSeenAt        time.Time
+	SessionGeneration int64
 }
 
 type SigningKey struct {
@@ -1068,19 +1069,20 @@ type UsageRollupState struct {
 }
 
 type User struct {
-	ID            uuid.UUID
-	OIDCIssuer    string
-	OIDCSubject   string
-	Email         string
-	DisplayName   string
-	PlatformRole  string
-	Status        string
-	Claims        json.RawMessage
-	Revision      int64
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	LastLoginAt   *time.Time
-	Groups        []string
-	EmailVerified bool
-	RequestEpoch  int64
+	ID                uuid.UUID
+	OIDCIssuer        string
+	OIDCSubject       string
+	Email             string
+	DisplayName       string
+	PlatformRole      string
+	Status            string
+	Claims            json.RawMessage
+	Revision          int64
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	LastLoginAt       *time.Time
+	Groups            []string
+	EmailVerified     bool
+	RequestEpoch      int64
+	SessionGeneration int64
 }

@@ -20,10 +20,10 @@ VALUES ($1,'epoch-store@example.test','Epoch store','test','epoch-store') RETURN
 		t.Fatal("old-style insert did not receive initial epoch:", err)
 	}
 	var schema int64
-	if err := pool.QueryRow(ctx, "SELECT max(version_id) FROM goose_db_version WHERE is_applied").Scan(&schema); err != nil || schema != 52 {
-		t.Fatal("request epoch proof requires the corrected expanded schema52")
+	if err := pool.QueryRow(ctx, "SELECT max(version_id) FROM goose_db_version WHERE is_applied").Scan(&schema); err != nil || schema != 53 {
+		t.Fatal("request epoch proof requires the current expanded schema53")
 	}
-	t.Log("REQUEST_EPOCH_SCHEMA52_APPLIED_OWNED_DB")
+	t.Log("REQUEST_EPOCH_SCHEMA53_APPLIED_OWNED_DB")
 	current := func() int64 {
 		t.Helper()
 		var value int64

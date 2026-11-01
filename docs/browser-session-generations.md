@@ -1,0 +1,31 @@
+# Browser-session revocation versus a fresh request
+
+**Decision91/migration53; implemented with scoped application and real-callback proofs, not SCIM support.** This is a separate prerequisite after [request epochs](request-authority-epochs.md). The owner requests SCIM first, followed by closeout toward one verified pre-1.0 release and a pause. No standalone foundation release is authorized.
+
+## Why another value
+
+A request epoch prevents an already-authenticated request from inheriting new standing after a change-and-revert. It cannot by itself prevent an undeleted old browser cookie from authenticating again and obtaining a fresh epoch. Physical session deletion can wait on original consent/session rows held while another transaction waits on provider work. A future short directory fence therefore needs an irreversible session generation independent of physical cleanup.
+
+`users.session_generation` is positive and monotonic. `sessions.session_generation` is the immutable snapshot at issuance. Manual transition into suspension advances the user generation; reactivation does not restore it. A short explicit lifecycle fence can also advance it without enumerating/deleting sessions. Any advance also advances `users.request_epoch`, so requests authenticated by an ended cookie before the fence cannot mint a key through the first epoch consumer. A single manual suspension advances the request epoch once, not twice. Overflow or a decrease refuses the entire transaction. Profile-only changes do neither.
+
+Active-cookie authentication, active-session listing/activity and both original personal/shared connection-consent session checks compare the snapshot with the user's current generation. The existing explicit suspended-account refusal remains; reactivation cannot make a generation-mismatched cookie active. Original session/user IDs, strict absolute/idle expiry, lock modes, NOWAIT handling and single-use state/code remain unchanged. The generation trigger performs only a non-key row update: no session deletion, provider call or new logical/row lock.
+
+## Issuance and previous SQL
+
+New application session issuance must supply its genuinely captured positive generation. A missing value is refused before producing a secret, and a stale/future value refuses rather than reading a fresh admission after waiting. A stored session snapshot cannot be changed to revive its cookie. Existing revoke-one/revoke-all/keep-current semantics continue using their physical transactional deletion; this prerequisite does not replace that API with a blanket all-user generation bump.
+
+Expand-only migration53 initializes existing users/sessions at generation1. Once its owner-only, pinned SECURITY INVOKER trigger exists, the session column's insert default becomes0. That SQL-omission sentinel lets the **previous binary**, which does not know the column, stamp its new session with the user's actual current generation. It is not a new-code admission fallback. Explicit mismatched generations refuse. Non-approval functions stay outside the unchanged closed private approval catalog; PUBLIC execute is revoked and runtime grants are not broadened.
+
+Actual previous-image compatibility must be repeated against final schema53, including reopening an old-image-created fresh session after generation advancement. Schema52 receipts do not cover53. Older serving code ignores generation checks and must drain before relying on enforcement. Compatibility is not old-image cookie/lifecycle fencing.
+
+## Executed evidence
+
+A frozen snapshot passed six complete adjacent packages (`apikeys`, `auth`, `platform`, `providers`, `gateways`, `store`) in normal and race modes under both independently authenticated PostgreSQL role modes (136.5/268.0s and 147.7/352.8s), with all thirteen required request-epoch, transaction-reader and session-generation regressions. Three more race repetitions per role of the actual cookie/consent-lock test passed: a real `RequireSession` cookie, real shared-consent USER KEY SHARE and SESSION FOR UPDATE locks held, a non-key generation fence committing before their release, then the retained cookie and both original consent queries refused while the physical session row remained.
+
+Real HTTP personal (new and reconnect) and shared callbacks were blocked inside the fake provider's token exchange while the non-key generation fence committed. With the consent generation predicate removed (same schema, regenerated queries), all three new cases connected late in every role/race mode; that negative is an unreleased-source control, not a released-policy defect. With the predicate, the complete original callback matrices (18 cases including logout, expiry, idle, suspension, reactivation, revoke, revision, demotion and provider changes) passed in all four modes with unchanged credential, audit, no-restored-state and no-replay assertions.
+
+## Acceptance and remaining boundaries
+
+Required executable evidence includes generation monotonic/no-op/overflow and immutable snapshot checks; a real cookie that remains unusable after a non-key generation fence/reactivation while its physical row still exists; fresh-session/legacy-insert controls; both original consent readers; and a compatible retained USER KEY SHARE/SESSION lock footprint. An actual blocked-provider first-fence commit and complete global-G/session/lifetime integration remain full-SCIM gates, not conclusions inferred from a SQL lock test.
+
+Persistent enrollment/deletion life, pending OIDC login-policy observation, effective directory/group provenance and child-aware stable cleanup remain separate values/proofs. No generation permits restoring consumed OAuth state, approval spend or task input. A usable SCIM token, discovery route or provisioning surface is not implemented by these fields/readers. Full normal/race both-role tests, old-image checks and final product/release gates remain required before acceptance.

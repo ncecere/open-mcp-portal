@@ -1503,8 +1503,9 @@ func (q *Queries) LockAuthProvider(ctx context.Context, id uuid.UUID) (AuthProvi
 }
 
 const lockPersonalConsentSession = `-- name: LockPersonalConsentSession :one
-SELECT id FROM sessions WHERE id = $1 AND user_id = $2
-AND expires_at > $3::timestamptz AND last_seen_at > $4::timestamptz FOR UPDATE NOWAIT
+SELECT s.id FROM sessions s JOIN users u ON u.id = s.user_id
+WHERE s.id = $1 AND s.user_id = $2 AND s.session_generation = u.session_generation
+AND s.expires_at > $3::timestamptz AND s.last_seen_at > $4::timestamptz FOR UPDATE OF s NOWAIT
 `
 
 type LockPersonalConsentSessionParams struct {

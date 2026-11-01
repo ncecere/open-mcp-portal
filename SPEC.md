@@ -97,6 +97,10 @@ states bound to the ended session; connected apps, keys and provider connections
 an absolute `SESSION_TTL` and an optional `SESSION_IDLE_TIMEOUT` (default off; 5m through the absolute lifetime).
 Every session entry point checks both limits and records activity at most once a minute. See decision 76 and
 [the client-auth design](docs/phase4-client-auth.md#browser-sessions-37-decision-76).
+The in-progress decision91 prerequisite adds a distinct immutable session-generation snapshot: an old
+cookie cannot become active after a non-key revocation fence/reactivation while its row awaits cleanup.
+This is separate from request admission and deletion life; see [session generations](docs/browser-session-generations.md)
+for compatibility, original-consent checks and still-required SCIM acceptance.
 
 | Role | Can |
 |---|---|

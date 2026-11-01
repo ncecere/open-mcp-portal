@@ -2,8 +2,9 @@
 SELECT status FROM users WHERE id = $1 FOR KEY SHARE;
 
 -- name: LockServiceConsentSession :one
-SELECT id FROM sessions WHERE id = @id AND user_id = @user_id
-AND expires_at > @as_of::timestamptz AND last_seen_at > @idle_since::timestamptz FOR UPDATE;
+SELECT s.id FROM sessions s JOIN users u ON u.id = s.user_id
+WHERE s.id = @id AND s.user_id = @user_id AND s.session_generation = u.session_generation
+AND s.expires_at > @as_of::timestamptz AND s.last_seen_at > @idle_since::timestamptz FOR UPDATE OF s;
 
 -- name: LockServiceConnectionTeam :exec
 SELECT pg_advisory_xact_lock(hashtextextended('service-connections:' || @team_id::text,0));

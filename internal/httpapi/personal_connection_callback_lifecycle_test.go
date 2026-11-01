@@ -23,7 +23,7 @@ func TestPersonalConnectionCallbackRechecksSessionAfterExchange(t *testing.T) {
 			name = "reconnect"
 		}
 		t.Run(name, func(t *testing.T) {
-			for _, mutation := range []string{"logout", "session_expiry", "session_idle", "suspend", "suspend_reactivate"} {
+			for _, mutation := range []string{"logout", "session_expiry", "session_idle", "suspend", "suspend_reactivate", "session_generation"} {
 				t.Run(mutation, func(t *testing.T) {
 					e := newProvEnvHook(t, func(d *httpapi.Deps) {
 						if mutation == "session_idle" {
@@ -86,6 +86,19 @@ func TestPersonalConnectionCallbackRechecksSessionAfterExchange(t *testing.T) {
 						if _, err := e.app.Pool.Exec(context.Background(), `UPDATE sessions SET last_seen_at=now()-interval '10 minutes' WHERE user_id=$1`, userID); err != nil {
 							t.Fatal(err)
 						}
+					case "session_generation":
+						// Commit the non-key fence while the actual provider exchange
+						// remains blocked; retain the original session physically.
+						fenceCtx, fenceCancel := context.WithTimeout(context.Background(), 2*time.Second)
+						_, err := e.app.Pool.Exec(fenceCtx, `UPDATE users SET session_generation=session_generation+1 WHERE id=$1`, userID)
+						fenceCancel()
+						if err != nil {
+							t.Fatal("generation fence during provider exchange:", err)
+						}
+						if n := e.scalar(`SELECT count(*)::text FROM sessions WHERE user_id=$1`, userID); n == "0" {
+							t.Fatal("generation refusal cannot rely on deleting the original browser session")
+						}
+						t.Log("PERSONAL_CALLBACK_GENERATION_FENCE_COMMITTED_DURING_BLOCKED_EXCHANGE")
 					case "suspend", "suspend_reactivate":
 						setStatus("suspended")
 						if mutation == "suspend_reactivate" {

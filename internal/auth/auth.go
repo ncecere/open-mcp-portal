@@ -157,6 +157,9 @@ func (s *Service) clientIP(r *http.Request) string { return httpx.ClientIP(r, s.
 // createSession stores a new session and returns the cookie secret. The
 // caller sets the cookie only after the surrounding transaction commits.
 func (s *Service) createSession(ctx context.Context, r *http.Request, q *dbgen.Queries, user dbgen.User) (string, error) {
+	if user.SessionGeneration <= 0 {
+		return "", errors.New("browser session requires an admitted positive generation")
+	}
 	secret := httpx.NewID(32)
 	csrf := httpx.NewID(32)
 	ua := r.UserAgent()
@@ -165,15 +168,19 @@ func (s *Service) createSession(ctx context.Context, r *http.Request, q *dbgen.Q
 	}
 	now := s.now()
 	_, err := q.CreateSession(ctx, dbgen.CreateSessionParams{
-		AsOf:        now,
-		UserID:      user.ID,
-		TokenDigest: Digest(secret),
-		CSRFToken:   csrf,
-		UserAgent:   ua,
-		ClientIP:    s.clientIP(r),
-		ExpiresAt:   now.Add(s.cfg.SessionTTL),
+		AsOf:              now,
+		UserID:            user.ID,
+		SessionGeneration: user.SessionGeneration,
+		TokenDigest:       Digest(secret),
+		CSRFToken:         csrf,
+		UserAgent:         ua,
+		ClientIP:          s.clientIP(r),
+		ExpiresAt:         now.Add(s.cfg.SessionTTL),
 	})
-	return secret, err
+	if err != nil {
+		return "", err
+	}
+	return secret, nil
 }
 
 func (s *Service) setSessionCookie(w http.ResponseWriter, secret string) {
