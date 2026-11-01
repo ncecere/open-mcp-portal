@@ -1,6 +1,6 @@
 # Status and handoff
 
-Last updated: 2026-11-01. Open MCP Portal (formerly Open MCP Gateway, decision46): **[v0.12.0](releases/v0.12.0.md), [SCIM 2.0 provisioning](scim.md) (#36), is published and independently verified; development is paused.** Source `bf5660d` (tested runtime `5e5c788`), image index `sha256:be6969216aa7972d333c6ad9cae6de8eaa875a38c3fb1153f63c2e0deb4072ef`, pinned in the example overlay. Evidence covers four frozen full PostgreSQL suites, 900 browser tests, main CI, Kubernetes smoke, upgrade from v0.11.0 with the breaking-migration canary, load, keyless signatures/provenance/SBOMs, six byte-identical CLI rebuilds, and a published-image runtime acceptance against a local authentik. Per the owner's instruction (finish SCIM, publish and verify one release, then stop), **development and worker assignments are paused until the owner explicitly resumes them**; the four reusable Boat VMs stay up. Catalog search (#49) and other returned foundations remain unmerged; decisions 93+ and migrations 57+ are unallocated. v1.0.0 remains the owner's decision. A fresh agent should read [agent-handoff.md](agent-handoff.md).
+Last updated: 2026-11-01. Open MCP Portal (formerly Open MCP Gateway, decision46): **[v0.13.0](releases/v0.13.0.md) is in release validation** (catalog search #49 slice, list-column fix, #38/#70 unwired groundwork, dependency updates; no migrations), at the owner's request to merge the outstanding items, cut a release and pause. Previous release: **[v0.12.0](releases/v0.12.0.md), [SCIM 2.0 provisioning](scim.md) (#36), is published and independently verified.** Source `bf5660d` (tested runtime `5e5c788`), image index `sha256:be6969216aa7972d333c6ad9cae6de8eaa875a38c3fb1153f63c2e0deb4072ef`, pinned in the example overlay. Evidence covers four frozen full PostgreSQL suites, 900 browser tests, main CI, Kubernetes smoke, upgrade from v0.11.0 with the breaking-migration canary, load, keyless signatures/provenance/SBOMs, six byte-identical CLI rebuilds, and a published-image runtime acceptance against a local authentik. Decisions 93+ and migrations 57+ are unallocated. v1.0.0 remains the owner's decision. A fresh agent should read [agent-handoff.md](agent-handoff.md).
 (release notes: [releases/v0.10.0.md](releases/v0.10.0.md), [v0.9.0](releases/v0.9.0.md), [v0.8.0](releases/v0.8.0.md); earlier: [v0.7.0](releases/v0.7.0.md), [v0.6.0](releases/v0.6.0.md), [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
 ## Current batch: SCIM provisioning (#36) and one catalog-search side lane
@@ -887,7 +887,7 @@ server allow-list).
 
 - Clone `git@github.com:ncecere/open-mcp-portal.git`, check out `main` and fetch tags. All required source,
   migrations and generated code for the released baseline are on the remote. The latest immutable shipped source is
-  `v0.12.0` (#36 SCIM, closed with acceptance). Unmerged foundation branches (catalog #49, #38, #70) are not part of main. The Terraform provider is a separate project and direct Vault/OpenBao integration (#41) is deferred (owner decisions, 2026-11-01); their exploratory branches are kept for reference only.
+  `v0.12.0` (#36 SCIM, closed with acceptance); v0.13.0 is in release validation. The Terraform provider is a separate project and direct Vault/OpenBao integration (#41) is deferred (owner decisions, 2026-11-01); their exploratory branches are kept for reference only.
 - Read this release section, `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md) and
   [implementation order](implementation-order.md). Do not restart already shipped features.
 - Install Go 1.26.10+, Node 22+, Docker, Python 3 and sqlc 1.31.1; run `npm ci` in `web/`.
@@ -896,7 +896,7 @@ server allow-list).
   database. They were deliberately not exported or committed. Use a fresh development instance, or securely
   transfer a consistent database backup and its required keys separately under explicit operator control.
   Do not regenerate encryption keys for an existing database or migrate/reset the old instance implicitly.
-- **Development is paused after v0.12.0** until the owner explicitly resumes it. Inspect open issues and current
+- **v0.13.0 is in release validation**; development pauses after it until the owner resumes it. Inspect open issues and current
   Git/CI before choosing work; v1.0.0 requires the owner's explicit decision.
 
 For a **new** development instance, use [development setup](../CONTRIBUTING.md#development-setup), not a
@@ -905,9 +905,8 @@ blind restart/seed of an existing one. The historical dev-database migration hel
 
 ## Next steps
 
-0. **Paused after verified v0.12.0 (#36 SCIM).** Wait for the owner's explicit resumption. Then re-read
-   [agent-handoff.md](agent-handoff.md); catalog search (#49) still needs an upstream bitop-ui DataTable contrast fix
-   before acceptance. The items below are historical.
+0. **Finish v0.13.0** (catalog search #49 slice, #38/#70 groundwork, dependency updates), then pause until the owner
+   resumes. Re-read [agent-handoff.md](agent-handoff.md). The items below are historical.
 1. v0.4.0 is published and verified; #26/#29/#30/#44/#68 are closed with acceptance evidence. Its follow-up
    documentation/image-pin CI and both smoke jobs also passed. Keep the immutable release tag/digest intact.
 2. **Historical machine-transfer stop point completed:** #31 shipped in verified v0.5.0 and is closed. The

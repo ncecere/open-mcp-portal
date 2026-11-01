@@ -1,6 +1,6 @@
-# Agent handoff: v0.12.0 published and verified; development paused
+# Agent handoff: v0.13.0 release validation, then pause
 
-**Paused.** The owner asked to finish SCIM, cut one more pre-1.0 release and then stop. v0.12.0 is published and independently verified; development and worker assignments are paused until the owner explicitly resumes them. The four reusable Boat VMs stay up with their fixtures and evidence. v1.0.0 remains the owner's decision.
+**Current batch (owner, 2026-11-01):** merge the outstanding items (catalog search #49 slice, #38 audit-evidence and #70 scanning-corpus groundwork, Dependabot updates), cut v0.13.0, then pause until the owner resumes. The Terraform provider is a separate project; direct Vault/OpenBao integration (#41) is deferred. The four reusable Boat VMs stay up. v1.0.0 remains the owner's decision.
 
 **Last release:** [v0.12.0](releases/v0.12.0.md), [SCIM 2.0 provisioning](scim.md) (#36, decisions 90–92, migrations 51–56), source `bf5660dbec705ca926fff8de901a029fec3d9e32`, annotated tag `12dc4d4d288e32e78fd42cbc94754b9d9a37de68`, image index `sha256:be6969216aa7972d333c6ad9cae6de8eaa875a38c3fb1153f63c2e0deb4072ef`. Evidence and limits are in the release notes. Catalog search (#49) and the other returned foundation branches remain unmerged.
 

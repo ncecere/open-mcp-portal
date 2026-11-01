@@ -6,7 +6,7 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
-## Unreleased
+## [0.13.0] - 2026-11-01
 
 - **Approved-capability catalog search (#49 slice).** Find servers by approved, listed capability metadata using literal matching and existing catalog visibility/session-only access. Search grants no invocation authority. Malformed UTF-8/NUL search text now returns `400 invalid_search` before database binding rather than an inherited server error; valid UTF-8 byte limits and literal escaping are preserved.
 

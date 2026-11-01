@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **2026-11-01.** v0.12.0 adds supported SCIM 2.0 provisioning (#36, decision 92) with request epochs and browser-session generations as prerequisites; see [SCIM provisioning](scim.md). v0.11.0 hardened personal credential final writes and shipped the shared secret rules (#71) and a GitHub Action slice (#47). Catalog search (#49) stays unmerged. Work continues through [the implementation order](implementation-order.md); v1.0.0 remains the owner's decision.
+Status: **2026-11-01.** v0.13.0 (in release validation) adds approved-capability catalog search (a #49 slice), a list-column fix and unwired groundwork for audit streaming (#38) and content scanning (#70). v0.12.0 added supported SCIM 2.0 provisioning (#36, decision 92) with request epochs and browser-session generations as prerequisites; see [SCIM provisioning](scim.md). v0.11.0 hardened personal credential final writes and shipped the shared secret rules (#71) and a GitHub Action slice (#47). Work continues through [the implementation order](implementation-order.md); v1.0.0 remains the owner's decision.
 Each remaining issue has an implementation plan (data model, API, packages to change, tests, acceptance criteria and open questions):
 [all roadmap issues](https://github.com/ncecere/open-mcp-portal/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap), grouped by
 [milestone](https://github.com/ncecere/open-mcp-portal/milestones). Sizes are relative effort: **S** a few days, **M** a week or two, **L** several weeks. Each item that needs a
@@ -45,6 +45,7 @@ Decided out of scope:
 | [v0.10.0](releases/v0.10.0.md) | 2026-10-30 | Accountable governance, human label confirmation, gateway ceilings, review/lifecycle/transfer and final transport cutoffs; token-only omp CLI/public client and policy-preserving plans. #40/#46 are closed. |
 | [v0.11.0](releases/v0.11.0.md) | 2026-10-31 | Personal credential final-write hardening, shared secret-rule registry (#71) and a signed token-only GitHub Action slice (#47). |
 | [v0.12.0](releases/v0.12.0.md) | 2026-11-01 | SCIM 2.0 provisioning (#36): directory tokens, enrollment by verified OIDC subject, explicit adoption, protected admins/owners, deactivation fence, deletion clean-up and group-to-team-role mappings; request epochs and browser-session generations. |
+| [v0.13.0](releases/v0.13.0.md) | 2026-11-01 | Approved-capability catalog search (#49 slice), list columns that follow window resizing, unwired audit-evidence (#38) and scanning-corpus (#70) groundwork, dependency updates. No migrations. |
 
 Proven on a real deployment (one Talos cluster, Authentik sign-in, CloudNativePG with continuous archiving and daily backups, a restore tested twice):
 Claude Code over OAuth and an API key on the 2026-07-28 revision; per-person OAuth to GitHub's hosted MCP server; DeepWiki through a gateway.
