@@ -71,7 +71,7 @@ annotation lists only the minimum and the check is "the token holds any listed s
 - Field rule: `updateTeamMcpServer` with a changed `capturePayloads` is `403 token_not_allowed` (`details.field`), since only owners and admins may switch capture and a token is not a person who accepted the notice.
 - Field rule (decision 73): `createTeamMcpServer` and `updateTeamMcpServer` with `machineOAuth`, or `authMode` `machine_oauth` on a server not already in it, are `403 token_not_allowed` (`details.field` `machineOAuth` or `authMode`) **even on a server with no credentials**: a token must not choose where a client secret goes. A server already in the mode is protected like one with credentials (no URL, mode, client or `sendIdentity` change).
 
-**Decisions to review:** the platform write list is "provisioning that is reversible and doesn't widen trust or who is trusted" (teams, gateways, grants, limits, revoking a person's consent); trust-widening settings and deletes wait for a separate scope in v0.3/v0.5 (Terraform).
+**Decisions to review:** the platform write list is "provisioning that is reversible and doesn't widen trust or who is trusted" (teams, gateways, grants, limits, revoking a person's consent); trust-widening settings and deletes would need a separate, explicitly reviewed scope (the Terraform provider that motivated one is now a separate project).
 `adminAssignOwner` is excluded although team provisioning wants it; a platform token creates an ownerless team and a person assigns the owner. A platform token dies with its creator's platform-admin role; team tokens don't.
 
 ## Examples

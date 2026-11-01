@@ -139,7 +139,7 @@ failure/warning and secret-free outputs without substituting the adapter's HTTPS
 checks. It does not contact a production portal, mint external credentials, or
 execute the composite step itself inside a hosted GitHub runner.
 
-Remaining #47 work: Terraform provider/resources and acceptance/state tests,
-any separately decided delete scope, vendor secret-scanning registration, separate
-Action repository/publication and a hosted-runner acceptance run. This slice does
-not close #47.
+Remaining #47 work: vendor secret-scanning registration, separate Action
+repository/publication and a hosted-runner acceptance run. This slice does not
+close #47. The Terraform provider originally planned in #47 is a separate project,
+not part of this repository.

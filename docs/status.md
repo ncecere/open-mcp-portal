@@ -887,7 +887,7 @@ server allow-list).
 
 - Clone `git@github.com:ncecere/open-mcp-portal.git`, check out `main` and fetch tags. All required source,
   migrations and generated code for the released baseline are on the remote. The latest immutable shipped source is
-  `v0.12.0` (#36 SCIM, closed with acceptance). Unmerged foundation branches (catalog #49, Terraform #47, #38, #41, #70) are not part of main.
+  `v0.12.0` (#36 SCIM, closed with acceptance). Unmerged foundation branches (catalog #49, #38, #70) are not part of main. The Terraform provider is a separate project and direct Vault/OpenBao integration (#41) is deferred (owner decisions, 2026-11-01); their exploratory branches are kept for reference only.
 - Read this release section, `AGENTS.md`, [CONTRIBUTING.md](../CONTRIBUTING.md) and
   [implementation order](implementation-order.md). Do not restart already shipped features.
 - Install Go 1.26.10+, Node 22+, Docker, Python 3 and sqlc 1.31.1; run `npm ci` in `web/`.
@@ -920,8 +920,8 @@ blind restart/seed of an existing one. The historical dev-database migration hel
 3. **v0.9.0/#35 is published, verified and closed**, after #32 in v0.6.0 and #33 in v0.7.0/v0.8.0.
    The v0.9.0 and v0.10.0 evidence/pin follow-ups are complete. #40 governance/#46 CLI shipped in verified v0.10.0 and are closed; v0.10.1's invite lock-order patch is independently verified. Validate its separate evidence/pin follow-up CI. Applied migrations49/50 are immutable. #36 SCIM comes next after its linking/deprovisioning design is corrected and decided.
    Continue [implementation order](implementation-order.md), serializing migration writers. #43's upgrade,
-   ingress, restore and load gates are proven and closed; Helm packaging still depends on #41's actual
-   KMS handling. #52 was design-only and #70–#73 track its first implementation slice.
+   ingress, restore and load gates are proven and closed; Helm packaging no longer waits on #41, which is
+   deferred (no direct Vault/OpenBao integration for now). #52 was design-only and #70–#73 track its first implementation slice.
 4. Keep #13–#20's real review/client/provider/channel/pilot evidence separate. VS Code planning and fake OAuth
    browser checks do not close compatibility or real-provider issues. Use authorized throwaway accounts and
    dedicated client profiles; do not contact external recipients or use personal profiles implicitly.
