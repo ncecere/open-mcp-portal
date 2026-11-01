@@ -79,9 +79,10 @@ var (
 	ErrInvalid = errors.New("invalid API key")
 )
 
-// Gateways says which gateways a person may use now (internal/gateways).
+// Gateways checks current access on the key writer's registered transaction,
+// never on another connection while it holds USER or an authority scope.
 type Gateways interface {
-	Usable(ctx context.Context, u dbgen.User, ids []uuid.UUID) ([]dbgen.Gateway, []uuid.UUID, error)
+	UsableInTx(ctx context.Context, q *dbgen.Queries, u dbgen.User, ids []uuid.UUID) ([]dbgen.Gateway, []uuid.UUID, error)
 }
 
 // Service manages keys.
@@ -239,7 +240,7 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, in CreateInput) (Cr
 			if s.gateways == nil {
 				return errors.New("apikeys: no gateway checker")
 			}
-			usable, refused, err := s.gateways.Usable(ctx, u, gatewayIDs)
+			usable, refused, err := s.gateways.UsableInTx(ctx, q, u, gatewayIDs)
 			if err != nil {
 				return err
 			}

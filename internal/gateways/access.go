@@ -188,17 +188,28 @@ func unserved(ctx context.Context, q *dbgen.Queries, g dbgen.Gateway) (string, e
 // team gateway's team active, and they have access), in the order given,
 // and the IDs they may not (unknown ones included).
 func (s *Service) Usable(ctx context.Context, u dbgen.User, ids []uuid.UUID) ([]dbgen.Gateway, []uuid.UUID, error) {
-	return s.usable(ctx, ids, func(g dbgen.Gateway) (Caller, error) { return callerOf(ctx, s.q, g, u) })
+	return usable(ctx, s.q, ids, func(g dbgen.Gateway) (Caller, error) { return callerOf(ctx, s.q, g, u) })
+}
+
+// UsableInTx performs all gateway, team, membership and grant reads on the
+// caller's exact live registered transaction. It acquires no pool connection
+// and never commits or rolls back the owner. Registration alone is not proof
+// of a global gate, current user standing or an admitted request epoch.
+func (s *Service) UsableInTx(ctx context.Context, q *dbgen.Queries, u dbgen.User, ids []uuid.UUID) ([]dbgen.Gateway, []uuid.UUID, error) {
+	if _, ok := store.TxOf(q); !ok {
+		return nil, nil, errors.New("gateway authority read requires registered transaction queries")
+	}
+	return usable(ctx, q, ids, func(g dbgen.Gateway) (Caller, error) { return callerOf(ctx, q, g, u) })
 }
 
 // UsableByServiceAccount is Usable for a service account of a team with a
 // role (ServiceAccountCaller).
 func (s *Service) UsableByServiceAccount(ctx context.Context, teamID uuid.UUID, role string, ids []uuid.UUID) ([]dbgen.Gateway, []uuid.UUID, error) {
-	return s.usable(ctx, ids, func(g dbgen.Gateway) (Caller, error) { return serviceAccountCaller(ctx, s.q, g, teamID, role) })
+	return usable(ctx, s.q, ids, func(g dbgen.Gateway) (Caller, error) { return serviceAccountCaller(ctx, s.q, g, teamID, role) })
 }
 
-func (s *Service) usable(ctx context.Context, ids []uuid.UUID, caller func(dbgen.Gateway) (Caller, error)) ([]dbgen.Gateway, []uuid.UUID, error) {
-	rows, err := s.q.ListUsableGatewayCandidates(ctx, ids)
+func usable(ctx context.Context, q *dbgen.Queries, ids []uuid.UUID, caller func(dbgen.Gateway) (Caller, error)) ([]dbgen.Gateway, []uuid.UUID, error) {
+	rows, err := q.ListUsableGatewayCandidates(ctx, ids)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -211,7 +222,7 @@ func (s *Service) usable(ctx context.Context, ids []uuid.UUID, caller func(dbgen
 	for _, id := range ids {
 		g, ok := byID[id]
 		if ok {
-			why, err := unserved(ctx, s.q, g)
+			why, err := unserved(ctx, q, g)
 			if err != nil {
 				return nil, nil, err
 			}
