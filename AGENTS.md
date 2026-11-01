@@ -9,8 +9,8 @@ with an AI agent on this repository. For a fresh machine/session, start with
   SCIM lifecycle (#36) is primary, with existing catalog-search (#49) review as the one bounded side lane. Do not
   integrate all returned foundations or expand authority implicitly. The main thread allocated decision90/migrations51–52
   only for the request-authority epoch prerequisite (first personal-key writer), and decision91/migration53 for a distinct
-  irreversible browser-session generation and its readers, and decision92/migrations54–55 for supported SCIM provisioning
-  (docs/scim.md). 56+ are unallocated. Workers may not allocate further decisions/migrations. Preserve partial evidence and keep all four reusable Boat VMs up.
+  irreversible browser-session generation and its readers, and decision92/migrations54–56 for supported SCIM provisioning
+  (docs/scim.md). 57+ are unallocated. Workers may not allocate further decisions/migrations. Preserve partial evidence and keep all four reusable Boat VMs up.
 - **Next release stop point.** The owner requests one further pre-1.0 release after SCIM work, then a stop.
   Finish the supported SCIM scope and required gates; include catalog only if independently accepted. After publishing,
   independently verifying and documenting that release, stop development and worker assignments until explicitly

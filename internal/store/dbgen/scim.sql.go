@@ -1335,6 +1335,17 @@ func (q *Queries) LockDirectoryCleanupJob(ctx context.Context, id uuid.UUID) (Di
 	return i, err
 }
 
+const lockDirectoryReconcile = `-- name: LockDirectoryReconcile :exec
+SELECT pg_advisory_xact_lock(hashtextextended('omp-directory-reconcile:' || $1::text, 0))
+`
+
+// Serialises reconciliation of one person's directory memberships, taken
+// (in UUID order) before reading desired and owned state.
+func (q *Queries) LockDirectoryReconcile(ctx context.Context, userKey string) error {
+	_, err := q.db.Exec(ctx, lockDirectoryReconcile, userKey)
+	return err
+}
+
 const lockEnrollmentCandidates = `-- name: LockEnrollmentCandidates :many
 SELECT id, directory_id, user_name, external_id, active, display_name, given_name, family_name, email, linked_user_id, version, created_at, updated_at FROM scim_users
 WHERE directory_id = $1 AND external_id = $2 AND linked_user_id IS NULL

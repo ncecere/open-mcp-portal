@@ -82,6 +82,8 @@ func DirectoryGuard(err error) (*Error, bool) {
 		return Conflict("protected_principal", "Directory-managed people can't be platform admins. Unlink them from provisioning first."), true
 	case "users_directory_protected_owner", "team_members_directory_protected_owner":
 		return Conflict("protected_principal", "Directory-managed people can't be team owners. Unlink them from provisioning first."), true
+	case "team_members_directory_busy":
+		return Conflict("directory_busy", "Provisioning is changing this person right now. Try again."), true
 	case "users_directory_cleanup_pending":
 		return Conflict("cleanup_pending", "This person's deprovisioning clean-up hasn't finished yet"), true
 	}

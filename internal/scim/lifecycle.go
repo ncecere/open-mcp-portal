@@ -137,12 +137,23 @@ func roleRank(role string) int {
 }
 
 // reconcile brings directory-created team memberships of users in line with
-// their mapped groups. Manual memberships are never changed. Teams are
-// locked in UUID order, matching the team writers. Changes are audited per
+// their mapped groups. Manual memberships are never changed. Lock order:
+// per-person reconcile locks (UUID order), then teams (UUID order), matching
+// the team writers. Changes are audited per
 // team as scim.membership_sync.
 func reconcile(ctx context.Context, q *dbgen.Queries, users []uuid.UUID, requestID string) error {
 	if len(users) == 0 {
 		return nil
+	}
+	// Serialise per person before reading: two writers changing different
+	// groups of the same person must not each apply a stale desired role.
+	users = slices.Clone(users)
+	slices.SortFunc(users, compareUUID)
+	users = slices.Compact(users)
+	for _, u := range users {
+		if err := q.LockDirectoryReconcile(ctx, u.String()); err != nil {
+			return err
+		}
 	}
 	desired, err := q.DirectoryDesiredMemberships(ctx, users)
 	if err != nil {

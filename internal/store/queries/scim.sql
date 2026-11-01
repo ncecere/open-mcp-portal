@@ -270,6 +270,11 @@ SELECT linked_user_id::uuid FROM scim_users WHERE id = ANY(@ids::uuid[]) AND lin
 -- Unlinking hands directory-created memberships to manual control.
 DELETE FROM directory_team_memberships WHERE user_id = @user_id;
 
+-- name: LockDirectoryReconcile :exec
+-- Serialises reconciliation of one person's directory memberships, taken
+-- (in UUID order) before reading desired and owned state.
+SELECT pg_advisory_xact_lock(hashtextextended('omp-directory-reconcile:' || sqlc.arg(user_key)::text, 0));
+
 -- name: MarkDirectoryWriter :exec
 SELECT set_config('omp.directory_writer', 'on', true);
 
