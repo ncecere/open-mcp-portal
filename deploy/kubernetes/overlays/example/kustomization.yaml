@@ -30,7 +30,7 @@ resources:
 images:
   - name: ghcr.io/ncecere/open-mcp-portal
     newTag: v0.13.0
-    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    digest: sha256:29259a050743d6e34eb0ceefd8e1f925da140277bc07e4877add500a1ba5e2eb
 
 configMapGenerator:
   - name: open-mcp-portal-config

@@ -5,11 +5,12 @@ Conventions for building and testing are in [CONTRIBUTING.md](CONTRIBUTING.md), 
 with an AI agent on this repository. For a fresh machine/session, start with
 [docs/agent-handoff.md](docs/agent-handoff.md); confirm its release stop point against `docs/status.md` and GitHub.
 
-- **Current owner-approved batch (2026-11-01).** The owner resumed development to merge the outstanding items and cut
-  a release, then pause: catalog search (#49 slice), the #38 audit-evidence and #70 scanning-corpus groundwork, and the
-  Dependabot updates, as **v0.13.0** (docs/releases/v0.13.0.md). The Terraform provider is a separate project and direct
-  Vault/OpenBao integration (#41) is deferred. After v0.13.0 is published and verified, pause until the owner resumes.
-  Decisions 93+ and migrations 57+ are unallocated; this release adds none. Keep all four reusable Boat VMs up.
+- **Paused after v0.13.0.** The owner asked to merge the outstanding items, cut a release, then pause. v0.13.0
+  (catalog search #49 slice, list-column fix, #38/#70 unwired groundwork, dependency updates; no migrations) is
+  published and independently verified (docs/releases/v0.13.0.md). **Development and worker assignments are paused
+  until the owner explicitly resumes them.** The Terraform provider is a separate project; direct Vault/OpenBao
+  integration (#41) is deferred. Decisions 93+ and migrations 57+ are unallocated. Do not infer v1.0.0 approval. Keep
+  all four reusable Boat VMs and their fixtures/evidence up.
 - **Execution mode.** The main thread owns coordination, review, integration and releases. The owner has explicitly
   re-authorized parallel Boat/Codex coding agents for bounded development issues. Give each writer an isolated
   sandbox/checkout, only the required model credentials, and a narrow task; never forward production or infrastructure
