@@ -7,8 +7,9 @@ with an AI agent on this repository. For a fresh machine/session, start with
 
 - **Current owner-approved batch.** The post-v0.11.0 pause was honored; the owner explicitly requested resumption.
   SCIM lifecycle (#36) is primary, with existing catalog-search (#49) review as the one bounded side lane. Do not
-  integrate all returned foundations or expand authority implicitly. No decision90 or migration51 is allocated yet;
-  workers may not allocate either. Preserve partial evidence and keep all four reusable Boat VMs up.
+  integrate all returned foundations or expand authority implicitly. The main thread allocated decision90/migrations51–52
+  only for the request-authority epoch prerequisite (first personal-key writer), not SCIM provisioning schema/support.
+  Workers may not allocate further decisions/migrations. Preserve partial evidence and keep all four reusable Boat VMs up.
 - **Next release stop point.** The owner requests one further pre-1.0 release after SCIM work, then a stop.
   Finish the supported SCIM scope and required gates; include catalog only if independently accepted. After publishing,
   independently verifying and documenting that release, stop development and worker assignments until explicitly

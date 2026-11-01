@@ -110,6 +110,12 @@ Every session entry point checks both limits and records activity at most once a
 Platform roles do not grant team content (captured payloads) unless stated. Last owner / last platform admin
 protections as in Grounded.
 
+Decision90 distinguishes an authenticated request's admitted authority from its reusable credential. Personal
+API-key creation compares a dedicated monotonic user request epoch after its existing user lock; a request
+queued across a status/role change cannot inherit new authority after reactivation. Fresh requests can still
+use otherwise eligible preserved credentials. This first consumer is not complete lifecycle or SCIM support;
+see [request authority epochs](docs/request-authority-epochs.md) for implementation and acceptance limits.
+
 ## 5. Domain model (later phases)
 
 **MCP server** (team-owned): slug, name, description, URL, transport (`streamable_http`), upstream auth

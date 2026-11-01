@@ -1,6 +1,6 @@
 # SCIM provisioning: main-thread implementation preflight
 
-**Status: draft review, not accepted policy or implementation.** This document advances [#36](https://github.com/ncecere/open-mcp-portal/issues/36); it does not close its acceptance criteria, allocate decision90 or reserve migration51. There is no SCIM endpoint, token, schema change or supported IdP integration in this change.
+**Status: draft review, not accepted policy or implementation.** This document advances [#36](https://github.com/ncecere/open-mcp-portal/issues/36); it does not close its acceptance criteria. The parent separately allocated [decision90/migrations51–52](request-authority-epochs.md) only for a dedicated request-epoch prerequisite and first personal-key writer, whose adjacent-package normal/race/both-role tests, six queued-cycle races and bounded actual previous-image compatibility passed. There is no SCIM endpoint, provisioner token, provisioning-resource schema or supported IdP integration.
 
 Reviewed baseline: `cc44f0433c372785dd151f2425a222d812b364c6`, the evidence/image-pin follow-up to independently verified [v0.11.0](releases/v0.11.0.md). The owner resumed work after the release pause: SCIM lifecycle is the main-thread-owned primary task; an independent catalog-search review is the one side lane. The latest owner boundary is to finish SCIM, cut one further independently verified pre-1.0 release, then stop development and worker assignments until explicitly resumed; retained VMs stay up. Earlier isolated drafts are background research, not accepted specifications. The invite lock-order prerequisite shipped in v0.10.1, and API-key/personal-callback final-write hardening shipped in v0.11.0. Neither release implements SCIM.
 
@@ -120,7 +120,7 @@ The following are direct code observations. They identify requirements for a fut
 
 ### API keys
 
-`internal/apikeys/apikeys.go:Create` locks the user with `GetUserForUpdate`, now rejects a non-active returned row after the wait, checks current gateway eligibility using that fresh user, then checks the key cap and inserts/audits. The queued-suspension defect was reproduced and fixed in v0.11.0; existing unrevoked credentials remain preserved through reversible suspension. That shipped check is not a request-authority epoch: a prior request cannot yet distinguish an intervening suspend/reactivate lifetime cycle. The future SCIM protocol must define and test that distinction rather than claim the existing status check is absent.
+`internal/apikeys/apikeys.go:Create` locks the user with `GetUserForUpdate`, now rejects a non-active returned row after the wait, checks current gateway eligibility using that fresh user, then checks the key cap and inserts/audits. The queued-suspension defect was reproduced and fixed in v0.11.0; existing unrevoked credentials remain preserved through reversible suspension. That released status check alone was not a request-authority epoch. The current decision90 prerequisite separately captures and compares that epoch for key creation, and its actual queued-cycle regression passed normal/race in both roles. Global-G and other lifecycle paths remain unimplemented; neither the released status check nor this new narrow consumer is complete SCIM enforcement.
 
 ### OAuth grants, codes and tokens
 
@@ -174,7 +174,7 @@ Browser sessions need independent irreversible invalidation. Unlike preserved re
 
 Use an explicit lifecycle state machine, not one overloaded suspension flag. Effective eligibility is the intersection of manual standing, directory standing and absence of an irreversible deletion fence. Directory `active:true` cannot write away the manual restriction. An unlinked protected/unmanaged person is not a successful directory offboarding target.
 
-A proposed monotonic **request-authority epoch** advances on adoption/unlink, reducing lifecycle transitions and re-enablement. Current `auth.Identity` carries the user/session/CSRF state, and `Identity.Actor` copies user UUID and platform role into `authz.Actor`; neither currently carries a request-authority epoch. A mutable profile revision or an actor UUID must not be mislabeled as this missing fence. Capture the decided epoch at authentication/admission and validate it under the final writer barrier after waits. This prevents an old authenticated request from becoming valid again merely because a suspend/reactivate cycle finished before its final store. The exact actor/session propagation is an implementation requirement; current actor UUIDs and stored claims do not already provide it.
+A proposed monotonic **request-authority epoch** advances on adoption/unlink, reducing lifecycle transitions and re-enablement. At reviewedcc44, `auth.Identity.Actor` copied UUID/platform role without an epoch. The separate decision90 prerequisite now introduces that admission field and its first key writer, with scoped adjacent-package and queued-cycle proofs passed; the remaining paths are not thereby fenced. A mutable profile revision or an actor UUID must not be mislabeled as this missing fence. Capture the decided epoch at authentication/admission and validate it under the final writer barrier after waits. This prevents an old authenticated request from becoming valid again merely because a suspend/reactivate cycle finished before its final store. The exact actor/session propagation is an implementation requirement; current actor UUIDs and stored claims do not already provide it.
 
 #### Current-application request-cycle experiment
 
@@ -270,14 +270,14 @@ The recommended token domain is directory/issuer-bound, separate from automation
 
 ## 9. Required proofs and next concrete work
 
-Before accepting a design or allocating DDL:
+Before accepting supported SCIM provisioning or allocating its resource/token DDL (distinct from the request-epoch prerequisite):
 
 1. Finish the new/existing identity and group-binding state matrices, including unadopted collisions, protected principals, required enrollment and manual restrictions.
 2. Inventory all remaining final writers and choose a single auditable lock/generation protocol. Trace the actual calls, not only SQL names.
 3. Write deterministic real-PostgreSQL barrier tests for adopt/promote, login/bootstrap/invite, late API-key/code/token/callback/secret/task writes, refresh/fence/cleanup and final-zero/re-enrollment races in both actual DB-role modes.
 4. Prove manual-plus-directory role preservation and immediate group reductions, including direct gateway group grants and stale OIDC login claims.
 5. Specify the RFC capability/error profile and token/audit/storage boundary; keep the router absent until its advertised resources actually work.
-6. Inspect integrated schema before separately allocating migration51 or later. Test the actual prior release against the expanded schema and drain older writers before relying on new enforcement.
+6. Inspect integrated schema, including the separate request-epoch prerequisites51/52, before allocating the next provisioning migration. Test the actual prior release against the expanded schema and drain older writers before relying on new enforcement.
 7. Keep owned fixtures distinct from real authentik/Entra, client/pilot and independent security acceptance. Preserve failed proof attempts instead of weakening gates.
 
 No implementation slice is authorized by this draft's existence. A token-only foundation is not complete SCIM support and does not need an independent release.

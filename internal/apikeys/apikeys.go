@@ -229,6 +229,11 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, in CreateInput) (Cr
 		if u.Status != "active" {
 			return apperr.Forbidden("This account is suspended")
 		}
+		// A reversible change-and-revert must not refresh an old admitted
+		// request. Missing admission is not permission to stamp it here.
+		if a.RequestEpoch <= 0 || a.RequestEpoch != u.RequestEpoch {
+			return apperr.Conflict("request_authority_changed", "Your access changed. Start a new request.")
+		}
 		var scope []dbgen.Gateway
 		if len(gatewayIDs) > 0 {
 			if s.gateways == nil {

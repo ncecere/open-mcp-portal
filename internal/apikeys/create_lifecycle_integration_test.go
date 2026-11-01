@@ -9,7 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ncecere/open-mcp-portal/internal/apperr"
-	"github.com/ncecere/open-mcp-portal/internal/authz"
+	"github.com/ncecere/open-mcp-portal/internal/auth"
+	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 	"github.com/ncecere/open-mcp-portal/internal/testutil"
 )
 
@@ -22,6 +23,11 @@ func TestCreateRechecksSuspensionAfterUserLockWait(t *testing.T) {
 		VALUES ($1,'key-wait@example.test','Key wait','test','key-wait')`, userID); err != nil {
 		t.Fatal(err)
 	}
+	user, err := dbgen.New(pool).GetUser(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actor := (auth.Identity{User: user}).Actor("key-status-wait", "")
 	blocker, err := pool.Begin(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -41,7 +47,7 @@ func TestCreateRechecksSuspensionAfterUserLockWait(t *testing.T) {
 	finished := make(chan result, 1)
 	svc := New(pool, []byte("key-lifecycle-fixture-pepper"), nil)
 	go func() {
-		created, err := svc.Create(ctx, authz.Actor{UserID: userID}, CreateInput{Name: "must-not-create"})
+		created, err := svc.Create(ctx, actor, CreateInput{Name: "must-not-create"})
 		finished <- result{created, err}
 	}()
 	// Observe the actual final-writer lock wait; no elapsed-time scheduling.
@@ -98,7 +104,11 @@ func TestCreateSuspensionPreservesExistingKeyReactivation(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc := New(pool, []byte("key-lifecycle-fixture-pepper"), nil)
-	actor := authz.Actor{UserID: userID}
+	user, err := dbgen.New(pool).GetUser(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actor := (auth.Identity{User: user}).Actor("key-standing-original", "")
 	first, err := svc.Create(ctx, actor, CreateInput{Name: "preserved"})
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +129,12 @@ func TestCreateSuspensionPreservesExistingKeyReactivation(t *testing.T) {
 	if _, err := svc.Authenticate(ctx, first.Secret); err != nil {
 		t.Fatal("reversible suspension destroyed an existing unrevoked key")
 	}
-	if _, err := svc.Create(ctx, actor, CreateInput{Name: "fresh-after-reactivation"}); err != nil {
+	fresh, err := dbgen.New(pool).GetUser(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	freshActor := (auth.Identity{User: fresh}).Actor("fresh-after-reactivation", "")
+	if _, err := svc.Create(ctx, freshActor, CreateInput{Name: "fresh-after-reactivation"}); err != nil {
 		t.Fatal(err)
 	}
 	var keys, audits int

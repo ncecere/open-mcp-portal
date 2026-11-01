@@ -59,6 +59,10 @@ type Actor struct {
 	Kind         string
 	UserID       uuid.UUID
 	PlatformRole string
+	// RequestEpoch is captured from the authenticated user's request authority
+	// before resource waits. It is not a credential or enrollment lifetime;
+	// machine actors do not obtain a human epoch merely from attribution.
+	RequestEpoch int64
 	RequestID    string
 	ClientIP     string
 

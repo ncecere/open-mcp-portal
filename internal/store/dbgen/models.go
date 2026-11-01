@@ -1082,4 +1082,5 @@ type User struct {
 	LastLoginAt   *time.Time
 	Groups        []string
 	EmailVerified bool
+	RequestEpoch  int64
 }

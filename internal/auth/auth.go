@@ -52,7 +52,7 @@ type Identity struct {
 
 // Actor converts the identity into the authz principal for a request.
 func (i Identity) Actor(requestID, clientIP string) authz.Actor {
-	return authz.Actor{UserID: i.User.ID, PlatformRole: i.User.PlatformRole, RequestID: requestID, ClientIP: clientIP}
+	return authz.Actor{UserID: i.User.ID, PlatformRole: i.User.PlatformRole, RequestEpoch: i.User.RequestEpoch, RequestID: requestID, ClientIP: clientIP}
 }
 
 func (i Identity) IsPlatformAdmin() bool { return i.User.PlatformRole == RolePlatformAdmin }
