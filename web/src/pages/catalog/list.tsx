@@ -111,11 +111,8 @@ export function CatalogPage() {
       error={servers.error}
       onRetry={() => void servers.refetch()}
       rowActions={(x) => [{ label: "Open", render: link(x) }]}
-      empty={
-        q
-          ? { icon: <Library />, title: "No servers match." }
-          : { icon: <Library />, title: "Nothing in the catalog yet.", description: "Teams publish their MCP servers here. Each one appears once it's approved (or published by a team allowed to self-publish)." }
-      }
+      // Shown only with no search: a search that matches nothing gets the table's "No results for “…”".
+      empty={{ icon: <Library />, title: "Nothing in the catalog yet.", description: "Teams publish their MCP servers here. Each one appears once it's approved (or published by a team allowed to self-publish)." }}
       tableProps={{ columnsMenuMin: 5, loadMore: { hasMore: Boolean(servers.hasNextPage), loading: servers.isFetchingNextPage, onLoadMore: () => void servers.fetchNextPage() } }}
     />
   );
