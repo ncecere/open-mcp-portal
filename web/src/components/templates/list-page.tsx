@@ -1,7 +1,7 @@
 /*
  * ListPage (D5): every list and log. A DataTable with the filters and search
  * text in the URL (linkable, Back-able), a row "…" menu with delete last,
- * pagination, remembered column visibility and an empty state.
+ * pagination, remembered column visibility (narrow-window defaults follow resizing) and an empty state.
  *
  *   <ListPage id="team-sources" title="Data sources" primaryAction={<Button>New source</Button>}
  *     caption="Data sources" columns={columns} data={sources} getRowId={(r) => r.id}
@@ -14,7 +14,7 @@
  * For server-side filtering read the same URL state with useListFilters(facets)
  * and pass `manual` plus the already-filtered rows.
  */
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { type DataTableColumn, DataTable, type DataTableProps } from "@/components/ui/data-table/data-table";
 import { EmptyState } from "@/components/ui/empty-state/empty-state";
 import { type Facet, type FilterValues, filterValuesFromSearchParams, filterValuesToSearchParams } from "@/components/ui/filter-bar/filter-bar";
@@ -22,6 +22,7 @@ import { Stack } from "@/components/ui/layout/layout";
 import { PageHeader } from "@/components/ui/page-header/page-header";
 import { Time } from "@/components/ui/time/time";
 import { formatDate, toDate } from "@/lib/bitop-format";
+import { NARROW_QUERY, useMediaQuery } from "@/lib/bitop-utils";
 import { needsCalendarDay, relativeDay } from "@/lib/relative-day";
 import { useSearchParams } from "@/lib/url-search";
 import s from "../../pages/shared.module.css";
@@ -77,6 +78,36 @@ export function timeColumn<T>(id: string, header: string, get: (row: T) => strin
       </span>
     ),
   };
+}
+
+function savedColumns(key: string): string[] | null {
+  try {
+    const parsed: unknown = JSON.parse(globalThis.localStorage?.getItem(key) ?? "null");
+    return Array.isArray(parsed) && parsed.every((x) => typeof x === "string") ? (parsed as string[]) : null;
+  } catch {
+    return null; // storage unavailable or invalid: use the defaults
+  }
+}
+
+/**
+ * Hidden columns: the person's saved choice ("omp.columns.<id>"), otherwise the columns' defaults for the window's
+ * current width. The narrow defaults follow the window, not only its width at first render, so a desktop window
+ * shrunk to phone width hides the wide columns instead of leaving them scrolling under the sticky actions column.
+ */
+export function useColumnChoice<T>(id: string, columns: DataTableColumn<T>[]) {
+  const key = `omp.columns.${id}`;
+  const narrow = useMediaQuery(NARROW_QUERY);
+  const [saved, setSaved] = useState<string[] | null>(() => savedColumns(key));
+  const hidden = saved ?? columns.filter((c) => c.defaultHidden || (narrow && c.defaultHiddenNarrow)).map((c) => c.id);
+  const choose = (next: string[]) => {
+    setSaved(next);
+    try {
+      globalThis.localStorage?.setItem(key, JSON.stringify(next));
+    } catch {
+      /* ignore quota / privacy-mode errors */
+    }
+  };
+  return [hidden, choose] as const;
 }
 
 export type ListEmpty = { icon?: ReactNode; title: ReactNode; description?: ReactNode; action?: ReactNode };
@@ -147,6 +178,7 @@ export function ListPage<T>({
   tableProps,
 }: ListPageProps<T>) {
   const filters = useListFilters(facets);
+  const [hiddenColumns, setHiddenColumns] = useColumnChoice(id, columns);
   const table = (
     <DataTable<T>
       caption={caption}
@@ -155,7 +187,8 @@ export function ListPage<T>({
       getRowId={getRowId}
       rowLabel={rowLabel}
       columnsMenu
-      columnsStorageKey={`omp.columns.${id}`}
+      hiddenColumns={hiddenColumns}
+      onHiddenColumnsChange={setHiddenColumns}
       facets={facets}
       facetValues={filters.values}
       onFacetValuesChange={filters.setValues}
