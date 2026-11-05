@@ -7914,13 +7914,22 @@ components:
               status: {type: string, enum: ["off", stale, scanned, incomplete]}
               rulesetVersion: {type: string}
               reason: {type: string}
+              scannedAt:
+                type: string
+                format: date-time
+                description: >-
+                  When the stored scan ran. Present only for status scanned or incomplete (a current scan of
+                  this definition under this ruleset); absent when scanning is off or the scan is stale.
               findings:
                 type: array
                 items:
                   type: object
-                  required: [ruleId, severity, count, location]
+                  required: [ruleId, group, severity, count, location]
                   properties:
                     ruleId: {type: string}
+                    group:
+                      type: string
+                      description: The rule's catalog group (secret, unicode, poison, length); empty for a rule id no longer in the catalog.
                     severity: {type: string}
                     count: {type: integer}
                     location: {type: string}

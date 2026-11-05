@@ -4287,14 +4287,20 @@ type DefinitionScanPage = []struct {
 	CapabilityId openapi_types.UUID `json:"capabilityId"`
 	Scan         struct {
 		Findings []struct {
-			Count    int    `json:"count"`
+			Count int `json:"count"`
+
+			// Group The rule's catalog group (secret, unicode, poison, length); empty for a rule id no longer in the catalog.
+			Group    string `json:"group"`
 			Location string `json:"location"`
 			RuleId   string `json:"ruleId"`
 			Severity string `json:"severity"`
 		} `json:"findings"`
-		Reason         *string                      `json:"reason,omitempty"`
-		RulesetVersion string                       `json:"rulesetVersion"`
-		Status         DefinitionScanPageScanStatus `json:"status"`
+		Reason         *string `json:"reason,omitempty"`
+		RulesetVersion string  `json:"rulesetVersion"`
+
+		// ScannedAt When the stored scan ran. Present only for status scanned or incomplete (a current scan of this definition under this ruleset); absent when scanning is off or the scan is stale.
+		ScannedAt *time.Time                   `json:"scannedAt,omitempty"`
+		Status    DefinitionScanPageScanStatus `json:"status"`
 	} `json:"scan"`
 }
 

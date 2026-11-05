@@ -253,12 +253,14 @@ func (s *Service) DefinitionFindings(ctx context.Context, a authz.Actor, ref str
 			if e == nil && scan.Fingerprint == c.Fingerprint && scan.RulesetVersion == definitionscan.Version {
 				r.Status = scan.Status
 				r.Reason = scan.Reason
+				at := scan.ScannedAt
+				r.ScannedAt = &at
 				fs, e := s.q.ListDefinitionFindings(ctx, c.ID)
 				if e != nil {
 					return nil, e
 				}
 				for _, f := range fs {
-					r.Findings = append(r.Findings, definitionscan.Finding{RuleID: f.RuleID, Severity: f.Severity, Count: int(f.Count), Location: f.Location})
+					r.Findings = append(r.Findings, definitionscan.Finding{RuleID: f.RuleID, Group: definitionscan.RuleGroup(f.RuleID), Severity: f.Severity, Count: int(f.Count), Location: f.Location})
 				}
 			}
 		}
