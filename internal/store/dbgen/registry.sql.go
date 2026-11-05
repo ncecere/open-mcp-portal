@@ -437,7 +437,7 @@ func (q *Queries) GetNetworkSettings(ctx context.Context) (NetworkSetting, error
 
 const getPlatformSettings = `-- name: GetPlatformSettings :one
 
-SELECT id, publish_default_policy, revision, updated_by, updated_at, review_interval_days_public, review_interval_days_internal, review_interval_days_confidential, review_interval_days_restricted, governance_return_overdue, governance_revision, governance_updated_by, governance_updated_at FROM platform_settings WHERE id = 1
+SELECT id, publish_default_policy, revision, updated_by, updated_at, review_interval_days_public, review_interval_days_internal, review_interval_days_confidential, review_interval_days_restricted, governance_return_overdue, governance_revision, governance_updated_by, governance_updated_at, definition_scan_mode, scan_revision FROM platform_settings WHERE id = 1
 `
 
 // The MCP server registry: servers, capabilities, health checks and the
@@ -459,6 +459,8 @@ func (q *Queries) GetPlatformSettings(ctx context.Context) (PlatformSetting, err
 		&i.GovernanceRevision,
 		&i.GovernanceUpdatedBy,
 		&i.GovernanceUpdatedAt,
+		&i.DefinitionScanMode,
+		&i.ScanRevision,
 	)
 	return i, err
 }
@@ -1441,7 +1443,7 @@ func (q *Queries) LockNetworkSettings(ctx context.Context) (NetworkSetting, erro
 }
 
 const lockPlatformSettings = `-- name: LockPlatformSettings :one
-SELECT id, publish_default_policy, revision, updated_by, updated_at, review_interval_days_public, review_interval_days_internal, review_interval_days_confidential, review_interval_days_restricted, governance_return_overdue, governance_revision, governance_updated_by, governance_updated_at FROM platform_settings WHERE id = 1 FOR UPDATE
+SELECT id, publish_default_policy, revision, updated_by, updated_at, review_interval_days_public, review_interval_days_internal, review_interval_days_confidential, review_interval_days_restricted, governance_return_overdue, governance_revision, governance_updated_by, governance_updated_at, definition_scan_mode, scan_revision FROM platform_settings WHERE id = 1 FOR UPDATE
 `
 
 func (q *Queries) LockPlatformSettings(ctx context.Context) (PlatformSetting, error) {
@@ -1461,6 +1463,8 @@ func (q *Queries) LockPlatformSettings(ctx context.Context) (PlatformSetting, er
 		&i.GovernanceRevision,
 		&i.GovernanceUpdatedBy,
 		&i.GovernanceUpdatedAt,
+		&i.DefinitionScanMode,
+		&i.ScanRevision,
 	)
 	return i, err
 }
@@ -2094,7 +2098,7 @@ const updatePublishDefaultPolicy = `-- name: UpdatePublishDefaultPolicy :one
 UPDATE platform_settings
 SET publish_default_policy = $1, revision = revision + 1, updated_by = $2, updated_at = now()
 WHERE id = 1
-RETURNING id, publish_default_policy, revision, updated_by, updated_at, review_interval_days_public, review_interval_days_internal, review_interval_days_confidential, review_interval_days_restricted, governance_return_overdue, governance_revision, governance_updated_by, governance_updated_at
+RETURNING id, publish_default_policy, revision, updated_by, updated_at, review_interval_days_public, review_interval_days_internal, review_interval_days_confidential, review_interval_days_restricted, governance_return_overdue, governance_revision, governance_updated_by, governance_updated_at, definition_scan_mode, scan_revision
 `
 
 type UpdatePublishDefaultPolicyParams struct {
@@ -2119,6 +2123,8 @@ func (q *Queries) UpdatePublishDefaultPolicy(ctx context.Context, arg UpdatePubl
 		&i.GovernanceRevision,
 		&i.GovernanceUpdatedBy,
 		&i.GovernanceUpdatedAt,
+		&i.DefinitionScanMode,
+		&i.ScanRevision,
 	)
 	return i, err
 }

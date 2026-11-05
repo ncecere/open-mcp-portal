@@ -64,6 +64,233 @@ tags:
   description: Session-only sensitive tool-call approvals and rules (docs/tool-approvals.md, decision 82).
     Rules never grant access. No automation token can use these operations.
 paths:
+  /v1/admin/settings/scanning:
+    get:
+      operationId: adminGetScanningSettings
+      tags: [admin]
+      summary: Definition scanning (browser session only)
+      responses:
+        '200':
+          description: Detection metadata; finding nothing is not a safety verdict
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/ScanningSettings'}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+    put:
+      operationId: adminUpdateScanningSettings
+      tags: [admin]
+      summary: Definition scanning (browser session only)
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ScanningSettingsUpdate'}
+      responses:
+        '200':
+          description: Detection metadata; finding nothing is not a safety verdict
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/ScanningSettings'}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/scanning/rules:
+    get:
+      operationId: adminListScanningRules
+      tags: [admin]
+      summary: Definition scanning (browser session only)
+      responses:
+        '200':
+          description: Detection metadata; finding nothing is not a safety verdict
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/ScanningCatalog'}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/mcp-servers/{serverId}/scan-findings:
+    get:
+      operationId: teamListDefinitionFindings
+      tags: [admin]
+      summary: Definition scanning (browser session only)
+      parameters:
+      - name: team
+        in: path
+        required: true
+        schema: {type: string}
+      - name: serverId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Detection metadata; finding nothing is not a safety verdict
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/DefinitionScanPage'}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/mcp-servers/{serverId}/scan:
+    post:
+      operationId: teamRescanDefinitions
+      tags: [admin]
+      summary: Definition scanning (browser session only)
+      parameters:
+      - name: team
+        in: path
+        required: true
+        schema: {type: string}
+      - name: serverId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Detection metadata; finding nothing is not a safety verdict
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/DefinitionScanPage'}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/mcp-servers/{serverId}/scan-findings:
+    get:
+      operationId: adminListDefinitionFindings
+      tags: [admin]
+      summary: Definition scanning (browser session only)
+      parameters:
+      - name: serverId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Detection metadata; finding nothing is not a safety verdict
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/DefinitionScanPage'}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/mcp-servers/{serverId}/scan:
+    post:
+      operationId: adminRescanDefinitions
+      tags: [admin]
+      summary: Definition scanning (browser session only)
+      parameters:
+      - name: serverId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Detection metadata; finding nothing is not a safety verdict
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/DefinitionScanPage'}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
   /healthz:
     get:
       tags:
@@ -7645,6 +7872,56 @@ components:
               data:
                 $ref: '#/components/schemas/UsageReport'
   schemas:
+    ScanningSettingsUpdate:
+      type: object
+      required: [definitionMode]
+      properties:
+        definitionMode: {type: string, enum: ["off", shadow]}
+    ScanningSettings:
+      type: object
+      required: [definitionMode, revision]
+      properties:
+        definitionMode: {type: string, enum: ["off", shadow]}
+        revision: {type: integer, format: int64}
+    ScanningCatalog:
+      type: object
+      required: [rulesetVersion, rules]
+      properties:
+        rulesetVersion: {type: string}
+        rules:
+          type: array
+          items:
+            type: object
+            required: [id, group, severity, description]
+            properties:
+              id: {type: string}
+              group: {type: string}
+              severity: {type: string}
+              description: {type: string}
+    DefinitionScanPage:
+      type: array
+      items:
+        type: object
+        required: [capabilityId, scan]
+        properties:
+          capabilityId: {type: string, format: uuid}
+          scan:
+            type: object
+            required: [status, rulesetVersion, findings]
+            properties:
+              status: {type: string, enum: ["off", stale, scanned, incomplete]}
+              rulesetVersion: {type: string}
+              reason: {type: string}
+              findings:
+                type: array
+                items:
+                  type: object
+                  required: [ruleId, severity, count, location]
+                  properties:
+                    ruleId: {type: string}
+                    severity: {type: string}
+                    count: {type: integer}
+                    location: {type: string}
     ApprovalTargetKind:
       type: string
       enum: [server, gateway]

@@ -120,7 +120,7 @@ var (
 )
 
 func appCollectors() []prometheus.Collector {
-	return append([]prometheus.Collector{BuildInfo, MCPRequests, MCPRequestDuration, MCPCallDuration, MCPRateLimited, ServerCircuitState, PayloadCaptures,
+	return append([]prometheus.Collector{ScanFindings, ScanDuration, ScanIncomplete, ScanRuleset, BuildInfo, MCPRequests, MCPRequestDuration, MCPCallDuration, MCPRateLimited, ServerCircuitState, PayloadCaptures,
 		PayloadRedactions, PayloadCaptureErrors, ProviderTokenRefresh, MachineTokenRequests, ServerHealthChecks, HTTPRequests, HTTPRequestDuration,
 		RetentionDeleted, RetentionLastSuccess, UsageRollupLastSuccess, LoopLeader}, v02Collectors()...)
 }
