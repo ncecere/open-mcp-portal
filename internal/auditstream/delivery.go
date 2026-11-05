@@ -28,6 +28,10 @@ type Envelope struct {
 	Reference     string          `json:"reference,omitempty"`
 }
 
+// FullRowJSONSQL is shared by envelope length and bounded fetch, so the
+// advertised byte length is exactly the referenced UTF-8 representation.
+const FullRowJSONSQL = `(to_jsonb(a)||jsonb_build_object('sql_null_json',to_jsonb(array_remove(ARRAY[CASE WHEN a.before_state IS NULL THEN 'before_state' END,CASE WHEN a.after_state IS NULL THEN 'after_state' END,CASE WHEN a.metadata IS NULL THEN 'metadata' END],NULL))))::text`
+
 const joinAudit = ` LEFT JOIN public.audit_log a ON a.id=c.audit_id AND (a.row_uid=c.row_uid OR (a.txid IS NULL AND a.id=c.legacy_id)) `
 
 // CheckRange must run in the same repeatable-read snapshot as Read. PurgedSeq
@@ -57,7 +61,7 @@ func Read(ctx context.Context, tx pgx.Tx, seq int64, full bool) (Envelope, error
 	var raw, epochRaw []byte
 	var before, after, meta *string
 	var timestamp time.Time
-	err := tx.QueryRow(ctx, `SELECT s.stream_id,c.seq,c.kind,c.flags,c.row_uid,c.legacy_id,coalesce(c.audit_id,0),c.epoch,c.occurred_at,encode(c.summary_hash,'hex'),encode(c.entry_hash,'hex'),encode(c.chain_hash,'hex'),c.epoch_summary,to_jsonb(a),a.before_state::text,a.after_state::text,a.metadata::text FROM omp_audit.chain c CROSS JOIN omp_audit.state s `+joinAudit+` WHERE c.seq=$1`, seq).Scan(&e.Stream, &e.Seq, &e.Kind, &e.Flags, &e.RowUID, &e.LegacyID, &e.AuditID, &e.Epoch, &timestamp, &e.Record.Summary, &e.Entry, &e.Chain, &epochRaw, &raw, &before, &after, &meta)
+	err := tx.QueryRow(ctx, `SELECT s.stream_id,c.seq,c.kind,c.flags,c.row_uid,c.legacy_id,coalesce(c.audit_id,0),c.epoch,c.occurred_at,encode(c.summary_hash,'hex'),encode(c.entry_hash,'hex'),encode(c.chain_hash,'hex'),c.epoch_summary,to_jsonb(a),a.before_state::text,a.after_state::text,a.metadata::text,coalesce(octet_length(`+FullRowJSONSQL+`),0) FROM omp_audit.chain c CROSS JOIN omp_audit.state s `+joinAudit+` WHERE c.seq=$1`, seq).Scan(&e.Stream, &e.Seq, &e.Kind, &e.Flags, &e.RowUID, &e.LegacyID, &e.AuditID, &e.Epoch, &timestamp, &e.Record.Summary, &e.Entry, &e.Chain, &epochRaw, &raw, &before, &after, &meta, &e.FullLength)
 	if err != nil {
 		return e, err
 	}

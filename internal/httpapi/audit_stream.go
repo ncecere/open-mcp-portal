@@ -118,10 +118,8 @@ func (a *api) auditStream(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if env.Flags&2 != 0 && profile == "full" {
-			fullRaw, _ := json.Marshal(env.Full)
 			env.Full = nil
 			env.Oversized = true
-			env.FullLength = len(fullRaw)
 			env.Reference = fmt.Sprintf("/v1/admin/audit/entries/%d/full", n)
 			raw, err = json.Marshal(env)
 			if err != nil {
@@ -195,7 +193,7 @@ func (a *api) auditFull(w http.ResponseWriter, r *http.Request) {
 	}
 	// PostgreSQL sends bounded text chunks; no full snapshot is buffered in Go.
 	var size int
-	const source = `SELECT (to_jsonb(a)||jsonb_build_object('sql_null_json',to_jsonb(array_remove(ARRAY[CASE WHEN a.before_state IS NULL THEN 'before_state' END,CASE WHEN a.after_state IS NULL THEN 'after_state' END,CASE WHEN a.metadata IS NULL THEN 'metadata' END],NULL))))::text body FROM omp_audit.chain c JOIN public.audit_log a ON a.id=c.audit_id AND (a.row_uid=c.row_uid OR (a.txid IS NULL AND a.id=c.legacy_id)) WHERE c.seq=$1`
+	const source = `SELECT ` + auditstream.FullRowJSONSQL + ` body FROM omp_audit.chain c JOIN public.audit_log a ON a.id=c.audit_id AND (a.row_uid=c.row_uid OR (a.txid IS NULL AND a.id=c.legacy_id)) WHERE c.seq=$1`
 	err = tx.QueryRow(r.Context(), `SELECT length(body) FROM (`+source+`) x`, seq).Scan(&size)
 	if err == pgx.ErrNoRows {
 		httpx.Error(w, 404, "not_found", "Entry not found")
