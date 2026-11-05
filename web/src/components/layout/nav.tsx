@@ -151,6 +151,7 @@ export type AdminPath =
   | "/admin/usage"
   | "/admin/limits"
   | "/admin/retention"
+  | "/admin/scanning"
   | "/admin/capture"
   | "/admin/notifications";
 
@@ -200,6 +201,7 @@ export const adminSections: { label?: string; defaultOpen?: boolean; items: Admi
       { to: "/admin/usage", label: terms.usage, icon: icon(BarChart3) },
     ],
   },
+  { label: "Settings", defaultOpen: true, items: [{ to: "/admin/scanning", label: "Definition scanning", icon: icon(ShieldCheck) }] },
   {
     label: "Operations",
     defaultOpen: true,

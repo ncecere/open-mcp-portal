@@ -43,6 +43,7 @@ describe("navigation lists", () => {
       "/admin/audit",
       "/admin/calls",
       "/admin/usage",
+      "/admin/scanning",
       "/admin/limits",
       "/admin/retention",
       "/admin/capture",
@@ -100,11 +101,12 @@ describe("navigation lists", () => {
 
   it("groups the admin pages and finds the current page's group", () => {
     // Overview is first and has no group.
-    expect(adminSections.map((s) => s.label)).toEqual([undefined, "People", "Catalog", "Access", "Records", "Operations"]);
+    expect(adminSections.map((s) => s.label)).toEqual([undefined, "People", "Catalog", "Access", "Records", "Settings", "Operations"]);
     expect(activeAdminGroup("/admin/automation-tokens")).toBe("Access");
     expect(activeAdminGroup("/admin/notifications")).toBe("Operations");
     expect(activeAdminGroup("/admin/usage")).toBe("Records");
     expect(activeAdminGroup("/admin/calls/501")).toBe("Records");
+    expect(activeAdminGroup("/admin/scanning")).toBe("Settings");
     expect(activeAdminGroup("/admin/limits")).toBe("Operations");
     expect(activeAdminGroup("/admin/retention")).toBe("Operations");
     expect(activeAdminGroup("/admin/capture")).toBe("Operations");

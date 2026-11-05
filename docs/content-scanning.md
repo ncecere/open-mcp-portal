@@ -1,8 +1,9 @@
 # Content scanning: design (#52, decision 50)
 
-**Status (2026-11-04): #72 backend implementation under local review.** Slice 1 adds a local definition scanner,
-migration 00061, refresh persistence, session-only management APIs and leader-elected rescan backfill. The UI is
-still #73; argument/result scanning and enforcement remain later slices. See [operator instructions](registry.md#definition-scanning).
+**Status (2026-11-05): F4 (#73) shipped in the UI; definition scanning remains shadow only.** Slice 1 adds a local definition scanner,
+migration 00061, refresh persistence, session-only management APIs and leader-elected rescan backfill. The Capabilities tab and publish/approval dialogs show per-capability findings and explicit scan states;
+Admin › Settings offers Off/Shadow and the read-only rule catalog. Argument/result scanning
+and enforcement remain later slices. See [operator instructions](registry.md#definition-scanning).
 The acceptance evidence and remaining limitations are in [the implementation report](scanning-72-report.md).
 The defaults below remain delegated defaults, and latency figures remain proposed gates unless explicitly measured.
 
@@ -854,7 +855,7 @@ Ruleset v1 for definitions (secret, unicode, poison, length groups; ids as in 3)
 operation, plus a leader-elected backfill after upgrade or a ruleset change); the rule catalog operation; the
 definition-stage metrics; threat-model and operator docs. *Acceptance:* A1 to A6, A8, A10 to A12.
 
-**F4 ([#73](https://github.com/ncecere/open-mcp-portal/issues/73)). Findings in the Capabilities tab and the review dialogs.** *Size S. Depends on: F3.* A findings panel per
+**F4 ([#73](https://github.com/ncecere/open-mcp-portal/issues/73)). Findings in the Capabilities tab and the review dialogs.** **UI shipped; shadow only.** *Size S. Depends on: F3.* A findings panel per
 capability and a summary in the publish and review dialogs, with the ruleset version, the "found nothing does not
 mean safe" wording and no success state. *Acceptance:* A9; keyboard and screen-reader use verified by axe in Vitest;
 no hard-coded colours (the styling check).
