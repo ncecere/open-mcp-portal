@@ -117,7 +117,7 @@ func (a *api) auditStream(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return
 		}
-		if env.Flags&2 != 0 && profile == "full" {
+		if profile == "full" && (env.Flags&2 != 0 || len(raw)+1 > 16<<20) {
 			env.Full = nil
 			env.Oversized = true
 			env.Reference = fmt.Sprintf("/v1/admin/audit/entries/%d/full", n)
@@ -152,6 +152,13 @@ func (a *api) auditAck(w http.ResponseWriter, r *http.Request) {
 		code := "invalid_ack"
 		if strings.Contains(err.Error(), "oversized_pending") {
 			code = "oversized_pending"
+			var pending []byte
+			queryErr := a.Pool.QueryRow(r.Context(), `SELECT coalesce(jsonb_agg(seq ORDER BY seq),'[]'::jsonb) FROM (SELECT ch.seq FROM omp_audit.chain ch JOIN omp_audit.consumers c ON c.name=$1 WHERE ch.seq>c.acked_seq AND ch.seq<=$2 AND ch.flags&2<>0 AND NOT EXISTS(SELECT 1 FROM omp_audit.oversized_fetches f WHERE f.consumer=c.name AND f.seq=ch.seq) ORDER BY ch.seq LIMIT 1000) pending`, *in.Consumer, *in.Seq).Scan(&pending)
+			if failed(w, r, queryErr) {
+				return
+			}
+			httpx.ErrorDetails(w, 409, code, "Fetch these oversized entries before acknowledging", map[string]any{"seqs": json.RawMessage(pending), "limit": 1000})
+			return
 		}
 		httpx.Error(w, 409, code, "Acknowledgement refused")
 		return
@@ -248,11 +255,24 @@ func (a *api) auditVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(r.Context())
-	_, err = auditstream.CheckRange(r.Context(), tx, from-1, int(to-from+1))
-	if err != nil {
-		streamFailure(w, r, err)
+	var tip int64
+	if err = tx.QueryRow(r.Context(), `SELECT last_seq FROM omp_audit.state WHERE singleton`).Scan(&tip); failed(w, r, err) {
 		return
 	}
+	if from > tip {
+		httpx.JSON(w, 200, map[string]any{"valid": true, "checked": 0})
+		return
+	}
+	earliest, rangeErr := auditstream.CheckRange(r.Context(), tx, from-1, int(to-from+1))
+	if rangeErr != nil {
+		if rangeErr.Error() == "range_expired" {
+			httpx.ErrorDetails(w, 410, "range_expired", "Requested range expired", map[string]any{"earliest_seq": earliest})
+		} else {
+			streamFailure(w, r, rangeErr)
+		}
+		return
+	}
+
 	var prev [32]byte
 	if from == 1 {
 		var id string
