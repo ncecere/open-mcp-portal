@@ -15,10 +15,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/ncecere/open-mcp-portal/internal/observability"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/testutil"
 	"github.com/ncecere/open-mcp-portal/migrations"
 	"github.com/pressly/goose/v3"
+	dto "github.com/prometheus/client_model/go"
 )
 
 var ctx = context.Background()
@@ -100,6 +102,14 @@ func TestWatermarkNegativeControl(t *testing.T) {
 }
 func TestWatermarkConcurrentWriters(t *testing.T) {
 	p, _ := testutil.NewDB(t)
+	lateValue := func() float64 {
+		var metric dto.Metric
+		if err := observability.AuditStreamLate.Write(&metric); err != nil {
+			t.Fatal(err)
+		}
+		return metric.GetCounter().GetValue()
+	}
+	lateBefore := lateValue()
 	var wg sync.WaitGroup
 	for w := 0; w < 24; w++ {
 		wg.Add(1)
@@ -145,6 +155,20 @@ func TestWatermarkConcurrentWriters(t *testing.T) {
 			drain(t, p)
 			if n, err := (Sealer{p}).Sweep(ctx); err != nil || n != 0 {
 				t.Fatalf("normal sweep: %d %v", n, err)
+			}
+			// Force a complete post-stress cycle in addition to concurrent
+			// scheduled passes, so the metric assertion covers every identity.
+			exec(t, testutil.OwnerPool(t, p), `UPDATE omp_audit.state SET sweep_pending=true,sweep_scan_id=NULL,sweep_started_xmin=NULL`)
+			for i := 0; i < 10 && count(t, p, `SELECT sweep_pending::int FROM omp_audit.state WHERE singleton`) != 0; i++ {
+				if n, err := (Sealer{p}).Sweep(ctx); err != nil || n != 0 {
+					t.Fatalf("post-stress sweep: %d %v", n, err)
+				}
+			}
+			if count(t, p, `SELECT sweep_pending::int FROM omp_audit.state WHERE singleton`) != 0 {
+				t.Fatal("post-stress sweep incomplete")
+			}
+			if delta := lateValue() - lateBefore; delta != 0 {
+				t.Fatalf("normal stress increased late_total: %f", delta)
 			}
 			if count(t, p, `SELECT count(*) FROM public.audit_log a WHERE NOT EXISTS(SELECT 1 FROM omp_audit.chain c WHERE c.row_uid=a.row_uid OR c.legacy_id=a.id AND a.txid IS NULL)`) != 0 {
 				t.Fatal("missing")
