@@ -5,13 +5,13 @@ Conventions for building and testing are in [CONTRIBUTING.md](CONTRIBUTING.md), 
 with an AI agent on this repository. For a fresh machine/session, start with
 [docs/agent-handoff.md](docs/agent-handoff.md); confirm its release stop point against `docs/status.md` and GitHub.
 
-- **Paused after v0.13.1.** The owner asked for a cut release with `main` matching it, old branches cleaned up and
-  only pick-up-later work kept. v0.13.1 (refreshed builder image, OIDC snapshot regression test) is the latest release
-  and `main` is exactly its tagged commit; v0.13.0 shipped catalog search (#49 slice), the list-column fix and #38/#70
-  groundwork (docs/releases/). Parked on GitHub: `parked/terraform-provider` (seed for the separate Terraform project)
-  and `parked/keyprovider-transit` (#41, deferred). **Development and worker assignments are paused until the owner
-  explicitly resumes them.** Decisions 93+ and migrations 57+ are unallocated. Do not infer v1.0.0 approval. Keep all
-  four reusable Boat VMs and their fixtures/evidence up.
+- **Resumed 2026-11-05 after v0.13.1.** v0.13.1 (refreshed builder image, OIDC snapshot regression test) is the
+  latest release; v0.13.0 shipped catalog search (#49 slice), the list-column fix and #38/#70 groundwork
+  (docs/releases/). The owner resumed development with the batch in [docs/status.md](docs/status.md) ("Current
+  batch"): #72 definition scanning (migration 57) and the #38 audit-streaming design (decision 93; migration 58+ if
+  needed). Decisions 94+ and migrations 59+ are unallocated; allocate them from the main thread only. Parked on
+  GitHub: `parked/terraform-provider` (seed for the separate Terraform project) and `parked/keyprovider-transit`
+  (#41, deferred). Do not infer v1.0.0 approval. Keep all four reusable Boat VMs and their fixtures/evidence up.
 - **Execution mode.** The main thread owns coordination, review, integration and releases. The owner has explicitly
   re-authorized parallel Boat/Codex coding agents for bounded development issues. Give each writer an isolated
   sandbox/checkout, only the required model credentials, and a narrow task; never forward production or infrastructure
