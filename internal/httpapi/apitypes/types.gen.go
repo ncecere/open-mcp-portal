@@ -323,6 +323,24 @@ func (e AuditActorKind) Valid() bool {
 	}
 }
 
+// Defines values for AuditConsumerRequestProfile.
+const (
+	AuditConsumerRequestProfileFull    AuditConsumerRequestProfile = "full"
+	AuditConsumerRequestProfileSummary AuditConsumerRequestProfile = "summary"
+)
+
+// Valid indicates whether the value is a known member of the AuditConsumerRequestProfile enum.
+func (e AuditConsumerRequestProfile) Valid() bool {
+	switch e {
+	case AuditConsumerRequestProfileFull:
+		return true
+	case AuditConsumerRequestProfileSummary:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AuditEntryActorKind.
 const (
 	AuditEntryActorKindApiKey          AuditEntryActorKind = "api_key"
@@ -2939,6 +2957,24 @@ func (e AdminListAuditParamsActorKind) Valid() bool {
 	}
 }
 
+// Defines values for AdminAuditStreamParamsProfile.
+const (
+	AdminAuditStreamParamsProfileFull    AdminAuditStreamParamsProfile = "full"
+	AdminAuditStreamParamsProfileSummary AdminAuditStreamParamsProfile = "summary"
+)
+
+// Valid indicates whether the value is a known member of the AdminAuditStreamParamsProfile enum.
+func (e AdminAuditStreamParamsProfile) Valid() bool {
+	switch e {
+	case AdminAuditStreamParamsProfileFull:
+		return true
+	case AdminAuditStreamParamsProfileSummary:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AdminGetUsageParamsMethod.
 const (
 	AdminGetUsageParamsMethodPromptsget             AdminGetUsageParamsMethod = "prompts/get"
@@ -3468,6 +3504,17 @@ type AuditActorAutomationTokenKind string
 
 // AuditActorKind defines model for AuditActor.Kind.
 type AuditActorKind string
+
+// AuditConsumerRequest defines model for AuditConsumerRequest.
+type AuditConsumerRequest struct {
+	Consumer *string                      `json:"consumer,omitempty"`
+	Profile  *AuditConsumerRequestProfile `json:"profile,omitempty"`
+	Required *bool                        `json:"required,omitempty"`
+	Seq      *int64                       `json:"seq,omitempty"`
+}
+
+// AuditConsumerRequestProfile defines model for AuditConsumerRequest.Profile.
+type AuditConsumerRequestProfile string
 
 // AuditEntry defines model for AuditEntry.
 type AuditEntry struct {
@@ -7917,6 +7964,27 @@ type AdminListAuditParams struct {
 // AdminListAuditParamsActorKind defines parameters for AdminListAudit.
 type AdminListAuditParamsActorKind string
 
+// AdminAuditFullParams defines parameters for AdminAuditFull.
+type AdminAuditFullParams struct {
+	Consumer *string `form:"consumer,omitempty" json:"consumer,omitempty"`
+}
+
+// AdminAuditStreamParams defines parameters for AdminAuditStream.
+type AdminAuditStreamParams struct {
+	AfterSeq *int64                         `form:"after_seq,omitempty" json:"after_seq,omitempty"`
+	Limit    *int64                         `form:"limit,omitempty" json:"limit,omitempty"`
+	Profile  *AdminAuditStreamParamsProfile `form:"profile,omitempty" json:"profile,omitempty"`
+}
+
+// AdminAuditStreamParamsProfile defines parameters for AdminAuditStream.
+type AdminAuditStreamParamsProfile string
+
+// AdminAuditVerifyParams defines parameters for AdminAuditVerify.
+type AdminAuditVerifyParams struct {
+	From *int64 `form:"from,omitempty" json:"from,omitempty"`
+	To   *int64 `form:"to,omitempty" json:"to,omitempty"`
+}
+
 // AdminUpdateAuthProviderParams defines parameters for AdminUpdateAuthProvider.
 type AdminUpdateAuthProviderParams struct {
 	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
@@ -8071,6 +8139,24 @@ type AdminListServiceConnectionsParams struct {
 	// Cursor nextCursor from the previous page
 	Cursor *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit  *LimitParam  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// AdminAuditRegisterConsumerParams defines parameters for AdminAuditRegisterConsumer.
+type AdminAuditRegisterConsumerParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
+// AdminAuditRemoveConsumerParams defines parameters for AdminAuditRemoveConsumer.
+type AdminAuditRemoveConsumerParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
+// AdminAuditSetRequiredParams defines parameters for AdminAuditSetRequired.
+type AdminAuditSetRequiredParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
 }
 
 // AdminUpdateCaptureSettingsParams defines parameters for AdminUpdateCaptureSettings.
@@ -8530,6 +8616,9 @@ type AdminCreateApprovalRuleJSONRequestBody = ApprovalRuleInput
 // AdminReplaceApprovalRuleJSONRequestBody defines body for AdminReplaceApprovalRule for application/json ContentType.
 type AdminReplaceApprovalRuleJSONRequestBody = ApprovalRuleInput
 
+// AdminAuditAckJSONRequestBody defines body for AdminAuditAck for application/json ContentType.
+type AdminAuditAckJSONRequestBody = AuditConsumerRequest
+
 // AdminCreateAuthProviderJSONRequestBody defines body for AdminCreateAuthProvider for application/json ContentType.
 type AdminCreateAuthProviderJSONRequestBody = AuthProviderCreate
 
@@ -8586,6 +8675,12 @@ type AdminCreateProvisioningMappingJSONRequestBody = ProvisioningMappingCreate
 
 // AdminCreateProvisioningTokenJSONRequestBody defines body for AdminCreateProvisioningToken for application/json ContentType.
 type AdminCreateProvisioningTokenJSONRequestBody = ProvisioningTokenCreate
+
+// AdminAuditRegisterConsumerJSONRequestBody defines body for AdminAuditRegisterConsumer for application/json ContentType.
+type AdminAuditRegisterConsumerJSONRequestBody = AuditConsumerRequest
+
+// AdminAuditSetRequiredJSONRequestBody defines body for AdminAuditSetRequired for application/json ContentType.
+type AdminAuditSetRequiredJSONRequestBody = AuditConsumerRequest
 
 // AdminUpdateCaptureSettingsJSONRequestBody defines body for AdminUpdateCaptureSettings for application/json ContentType.
 type AdminUpdateCaptureSettingsJSONRequestBody = CaptureSettingsUpdate

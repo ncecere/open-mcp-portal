@@ -36,6 +36,7 @@ type Row struct {
 	ActorTokenName *string         `json:"actor_token_name"`
 	ActorTokenKind *string         `json:"actor_token_kind"`
 	Txid           *string         `json:"txid"`
+	SQLNullJSON    []string        `json:"sql_null_json"`
 	RowUID         *uuid.UUID      `json:"row_uid"`
 }
 
@@ -240,10 +241,20 @@ func NewRecord(stream uuid.UUID, epoch uint32, seq int64, previous [32]byte, r R
 	if err != nil {
 		return Record{}, [32]byte{}, err
 	}
+	flags := uint8(0)
+	raw, err := json.Marshal(r)
+	if err != nil {
+		return Record{}, [32]byte{}, err
+	}
+	// Reserve 64 KiB for bounded envelope/summary fields. No full profile
+	// record at or above the protocol limit is ever silently downgraded.
+	if len(raw) > (16<<20)-(64<<10) {
+		flags = 2
+	}
 	b := append([]byte("OMP-AUDIT-EVIDENCE\x00CHAIN\x00V2\x00"), previous[:]...)
-	b = append(b, RecordBytes(stream, epoch, seq, 0, r, sh, eh)...)
+	b = append(b, RecordBytes(stream, epoch, seq, flags, r, sh, eh)...)
 	ch := sha256.Sum256(b)
-	rec := Record{AuditID: r.ID, Seq: seq, Kind: "entry", RowUID: r.RowUID, Summary: hex.EncodeToString(sh[:]), Entry: hex.EncodeToString(eh[:]), Chain: hex.EncodeToString(ch[:])}
+	rec := Record{Flags: flags, AuditID: r.ID, Seq: seq, Kind: "entry", RowUID: r.RowUID, Summary: hex.EncodeToString(sh[:]), Entry: hex.EncodeToString(eh[:]), Chain: hex.EncodeToString(ch[:])}
 	if r.RowUID == nil {
 		rec.LegacyID = &r.ID
 	}

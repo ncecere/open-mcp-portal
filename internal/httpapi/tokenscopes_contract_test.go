@@ -46,8 +46,8 @@ func TestTokenScopesMatchSpecAndRoutes(t *testing.T) {
 			ids[key] = op.OperationID
 		}
 	}
-	if len(annotated) != 63 {
-		t.Errorf("the spec annotates %d operations, the design lists 63", len(annotated))
+	if len(annotated) != 68 {
+		t.Errorf("the spec annotates %d operations, the design lists 68", len(annotated))
 	}
 	served := map[string]bool{}
 	for _, r := range apiRoutes(Deps{Config: config.Defaults(), Health: NewHealth(nil), Log: testutil.Logger(), Auth: &auth.Service{}}) {
@@ -108,7 +108,7 @@ func TestTokenScopesMatchSpecAndRoutes(t *testing.T) {
 		}
 		count[scopes[0]]++
 	}
-	want := map[string]int{"platform:read": 39, "platform:write": 11, "servers:read": 5, "servers:write": 7}
+	want := map[string]int{"platform:read": 44, "platform:write": 11, "servers:read": 5, "servers:write": 7}
 	if len(count) != len(want) {
 		t.Errorf("scopes in use: %v", count)
 	}

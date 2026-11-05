@@ -33,12 +33,14 @@ var callBuckets = []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30
 var httpBuckets = []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30, 60}
 
 var (
-	AuditStreamState  = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "omp_audit_stream_state", Help: "Current audit stream state."}, []string{"state"})
-	AuditStreamLate   = prometheus.NewCounter(prometheus.CounterOpts{Name: "omp_audit_stream_late_total", Help: "Audit rows recovered by safety sweep."})
-	AuditStreamEpoch  = prometheus.NewGauge(prometheus.GaugeOpts{Name: "omp_audit_stream_epoch", Help: "Current audit stream epoch; changes require investigation."})
-	AuditStreamLag    = prometheus.NewGauge(prometheus.GaugeOpts{Name: "omp_audit_stream_lag_seconds", Help: "Age of the oldest unsealed audit row in seconds."})
-	AuditStreamSealed = prometheus.NewCounter(prometheus.CounterOpts{Name: "omp_audit_stream_sealed_total", Help: "Audit entries sealed successfully."})
-	BuildInfo         = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	AuditStreamIntegrity   = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "omp_audit_stream_integrity_errors_total", Help: "Audit integrity failures."}, []string{"kind"})
+	AuditStreamConsumerLag = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "omp_audit_stream_consumer_lag", Help: "Maximum unacknowledged sequence count by profile and requirement."}, []string{"profile", "required"})
+	AuditStreamState       = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "omp_audit_stream_state", Help: "Current audit stream state."}, []string{"state"})
+	AuditStreamLate        = prometheus.NewCounter(prometheus.CounterOpts{Name: "omp_audit_stream_late_total", Help: "Audit rows recovered by safety sweep."})
+	AuditStreamEpoch       = prometheus.NewGauge(prometheus.GaugeOpts{Name: "omp_audit_stream_epoch", Help: "Current audit stream epoch; changes require investigation."})
+	AuditStreamLag         = prometheus.NewGauge(prometheus.GaugeOpts{Name: "omp_audit_stream_lag_seconds", Help: "Age of the oldest unsealed audit row in seconds."})
+	AuditStreamSealed      = prometheus.NewCounter(prometheus.CounterOpts{Name: "omp_audit_stream_sealed_total", Help: "Audit entries sealed successfully."})
+	BuildInfo              = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "omp_build_info",
 		Help: "Always 1: the binary's version and commit.",
 	}, []string{"version", "commit"})
@@ -127,7 +129,7 @@ var (
 func appCollectors() []prometheus.Collector {
 	return append([]prometheus.Collector{ScanFindings, ScanDuration, ScanIncomplete, ScanRuleset, BuildInfo, MCPRequests, MCPRequestDuration, MCPCallDuration, MCPRateLimited, ServerCircuitState, PayloadCaptures,
 		PayloadRedactions, PayloadCaptureErrors, ProviderTokenRefresh, MachineTokenRequests, ServerHealthChecks, HTTPRequests, HTTPRequestDuration,
-		AuditStreamState, AuditStreamLate, AuditStreamEpoch, AuditStreamLag, AuditStreamSealed, RetentionDeleted, RetentionLastSuccess, UsageRollupLastSuccess, LoopLeader}, v02Collectors()...)
+		AuditStreamIntegrity, AuditStreamConsumerLag, AuditStreamState, AuditStreamLate, AuditStreamEpoch, AuditStreamLag, AuditStreamSealed, RetentionDeleted, RetentionLastSuccess, UsageRollupLastSuccess, LoopLeader}, v02Collectors()...)
 }
 
 // Metrics owns a registry with the Go and process collectors, the
