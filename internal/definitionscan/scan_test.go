@@ -57,3 +57,19 @@ func TestConfusableNames(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestBearerPrefilterRetainsPadding(t *testing.T) {
+	for _, text := range []string{"Bearer a" + strings.Repeat("=", 19), "Authorization: Bearer a1"} {
+		raw, _ := json.Marshal(map[string]string{"description": text})
+		r := Scan(context.Background(), raw)
+		found := false
+		for _, f := range r.Findings {
+			if f.RuleID == "secret.bearer" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("prefilter omitted shared-registry match: %+v", r)
+		}
+	}
+}

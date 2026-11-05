@@ -316,8 +316,6 @@ func unicodeFind(s, key string, add func(string, string, int)) {
 	}
 }
 
-var bearerCandidate = regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9\-._~+/]{20,}`)
-
 func secretCandidate(s string) bool {
 	lower := strings.ToLower(s)
 	for _, prefix := range []string{"-----BEGIN ", "eyJ", "om", "xox", "gh", "glpat-", "ya29.", "AIza", "AKIA", "ASIA", "://"} {
@@ -325,7 +323,7 @@ func secretCandidate(s string) bool {
 			return true
 		}
 	}
-	return strings.Contains(lower, "bearer") && (strings.Contains(lower, "authorization:") || bearerCandidate.MatchString(s))
+	return strings.Contains(lower, "bearer") && (strings.Contains(lower, "authorization:") || possibleBearer(lower))
 }
 func phraseCandidate(id, s string) bool {
 	switch id {
@@ -386,4 +384,30 @@ func normalizePhrasing(text string) string {
 		out.WriteRune(r)
 	}
 	return out.String()
+}
+
+// This is deliberately a superset prefilter. Find owns payload validation,
+// including padding in its minimum-length calculation.
+func possibleBearer(lower string) bool {
+	for {
+		i := strings.Index(lower, "bearer")
+		if i < 0 {
+			return false
+		}
+		lower = lower[i+6:]
+		if len(lower) == 0 || !unicode.IsSpace(rune(lower[0])) {
+			continue
+		}
+		start := 0
+		for start < len(lower) && unicode.IsSpace(rune(lower[start])) {
+			start++
+		}
+		end := start
+		for end < len(lower) && !unicode.IsSpace(rune(lower[end])) {
+			end++
+			if end-start >= 20 {
+				return true
+			}
+		}
+	}
 }
