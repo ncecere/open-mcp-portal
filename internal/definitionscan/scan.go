@@ -188,7 +188,7 @@ func scan(ctx context.Context, raw []byte, origin string, testRule func(string))
 		if key == "description" && n > 2000 {
 			add("length.description", "info", ptr, 1)
 		}
-		if strings.Contains(ptr, "/inputSchema/") && n > 1000 {
+		if (strings.Contains(ptr, "/inputSchema/") || strings.Contains(ptr, "/outputSchema/") || strings.Contains(ptr, "/arguments/")) && (key == "description" || key == "default" || key == "enum") && n > 1000 {
 			add("length.schema_text", "low", ptr, 1)
 		}
 	}
@@ -290,8 +290,8 @@ func unicodeFind(s, key string, add func(string, string, int)) {
 			} else {
 				counts["joiner"]++
 			}
-		case unicode.Is(unicode.Variation_Selector, r):
-			if i == 0 || unicode.Is(unicode.Variation_Selector, rs[i-1]) || rs[i-1] < 0x2300 {
+		case payloadVariationSelector(r):
+			if i == 0 || payloadVariationSelector(rs[i-1]) || rs[i-1] < 0x2300 {
 				counts["variation_selector"]++
 			}
 		case r == 0x200b || r == 0x2060 || r == 0xfeff || r == 0xad || r == 0x180e || r == 0x34f:
@@ -410,4 +410,8 @@ func possibleBearer(lower string) bool {
 			}
 		}
 	}
+}
+
+func payloadVariationSelector(r rune) bool {
+	return r >= 0xfe00 && r <= 0xfe0f || r >= 0xe0100 && r <= 0xe01ef
 }

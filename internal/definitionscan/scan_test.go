@@ -73,3 +73,24 @@ func TestBearerPrefilterRetainsPadding(t *testing.T) {
 		}
 	}
 }
+
+func TestSchemaLengthAcrossKindsAndMongolianVariation(t *testing.T) {
+	for _, field := range []string{"inputSchema", "outputSchema", "arguments"} {
+		raw, _ := json.Marshal(map[string]any{field: map[string]string{"description": strings.Repeat("ordinary ", 150)}})
+		r := Scan(context.Background(), raw)
+		found := false
+		for _, f := range r.Findings {
+			if f.RuleID == "length.schema_text" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("%s: %+v", field, r)
+		}
+	}
+	raw, _ := json.Marshal(map[string]string{"description": string(rune(0x1820)) + string(rune(0x180b))})
+	r := Scan(context.Background(), raw)
+	if len(r.Findings) != 0 {
+		t.Fatalf("legitimate Mongolian selector: %+v", r)
+	}
+}
