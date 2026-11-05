@@ -123,6 +123,7 @@ func (s Sealer) Loop(ctx context.Context, log *slog.Logger) {
 			var lag float64
 			if err := s.Pool.QueryRow(ctx, lagQuery).Scan(&lag); err == nil {
 				observability.AuditStreamLag.Set(lag)
+				s.observeConsumers(ctx)
 			}
 		}
 	}

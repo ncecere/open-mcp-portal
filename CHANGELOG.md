@@ -9,6 +9,7 @@ breaking changes; the entry says how to adapt.
 ## Unreleased
 
 - Show definition scan findings and scan times in Capabilities and publish/approval reviews, with explicit incomplete/stale/off states and heuristic limitations; add Admin scanning mode and rule catalog (shadow only, #73).
+- Experimental audit pull delivery, consumer acknowledgements and sealed-prefix retention interlock (migration 62); strict retention decoding and operator-owned retention floor. Disabled by default pending complete slice-1 acceptance.
 
 - Add audit stream incarnation recovery commands, epoch declarations and safety sweeps behind the disabled audit stream setting.
 

@@ -972,6 +972,307 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '409':
           $ref: '#/components/responses/ErrorReply'
+  /v1/admin/audit/stream:
+    get:
+      tags: [admin]
+      operationId: adminAuditStream
+      summary: Sealed audit records after an exclusive sequence cursor (NDJSON; contiguous or range_expired)
+      x-omp-token-scopes: [platform:read]
+      parameters:
+      - name: after_seq
+        in: query
+        schema:
+          type: integer
+          format: int64
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 1000
+          default: 100
+      - name: profile
+        in: query
+        schema:
+          type: string
+          enum: [summary, full]
+          default: summary
+      responses:
+        '200':
+          description: Audit stream response; tip is advisory and never replaces a pinned receiver anchor
+          content:
+            application/x-ndjson:
+              schema:
+                type: string
+                description: One AuditStreamEnvelope per line; at most 16 MiB per line; oversized full rows use a reference
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '410':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/audit/stream/tip:
+    get:
+      tags: [admin]
+      operationId: adminAuditStreamTip
+      summary: Advisory unsigned stream tip; never replaces a pinned receiver anchor
+      x-omp-token-scopes: [platform:read]
+      responses:
+        '200':
+          description: Audit stream response; tip is advisory and never replaces a pinned receiver anchor
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '410':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/audit/verify:
+    get:
+      tags: [admin]
+      operationId: adminAuditVerify
+      summary: Recompute retained summary, entry and chain hashes; report first bad sequence
+      x-omp-token-scopes: [platform:read]
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: integer
+          format: int64
+      - name: to
+        in: query
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Audit stream response; tip is advisory and never replaces a pinned receiver anchor
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '410':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/audit/entries/{seq}/full:
+    parameters:
+    - name: seq
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    get:
+      tags: [admin]
+      operationId: adminAuditFull
+      summary: Bounded full-row JSON chunks; consumer query records an oversized fetch
+      x-omp-token-scopes: [platform:read]
+      parameters:
+      - name: consumer
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Audit stream response; tip is advisory and never replaces a pinned receiver anchor
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '410':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/audit/stream/ack:
+    post:
+      tags: [admin]
+      operationId: adminAuditAck
+      summary: Monotonic registered-consumer acknowledgement, bounded by the sealed tip
+      x-omp-token-scopes: [platform:read]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditConsumerRequest'
+      responses:
+        '200':
+          description: Audit stream response; tip is advisory and never replaces a pinned receiver anchor
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '410':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/settings/audit-consumers:
+    get:
+      tags: [admin]
+      operationId: adminAuditConsumers
+      summary: List audit consumers (platform-admin browser sessions only)
+      responses:
+        '200':
+          description: Audit stream response; tip is advisory and never replaces a pinned receiver anchor
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '410':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags: [admin]
+      operationId: adminAuditRegisterConsumer
+      summary: Register a consumer (platform-admin browser session, audited, If-Match)
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditConsumerRequest'
+      responses:
+        '200':
+          description: Audit stream response; tip is advisory and never replaces a pinned receiver anchor
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '410':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/settings/audit-consumers/{consumer}:
+    parameters:
+    - name: consumer
+      in: path
+      required: true
+      schema:
+        type: string
+    put:
+      tags: [admin]
+      operationId: adminAuditSetRequired
+      summary: Change required retention protection (platform-admin browser session, audited, If-Match)
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditConsumerRequest'
+      responses:
+        '200':
+          description: Audit stream response; tip is advisory and never replaces a pinned receiver anchor
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '410':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+    delete:
+      tags: [admin]
+      operationId: adminAuditRemoveConsumer
+      summary: Remove a consumer (platform-admin browser session, audited, If-Match)
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      responses:
+        '200':
+          description: Audit stream response; tip is advisory and never replaces a pinned receiver anchor
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '410':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
   /v1/admin/audit:
     get:
       tags:
@@ -7874,6 +8175,21 @@ components:
               data:
                 $ref: '#/components/schemas/UsageReport'
   schemas:
+    AuditConsumerRequest:
+      type: object
+      properties:
+        consumer:
+          type: string
+          maxLength: 64
+        profile:
+          type: string
+          enum: [summary, full]
+        required:
+          type: boolean
+        seq:
+          type: integer
+          format: int64
+          minimum: 0
     ScanningSettingsUpdate:
       type: object
       required: [definitionMode]

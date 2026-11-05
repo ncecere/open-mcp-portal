@@ -4,10 +4,12 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ncecere/open-mcp-portal/internal/auditstream"
 	"github.com/ncecere/open-mcp-portal/internal/authz"
 	"github.com/ncecere/open-mcp-portal/internal/retention"
 	"github.com/ncecere/open-mcp-portal/internal/store"
@@ -52,6 +54,20 @@ func (f *fixture) exists(table, col, id string) bool {
 func TestRetentionPass(t *testing.T) {
 	ctx := context.Background()
 	pool, _ := testutil.NewDB(t)
+	owner := testutil.OwnerPool(t, pool)
+	tx, err := owner.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(ctx, `SELECT set_config('omp.audit_purge','on',true)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM public.audit_log`); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
 	f := &fixture{t: t, pool: pool}
 	f.user = f.scalar(`INSERT INTO users (oidc_issuer, oidc_subject, email, display_name) VALUES ('t', 's', 'a@example.com', 'A') RETURNING id::text`)
 	short := f.scalar(`INSERT INTO teams (slug, name, retention_overrides) VALUES ('short', 'Short', '{"call_metadata": 10}') RETURNING id::text`)
@@ -72,6 +88,19 @@ func TestRetentionPass(t *testing.T) {
 		(date_trunc('hour', now() - interval '10 days'), gen_random_uuid(), 'gw', 'G', 'tools/list', 'api_key', 'ok', 1, 1, '{1}', 1, 1)
 		RETURNING 1`)
 
+	deadline := time.Now().Add(2 * time.Minute)
+	for {
+		if _, err := (auditstream.Sealer{Pool: pool}).Batch(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if f.scalar(`SELECT count(*)::text FROM omp_audit.chain WHERE kind='entry'`) == "2" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("fixture watermark did not clear")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	// Call records can't be deleted outside the retention transaction.
 	if _, err := pool.Exec(ctx, `DELETE FROM mcp_calls WHERE id = $1::bigint`, shortCall); err == nil || (!strings.Contains(err.Error(), "append-only") && !strings.Contains(err.Error(), "permission denied")) {
 		t.Fatalf("delete outside retention: %v", err)

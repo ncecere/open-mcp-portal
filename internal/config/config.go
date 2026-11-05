@@ -67,7 +67,8 @@ type Config struct {
 	MetricsMaxObjects int
 
 	// AuditStreamEnabled enables only the experimental normal-operation sealer.
-	AuditStreamEnabled bool
+	AuditStreamEnabled    bool
+	AuditMinRetentionDays int
 
 	// RetentionInterval is how often the retention loop runs (one replica
 	// at a time); RetentionBatchSize is how many rows one transaction
@@ -203,6 +204,7 @@ func Defaults() Config {
 		TasksMaxTTL:                     mcptasks.DefaultMaxTTL,
 		TasksMaxOpenPerPrincipal:        mcptasks.DefaultMaxOpen,
 		RetentionInterval:               15 * time.Minute,
+		AuditMinRetentionDays:           30,
 		RetentionBatchSize:              1000,
 		OAuthMaxRegisteredClients:       1000,
 		OAuthMaxUnusedClientsPerAddress: 20,

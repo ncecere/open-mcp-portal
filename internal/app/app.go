@@ -77,6 +77,17 @@ func Run(ctx context.Context, mode string, cfg config.Config, log *slog.Logger) 
 			return err
 		}
 		err = store.Migrate(ctx, owner, log, cfg.DBRuntimeRole)
+		if err == nil {
+			days := cfg.AuditMinRetentionDays
+			if days == 0 {
+				days = 30
+			}
+			if days < 30 || days > 3650 {
+				err = fmt.Errorf("AUDIT_MIN_RETENTION_DAYS must be 30 to 3650")
+			} else {
+				_, err = owner.Exec(ctx, `UPDATE omp_audit.retention_floor SET min_days=$1 WHERE singleton`, days)
+			}
+		}
 		owner.Close()
 		if err != nil {
 			return err

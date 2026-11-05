@@ -20,14 +20,16 @@ func inspectAuditBoundary(ctx context.Context, db RoleDB, role string, required 
  SELECT ($2 AND NOT has_schema_privilege($1,'omp_audit','USAGE')) OR has_schema_privilege($1,'omp_audit','CREATE')
  OR EXISTS(SELECT 1 FROM pg_catalog.pg_namespace n,owner o WHERE n.nspname='omp_audit' AND n.nspowner<>o.oid)
  OR EXISTS(SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace,owner o WHERE n.nspname='omp_audit' AND c.relkind IN ('r','p','v','m','f','S') AND
- (c.relowner<>o.oid OR c.relkind<>'r' OR c.relname NOT IN ('state','chain') OR ($2 AND NOT has_table_privilege($1,c.oid,'SELECT')) OR has_table_privilege($1,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER,REFERENCES') OR has_any_column_privilege($1,c.oid,'INSERT,UPDATE,REFERENCES')))
- OR (SELECT count(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='omp_audit' AND c.relkind='r')<>2
+ (c.relowner<>o.oid OR c.relkind<>'r' OR c.relname NOT IN ('state','chain','consumers','oversized_fetches','retention_floor') OR ($2 AND NOT has_table_privilege($1,c.oid,'SELECT')) OR has_table_privilege($1,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER,REFERENCES') OR has_any_column_privilege($1,c.oid,'INSERT,UPDATE,REFERENCES')))
+ OR (SELECT count(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='omp_audit' AND c.relkind='r')<>CASE WHEN to_regclass('omp_audit.consumers') IS NULL THEN 2 ELSE 5 END
  OR EXISTS(SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace,owner o WHERE n.nspname='omp_audit' AND
  (p.proowner<>o.oid OR NOT coalesce(p.proconfig @> ARRAY['search_path=pg_catalog, pg_temp','TimeZone=UTC'],false)
- OR (p.oid=to_regprocedure('omp_audit.seal_batch(text,jsonb)') AND (NOT p.prosecdef OR ($2 AND NOT has_function_privilege($1,p.oid,'EXECUTE'))))
- OR (p.oid<>to_regprocedure('omp_audit.seal_batch(text,jsonb)') AND has_function_privilege($1,p.oid,'EXECUTE'))
+ OR (coalesce(p.oid=ANY(ARRAY[to_regprocedure('omp_audit.seal_batch(text,jsonb)'),to_regprocedure('omp_audit.ack(text,bigint)'),to_regprocedure('omp_audit.register_consumer(text,text,boolean,uuid)'),to_regprocedure('omp_audit.set_required(text,boolean)'),to_regprocedure('omp_audit.remove_consumer(text)'),to_regprocedure('omp_audit.record_oversized_fetch(text,bigint)')]),false) AND (NOT p.prosecdef OR ($2 AND NOT has_function_privilege($1,p.oid,'EXECUTE'))))
+ OR (NOT coalesce(p.oid=ANY(ARRAY[to_regprocedure('omp_audit.seal_batch(text,jsonb)'),to_regprocedure('omp_audit.ack(text,bigint)'),to_regprocedure('omp_audit.register_consumer(text,text,boolean,uuid)'),to_regprocedure('omp_audit.set_required(text,boolean)'),to_regprocedure('omp_audit.remove_consumer(text)'),to_regprocedure('omp_audit.record_oversized_fetch(text,bigint)')]),false) AND has_function_privilege($1,p.oid,'EXECUTE'))
  OR EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE')))
  OR NOT EXISTS(SELECT 1 FROM pg_catalog.pg_proc WHERE oid=to_regprocedure('omp_audit.seal_batch(text,jsonb)'))
+ OR (to_regclass('omp_audit.consumers') IS NOT NULL AND
+  (SELECT count(*) FROM unnest(ARRAY[to_regprocedure('omp_audit.ack(text,bigint)'),to_regprocedure('omp_audit.register_consumer(text,text,boolean,uuid)'),to_regprocedure('omp_audit.set_required(text,boolean)'),to_regprocedure('omp_audit.remove_consumer(text)'),to_regprocedure('omp_audit.record_oversized_fetch(text,bigint)')]) f(oid) WHERE f.oid IS NOT NULL)<>5)
  OR NOT EXISTS(SELECT 1 FROM pg_catalog.pg_trigger WHERE tgrelid='public.audit_log'::regclass AND tgname='audit_log_stream_stamp' AND tgfoid=to_regprocedure('omp_audit.stamp()') AND tgtype=7 AND tgenabled IN ('O','A'))
  OR NOT EXISTS(SELECT 1 FROM pg_catalog.pg_trigger WHERE tgrelid=to_regclass('omp_audit.chain') AND tgname='chain_append_only' AND tgfoid=to_regprocedure('omp_audit.append_only()') AND tgtype=27 AND tgenabled IN ('O','A'))`, role, required).Scan(&unsafe)
 	if err != nil {
@@ -56,6 +58,15 @@ func reconcileAuditGrants(ctx context.Context, tx pgx.Tx, quoted string) error {
 		"GRANT EXECUTE ON FUNCTION omp_audit.seal_batch(text,jsonb) TO " + quoted,
 	} {
 		if _, err := tx.Exec(ctx, q); err != nil {
+			return err
+		}
+	}
+	var consumers bool
+	if err := tx.QueryRow(ctx, `SELECT to_regclass('omp_audit.consumers') IS NOT NULL`).Scan(&consumers); err != nil {
+		return err
+	}
+	if consumers {
+		if _, err := tx.Exec(ctx, "GRANT EXECUTE ON FUNCTION omp_audit.ack(text,bigint), omp_audit.register_consumer(text,text,boolean,uuid), omp_audit.set_required(text,boolean), omp_audit.remove_consumer(text), omp_audit.record_oversized_fetch(text,bigint) TO "+quoted); err != nil {
 			return err
 		}
 	}

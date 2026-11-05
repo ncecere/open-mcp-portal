@@ -100,6 +100,28 @@ func (r request) h(hs map[string]string) request { r.headers = hs; return r }
 var rev1 = map[string]string{"If-Match": `"1"`}
 
 var matrixPolicies = map[string]policy{
+	"adminAuditStream":    {own: platform, build: func(*mctx) request { return get("/v1/admin/audit/stream") }},
+	"adminAuditStreamTip": {own: platform, build: func(*mctx) request { return get("/v1/admin/audit/stream/tip") }},
+	"adminAuditVerify":    {own: platform, build: func(c *mctx) request { c.sealAudit(); return get("/v1/admin/audit/verify?from=1&to=1") }},
+	"adminAuditFull":      {own: platform, build: func(c *mctx) request { c.sealAudit(); return get("/v1/admin/audit/entries/1/full") }},
+	"adminAuditAck": {own: platform, build: func(c *mctx) request {
+		c.ensureConsumer("matrix-ack")
+		return post("/v1/admin/audit/stream/ack", map[string]any{"consumer": "matrix-ack", "seq": 0})
+	}},
+	"adminAuditConsumers": {own: padmin, build: func(*mctx) request { return get("/v1/admin/settings/audit-consumers") }},
+	"adminAuditRegisterConsumer": {own: padmin, build: func(c *mctx) request {
+		return post("/v1/admin/settings/audit-consumers", map[string]any{"consumer": fmt.Sprintf("matrix-%d", c.e.next()), "profile": "summary", "required": false}).h(map[string]string{"If-Match": c.consumerRevision()})
+	}},
+	"adminAuditSetRequired": {own: padmin, build: func(c *mctx) request {
+		c.ensureConsumer("matrix-set")
+		return request{method: "PUT", path: "/v1/admin/settings/audit-consumers/matrix-set", body: map[string]any{"required": false}, headers: map[string]string{"If-Match": c.consumerRevision()}}
+	}},
+	"adminAuditRemoveConsumer": {own: padmin, build: func(c *mctx) request {
+		name := fmt.Sprintf("matrix-remove-%d", c.e.next())
+		c.ensureConsumer(name)
+		return del("/v1/admin/settings/audit-consumers/" + name).h(map[string]string{"If-Match": c.consumerRevision()})
+	}},
+
 	"adminGetScanningSettings": {own: platform, build: func(*mctx) request { return get("/v1/admin/settings/scanning") }},
 	"adminUpdateScanningSettings": {own: padmin, build: func(c *mctx) request {
 		rev := c.e.exec(`SELECT scan_revision::text FROM platform_settings`)

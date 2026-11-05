@@ -104,3 +104,19 @@ and recomputes both summary and chain hashes itself. `seal_batch('epoch', …)`
 requires a pending rebase marker and a matching summary hash. Runtime cannot
 prepare an epoch or choose an incarnation, predecessor, gap, timestamp or epoch.
 Automatic timeline transitions use the same internal encoding and append primitive.
+
+## Pull JSON envelope (slice 1c)
+
+NDJSON envelopes expose `stream_id`, `epoch`, `seq`, `kind`, `flags`, identities,
+`occurred_at`, and hex `summary_hash`, `entry_hash`, `chain_hash`. `summary_fields`
+contains the normative scalar summary fields. Full profile adds `full`, containing
+the original audit row plus `sql_null_json`, an array naming SQL-NULL JSON columns.
+These names restore presence framing when the wire JSON has a null value; a null
+column not listed is a present JSON null. Full fetch uses the same convention.
+`epoch_summary` contains the normative epoch declaration. IDs and digests are not
+inferred from JSON property order; canonical bytes remain defined above.
+
+An oversized envelope omits `full`, sets `oversized`, and provides `full_length`
+and a relative `reference`. The authenticated flags contain bit 2; the server
+reserves 64 KiB for envelope overhead below the 16 MiB line cap. Receivers fetch
+and verify the full entry instead of treating the smaller envelope as full evidence.
