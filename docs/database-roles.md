@@ -123,3 +123,13 @@ fixture-only access for DDL/migration/instrumentation tests, never a replacement
 for the authenticated runtime pool in service/API tests. `testutil.Regrant`
 reconciles after a fixture recreates tables. Stop only that named disposable
 container after testing; `--rm` and tmpfs remove its isolated storage.
+
+## Audit sealing boundary (decision 93, slice 1a)
+
+Migrations 58–59 add migration-owned `omp_audit`. Runtime receives schema USAGE,
+SELECT on state/chain and EXECUTE only on `omp_audit.seal_batch(text,jsonb)`.
+The inspector rejects direct/column writes, CREATE, helper EXECUTE, wrong owners,
+unsafe function settings, grant options and SET privilege on
+`session_replication_role`, including reachable roles. Historical schemas without
+`omp_audit` retain their prior grant layout. Single-owner mode remains supported,
+with the existing weaker owner trust scope. Purge is unchanged in slice 1a.
