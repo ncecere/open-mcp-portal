@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDefinitionCorpus(t *testing.T) {
@@ -34,7 +35,7 @@ func TestDefinitionCorpus(t *testing.T) {
 	for _, f := range fixtures {
 		t.Run(f.id, func(t *testing.T) {
 			raw, _ := json.Marshal(map[string]string{"description": f.text})
-			r := definitionscan.Scan(context.Background(), raw)
+			r := detectOrigin(raw, "")
 			for _, got := range r.Findings {
 				if got.RuleID == f.rule && got.Severity == f.severity {
 					return
@@ -45,7 +46,7 @@ func TestDefinitionCorpus(t *testing.T) {
 	}
 	for _, text := range []string{"Ordinary reference documentation", string(rune(0x1f600)) + string(rune(0xfe0f)), string(rune(0x2066)) + "text" + string(rune(0x2069)), string(rune(0xfeff)) + "text", string(rune(0x1f3f4)) + string(rune(0xe0067)) + string(rune(0xe007f))} {
 		raw, _ := json.Marshal(map[string]string{"description": text})
-		if r := definitionscan.Scan(context.Background(), raw); len(r.Findings) != 0 {
+		if r := detectOrigin(raw, ""); len(r.Findings) != 0 {
 			t.Fatalf("benign: %+v", r)
 		}
 	}
@@ -67,7 +68,7 @@ func TestDefinitionKnownMissLedger(t *testing.T) {
 	var misses []string
 	for _, c := range cases {
 		raw, _ := json.Marshal(c.definition)
-		r := definitionscan.Scan(context.Background(), raw)
+		r := detectOrigin(raw, "")
 		if r.Status != "scanned" {
 			t.Fatalf("%s incomplete: %+v", c.id, r)
 		}
@@ -116,7 +117,7 @@ func TestDefinitionSecretCorpus(t *testing.T) {
 		}
 		t.Run(c.ID, func(t *testing.T) {
 			raw, _ := json.Marshal(map[string]string{"description": c.Text})
-			r := definitionscan.Scan(context.Background(), raw)
+			r := detectOrigin(raw, "")
 			if r.Status != "scanned" {
 				t.Fatalf("%+v", r)
 			}
@@ -157,7 +158,7 @@ func TestDefinitionRemainingGroups(t *testing.T) {
 		{"description", strings.Repeat("ab12", 60), "poison.encoded_blob", "info"},
 	} {
 		raw, _ := json.Marshal(map[string]string{tc.field: tc.text})
-		r := definitionscan.ScanOrigin(context.Background(), raw, "https://server.example.org")
+		r := detectOrigin(raw, "https://server.example.org")
 		found := false
 		for _, f := range r.Findings {
 			if f.RuleID == tc.rule && f.Severity == tc.sev {
@@ -169,7 +170,7 @@ func TestDefinitionRemainingGroups(t *testing.T) {
 		}
 	}
 	raw, _ := json.Marshal(map[string]any{"inputSchema": map[string]any{"properties": map[string]any{"param": map[string]string{"default": strings.Repeat("text ", 250)}}}})
-	r := definitionscan.Scan(context.Background(), raw)
+	r := detectOrigin(raw, "")
 	found := false
 	for _, f := range r.Findings {
 		if f.RuleID == "length.schema_text" && f.Severity == "low" {
@@ -191,7 +192,7 @@ func TestDefinitionBenignRate(t *testing.T) {
 			text = "See https://docs.example.org/help"
 		}
 		raw, _ := json.Marshal(map[string]string{"description": text})
-		r := definitionscan.ScanOrigin(context.Background(), raw, "https://server.example.org")
+		r := detectOrigin(raw, "https://server.example.org")
 		for _, f := range r.Findings {
 			if f.Severity == "medium" || f.Severity == "high" {
 				t.Fatalf("benign %+v", f)
@@ -204,4 +205,10 @@ func TestDefinitionBenignRate(t *testing.T) {
 	if findings > 4 {
 		t.Fatalf("low/info finding definitions %d/200 > 2%%", findings)
 	}
+}
+
+// detectOrigin scans with a generous budget: the corpus checks what is found,
+// not timing (the refresh budget has its own tests in definitionscan).
+func detectOrigin(raw []byte, origin string) definitionscan.Result {
+	return definitionscan.ScanBudget(context.Background(), raw, origin, 10*time.Second)
 }

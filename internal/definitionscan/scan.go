@@ -96,9 +96,21 @@ func KnownRule(id string) bool {
 func Scan(ctx context.Context, raw []byte) Result { return ScanOrigin(ctx, raw, "") }
 
 func ScanOrigin(ctx context.Context, raw []byte, origin string) Result {
-	return scan(ctx, raw, origin, nil)
+	return scan(ctx, raw, origin, DefaultBudget, nil)
 }
-func scan(ctx context.Context, raw []byte, origin string, testRule func(string)) (out Result) {
+
+// DefaultBudget is the per-definition wall-clock budget at refresh. A scan that
+// exceeds it is incomplete ("budget"), never clean.
+const DefaultBudget = 25 * time.Millisecond
+
+// ScanBudget is ScanOrigin with an explicit budget. Detection tests use a large
+// one so their verdicts do not depend on machine load; the refresh path and the
+// budget tests use DefaultBudget.
+func ScanBudget(ctx context.Context, raw []byte, origin string, budget time.Duration) Result {
+	return scan(ctx, raw, origin, budget, nil)
+}
+
+func scan(ctx context.Context, raw []byte, origin string, budget time.Duration, testRule func(string)) (out Result) {
 	out = Result{Status: "scanned", RulesetVersion: Version, Findings: []Finding{}}
 	defer func() {
 		if recover() != nil {
@@ -111,7 +123,7 @@ func scan(ctx context.Context, raw []byte, origin string, testRule func(string))
 		incomplete("size")
 		return
 	}
-	ctx, cancel := context.WithTimeout(ctx, 25*time.Millisecond)
+	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	if ctx.Err() != nil {
 		incomplete("budget")
