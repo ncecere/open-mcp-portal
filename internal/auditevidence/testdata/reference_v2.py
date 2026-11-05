@@ -130,6 +130,18 @@ def verify_records(records, stream_id, start_seq, previous, end_seq, final):
 
 
 def epoch_summary(e):
+    assert type(e['previous_epoch']) is int and 1 <= e['previous_epoch'] < 2**32
+    assert type(e['predecessor_seq']) is int and 0 <= e['predecessor_seq'] < 2**63
+    for prefix in ('old', 'new'):
+        identifier = e[prefix + '_system_identifier']
+        assert isinstance(identifier, str) and 1 <= len(identifier) <= 20
+        assert identifier.isascii() and identifier.isdigit()
+        assert (identifier == '0' or not identifier.startswith('0')) and int(identifier) < 2**64
+        timeline = e[prefix + '_timeline']
+        assert type(timeline) is int and 1 <= timeline < 2**32
+    for name in ('gap_from', 'gap_to'):
+        assert e[name] is None or (type(e[name]) is int and 1 <= e[name] < 2**63)
+    assert e['gap_from'] is None or e['reason'] == 'rebase'
     result = struct.pack('>Iq', e['previous_epoch'], e['predecessor_seq'])
     predecessor = bytes.fromhex(e['predecessor_hash'])
     assert len(predecessor) == 32 and e['reason'] in ('timeline', 'rebase')

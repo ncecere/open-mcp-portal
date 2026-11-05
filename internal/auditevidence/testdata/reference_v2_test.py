@@ -71,5 +71,16 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(len(recv.history[14]), 2)
         self.assertEqual(recv.forks[-1][0], 14)
 
+    def test_invalid_epoch_declarations(self):
+        from reference_v2 import epoch_summary
+        e = json.loads((Path(__file__).parents[2] / 'auditstream/testdata/epoch_vectors.json').read_text())[0]['summary']
+        for change in ({'previous_epoch': 0}, {'previous_epoch': True},
+                       {'predecessor_seq': -1}, {'reason': 'unknown'},
+                       {'old_system_identifier': '+1'}, {'new_system_identifier': '01'},
+                       {'old_timeline': 0}, {'new_timeline': 2**32},
+                       {'gap_from': 13, 'gap_to': 20}, {'gap_to': 20}):
+            with self.assertRaises(AssertionError):
+                epoch_summary(dict(e, **change))
+
 if __name__ == '__main__':
     unittest.main()
