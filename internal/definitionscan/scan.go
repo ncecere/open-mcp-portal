@@ -30,16 +30,22 @@ type Rule struct {
 	Description string `json:"description"`
 }
 type Finding struct {
-	RuleID   string `json:"ruleId"`
+	RuleID string `json:"ruleId"`
+	// Group is the rule's catalog group (secret, unicode, poison, length). The
+	// scanner leaves it empty; the findings API fills it from the catalog.
+	Group    string `json:"group,omitempty"`
 	Severity string `json:"severity"`
 	Count    int    `json:"count"`
 	Location string `json:"location"`
 }
 type Result struct {
-	Status         string    `json:"status"`
-	RulesetVersion string    `json:"rulesetVersion"`
-	Reason         string    `json:"reason,omitempty"`
-	Findings       []Finding `json:"findings"`
+	Status         string `json:"status"`
+	RulesetVersion string `json:"rulesetVersion"`
+	// ScannedAt is when the stored scan ran; nil when no current scan exists
+	// (scanning off, or a stale or missing scan). Set by the findings API.
+	ScannedAt *time.Time `json:"scannedAt,omitempty"`
+	Reason    string     `json:"reason,omitempty"`
+	Findings  []Finding  `json:"findings"`
 }
 
 var phrases = []struct{ id, severity, pattern string }{
@@ -83,6 +89,17 @@ func buildCatalog() []Rule {
 	out = append(out, Rule{"length.description", "length", "info", "Description exceeds 2000 characters"}, Rule{"length.schema_text", "length", "low", "Schema string exceeds 1000 characters"})
 	return out
 }
+
+// RuleGroup is the catalog group of a rule id, or "" for an unknown id.
+func RuleGroup(id string) string {
+	for _, r := range ruleCatalog {
+		if r.ID == id {
+			return r.Group
+		}
+	}
+	return ""
+}
+
 func KnownRule(id string) bool {
 	for _, r := range ruleCatalog {
 		if r.ID == id {
@@ -146,7 +163,7 @@ func scan(ctx context.Context, raw []byte, origin string, budget time.Duration, 
 			incomplete("size")
 			return
 		}
-		out.Findings = append(out.Findings, Finding{id, sev, min(n, 100000), ptr})
+		out.Findings = append(out.Findings, Finding{RuleID: id, Severity: sev, Count: min(n, 100000), Location: ptr})
 	}
 	var walk func(any, string, string, int)
 	check := func(text, ptr, key string) {

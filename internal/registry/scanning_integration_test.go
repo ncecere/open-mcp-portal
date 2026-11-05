@@ -55,6 +55,31 @@ func TestDefinitionPersistencePrivacyAndFailure(t *testing.T) {
 	if err != nil || len(findings) == 0 {
 		t.Fatalf("%+v %v", findings, err)
 	}
+	// The findings API reports the stored scan time and each finding's catalog group,
+	// and no scan time when there is no current scan (scanning off).
+	admin := authz.Actor{PlatformRole: authz.PlatformAdmin}
+	page, err := s.DefinitionFindings(ctx, admin, "", id, true, false)
+	if err != nil || len(page) != 1 {
+		t.Fatalf("%+v %v", page, err)
+	}
+	if got := page[0].Scan; got.Status != "scanned" || got.ScannedAt == nil || !got.ScannedAt.Equal(scan.ScannedAt) {
+		t.Fatalf("scannedAt: %+v want %v", got, scan.ScannedAt)
+	}
+	for _, f := range page[0].Scan.Findings {
+		if f.Group == "" || !strings.HasPrefix(f.RuleID, f.Group+".") || f.Group != definitionscan.RuleGroup(f.RuleID) {
+			t.Fatalf("group: %+v", f)
+		}
+	}
+	if _, err := s.pool.Exec(ctx, `UPDATE platform_settings SET definition_scan_mode='off'`); err != nil {
+		t.Fatal(err)
+	}
+	page, err = s.DefinitionFindings(ctx, admin, "", id, true, false)
+	if err != nil || page[0].Scan.Status != "off" || page[0].Scan.ScannedAt != nil {
+		t.Fatalf("off: %+v %v", page, err)
+	}
+	if _, err := s.pool.Exec(ctx, `UPDATE platform_settings SET definition_scan_mode='shadow'`); err != nil {
+		t.Fatal(err)
+	}
 	data, _ := json.Marshal(findings)
 	if strings.Contains(string(data), canary) || strings.Contains(logs.String(), canary) {
 		t.Fatal("canary leaked")

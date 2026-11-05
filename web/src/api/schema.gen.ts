@@ -3966,8 +3966,15 @@ export interface components {
                 status: "off" | "stale" | "scanned" | "incomplete";
                 rulesetVersion: string;
                 reason?: string;
+                /**
+                 * Format: date-time
+                 * @description When the stored scan ran. Present only for status scanned or incomplete (a current scan of this definition under this ruleset); absent when scanning is off or the scan is stale.
+                 */
+                scannedAt?: string;
                 findings: {
                     ruleId: string;
+                    /** @description The rule's catalog group (secret, unicode, poison, length); empty for a rule id no longer in the catalog. */
+                    group: string;
                     severity: string;
                     count: number;
                     location: string;
