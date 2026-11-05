@@ -85,6 +85,9 @@ func TestPurgeHostileTimeZoneFloors(t *testing.T) {
 	for _, kind := range []string{"audit", "calls"} {
 		t.Run(kind, func(t *testing.T) {
 			runtime, _, _ := splitFixture(t)
+			if kind == "audit" {
+				prepareAuditPurgeFixture(t, runtime)
+			}
 			conn, zone := hostilePurgeConn(t, runtime)
 			var query, table string
 			if kind == "audit" {
@@ -92,6 +95,7 @@ func TestPurgeHostileTimeZoneFloors(t *testing.T) {
 				roleExec(t, conn, `INSERT INTO audit_log(occurred_at,actor_kind,action,target_type) VALUES
  (now()-interval '744 hours','system','old','fixture'),
  (now()-interval '708 hours','system','29.5 days old','fixture')`)
+				sealAuditPurgeFixture(t, runtime)
 				query, table = `SELECT public.omp_purge_audit_log(0,100)`, "audit_log"
 			} else {
 				insertCall(t, runtime, "48 hours", nil, nil)
@@ -109,8 +113,8 @@ func TestPurgeHostileTimeZoneFloors(t *testing.T) {
 				t.Fatalf("hostile TimeZone bypassed %s elapsed-time floor: deleted %d rows, want only 1 truly old row", kind, n)
 			}
 			assertPurgeCallerSettings(t, conn, zone)
-			// The migration's system retirement audit entry is also recent and
-			// protected. Count only this test's audit fixtures, not that history.
+			// Count precisely this test's fixtures. The separate prefix tests
+			// cover recent history blocking later old rows.
 			filter := ""
 			if kind == "audit" {
 				filter = " WHERE target_type='fixture'"
@@ -128,6 +132,7 @@ func TestPurgeHostileTimeZoneFloors(t *testing.T) {
 
 func TestPurgeTimeZoneAndFlagsRestoredAfterError(t *testing.T) {
 	runtime, owner, _ := splitFixture(t)
+	prepareAuditPurgeFixture(t, runtime)
 	roleExec(t, owner, `CREATE FUNCTION reject_timezone_purge() RETURNS trigger LANGUAGE plpgsql AS $$
  BEGIN RAISE EXCEPTION 'fixture purge error'; END $$;
  CREATE TRIGGER reject_timezone_purge BEFORE DELETE ON public.audit_log
@@ -139,6 +144,7 @@ func TestPurgeTimeZoneAndFlagsRestoredAfterError(t *testing.T) {
  VALUES (now()-interval '744 hours','system','old','fixture');
  UPDATE usage_rollup_state SET rolled_up_to=now()`)
 	insertCall(t, runtime, "48 hours", nil, nil)
+	sealAuditPurgeFixture(t, runtime)
 	for _, tc := range []struct{ call, code string }{
 		{`public.omp_purge_audit_log(30,100)`, "raise_exception"},
 		{`public.omp_purge_mcp_calls(now(),1,100)`, "raise_exception"},

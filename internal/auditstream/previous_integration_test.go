@@ -29,7 +29,7 @@ func TestPreviousImageCurrentSchemas(t *testing.T) {
 		t.Skip("set OMP_TEST_PREVIOUS_BINARY to the previous image executable")
 	}
 	t.Setenv("OMP_TEST_SPLIT_ROLES", "1")
-	for _, version := range []int64{58, 59, 60, 61} {
+	for _, version := range []int64{58, 59, 60, 61, 62} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			p, _ := testutil.NewDBWithMigration(t, func(ctx context.Context, owner *pgxpool.Pool, role string) error {
 				db := stdlib.OpenDBFromPool(owner)
@@ -49,6 +49,16 @@ func TestPreviousImageCurrentSchemas(t *testing.T) {
 				return store.ReconcileRuntimeGrants(ctx, conn.Conn(), role)
 			})
 			owner := testutil.OwnerPool(t, p)
+			if version == 62 {
+				// Start the stream (seal at least one row) so the sealed-only interlock is
+				// in force; before anything is sealed the purge deliberately deletes by age
+				// (TestRetentionBeforeStreamingPurgesByAge). The old fixture stays unsealed:
+				// the previous binary's retention loop must not delete it.
+				exec(t, p, insert)
+				drain(t, p)
+				exec(t, p, `INSERT INTO public.audit_log(actor_kind,action,target_type,occurred_at) VALUES('system','old.fixture','fixture',now()-interval '4000 days')`)
+			}
+
 			listener, err := net.Listen("tcp", "127.0.0.1:0")
 			if err != nil {
 				t.Fatal(err)
@@ -88,6 +98,23 @@ func TestPreviousImageCurrentSchemas(t *testing.T) {
 				}
 				time.Sleep(50 * time.Millisecond)
 			}
+			if version == 62 && signedIn {
+				deadline := time.Now().Add(5 * time.Second)
+				for count(t, p, `SELECT count(*) FROM public.retention_settings WHERE last_run IS NOT NULL`) == 0 && time.Now().Before(deadline) {
+					time.Sleep(20 * time.Millisecond)
+				}
+				if count(t, p, `SELECT count(*) FROM public.retention_settings WHERE last_run IS NOT NULL AND coalesce(last_run->'errors','{}')='{}'::jsonb`) == 0 {
+					cancel()
+					_ = cmd.Wait()
+					t.Fatal("previous retention loop did not complete successfully")
+				}
+				if count(t, p, `SELECT count(*) FROM public.audit_log WHERE action='old.fixture'`) != 1 {
+					cancel()
+					_ = cmd.Wait()
+					t.Fatal("previous retention loop bypassed sealed-only interlock")
+				}
+			}
+
 			cancel()
 			_ = cmd.Wait()
 			if !signedIn || !strings.Contains(output.String(), "http listening") {

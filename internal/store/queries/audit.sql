@@ -88,7 +88,7 @@ CROSS JOIN LATERAL (
                                    JOIN mcp_servers ps2 ON ps2.id = ps.server_id WHERE ps.id = ids.target_uuid)
         WHEN 'platform_settings' THEN (CASE a.target_id WHEN 'publishing' THEN 'Publishing settings' WHEN 'network' THEN 'Internal networks'
                                        WHEN 'oauth_clients' THEN 'Trusted clients' WHEN 'limits' THEN 'Rate limits'
-                                       WHEN 'capture' THEN 'Payload capture' WHEN 'retention' THEN 'Retention'
+                                       WHEN 'audit_consumers' THEN 'Audit consumers' WHEN 'capture' THEN 'Payload capture' WHEN 'retention' THEN 'Retention'
                                        WHEN 'keys' THEN 'Encryption keys' WHEN 'notifications' THEN 'Notifications' END)
         WHEN 'mcp_call' THEN (SELECT 'Call ' || mc.id::text || ' · ' || COALESCE(mc.exposed_name, mc.method) FROM mcp_calls mc
                               WHERE mc.id = (CASE WHEN a.target_id ~ '^[0-9]{1,18}$' THEN a.target_id::bigint END))

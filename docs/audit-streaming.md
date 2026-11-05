@@ -1,7 +1,6 @@
 # Audit streaming: ordering, sealing, delivery and retention (#38, decision 93)
 
-Status: **design, revised twice on 2026-11-05 after two independent adversarial reviews (section 10). Nothing in this document
-is built yet.** It turns the #38 proposal and the unwired [audit evidence foundation](audit-streaming-foundation.md)
+Status: **implementation in progress, feature disabled by default.** Slices 1a/1b implement schema, canonical records, sealing and recovery. Slice 1c adds migration 62, consumer boundaries, retention interlock and pull APIs; acceptance evidence remains required before enabling. The design was revised twice on 2026-11-05 after two independent adversarial reviews (section 10). It turns the #38 proposal and the unwired [audit evidence foundation](audit-streaming-foundation.md)
 into an ordered build plan, and settles the gate the foundation left open: *a proven ordering, gap and retention
 design*. The owner delegated the defaults below when resuming development (2026-11-05) and may override any of them.
 
@@ -361,6 +360,14 @@ parity test. Such values are reachable only by writing to the database directly;
 start anchor. Acceptance covers hostile-timezone callers, each missing-row and malformed-value case, flag restoration,
 and owner/ACL/definer/`search_path`/`TimeZone` preservation.
 
+**Before the stream has sealed anything and before any consumer exists** (every install that has not enabled
+`AUDIT_STREAM_ENABLED`), the purge deletes by age exactly as before, still never below the floor or the longest
+call-metadata period: there is nothing to protect, and requiring sealed rows would silently stop audit retention.
+The first-ever seal takes the retention-floor row lock (state, then floor), as the purge does, so a row the purge is
+deleting cannot be sealed and a sealed row cannot be age-purged. From then on the interlock above applies for good.
+This was caught at integration review of slice 1c (`TestRetentionBeforeStreamingPurgesByAge`,
+`TestFirstSealSerializesWithAgePurge`).
+
 **Before a consumer is registered**, rows are sealed but may be purged by age before anyone reads them. That is
 today's behaviour plus sealing, and the tip's earliest available `seq` says so honestly. Operators who need delivery
 guarantees register a required consumer.
@@ -447,3 +454,23 @@ deleted teams correctly fall back, and that pinned receivers cannot be made to a
 | R7 | Medium | Earliest-available seq misses interior retention holes | Retention removes only a `seq` prefix; contiguous-or-error API; exclusive `after_seq` (5.1, 6) |
 | R8 | Medium | Malformed settings and missing rows unspecified; `greatest` ignores `NULL` | Explicit fail-closed algorithm; strict Go decoding with a parity test (6) |
 | R9 | Medium | Oversized handling contradicted "never downgrade" | Authenticated `oversized` envelope, chunked fetch and ack gating (4.4) |
+
+## Slice 1c implementation notes
+
+Migration 62 persists `purged_seq` in the owner-protected retention singleton.
+Expiry is determined from this prefix anchor; a missing audit row above it is
+an integrity error. Batch deletion stops at the first locked row rather than
+skipping over it, preserving the no-interior-hole guarantee. Consumer configuration
+shares that singleton lock with purging. Platform/team retention settings changes
+serialize on the platform settings row.
+
+Full JSON uses `sql_null_json` to disambiguate SQL NULL from JSON null. The oversized
+flag reserves 64 KiB of envelope space below the 16 MiB wire limit. Consumer lag
+metrics aggregate maxima with four bounded profile/required label combinations.
+No consumer-name labels are emitted. Checkpoints, signing, push delivery and UI
+remain future slices. The Vector example requires a durable cursor-aware adapter.
+
+New consumers enroll at the protected `purged_seq` boundary. Starting them at zero
+would permanently block a full consumer on a previously purged oversized row that
+can no longer be fetched. This enrollment boundary does not claim delivery of
+unavailable history; receiver approval of an initial anchor remains explicit.

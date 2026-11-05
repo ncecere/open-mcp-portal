@@ -258,13 +258,13 @@ func (s Sealer) sealIDs(ctx context.Context, mode string, ids []int64, expected 
 				return err
 			}
 			if mode == "sweep" {
-				rec.Flags = 1
+				rec.Flags |= 1
 				sh := SummaryHash(r)
 				eh, err := EntryHash(r)
 				if err != nil {
 					return err
 				}
-				ch = sha256.Sum256(append(append([]byte("OMP-AUDIT-EVIDENCE\x00CHAIN\x00V2\x00"), previous[:]...), RecordBytes(stream, epoch, seq, 1, r, sh, eh)...))
+				ch = sha256.Sum256(append(append([]byte("OMP-AUDIT-EVIDENCE\x00CHAIN\x00V2\x00"), previous[:]...), RecordBytes(stream, epoch, seq, rec.Flags, r, sh, eh)...))
 				rec.Chain = fmt.Sprintf("%x", ch)
 			}
 			previous = ch

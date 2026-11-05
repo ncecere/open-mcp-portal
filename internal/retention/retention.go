@@ -84,9 +84,39 @@ type Settings struct {
 	LastRun   *Run
 }
 
-func decodeSettings(row dbgen.RetentionSetting) Settings {
-	stored := Periods{}
-	_ = json.Unmarshal(row.Periods, &stored)
+func decodePeriods(raw []byte) (Periods, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, fmt.Errorf("retention must be an object")
+	}
+	out := Periods{}
+	for key, raw := range fields {
+		k, ok := Find(key)
+		if !ok {
+			return nil, fmt.Errorf("unknown retention kind %s", key)
+		}
+		var n int32
+		if string(raw) == "null" {
+			return nil, fmt.Errorf("null retention %s", key)
+		}
+		if err := json.Unmarshal(raw, &n); err != nil {
+			return nil, err
+		}
+		if n < k.MinDays || n > k.MaxDays {
+			return nil, fmt.Errorf("invalid retention %s", key)
+		}
+		out[key] = n
+	}
+	return out, nil
+}
+func decodeSettings(row dbgen.RetentionSetting) (Settings, error) {
+	stored, err := decodePeriods(row.Periods)
+	if err != nil {
+		return Settings{}, err
+	}
 	s := Settings{Periods: Periods{}, Revision: row.Revision, UpdatedAt: row.UpdatedAt}
 	for _, k := range Kinds {
 		d, ok := stored[k.Kind]
@@ -101,15 +131,11 @@ func decodeSettings(row dbgen.RetentionSetting) Settings {
 			s.LastRun = &r
 		}
 	}
-	return s
+	return s, nil
 }
 
 // TeamOverrides decodes a team's overrides.
-func TeamOverrides(t dbgen.Team) Periods {
-	out := Periods{}
-	_ = json.Unmarshal(t.RetentionOverrides, &out)
-	return out
-}
+func TeamOverrides(t dbgen.Team) (Periods, error) { return decodePeriods(t.RetentionOverrides) }
 
 var (
 	errAdminOnly    = apperr.Forbidden("Only platform admins can do this")
@@ -187,7 +213,7 @@ func (s *Service) Get(ctx context.Context, a authz.Actor) (Settings, error) {
 	if err != nil {
 		return Settings{}, err
 	}
-	return decodeSettings(row), nil
+	return decodeSettings(row)
 }
 
 // Current returns the platform settings without an authorization check.
@@ -196,7 +222,7 @@ func (s *Service) Current(ctx context.Context) (Settings, error) {
 	if err != nil {
 		return Settings{}, err
 	}
-	return decodeSettings(row), nil
+	return decodeSettings(row)
 }
 
 // Change sets one kind's days.
@@ -225,7 +251,7 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, changes []Change, e
 		seen[c.Kind] = true
 	}
 	var out Settings
-	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
+	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, tx pgx.Tx) error {
 		cur, err := q.LockRetentionSettings(ctx)
 		if err != nil {
 			return err
@@ -233,13 +259,19 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, changes []Change, e
 		if cur.Revision != expectedRevision {
 			return apperr.Stale()
 		}
-		before := decodeSettings(cur)
+		before, err := decodeSettings(cur)
+		if err != nil {
+			return err
+		}
 		after := Periods{}
 		for k, v := range before.Periods {
 			after[k] = v
 		}
 		for _, c := range changes {
 			after[c.Kind] = c.Days
+		}
+		if err := validateAuditPeriod(ctx, tx, after); err != nil {
+			return err
 		}
 		raw, err := json.Marshal(after)
 		if err != nil {
@@ -249,7 +281,10 @@ func (s *Service) Update(ctx context.Context, a authz.Actor, changes []Change, e
 		if err != nil {
 			return err
 		}
-		out = decodeSettings(row)
+		out, err = decodeSettings(row)
+		if err != nil {
+			return err
+		}
 		e := a.Audit("settings.retention_update", "platform_settings", "retention")
 		e.Before, e.After = map[string]any{"periods": before.Periods}, map[string]any{"periods": out.Periods}
 		return audit.Record(ctx, q, e)
@@ -276,8 +311,11 @@ type TeamView struct {
 	Periods  []TeamPeriod
 }
 
-func teamView(t dbgen.Team, st Settings) TeamView {
-	o := TeamOverrides(t)
+func teamView(t dbgen.Team, st Settings) (TeamView, error) {
+	o, err := TeamOverrides(t)
+	if err != nil {
+		return TeamView{}, err
+	}
 	out := TeamView{TeamID: t.ID, TeamSlug: t.Slug, Revision: t.Revision}
 	for _, k := range Kinds {
 		if !k.Overridable {
@@ -289,7 +327,7 @@ func teamView(t dbgen.Team, st Settings) TeamView {
 		}
 		out.Periods = append(out.Periods, p)
 	}
-	return out
+	return out, nil
 }
 
 // GetTeam returns a team's periods: members, and platform admins and
@@ -310,7 +348,7 @@ func (s *Service) GetTeam(ctx context.Context, a authz.Actor, ref string) (TeamV
 	if err != nil {
 		return TeamView{}, err
 	}
-	return teamView(t, st), nil
+	return teamView(t, st)
 }
 
 // AdminGetTeam returns any team's periods (platform admins and auditors).
@@ -326,7 +364,7 @@ func (s *Service) AdminGetTeam(ctx context.Context, a authz.Actor, ref string) (
 	if err != nil {
 		return TeamView{}, err
 	}
-	return teamView(t, st), nil
+	return teamView(t, st)
 }
 
 // TeamChange sets (Days) or clears (nil) a team's override.
@@ -359,7 +397,15 @@ func (s *Service) UpdateTeam(ctx context.Context, a authz.Actor, ref string, cha
 		seen[c.Kind] = true
 	}
 	var out TeamView
-	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
+	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, tx pgx.Tx) error {
+		platform, err := q.LockRetentionSettings(ctx)
+		if err != nil {
+			return err
+		}
+		st, err := decodeSettings(platform)
+		if err != nil {
+			return err
+		}
 		t, err := teams.Resolve(ctx, q, ref)
 		if err != nil {
 			return err
@@ -370,7 +416,10 @@ func (s *Service) UpdateTeam(ctx context.Context, a authz.Actor, ref string, cha
 		if t.Revision != expectedRevision {
 			return apperr.Stale()
 		}
-		before := TeamOverrides(t)
+		before, err := TeamOverrides(t)
+		if err != nil {
+			return err
+		}
 		after := Periods{}
 		for k, v := range before {
 			after[k] = v
@@ -381,6 +430,9 @@ func (s *Service) UpdateTeam(ctx context.Context, a authz.Actor, ref string, cha
 			} else {
 				after[c.Kind] = *c.Days
 			}
+		}
+		if after[CallMetadata] > st.Periods[AuditLog] {
+			return invalid(CallMetadata, "audit_interlock", "Call metadata retention cannot exceed audit retention")
 		}
 		raw, err := json.Marshal(after)
 		if err != nil {
@@ -401,8 +453,12 @@ func (s *Service) UpdateTeam(ctx context.Context, a authz.Actor, ref string, cha
 		if err != nil {
 			return err
 		}
-		out = teamView(updated, decodeSettings(row))
-		return nil
+		st, err = decodeSettings(row)
+		if err != nil {
+			return err
+		}
+		out, err = teamView(updated, st)
+		return err
 	})
 	return out, err
 }
@@ -427,7 +483,10 @@ func (s *Service) CallPeriods(ctx context.Context, gatewayTeam, serverTeam uuid.
 			}
 			return 0, 0, err
 		}
-		o := TeamOverrides(t)
+		o, err := TeamOverrides(t)
+		if err != nil {
+			return 0, 0, err
+		}
 		c, p := st.Periods[CallMetadata], st.Periods[CapturedPayloads]
 		if v, ok := o[CallMetadata]; ok {
 			c = v

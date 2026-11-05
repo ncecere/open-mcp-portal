@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/ncecere/open-mcp-portal/internal/auditstream"
 	"github.com/ncecere/open-mcp-portal/internal/testutil"
 )
 
@@ -18,8 +19,10 @@ func insertCall(t *testing.T, pool *pgxpool.Pool, age string, gatewayTeam, serve
 
 func TestPurgeFloorsCountsAndPayloadCascade(t *testing.T) {
 	runtime, _, _ := splitFixture(t)
+	prepareAuditPurgeFixture(t, runtime)
 	roleExec(t, runtime, `INSERT INTO audit_log(occurred_at,actor_kind,action,target_type) VALUES
  (now()-interval '31 days','system','old','fixture'),(now()-interval '29 days','system','recent','fixture')`)
+	sealAuditPurgeFixture(t, runtime)
 	if n := roleCount(t, runtime, `SELECT public.omp_purge_audit_log(-100,1)`); n != 1 {
 		t.Fatalf("audit deleted %d", n)
 	}
@@ -121,6 +124,7 @@ func TestPurgeWatermarkBoundAndNullState(t *testing.T) {
 
 func TestPurgeInvalidInputAndFlags(t *testing.T) {
 	runtime, owner, _ := splitFixture(t)
+	prepareAuditPurgeFixture(t, runtime)
 	ctx := context.Background()
 	for _, args := range []string{"30,NULL", "30,0", "30,-1", "30,100001", "NULL,1"} {
 		roleDenied(t, runtime, `SELECT public.omp_purge_audit_log(`+args+`)`, "22023")
@@ -129,6 +133,7 @@ func TestPurgeInvalidInputAndFlags(t *testing.T) {
 	roleExec(t, owner, `CREATE FUNCTION reject_purge_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture purge error'; END $$;
  CREATE TRIGGER reject_purge_fixture BEFORE DELETE ON public.audit_log FOR EACH ROW EXECUTE FUNCTION reject_purge_fixture()`)
 	roleExec(t, runtime, `INSERT INTO audit_log(occurred_at,actor_kind,action,target_type) VALUES (now()-interval '100 days','system','old','fixture')`)
+	sealAuditPurgeFixture(t, runtime)
 	conn, err := runtime.Acquire(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -165,6 +170,7 @@ func TestPurgeInvalidInputAndFlags(t *testing.T) {
 
 func TestPurgeSearchPathShadowing(t *testing.T) {
 	runtime, _, _ := splitFixture(t)
+	prepareAuditPurgeFixture(t, runtime)
 	ctx := context.Background()
 	conn, err := runtime.Acquire(ctx)
 	if err != nil {
@@ -178,6 +184,7 @@ func TestPurgeSearchPathShadowing(t *testing.T) {
  CREATE TEMP TABLE usage_rollup_state(id int,rolled_up_to timestamptz);
  INSERT INTO pg_temp.usage_rollup_state VALUES (1,now()+interval '100 years');
  INSERT INTO public.audit_log(occurred_at,actor_kind,action,target_type) VALUES (now()-interval '100 days','system','old','fixture')`)
+	sealAuditPurgeFixture(t, runtime)
 	if n := roleCount(t, conn, `SELECT public.omp_purge_audit_log(30,100)`); n != 1 {
 		t.Fatalf("public purge deleted %d", n)
 	}
@@ -192,7 +199,9 @@ func TestPurgeSearchPathShadowing(t *testing.T) {
 func TestSingleOwnerLegacyAndDefinerRetention(t *testing.T) {
 	t.Setenv("OMP_TEST_SPLIT_ROLES", "0")
 	owner, _ := testutil.NewDB(t)
+	prepareAuditPurgeFixture(t, owner)
 	roleExec(t, owner, `INSERT INTO audit_log(occurred_at,actor_kind,action,target_type) VALUES (now()-interval '31 days','system','old','fixture')`)
+	sealAuditPurgeFixture(t, owner)
 	if n := roleCount(t, owner, `SELECT public.omp_purge_audit_log(30,100)`); n != 1 {
 		t.Fatal("single-owner definer retention failed")
 	}
@@ -205,4 +214,43 @@ func TestSingleOwnerLegacyAndDefinerRetention(t *testing.T) {
 	roleExec(t, conn, `INSERT INTO audit_log(actor_kind,action,target_type) VALUES ('system','legacy','fixture')`)
 	roleExec(t, conn, `SELECT set_config('omg.audit_purge','on',false)`)
 	roleExec(t, conn, `DELETE FROM audit_log`)
+}
+
+// The age-floor fixtures must occupy the sequence prefix. Remove only this
+// disposable database's unsealed migration-history seed before writing them;
+// a recent seed before an old fixture must (correctly) block prefix retention.
+func prepareAuditPurgeFixture(t *testing.T, p *pgxpool.Pool) {
+	t.Helper()
+	o := testutil.OwnerPool(t, p)
+	tx, err := o.Begin(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(context.Background())
+	if _, err = tx.Exec(context.Background(), `SELECT set_config('omp.audit_purge','on',true)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(context.Background(), `DELETE FROM public.audit_log`); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	roleExec(t, p, `UPDATE public.retention_settings SET periods=jsonb_build_object('call_metadata',30)`)
+}
+func sealAuditPurgeFixture(t *testing.T, p *pgxpool.Pool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Minute)
+	for {
+		if _, err := (auditstream.Sealer{Pool: p}).Batch(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if roleCount(t, p, `SELECT count(*) FROM public.audit_log a WHERE NOT EXISTS(SELECT 1 FROM omp_audit.chain c WHERE c.row_uid=a.row_uid OR (a.txid IS NULL AND c.legacy_id=a.id))`) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("fixture watermark did not clear")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
