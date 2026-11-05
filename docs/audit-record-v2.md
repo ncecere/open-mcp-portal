@@ -45,8 +45,8 @@ Unknown kinds/flag bits are invalid. Epoch and sequence are positive.
 For entries, row_identity is row_uid, or eight FF bytes followed by legacy_id as
 signed i64 big-endian for historical NULL-txid rows. A v4 row UUID cannot collide
 with that prefix. Non-entry kinds use a zero identity and zero entry hash. Their
-summary is kind-specific and will be specified with recovery/checkpoint support;
-slice 1a accepts only entries, rather than pretending to validate those summaries.
+summary is kind-specific: epoch starts are specified below; checkpoints remain
+reserved and are not accepted by the sealing boundary.
 
 `chain_hash = SHA256(ASCII("OMP-AUDIT-EVIDENCE\0CHAIN\0V2\0") || previous_hash_32 || record_bytes_119)`.
 The predecessor before seq 1 is
@@ -64,3 +64,39 @@ row's primary-key locator), `seq`, `kind`, `flags`, `row_uid`, `legacy_id`,
 is present. For UUID identities SQL looks up by audit_id AND row_uid, so the
 primary key avoids per-record full-table scans while identity remains the UUID.
 The source audit_id is not itself a chain identity and is not hashed separately.
+
+## Epoch starts (slice 1b)
+
+An `epoch_start` has kind 2, flags zero, zero identity and entry hash. Its
+`epoch_summary` declaration MUST contain these fields. Its summary hash is SHA256
+of `OMP-AUDIT-EPOCH\0V1\0` followed by, in order:
+
+- `previous_epoch` u32; `predecessor_seq` i64; `predecessor_hash` raw 32 bytes.
+- `reason` text (`timeline` or `rebase`), using the variable-length presence framing.
+- `old_system_identifier` text, `old_timeline` i64.
+- `new_system_identifier` text, `new_timeline` i64.
+- `gap_from`, `gap_to`: nullable i64, using fixed-width presence framing.
+
+All fields except the gap endpoints MUST be present. Identifiers are unsigned
+PostgreSQL decimal text. Both gap endpoints MUST be NULL together, or describe
+`predecessor_seq + 1 … resume_after_seq`, inclusive. An absent gap starts the
+marker at `predecessor_seq + 1`; a present gap starts it at `gap_to + 1`.
+The marker's epoch MUST be `previous_epoch + 1`. The marker chain uses the declared
+predecessor hash even when a gap is declared; missing records are never fabricated.
+The timestamp in the fixed record is the transition preparation time in UTC.
+The shared `epoch_vectors.json` includes clean and declared-gap cases.
+
+Receivers MUST pin stream UUID and retain stream-wide hashes across epochs. A
+clean continuation requires the declared predecessor at `seq - 1` with the held
+hash, no declared gap, and no held records beyond that predecessor. All other
+epoch starts require local approval, which installs the marker as a new trusted
+anchor while retaining the previous anchors and orphaned records as fork evidence.
+A different hash at an already held sequence MUST alert and preserve both hashes.
+An unsigned tip MUST NOT replace trusted local state. The Python `Receiver`
+harness implements these rules; it does not define a delivery API.
+
+SQL derives epoch declarations from locked state, stores them in `epoch_pending`,
+and recomputes both summary and chain hashes itself. `seal_batch('epoch', …)`
+requires a pending rebase marker and a matching summary hash. Runtime cannot
+prepare an epoch or choose an incarnation, predecessor, gap, timestamp or epoch.
+Automatic timeline transitions use the same internal encoding and append primitive.

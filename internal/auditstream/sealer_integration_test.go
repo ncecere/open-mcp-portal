@@ -143,6 +143,9 @@ func TestWatermarkConcurrentWriters(t *testing.T) {
 		select {
 		case <-done:
 			drain(t, p)
+			if n, err := (Sealer{p}).Sweep(ctx); err != nil || n != 0 {
+				t.Fatalf("normal sweep: %d %v", n, err)
+			}
 			if count(t, p, `SELECT count(*) FROM public.audit_log a WHERE NOT EXISTS(SELECT 1 FROM omp_audit.chain c WHERE c.row_uid=a.row_uid OR c.legacy_id=a.id AND a.txid IS NULL)`) != 0 {
 				t.Fatal("missing")
 			}
@@ -151,6 +154,9 @@ func TestWatermarkConcurrentWriters(t *testing.T) {
 			}
 			return
 		default:
+			if n, err := (Sealer{p}).Sweep(ctx); err != nil || n != 0 {
+				t.Errorf("stress sweep: %d %v", n, err)
+			}
 			if _, err := (Sealer{p}).Batch(ctx); err != nil {
 				t.Fatal(err)
 			}

@@ -29,7 +29,7 @@ func TestPreviousImageSchema58And59(t *testing.T) {
 		t.Skip("set OMP_TEST_PREVIOUS_BINARY to the previous image executable")
 	}
 	t.Setenv("OMP_TEST_SPLIT_ROLES", "1")
-	for _, version := range []int64{58, 59} {
+	for _, version := range []int64{58, 59, 60} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			p, _ := testutil.NewDBWithMigration(t, func(ctx context.Context, owner *pgxpool.Pool, role string) error {
 				db := stdlib.OpenDBFromPool(owner)
@@ -97,6 +97,19 @@ func TestPreviousImageSchema58And59(t *testing.T) {
 				t.Fatal("previous executable did not write a stamped auth.login")
 			}
 
+			// Historical startup remains verified above. Upgrade to the current
+			// boundary before asking the current sealer to use recovery modes.
+			db := stdlib.OpenDBFromPool(owner)
+			provider, err := goose.NewProvider(goose.DialectPostgres, db, migrations.FS)
+			if err != nil {
+				db.Close()
+				t.Fatal(err)
+			}
+			_, err = provider.Up(ctx)
+			db.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
 			drain(t, p)
 		})
 	}

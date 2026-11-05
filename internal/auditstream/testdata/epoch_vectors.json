@@ -1,0 +1,36 @@
+[
+  {
+    "summary": {
+      "previous_epoch": 1,
+      "predecessor_seq": 12,
+      "predecessor_hash": "abababababababababababababababababababababababababababababababab",
+      "reason": "timeline",
+      "old_system_identifier": "7000000000000000001",
+      "old_timeline": 1,
+      "new_system_identifier": "7000000000000000001",
+      "new_timeline": 2,
+      "gap_from": null,
+      "gap_to": null
+    },
+    "hash": "637d09cf6f606d7e40f544fb9cf1c5a89a860c5d797848f48b1e50667f286840",
+    "record": "02020000112233445546778899aabbccddeeff00000002000000000000000d0000000000000000000000000000000000060a2418202240637d09cf6f606d7e40f544fb9cf1c5a89a860c5d797848f48b1e50667f2868400000000000000000000000000000000000000000000000000000000000000000",
+    "chain": "2066aa7c4f5a1ff0162518572ea45b650f4fcd037ef393a0677e659d42a34eb6"
+  },
+  {
+    "summary": {
+      "previous_epoch": 1,
+      "predecessor_seq": 12,
+      "predecessor_hash": "abababababababababababababababababababababababababababababababab",
+      "reason": "rebase",
+      "old_system_identifier": "7000000000000000001",
+      "old_timeline": 1,
+      "new_system_identifier": "7000000000000000002",
+      "new_timeline": 2,
+      "gap_from": 13,
+      "gap_to": 20
+    },
+    "hash": "2ae3c70b87b834744a90d0727c31f200216aebfd7c5bb1e1b5b1e1162a870d22",
+    "record": "02020000112233445546778899aabbccddeeff0000000200000000000000150000000000000000000000000000000000060a24182022402ae3c70b87b834744a90d0727c31f200216aebfd7c5bb1e1b5b1e1162a870d220000000000000000000000000000000000000000000000000000000000000000",
+    "chain": "c7132a8c86fce71ecddbdfe75dab4e2be3d1d1d9994b7e964057648d9a1a9e81"
+  }
+]

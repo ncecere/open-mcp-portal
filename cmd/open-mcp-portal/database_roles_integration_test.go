@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -32,5 +33,31 @@ func TestDoctorAndRotateKeysNeverOpenOwnerURL(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "sentinel") {
 		t.Fatal("owner URL leaked")
+	}
+}
+
+func TestAuditRecoveryUsesOwnerAndStatusUsesRuntime(t *testing.T) {
+	p, url := testutil.NewDB(t)
+	owner := testutil.OwnerPool(t, p)
+	t.Setenv("OMP_CONFIG_FILE", "")
+	t.Setenv("DATABASE_URL", url)
+	t.Setenv("DATABASE_MIGRATE_URL", "invalid-unused-owner-sentinel")
+	var out bytes.Buffer
+	if err := runAuditStream([]string{"status"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "stream_id") {
+		t.Fatal("missing status")
+	}
+	if _, err := owner.Exec(context.Background(), `UPDATE omp_audit.state SET system_identifier='1',status='halted_incarnation'`); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DATABASE_MIGRATE_URL", owner.Config().ConnString())
+	t.Setenv("DATABASE_URL", "invalid-unused-runtime-sentinel")
+	if err := runAuditStream([]string{"rebind"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if err := runAuditStream([]string{"rebase"}, &out); err != nil {
+		t.Fatal(err)
 	}
 }
