@@ -104,6 +104,24 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
 		return out, fmt.Errorf("DB_RUNTIME_ROLE does not exist")
 	}
 	for _, r := range roles {
+		var parameterSet bool
+		if err := db.QueryRow(ctx, `SELECT has_parameter_privilege($1::oid,'session_replication_role','SET')`, r.oid).Scan(&parameterSet); err != nil {
+			return out, err
+		}
+		if parameterSet {
+			out.Problems = append(out.Problems, "SET session_replication_role privilege: "+r.name)
+		}
+		if privileges {
+			required := false
+			for _, root := range roots {
+				if root == r.name {
+					required = true
+				}
+			}
+			if err := inspectAuditBoundary(ctx, db, r.name, required, &out); err != nil {
+				return out, err
+			}
+		}
 		if r.admin || r.grant {
 			out.Problems = append(out.Problems, "administrative role rights: "+r.name)
 		}
@@ -112,8 +130,8 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
  EXISTS (SELECT 1 FROM pg_catalog.pg_database WHERE datname = current_database() AND datdba = $1)
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_namespace WHERE nspowner = $1
  AND nspname NOT LIKE 'pg_temp_%' AND nspname NOT LIKE 'pg_toast_temp_%')
- OR EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname IN ('public','omp_private') AND c.relowner = $1)
- OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname IN ('public','omp_private') AND p.proowner = $1)`, r.oid).Scan(&owns)
+ OR EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname IN ('public','omp_private','omp_audit') AND c.relowner = $1)
+ OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname IN ('public','omp_private','omp_audit') AND p.proowner = $1)`, r.oid).Scan(&owns)
 		if err != nil {
 			return out, err
 		}
@@ -188,14 +206,14 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
 		var options bool
 		err = db.QueryRow(ctx, `SELECT
  EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace,
- LATERAL aclexplode(c.relacl) a WHERE n.nspname IN ('public','omp_private') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
+ LATERAL aclexplode(c.relacl) a WHERE n.nspname IN ('public','omp_private','omp_audit') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_attribute at JOIN pg_catalog.pg_class c ON c.oid = at.attrelid
  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace, LATERAL aclexplode(at.attacl) a
- WHERE n.nspname IN ('public','omp_private') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
+ WHERE n.nspname IN ('public','omp_private','omp_audit') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_namespace n, LATERAL aclexplode(n.nspacl) a
- WHERE n.nspname IN ('public','omp_private') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
+ WHERE n.nspname IN ('public','omp_private','omp_audit') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace,
- LATERAL aclexplode(p.proacl) a WHERE n.nspname IN ('public','omp_private') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
+ LATERAL aclexplode(p.proacl) a WHERE n.nspname IN ('public','omp_private','omp_audit') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_database d, LATERAL aclexplode(d.datacl) a
  WHERE d.datname = current_database() AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))`, r.oid).Scan(&options)
 		if err != nil {
@@ -388,6 +406,9 @@ func ReconcileRuntimeGrants(ctx context.Context, conn *pgx.Conn, role string) er
 			if _, err := tx.Exec(ctx, "GRANT EXECUTE ON FUNCTION "+fn+" TO "+quoted); err != nil {
 				return err
 			}
+		}
+		if err := reconcileAuditGrants(ctx, tx, quoted); err != nil {
+			return err
 		}
 		safety, err := InspectRoles(ctx, tx, role, true)
 		if err != nil {

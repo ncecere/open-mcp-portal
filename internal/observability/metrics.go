@@ -33,7 +33,9 @@ var callBuckets = []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30
 var httpBuckets = []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30, 60}
 
 var (
-	BuildInfo = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	AuditStreamLag    = prometheus.NewGauge(prometheus.GaugeOpts{Name: "omp_audit_stream_lag_seconds", Help: "Age of the oldest unsealed audit row in seconds."})
+	AuditStreamSealed = prometheus.NewCounter(prometheus.CounterOpts{Name: "omp_audit_stream_sealed_total", Help: "Audit entries sealed successfully."})
+	BuildInfo         = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "omp_build_info",
 		Help: "Always 1: the binary's version and commit.",
 	}, []string{"version", "commit"})
@@ -122,7 +124,7 @@ var (
 func appCollectors() []prometheus.Collector {
 	return append([]prometheus.Collector{BuildInfo, MCPRequests, MCPRequestDuration, MCPCallDuration, MCPRateLimited, ServerCircuitState, PayloadCaptures,
 		PayloadRedactions, PayloadCaptureErrors, ProviderTokenRefresh, MachineTokenRequests, ServerHealthChecks, HTTPRequests, HTTPRequestDuration,
-		RetentionDeleted, RetentionLastSuccess, UsageRollupLastSuccess, LoopLeader}, v02Collectors()...)
+		AuditStreamLag, AuditStreamSealed, RetentionDeleted, RetentionLastSuccess, UsageRollupLastSuccess, LoopLeader}, v02Collectors()...)
 }
 
 // Metrics owns a registry with the Go and process collectors, the

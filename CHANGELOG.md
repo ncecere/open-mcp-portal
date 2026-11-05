@@ -6,6 +6,10 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
+## Unreleased
+
+- Add the disabled audit-stream sealing core, record v2 and protected schema (#38, slice 1a).
+
 ## [0.13.1] - 2026-11-01
 
 - **Rebuilt on the refreshed Go builder image.** The image builds from the current `golang:1.26.10` base digest; the Go version and the portal's code are unchanged. A regression test now pins the existing OIDC group-snapshot behaviour: an identity provider's group change takes effect at the person's next sign-in, for all of their sessions. No migrations or configuration changes.
