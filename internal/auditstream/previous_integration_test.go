@@ -23,13 +23,13 @@ import (
 
 // OMP_TEST_PREVIOUS_BINARY points to the unchanged executable extracted from
 // the public previous-release image. No container needs starting or stopping.
-func TestPreviousImageSchema58And59(t *testing.T) {
+func TestPreviousImageCurrentSchemas(t *testing.T) {
 	binary := os.Getenv("OMP_TEST_PREVIOUS_BINARY")
 	if binary == "" {
 		t.Skip("set OMP_TEST_PREVIOUS_BINARY to the previous image executable")
 	}
 	t.Setenv("OMP_TEST_SPLIT_ROLES", "1")
-	for _, version := range []int64{58, 59} {
+	for _, version := range []int64{58, 59, 61} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			p, _ := testutil.NewDBWithMigration(t, func(ctx context.Context, owner *pgxpool.Pool, role string) error {
 				db := stdlib.OpenDBFromPool(owner)
