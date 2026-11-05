@@ -8,6 +8,8 @@ breaking changes; the entry says how to adapt.
 
 ## Unreleased
 
+- Experimental audit pull delivery, consumer acknowledgements and sealed-prefix retention interlock (migration 62); strict retention decoding and operator-owned retention floor. Disabled by default pending complete slice-1 acceptance.
+
 - Add audit stream incarnation recovery commands, epoch declarations and safety sweeps behind the disabled audit stream setting.
 
 - Add the disabled audit-stream sealing core, record v2 and protected schema (#38, slice 1a).

@@ -935,3 +935,62 @@ A persisted scan cursor bounds clean scans too. It never takes rows still owned 
 the sweep pending until the cluster watermark passes F, so an older-xid writer
 blocked by the SHARE lock is recovered after commit. Keep the sealer running to
 complete this post-rebase sweep; inspect `sweep_pending` and `sweep_at` in status.
+
+### Audit pull collectors (experimental slice 1c)
+
+Keep `AUDIT_STREAM_ENABLED=false` until all slice-1 acceptance checks have passed.
+Migration 62 installs the retention interlock even when the sealer is disabled:
+new unsealed audit rows accumulate rather than being deleted. Monitor disk usage.
+Set `AUDIT_MIN_RETENTION_DAYS` on the **migrate** process (default 30, range 30–3650).
+Only that process's migration credentials can write the protected floor. Audit
+retention is at least this floor and the maximum call-metadata period across the
+platform and all existing teams, including archived teams.
+
+Using a platform-admin browser session, enroll a consumer with
+`POST /v1/admin/settings/audit-consumers`, `If-Match` from the collection's GET,
+and `{"consumer":"siem","profile":"full","required":true}`. Registration,
+changing `required`, and removal are audited; automation tokens cannot manage
+consumers. At most 100 admin-defined consumers are allowed. Collector requests
+use an automation token with `platform:read`, which also permits existing full
+audit reads. Store it in the collector's secret store. Summary ids are personal,
+linkable data; full snapshots may contain personal information, but never export
+captured call payloads through these endpoints.
+
+A Vector polling source can fetch a batch (the example starts at zero only for
+initial enrollment):
+
+```toml
+[sources.omp_audit]
+type = "http_client"
+endpoint = "https://portal.example/v1/admin/audit/stream?after_seq=0&limit=100&profile=summary"
+scrape_interval_secs = 10
+headers.Authorization = ["Bearer ${OMP_AUDIT_TOKEN}"]
+decoding.codec = "json"
+framing.method = "newline_delimited"
+```
+
+This static source is an enrollment/debugging example, **not a conforming durable
+collector**: a production receiver must persist its cursor, update `after_seq`,
+pin `stream_id`, verify hashes using `docs/audit-record-v2.md`, retain fork evidence,
+and acknowledge only after durable off-host storage. Use a cursor-aware polling
+adapter in front of Vector for production. Repeating a static URL replays records.
+Never automatically reset local state from `/v1/admin/audit/stream/tip`: it is
+unsigned and advisory. A `410 range_expired` includes `earliest_seq` and requires
+operator reconciliation of lost evidence. `500 audit_row_missing` is corruption,
+not an instruction to advance the cursor.
+
+Full-profile records flagged oversized have a summary envelope, entry hash and
+reference instead of the full row. Fetch the referenced JSON in bounded chunks,
+including `?consumer=siem`, verify the canonical full-entry digest, and only then
+POST `{"consumer":"siem","seq":123}` to `/v1/admin/audit/stream/ack`.
+`sql_null_json` identifies SQL NULL JSON columns; JSON null remains a present
+canonical value. Full consumers cannot acknowledge past unfetched oversized rows.
+Required consumers block age-based purge at their acknowledged sequence. Removing
+or making one optional releases that protection, so investigate collector lag first.
+Consumer lag metrics aggregate the maximum by profile/required status, never names.
+
+**Rollback hazard:** an older binary continues calling the replaced purge function
+and obeys its interlock, but has no sealer. It therefore retains new rows indefinitely.
+Keep the schema and budget disk space; do not revert migration 62 or replace the
+purge function as a routine rollback. Disabling the interlock would deliberately
+sacrifice evidence and requires a separately reviewed migration-role operation.
