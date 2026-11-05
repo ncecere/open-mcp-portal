@@ -1,6 +1,6 @@
 # Audit streaming: ordering, sealing, delivery and retention (#38, decision 93)
 
-Status: **design, revised 2026-11-05 after an independent adversarial review (section 10). Nothing in this document
+Status: **design, revised twice on 2026-11-05 after two independent adversarial reviews (section 10). Nothing in this document
 is built yet.** It turns the #38 proposal and the unwired [audit evidence foundation](audit-streaming-foundation.md)
 into an ordered build plan, and settles the gate the foundation left open: *a proven ordering, gap and retention
 design*. The owner delegated the defaults below when resuming development (2026-11-05) and may override any of them.
@@ -35,12 +35,16 @@ cursor:
 
 ```sql
 WITH wm AS (SELECT pg_snapshot_xmin(pg_current_snapshot()) AS x)
-SELECT a.id FROM audit_log a
+SELECT a.id, a.row_uid FROM audit_log a
 WHERE a.txid < (SELECT x FROM wm)
   AND (a.txid, a.id) > ($cursor_txid, $cursor_id)
+  AND NOT EXISTS (SELECT 1 FROM omp_audit.chain c WHERE c.row_uid = a.row_uid)
 ORDER BY a.txid, a.id
 LIMIT $batch
 ```
+
+The anti-join matters only after a rebase (section 4.3), when rows sealed by the rebase can carry foreign xids
+above the cursor. The cursor advances only to the last row actually sealed, never to a skipped one.
 
 **Why it is complete.** Every transaction with an xid below the snapshot's `xmin` has finished (committed or
 aborted), and every xid assigned later is at or above the next xid, which is above `xmin`. So once the watermark
@@ -55,7 +59,8 @@ chain does not claim to show which committed first. Receivers use `seq` order, w
 
 **Its precondition is one uninterrupted xid history.** A logical dump/restore into another cluster, or a
 logical-replication cutover, breaks it (section 4.3). Within that precondition, the fast path never membership-tests
-by `id`, so prefetched or caller-supplied ids and restored sequence state cannot strand a row.
+by `id`, and a row's identity in the chain is a trigger-stamped, never-reused `row_uid` (section 3). So prefetched,
+caller-supplied or reused ids and restored sequence state cannot strand a row or make it look sealed.
 
 **Evidence** ([proof program](proofs/audit-watermark/main.go), PostgreSQL 17, 2026-11-05: run three times by the
 main thread and once more by the reviewer):
@@ -81,45 +86,50 @@ a row. (Prepared transactions were reasoned from source, not executed: the test 
 ## 3. Schema (slice 1; migrations `00058` transactional, `00059` non-transactional)
 
 Changes to `public` are limited to what the previous release tolerates. Its grant reconciler gives every
-unfamiliar `public` table full DML to the runtime role, and its role inspector *requires* that DML. So protected
+unfamiliar `public` table full DML to the runtime role, and its role inspector *requires* that DML, so protected
 state cannot live in `public`. It cannot live in `omp_private` either, whose reconciler refuses unexpected
-relations. New protected state goes in a **new schema `omp_audit`**, owned by the migration role, which the
-previous release's reconciler and inspector do not touch.
+relations. New protected state goes in a **new schema `omp_audit`**, owned by the migration role. The re-check
+reviewer ran the previous release's actual inspector and reconciler against a migration-owned `omp_audit` with
+runtime `USAGE`/`SELECT` at synthetic versions 58 and 59: both accepted it and the reconciler preserved the grants
+(a catalog experiment; slice 1 adds the previous-image startup test).
 
 In `public`:
 
-1. `audit_log.txid xid8` (nullable, no default), a `BEFORE INSERT` trigger that **always** sets
-   `NEW.txid := pg_current_xact_id()` (the trigger function lives in `omp_audit`), and
-   `CHECK (txid IS NOT NULL) NOT VALID`, which applies to new rows only. A column default would let a caller supply
-   `NULL` or a forged old xid and hide a row. The reviewer confirmed that ordinary `INSERT` and `COPY` are restamped,
-   that an unprivileged role cannot set `session_replication_role`, and that privileged replica mode still fails
-   the `NULL` check. The new role inspector also rejects runtime `SET` privileges on that parameter.
+1. `audit_log.txid xid8` and `audit_log.row_uid uuid` (both nullable, no defaults). A `BEFORE INSERT` trigger
+   (function in `omp_audit`) **always** sets `NEW.txid := pg_current_xact_id()` and
+   `NEW.row_uid := gen_random_uuid()`, whatever the caller supplied. `CHECK (txid IS NOT NULL AND row_uid IS NOT
+   NULL) NOT VALID` applies to new rows only. A column default would let a caller supply `NULL` or a forged value.
+   `row_uid` exists because `id` is reusable: after retention deletes a row, a caller with `INSERT` can write a new
+   row with the same id (`OVERRIDING SYSTEM VALUE`, or a mis-restored sequence). Keyed by `id`, that new row would
+   look already sealed. Checked on PostgreSQL 17: the trigger overrides a caller-supplied `row_uid` and `txid`, even
+   with `OVERRIDING SYSTEM VALUE`. Both reviews confirmed restamping on `INSERT` and `COPY`, that an unprivileged
+   role cannot set `session_replication_role`, and that privileged replica mode still fails the `NULL` check. The
+   new role inspector also rejects runtime `SET` privileges on that parameter.
 2. `omp_purge_audit_log(days, batch)` is replaced in place: same signature, owner, ACL, `SECURITY DEFINER`, fixed
    `search_path` **and `TimeZone = 'UTC'`** (`CREATE OR REPLACE` drops settings it does not restate; dropping
-   migration 00033's setting would reopen the caller-timezone bypass). Section 6 gives the new body.
+   migration 00033's setting would reopen the caller-timezone bypass). Section 6 gives the new algorithm.
 
 In `omp_audit` (runtime role: `USAGE` on the schema, `SELECT` on the tables, `EXECUTE` on the listed functions,
 nothing else; managed by new reconciler and inspector code that the previous release ignores):
 
-3. `state` (one row): `stream_id uuid` (random per install), `incarnation` (`system_identifier`, `timeline_id`),
-   `epoch int`, `status` (`running`, `halted_incarnation`, `rebasing`), `cursor_txid xid8`, `cursor_id bigint`,
-   `last_seq bigint`, `last_chain_hash bytea`, `sweep_at`.
-4. `chain`: `seq bigint PRIMARY KEY`, `kind` (`entry`, `epoch_start`, `checkpoint`), `audit_id bigint UNIQUE`
-   (null for non-entry kinds), `epoch`, `flags` (`late`), `occurred_at`, `summary_hash`, `entry_hash`, `chain_hash`,
-   `sealed_at`. Append-only by trigger. No foreign key: retention removes the audit row first and keeps the chain
-   row as the anchor.
-5. `consumers`: `name`, `required bool`, `acked_seq`, `acked_at`, `created_by`. Pull consumers in slice 1; push
-   sinks add their sealed configuration in slice 2.
-6. `retention_floor` (one row, `min_days`). The migrate command writes `AUDIT_MIN_RETENTION_DAYS` from the
-   operator's environment (default 30, today's hard minimum, so no behaviour change). Neither platform admins nor
-   the runtime role can change it.
-7. Definer functions, the only way the runtime changes stream state: `seal_batch(...)` (enforces
-   `seq = last_seq + 1…`, that each `audit_id` exists and is not already chained, cursor monotonicity and the
-   status), `ack(consumer, seq)` (monotonic, at most `last_seq`), `register_consumer`/`set_required` (audited).
-   `rebase` is a migration-role command, not a runtime function.
-8. `00059` (`NO TRANSACTION`): `CREATE INDEX CONCURRENTLY IF NOT EXISTS` on `(txid, id) WHERE txid IS NOT NULL`,
-   dropping and recreating an invalid index left by an interrupted run (the safe-to-rerun pattern of `00020`).
-   Acceptance runs the previous image between `00058` and `00059` as well as after both.
+3. `state` (one row): `stream_id uuid` (random per install), `system_identifier`, `timeline`, `epoch int`, `status`
+   (`running`, `halted_incarnation`, `rebasing`), `cursor_txid xid8`, `cursor_id bigint`, `last_seq bigint`,
+   `last_chain_hash bytea`, `sweep_at`.
+4. `chain`: `seq bigint PRIMARY KEY`, `kind` (`entry`, `epoch_start`, `checkpoint`), `row_uid uuid UNIQUE` (new rows),
+   `legacy_id bigint UNIQUE` (history rows with `txid IS NULL`, whose ids can no longer be reused because new rows
+   are never `NULL`-stamped), exactly one of the two for `entry` and neither otherwise; `audit_id` (informational),
+   `epoch`, `flags` (`late`, `oversized`), `occurred_at`, `summary_hash`, `entry_hash`, `chain_hash`, `sealed_at`.
+   Append-only by trigger. No foreign key: retention removes the audit row first and keeps the chain row as the
+   anchor.
+5. `consumers`: `name`, `profile`, `required bool`, `acked_seq`, `acked_at`, `created_by`; `oversized_fetches`
+   (consumer, seq) for section 4.4.
+6. `retention_floor` (one row, `min_days`). The migrate command writes `AUDIT_MIN_RETENTION_DAYS` from the operator's
+   environment (default 30, today's hard minimum, so no behaviour change). Neither platform admins nor the runtime
+   role can change it.
+7. The definer functions in section 4.5, the only way the runtime changes stream state.
+8. `00059` (`NO TRANSACTION`): `CREATE INDEX CONCURRENTLY IF NOT EXISTS` on `audit_log (txid, id) INCLUDE (row_uid)
+   WHERE txid IS NOT NULL`, dropping and recreating an invalid index left by an interrupted run (the safe-to-rerun
+   pattern of `00020`). Acceptance runs the previous image between `00058` and `00059` as well as after both.
 
 Pre-existing history is exactly the rows with `txid IS NULL`. The `NOT VALID` check stops new ones, so that set is
 final once the migration commits.
@@ -128,48 +138,65 @@ final once the migration commits.
 
 ### 4.1 Normal operation
 
-The leader (advisory lock `omp.auditstream`, `store.TryAdvisoryLockText`) runs batches. Each batch is one
-transaction that calls `seal_batch` with records hashed in Go. `seal_batch` locks the state row, so two sealers can
-never both extend the chain even if leader election fails. A `seq` comes from the state row, never from a
-PostgreSQL sequence, so a rolled-back batch leaves no gap (the reviewer confirmed this by experiment). No network
-I/O happens inside the transaction. Order within a batch:
+The leader (advisory lock `omp.auditstream`, `store.TryAdvisoryLockText`) runs batches. Each batch is one READ
+COMMITTED transaction that calls `seal_batch` (section 4.5). `seal_batch` locks the state row, so two sealers can
+never both extend the chain even if leader election fails. A `seq` comes from the state row, never from a PostgreSQL
+sequence, so a rolled-back batch leaves no gap (confirmed by experiment). No network I/O happens inside the
+transaction. Order within a batch:
 
-1. **History backlog:** unsealed rows with `txid IS NULL`, in `id` order, until none remain.
+1. **History backlog:** rows with `txid IS NULL` not in `chain.legacy_id`, in `id` order, until none remain.
 2. **Fast path:** section 2's query.
+
+If `seal_batch` reports a stale candidate (already chained, or the status changed), the sealer discards the batch
+and re-reads; it never retries the same candidates in a loop.
 
 ### 4.2 Safety-net sweep
 
-A sweep runs daily and after every rebase or epoch change. It is an anti-join of `audit_log` against `chain` over
-rows that should already be sealed: `txid IS NULL`, or `(txid, id) <= cursor` with `txid` below the watermark.
-It seals anything it finds with the `late` flag and increments `omp_audit_stream_late_total`, which should always
-be zero; any hit alerts. Correctness does not rest on the sweep, but it bounds the damage of an unforeseen bypass
-to "late and flagged" rather than "never".
+A sweep runs daily and after every rebase or epoch change. It is an anti-join on `row_uid` (and `legacy_id`) over
+rows that should already be sealed: `txid IS NULL`, or `(txid, id) <= cursor` with `txid` below the watermark. It
+seals anything it finds with the `late` flag and increments `omp_audit_stream_late_total`, which should always be
+zero; any hit alerts. Correctness does not rest on the sweep, but it bounds the damage of an unforeseen bypass to
+"late and flagged" rather than "never". The re-check confirmed it catches a REPEATABLE READ writer that held an xid
+below a rebase's `F` and was blocked by its lock (`fast_hits=0, sweep_hits=1`), without sealing it before commit.
 
-### 4.3 Incarnation, epochs and rebase
+### 4.3 Incarnation, epochs, rebind and rebase
 
-The state records the cluster incarnation `(system_identifier, timeline_id)`, which any login role can read through
-`pg_control_system()` and `pg_control_checkpoint()` (checked on the test server). Each batch compares it to the live
-values.
+The state records the incarnation: `system_identifier` from `pg_control_system()`, and the **WAL insertion
+timeline** from `pg_walfile_name(pg_current_wal_lsn())`. That is not `pg_control_checkpoint().timeline_id`, which
+stays on the old timeline after a promotion until the end-of-recovery checkpoint completes, while the new primary
+already accepts writes. Any login role can read both (checked). Each batch compares them to the live values:
 
-- **`system_identifier` changed** (a logical dump/restore into a new cluster, or a logical-replication cutover,
-  where the apply worker also bypasses the stamping trigger and keeps the publisher's xids). The sealer **halts**
-  (`status = halted_incarnation`, metric and alert). It does not try to infer what happened from xids: the reviewer
-  showed that `snapshot xmin < cursor_txid` misses a regression once unrelated activity moves xmin past the old
-  cursor. The runbook requires `open-mcp-portal audit-stream rebase` (migration role) after a logical restore or
-  cutover, *before serving writes*. Audit rows written while halted are not lost; rebase seals them.
-- **`timeline_id` changed** (physical failover, PITR). xids continue, so the fast path stays correct, but the chain
-  may have rewound: records sealed on the old timeline may be gone. The sealer starts a new epoch automatically and
-  alerts. Receivers handle any overlap with the protocol in section 5.3.
-- **`rebase`:** (a) take `LOCK audit_log IN SHARE MODE` in transaction A, which waits for in-flight writers;
-  (b) open REPEATABLE READ transaction B and take its snapshot while A holds the lock, so B sees exactly the
-  committed pre-rebase rows; (c) in A, record the new incarnation, `epoch + 1`, `status = rebasing`,
-  `F = pg_current_xact_id()`, cursor `(F, 0)`, then commit, so writers resume after a lock held for milliseconds;
-  (d) B seals every row in its snapshot not yet chained, in `id` order, whatever its (possibly foreign) `txid`;
-  (e) set `status = running`; (f) once the watermark passes `F`, sweep rows with `txid < F` once, to catch writers
-  that already held an xid below `F` and were blocked by the lock.
+- **Timeline changed, same `system_identifier`** (physical failover or switchover, including CloudNativePG, and
+  PITR). xids continue, so the fast path stays correct, but the chain may have rewound. The sealer starts a new
+  epoch automatically with an `epoch_start` record (section 5.3) and alerts.
+- **`system_identifier` changed.** Either a logical restore or replication cutover (xids from another history;
+  the apply worker also bypasses the stamping trigger) or a `pg_upgrade` (a new cluster with xids preserved). The
+  sealer **halts** (`status = halted_incarnation`, metric, alert). It does not guess which from xids: the first
+  review showed that `snapshot xmin < cursor_txid` misses a regression once unrelated activity moves xmin past the
+  old cursor. Audit rows written while halted are kept and sealed later. The operator runs one of two migration-role
+  commands:
+  - `open-mcp-portal audit-stream rebind` after `pg_upgrade` (the deploy runbook's major-upgrade step): records the
+    new identifier and keeps epoch and cursor. It refuses if the snapshot xmin is below `cursor_txid`, as a sanity
+    check, not as proof of continuity; the operator asserts that.
+  - `open-mcp-portal audit-stream rebase` after a logical restore or cutover, **before serving writes**.
+- **Rebase** keeps every snapshot read-only and every state change in fresh transactions:
+  1. Transaction A takes `LOCK audit_log IN SHARE MODE`, which waits for in-flight writers. While A holds it,
+     read-only REPEATABLE READ transaction B takes its snapshot. B now sees exactly the committed pre-rebase rows.
+  2. A sets `status = rebasing`, the new incarnation, `epoch + 1`, `F = pg_current_xact_id()` and cursor `(F, 0)`,
+     writes no chain record and commits. Writers resume; the lock was held for milliseconds.
+  3. B streams the identities of its unsealed rows, in `id` order, to the sealer. The sealer seals them in normal
+     READ COMMITTED transactions through `seal_batch(mode => 'rebase')`, preceded by one `epoch_start` record.
+     B never locks or writes anything (the re-check showed B cannot lock the state row A changed: SQLSTATE 40001).
+     While `status = rebasing`, `seal_batch` accepts only rebase batches, so the fast path is fenced.
+  4. The sealer sets `status = running`. Once the watermark passes `F`, it sweeps rows with `txid < F` once, to catch
+     writers that held an xid below `F` and were blocked by the lock.
+  5. **Crash recovery.** A crash leaves `status = rebasing`. Rerunning `rebase` resumes: it takes a fresh
+     lock-bounded snapshot and seals every visible unsealed row. That superset includes rows written since, which is
+     safe: each identity is sealed at most once (`UNIQUE row_uid`), and the fast path skips chained rows. It keeps
+     the same epoch and does not repeat `epoch_start`.
 
-Every epoch begins with an `epoch_start` chain record (section 4.4) whose summary names the previous epoch, the last
-`seq` the database still holds, the reason (`rebase`, `timeline`) and both incarnations.
+  Rows sealed by a rebase can carry foreign xids above `F`. The fast path's anti-join skips them when the
+  watermark reaches them, and its cursor never jumps to a foreign xid, which would skip later local writes.
 
 ### 4.4 Record version 2
 
@@ -179,160 +206,238 @@ its discipline (fixed binary layout, domain separation, no JSON in the chain, ex
 
 ```
 summary_hash = SHA256("OMP-AUDIT-SUMMARY\0V1\0" || canonical_summary_bytes)
-entry_hash   = SHA256("OMP-AUDIT-ENTRY\0V1\0"   || canonical_entry_bytes)     -- zero for non-entry kinds
+entry_hash   = SHA256("OMP-AUDIT-ENTRY\0V1\0"   || canonical_entry_bytes)       -- zero for non-entry kinds
 record_v2    = version u8 (=2) || kind u8 || flags u8 || stream_id 16 || epoch u32 || seq u64
-               || audit_id u64 || occurred_at_unix_micros i64 || summary_hash 32 || entry_hash 32   -- 111 bytes
+               || row_identity 16 || occurred_at_unix_micros i64 || summary_hash 32 || entry_hash 32  -- 119 bytes
 chain_hash   = SHA256("OMP-AUDIT-EVIDENCE\0CHAIN\0V2\0" || previous_chain_hash 32 || record_v2)
 genesis predecessor = SHA256("OMP-AUDIT-EVIDENCE\0GENESIS\0V2\0" || stream_id)
 ```
 
-A summary receiver can now recompute `summary_hash` from what it was given. The reviewer showed that without this,
-a changed action or actor kept a valid linkage. A full receiver also recomputes `entry_hash`.
+`row_identity` is the `row_uid`, or for history rows eight `0xFF` bytes followed by the big-endian `legacy_id`
+(which `gen_random_uuid()` cannot produce, because its version nibble is 4). For `epoch_start` and `checkpoint`
+records it is zero, and `summary_hash` commits to the record's own fields (section 5.3).
 
-**Canonical encodings are a normative, versioned specification written with slice 1**, with golden vectors and
-the Python reference verifier extended to version 2. The specification must list every field of each profile
-(including `txid` and `actor_token_kind`, missing from the first draft) and define each encoding exactly:
+**Canonical encodings are a normative, versioned specification written with slice 1**, with golden vectors shared by
+Go, SQL and the Python reference verifier. Rules:
 
-- the presence byte for SQL `NULL` versus an empty string, and SQL `NULL` versus JSON `null`;
-- duplicate jsonb keys (PostgreSQL keeps the last), object key order (sorted by UTF-8 bytes) and string escaping
-  (one fixed escape set, no optional `\u` forms);
-- numbers as PostgreSQL's numeric text tokens. These are **never** decoded through float64, which loses
-  `9007199254740993`. Scale is preserved as stored (`1.0` and `1.00` are equal as jsonb but differ in text).
+- The **summary** encoding uses only scalar columns (text, uuid, timestamps, the actor kind), each as a presence byte,
+  then a big-endian length and the UTF-8 bytes, or the fixed-width value, in a fixed field order. It is deliberately
+  computable in SQL with built-ins (`sha256`, `int4send`, `int8send`, `uuid_send`, `convert_to`, checked) so the
+  database can validate it (section 4.5).
+- The **full** encoding adds `before_state`, `after_state`, `metadata`, `client_ip`, the token name and kind and
+  `txid`. It must define SQL `NULL` versus an empty string versus JSON `null`, duplicate jsonb keys (PostgreSQL keeps
+  the last), object key order (sorted by UTF-8 bytes) and one fixed string escaping with no optional `\u` forms.
+  Numbers are PostgreSQL's numeric text tokens, **never** decoded through float64, which loses `9007199254740993`.
+  Scale is preserved as stored (`1.0` and `1.00` are equal as jsonb but differ in text).
+- Adding a column to `audit_log` later means a new canonical version, never a silent change to version 1.
 
-Adding a column to `audit_log` later means a new canonical version, never a silent change to version 1.
-
-**Limits.** The foundation's 1,024-byte line cap and integer/hex-only CSV policy were made for the 59-byte record and
-do not fit version 2: legitimate snapshots exceed 2 KiB, and an action such as `team.create` is not hex. Version 2
-uses a 16 MiB per-line reader limit with a fixed-size buffer. A row whose full form exceeds it is still sealed and
-delivered in summary form with an `oversized` flag, and its full form stays retrievable by id while retained.
-Evidence is never truncated or dropped. CSV is an export view with spreadsheet-safe quoting (a leading `'` before
+**Limits and oversized rows.** The foundation's 1,024-byte line cap and integer/hex-only CSV policy were made for the
+59-byte record and do not fit version 2: legitimate snapshots exceed 2 KiB, and `team.create` is not hex. Version 2
+uses a 16 MiB per-line reader limit with a fixed-size buffer. A full-profile line above it is never downgraded. It
+is replaced by an **`oversized` envelope** that carries the summary fields, `entry_hash`, the full length and a
+reference. The consumer fetches the full row in bounded chunks from `GET /v1/admin/audit/entries/{seq}/full` and
+verifies `entry_hash` itself. The server records each fetch (`oversized_fetches`). A full-profile consumer's ack is
+refused (`409 oversized_pending`, listing the seqs) past any oversized seq it has not fetched, so retention cannot
+release full evidence it never collected. CSV is an export view with spreadsheet-safe quoting (a leading `'` before
 formula characters), never a verification input.
+
+### 4.5 The privileged boundary
+
+All functions are `SECURITY DEFINER`, owned by the migration role, `SET search_path = pg_catalog, pg_temp` and
+`TimeZone = 'UTC'`, with every relation schema-qualified, `EXECUTE` revoked from `PUBLIC` and granted to the runtime
+role only. Arguments are bounded: batch length 1 to 1,000, digests exactly 32 bytes, known kinds and flags only.
+
+- `seal_batch(mode, records[])` locks the state row, requires `status = running` (or `rebasing` for
+  `mode => 'rebase'`), and for each record checks that `seq` is `last_seq + 1…`, that the referenced audit row exists
+  with that `row_uid` or `legacy_id` and is not already chained, and that the fast-path cursor only moves forward.
+  It **recomputes `summary_hash` from the audit row and `chain_hash` from the fields and the previous hash in SQL**,
+  and rejects any mismatch. Only `entry_hash`, which needs the jsonb canonicaliser, is caller-supplied; a wrong one
+  is detected by `verify` and by full-profile receivers. So a compromised runtime can make the stream unverifiable
+  (a denial of evidence), but cannot make it state something about a row's summary that the row does not say.
+- `ack(consumer, seq)`: monotonic, at most `last_seq`, subject to the oversized rule.
+- `register_consumer`, `set_required`, `remove_consumer`: audited. Authorisation (platform admins with a browser
+  session for registration and `required`; the consumer's own token for `ack`) is enforced by the API, not the
+  database. A compromised runtime can therefore forge an ack and release the purge interlock for that consumer. The
+  consumer sees the result as `410` for what it never received, never as silent loss.
 
 ## 5. Delivery, consumers and recovery
 
 ### 5.1 Pull (slice 1)
 
-`GET /v1/admin/audit/stream?after_seq=&limit=&profile=summary|full` streams sealed records in `seq` order as NDJSON,
-joined to their audit rows. Platform admins and auditors with a browser session, or an automation token with
-`platform:read` (which already grants full audit reads). A collector (Vector, Fluent Bit, a SIEM's HTTP input)
-polls it. No outbound network, no sealed URLs, no SSRF surface. A request below the earliest seq whose audit row is
-still retained gets `410 range_expired` with the earliest available `seq`; it never silently skips or downgrades
-the profile. `POST /v1/admin/audit/stream/ack` records a registered consumer's acknowledged `seq`.
+`GET /v1/admin/audit/stream?after_seq=N&limit=&profile=summary|full` returns sealed records with `seq > N`
+(exclusive) in `seq` order as NDJSON, joined to their audit rows. It is open to platform admins and auditors with a
+browser session, or an automation token with `platform:read` (which already grants full audit reads). A collector
+(Vector, Fluent Bit, a SIEM's HTTP input) polls it. No outbound network, no sealed URLs, no SSRF surface.
+
+The response is **contiguous or an error**. Retention removes only a `seq` prefix (section 6), so a range is either
+fully available or starts below the earliest retained `seq`. In that case the API returns `410 range_expired` with
+the earliest available `seq`. Any `entry` record in the range whose audit row is missing anyway is an integrity
+failure (`500 audit_row_missing`, metric, alert), never a silent omission or a downgraded profile.
+`POST /v1/admin/audit/stream/ack` records a registered consumer's acknowledged `seq`.
 `GET /v1/admin/audit/verify?from=&to=` recomputes the chain over a range and reports the first bad `seq`.
 
 ### 5.2 Profiles
 
-The **summary** profile (default) carries time, action, actor kind and ids, team, target type and id, request id
-and automation-token id, all covered by `summary_hash`. The **full** profile adds `before_state`, `after_state`,
-`metadata`, `client_ip`, token name and kind and `txid`, covered by `entry_hash`. Full is opt-in per consumer,
-because snapshots can contain emails and other personal data. Snapshots are already secret-redacted at write
-time. Summary is a smaller projection, not least privilege: its stable ids are still personal, linkable data.
+The **summary** profile (default) carries time, action, actor kind and ids, team, target type and id, request id and
+automation-token id, all covered by `summary_hash`. The **full** profile adds the fields listed in section 4.4,
+covered by `entry_hash`. Full is opt-in per consumer, because snapshots can contain emails and other personal data.
+Snapshots are already secret-redacted at write time. Summary is a smaller projection, not least privilege: its
+stable ids are still personal, linkable data.
 
-### 5.3 Receiver protocol and tip
+### 5.3 Receiver protocol
 
-`GET /v1/admin/audit/stream/tip` returns `stream_id`, current epoch, `last_seq`, `last_chain_hash`, the earliest
-available `seq`, and the epoch history (each epoch's first `seq`, predecessor hash and reason). From slice 2 the tip
-is signed. A conforming receiver:
+A conforming receiver **pins `stream_id`** at enrollment. A record with another `stream_id` is never treated as a
+fresh stream without local operator approval, and the old anchor and history are kept. The receiver keeps
+stream-wide state across epochs, `(stream_id, seq) → chain_hash`, and:
 
-- keeps **stream-wide** state across epochs: `(stream_id, seq) → chain_hash`, not per-epoch deduplication;
-- accepts an `epoch_start` record whose predecessor is the hash it holds for `seq - 1` (a clean continuation);
-- treats any record at a `seq` it already holds with a different hash as a **fork**: it alerts and keeps both
-  copies. An epoch change never legitimises an overlap; only an explicit operator acknowledgement at the receiver
-  does;
-- polls the tip as well as the stream. A database restored to seq 500 when the receiver holds 1,000 answers
-  `after_seq=1000` with nothing; the tip's `last_seq < held seq` is the signal, and the receiver alerts.
+- accepts records whose predecessor is the hash it holds for `seq - 1`;
+- accepts an `epoch_start` record as a **clean continuation** only when its declared predecessor is `seq - 1` and
+  matches the hash it holds. A receiver that lagged behind a rewind point receives the restored history first and
+  reaches the continuation normally;
+- treats every other `epoch_start` as a **discontinuity**. That covers a predecessor that does not match the
+  receiver's hash, a declared gap (`--resume-after-seq`), and a receiver that holds records beyond the predecessor.
+  The receiver does not accept it until local approval. On approval it records the `epoch_start` as a new trusted
+  anchor and keeps the old anchor and any records beyond the predecessor as orphaned fork evidence;
+- treats a different hash at a held `seq` as a fork: it alerts and keeps both copies.
 
-`rebase --resume-after-seq=N` lets the operator restart numbering above the highest `seq` any receiver holds, so
-that after a known rewind the new epoch does not reuse sequence numbers at all.
+An `epoch_start` record's `summary_hash` commits to the previous epoch, the predecessor `seq` and hash the database
+still holds, the reason (`timeline`, `rebase`), both incarnations and any declared gap. `rebase
+--resume-after-seq=N` makes the new epoch start at `N + 1` and declares `predecessor_seq + 1 … N` as a gap. It
+exists so numbering after a known rewind does not collide with seqs receivers already hold; it is always a
+discontinuity, never a clean continuation.
+
+`GET /v1/admin/audit/stream/tip` returns `stream_id`, epoch, `last_seq`, `last_chain_hash`, the earliest available
+`seq` and the epoch history. It is **advisory**. An unsigned tip (slice 1) cannot make a pinned receiver accept
+altered history: the chain and digests prevent that. But it can lie to suppress a rewind signal (a tip below what
+the receiver holds), and a signed tip (slice 2) only adds the portal's own assertion. Receivers never replace
+trusted local state from the tip.
 
 ### 5.4 Push sinks and checkpoints (slices 2 and 3)
 
 Webhook (reusing `notify`'s signature header and client), then syslog over TLS (RFC 5424, octet counting) and OTLP
 logs over HTTP/JSON (hand-rolled; no new dependency). Sink URL and secret are sealed columns joined to
 `keyrotation.Columns`, with a separate `AUDIT_STREAM_ALLOWED_NETWORKS` (public https only by default). One sender
-per sink, at least once, strictly in `seq` order; its cursor advances only after acknowledgement. A stalled sink
-never blocks audit writes; it shows as lag and a failure counter, and platform admins are notified after 3
-consecutive failures.
+per sink, at least once, strictly in `seq` order; its cursor advances only after acknowledgement. A stalled sink never
+blocks audit writes; it shows as lag and a failure counter, and platform admins are notified after 3 consecutive
+failures.
 
-Every 10,000 records or 15 minutes, the sealer writes a `checkpoint` chain record signed with a **dedicated**
-Ed25519 audit-checkpoint key, never the identity key that signs upstream JWTs. The private key is sealed; public
-keys are at `/.well-known/omp-audit-keys.json`.
+Every 10,000 records or 15 minutes, the sealer writes a `checkpoint` chain record signed with a **dedicated** Ed25519
+audit-checkpoint key, never the identity key that signs upstream JWTs. The private key is sealed; public keys are at
+`/.well-known/omp-audit-keys.json`.
 
 ## 6. Retention interlock
 
-The replaced `omp_purge_audit_log(days, batch)` (section 3, item 2) deletes a row only when:
+The replaced `omp_purge_audit_log(days, batch)` (section 3, item 2) runs this algorithm, failing closed:
 
-1. it is older than `greatest(days, retention_floor.min_days, D_calls)`, where `D_calls` is the longest effective
-   call-metadata period: the platform setting or its built-in default, and every team override, read inside the
-   function from `retention_settings` and `teams.retention_overrides`. This enforces H-10 in the database, so it
-   also holds while previous-release binaries can still change settings;
-2. it is sealed (its `id` is in `omp_audit.chain`); and
-3. if any consumer is `required`, its `seq` is at or below the lowest required `acked_seq`.
+1. Read the singleton rows `public.retention_settings`, `omp_audit.state` and `omp_audit.retention_floor`. If any is
+   missing, raise (and delete nothing; the existing flag restoration on error is kept).
+2. Compute `D_calls` once per call: the platform `call_metadata` period, then the maximum with every
+   `teams.retention_overrides` `call_metadata` value. An absent key means the built-in 90 days for the platform,
+   and no override for a team. A JSON `null`, a non-integer or a value outside 1–3650 raises. Deleted teams no longer
+   count, which matches the call purge (confirmed by the re-check). A performance test uses 10,000 teams.
+3. `cutoff = now() - greatest(days, floor.min_days, D_calls)` days, all three non-null by step 1–2 (`greatest`
+   ignores `NULL`s, so this must be checked, not assumed).
+4. Find the largest `S` such that every `entry` record with `seq <= S` has `occurred_at < cutoff`, is at or below
+   every required consumer's `acked_seq`, and is not past an unfetched oversized seq of a required full-profile
+   consumer. Delete only audit rows whose chain record has `seq <= S`, joined on `row_uid` or `legacy_id`, in batches
+   with `FOR UPDATE SKIP LOCKED`. Unsealed rows are never candidates.
 
-The settings API additionally refuses an audit period below the floor or below `D_calls`, and refuses a call or team
-override above the audit period. The database rule is the guarantee; the API rule is the explanation.
+Retention therefore removes a **`seq` prefix**, so the stream never has interior holes. A late-sealed old row waits
+until the prefix reaches it, which retains it slightly longer than its age alone would. The settings API also refuses
+an audit period below the floor or below `D_calls`, and a call or team override above the audit period. The database
+rule is the guarantee; the API rule is the explanation.
+
+The Go settings decoder currently ignores JSON errors, so a `null` period decodes as 0 days and a malformed value can
+fall back to the built-in default. Slice 1 makes Go strict with the same rules as step 2 and pins them with a Go/SQL
+parity test. Such values are reachable only by writing to the database directly; the API validates them.
+
 `omp_audit.chain` rows outlive their audit rows and are purged only behind a checkpoint, which becomes the trusted
-start anchor. Acceptance covers hostile-timezone callers, missing floor or state rows (fail closed: delete nothing),
-flag restoration on error, and owner/ACL/definer/`search_path` preservation.
+start anchor. Acceptance covers hostile-timezone callers, each missing-row and malformed-value case, flag restoration,
+and owner/ACL/definer/`search_path`/`TimeZone` preservation.
 
 **Before a consumer is registered**, rows are sealed but may be purged by age before anyone reads them. That is
-today's behaviour plus sealing, and the tip's earliest-available `seq` says so honestly. Operators who need
-delivery guarantees register a required consumer.
+today's behaviour plus sealing, and the tip's earliest available `seq` says so honestly. Operators who need delivery
+guarantees register a required consumer.
 
-**Rollback hazard.** Once streaming is enabled, a rollback to a release without a sealer pauses audit purging
-(nothing new is sealed). That fails safe for evidence, at a storage cost. The runbook gives the migration-role
-command to disable the interlock deliberately. Mixed-version windows are fine: old binaries insert, the trigger
-stamps, the new sealer seals.
+**Rollback hazard.** Once streaming is enabled, a rollback to a release without a sealer pauses audit purging (nothing
+new is sealed). That fails safe for evidence, at a storage cost. The runbook gives the migration-role command to
+disable the interlock deliberately. Mixed-version windows are fine: old binaries insert, the trigger stamps, the new
+sealer seals.
 
 ## 7. What it detects, and what it does not
 
 - A receiver detects a missing `seq`, a reordered or duplicated record, a changed summary (any profile) or full row
-  (full profile), and a rewound or forked stream (a different hash at a held `seq`, or a tip below its own).
+  (full profile), and a rewound or forked stream (a different hash at a held `seq`, a discontinuity, or a changed
+  `stream_id`). An unsigned tip can hide a rewind signal but not altered history.
+- The database refuses seals whose summary or chain hash does not match the row; `verify` and full receivers detect a
+  wrong `entry_hash`.
 - `verify` detects in-database tampering of chained rows only relative to a trusted anchor. Without an off-host
-  checkpoint, someone who controls the database can rewrite the whole chain consistently.
-- Not detected: a row the application never wrote; a row invented by a compromised runtime; events during a period
-  when an attacker held the checkpoint key; anything in legacy single-owner mode that the owner role can undo.
+  checkpoint, someone who controls the database as owner can rewrite the whole chain consistently.
+- Not detected: a row the application never wrote; a row invented by a compromised runtime; a forged ack (it shows as
+  `410`, not silence); events during a period when an attacker held the checkpoint key; anything in legacy
+  single-owner mode that the owner role can undo.
 
 ## 8. Build plan
 
 | Slice | Contents | Migrations | Acceptance |
 | --- | --- | --- | --- |
-| **1. Seal and pull** | Section 3 schema and `omp_audit` reconciler/inspector support; sealer (backlog, fast path, sweep, incarnation halt, timeline epoch); `rebase` command; record v2 with its normative canonical specification, golden vectors and Python verifier; pull, ack, tip and verify APIs; consumers; purge interlock; metrics (`omp_audit_stream_lag_seconds`, `_sealed_total`, `_late_total`, `_state`); docs (deploy runbook for restore/cutover/rollback, threat model BR-10/H-10) | `00058`, `00059` | Ported watermark proof including the negative control; the trigger restamps forged or `NULL` `txid` and `COPY` under the runtime role; a late-prefetched or `OVERRIDING SYSTEM VALUE` id is sealed normally; a synthetic incarnation change halts and `rebase` seals pre-existing rows and lock-blocked writers without loss; a timeline change starts an epoch; sweep finds nothing in normal runs and seals a planted gap with `late`; purge never removes an unsealed or unacknowledged row, honours the floor and `D_calls` including team overrides, and keeps `TimeZone=UTC`; the runtime role cannot change `omp_audit` state except through the functions; the previous image starts in required split-role mode and migrates/reconciles without error between and after `00058`/`00059`; both role modes |
+| **1. Seal and pull** | Section 3 schema and `omp_audit` reconciler/inspector support; sealer (backlog, fast path, sweep, incarnation halt, timeline epoch); `rebind` and `rebase` commands; record v2 with its normative canonical specification and Go/SQL/Python golden vectors; the section 4.5 functions; pull, ack, oversized fetch, tip and verify APIs; consumers; purge algorithm; strict Go retention decoding; metrics (`omp_audit_stream_lag_seconds`, `_sealed_total`, `_late_total`, `_state`); docs (deploy runbook for restore, cutover, major upgrade and rollback; threat model BR-10/H-10) | `00058`, `00059` | Ported watermark proof including the negative control; the trigger restamps forged or `NULL` `txid`/`row_uid` and `COPY` under the runtime role; a reused, prefetched or `OVERRIDING SYSTEM VALUE` id after a purge is sealed as a new row; a synthetic incarnation change halts, `rebind` and `rebase` recover, `rebase` seals pre-existing rows, foreign-xid rows (never twice) and lock-blocked writers, and a crashed rebase resumes; a promotion fixture changes the insertion timeline and starts an epoch; sweep finds nothing normally and seals a planted gap with `late`; `seal_batch` rejects a wrong summary or chain hash, a reused identity, a gap and a fast-path batch during `rebasing`; purge removes only a sealed, acknowledged `seq` prefix, honours the floor and `D_calls` with team overrides, fails closed on each missing row and malformed value, and keeps `TimeZone=UTC`; the stream API returns contiguous ranges or `410`; an unfetched oversized seq blocks a full-profile ack; the previous image starts in required split-role mode and migrates/reconciles between and after `00058`/`00059`; both role modes |
 | **2. Push webhook + checkpoints** | Checkpoint key and signing, signed tip; webhook sink with sealed URL/secret; failure notification; Admin › Audit sinks UI | next free | At-least-once in order across restart and failover; a stalled required sink stops purge; sealed values never appear in any response, log or audit entry; checkpoints verify in the Python verifier |
 | **3. Syslog TLS + OTLP** | Two more sink kinds, allowed-networks setting, fake TLS syslog and OTLP receivers | none expected | Same as slice 2 per kind; TLS failure recovery |
 | **4. Bulk exports** | `adminExportAudit`, `adminExportCalls`, team calls export (NDJSON/CSV, streamed, filters as the list APIs, never payloads) | none | Streaming without loading the range; token scope; CSV safety |
 
-#39 (holds, export and erasure) starts after slice 2: holds join the purge interlock, and erasure must not break
-the chain. The plan is to keep the chain row and its hashes while personal fields are anonymised by a
-migration-role function, with an erasure marker; the full profile then reports the row as erased rather than
-failing verification. That is #39's design to settle.
+Slice 1 is large. It may be built as consecutive pull requests behind one feature setting that stays off until all
+of its acceptance passes: schema, trigger and functions; sealer and recovery; APIs and purge. It ships only whole.
+
+#39 (holds, export and erasure) starts after slice 2: holds join the purge interlock, and erasure must not break the
+chain. The plan is to keep the chain row and its hashes while personal fields are anonymised by a migration-role
+function, with an erasure marker; the full profile then reports the row as erased rather than failing verification.
+That is #39's design to settle.
 
 ## 9. Open questions for the owner
 
 1. Is the default **summary** profile right, or should full rows leave the host by default?
-2. The default `AUDIT_MIN_RETENTION_DAYS` of 30 keeps today's behaviour; the issue suggested 90. The database now
-   also keeps audit at least as long as call metadata (H-10). That can retain audit longer on upgrade where call
+2. The default `AUDIT_MIN_RETENTION_DAYS` of 30 keeps today's behaviour; the issue suggested 90. The database now also
+   keeps audit at least as long as call metadata (H-10). That can retain audit longer on upgrade where call
    retention exceeds audit retention today.
-3. Physical failover starts a new epoch automatically; a logical restore halts until `rebase`. Is that split right,
-   or should every incarnation change wait for an operator?
+3. A timeline change (failover, PITR) starts a new epoch automatically; a new `system_identifier` (logical restore,
+   cutover, major upgrade) halts until `rebind` or `rebase`. Is that split right?
 
 ## 10. Review record (2026-11-05)
 
-An independent fresh-context review (Codex, read-only, with its own experiments on a disposable server) confirmed
-watermark completeness within one xid history, snapshot alignment, savepoint stamping, trigger-and-`CHECK`
-behaviour, state-row gapless allocation, retention lock safety, the first draft's record framing and the migration split. It
-found no critical issue and eleven others, all addressed above:
+Two independent fresh-context reviews (Codex, read-only, each running its own experiments on a disposable
+PostgreSQL 17 server) preceded this version.
 
-| # | Severity | Finding | Resolution |
+**First review**: no critical finding, six high. It confirmed watermark completeness within one xid history, snapshot
+alignment, savepoint stamping, trigger-and-`CHECK` behaviour, state-row gapless allocation, retention lock safety and
+the migration split.
+
+| # | Severity | Finding | Resolution | Re-check verdict |
+| --- | --- | --- | --- | --- |
+| 1 | High | xmin-below-cursor misses a logical restore; logical replication keeps publisher xids and bypasses the trigger | Incarnation binding with a halt and `rebase`/`rebind` (4.3); sweep (4.2) | Partially (rebase failures, now R1–R3, R5) |
+| 2 | High | The id-floor seam strands prefetched/overridden ids and mis-restored sequences | Membership by `txid`; identity by `row_uid` (3, 4) | Partially (id reuse, now R2) |
+| 3 | High | Previous release's reconciler grants full DML on new `public` tables and its inspector requires it | `omp_audit` schema behind definer functions; split-role trust scope (1, 3) | Closed |
+| 4 | High | Summary fields not authenticated | `summary_hash` in record v2 (4.4) | Closed |
+| 5 | High | Sealed-only retention can purge before delivery | Durable consumers and acks; `410` (5.1, 6) | Partially (interior holes, now R7) |
+| 6 | High | No receiver recovery protocol | Tip, stream-wide state, fork rules (5.3) | Partially (now R6) |
+| 7 | Medium | Full canonical form under-specified | Normative specification with listed cases (4.4) | Partially (still deferred to slice 1 by design) |
+| 8 | Medium | Inherited 1 KiB line and hex-only CSV limits | Version-2 limits (4.4) | Partially (oversized conflict, now R9) |
+| 9 | Medium | H-10 missed team overrides and old binaries | `D_calls` in the purge function (6) | Partially (failure semantics, now R8) |
+| 10 | Medium | `CREATE OR REPLACE` drops `TimeZone=UTC` | Restate all settings; tests (3, 6) | Closed |
+| 11 | Low | "Commit order" overstated | Sealing order (2) | Closed |
+
+**Re-check of the revision**: no critical finding, three high. It ran the previous release's real inspector and
+reconciler against `omp_audit` (accepted) and confirmed the sweep covers lock-blocked older-snapshot writers, that
+deleted teams correctly fall back, and that pinned receivers cannot be made to accept rewritten history.
+
+| # | Severity | Finding | Resolution in this version |
 | --- | --- | --- | --- |
-| 1 | High | xmin-below-cursor misses a logical restore once xmin moves past; logical replication keeps publisher xids and bypasses the trigger | Incarnation binding with a halt and a mandatory rebase before serving writes (4.3); the sweep (4.2) as a backstop |
-| 2 | High | The id-floor seam can strand prefetched/overridden ids and mis-restored sequences | Membership is by `txid` (and `txid IS NULL` for history), never by id magnitude; rebase uses a lock-bounded snapshot, not `max(id)` (3, 4.3) |
-| 3 | High | Previous release's reconciler grants full DML on new `public` tables and its inspector requires it | Protected state in a new `omp_audit` schema behind definer functions; previous-image startup/migrate tests; trust scoped to split-role mode (1, 3) |
-| 4 | High | Summary fields were not authenticated | `summary_hash` in record v2 (4.4) |
-| 5 | High | Sealed-only retention can purge before delivery | Durable consumers and acks in slice 1; `410 range_expired`; honest pre-registration behaviour (5.1, 6) |
-| 6 | High | No receiver recovery protocol for rewinds | Tip endpoint, stream-wide receiver state, fork rules, `--resume-after-seq` (5.3) |
-| 7 | Medium | Full canonical form under-specified | Normative versioned specification with listed edge cases (4.4) |
-| 8 | Medium | Inherited 1 KiB line and hex-only CSV limits | Version-2 limits and oversized handling; CSV as a view (4.4) |
-| 9 | Medium | H-10 relation missed team overrides and old binaries | `D_calls` from platform and team settings, enforced in the purge function (6) |
-| 10 | Medium | `CREATE OR REPLACE` drops `TimeZone=UTC` | Restate all settings; hostile-timezone and fail-closed tests (3, 6) |
-| 11 | Low | "Commit order" overstated | Renamed to sealing order (2) |
+| R1 | High | Rebase transaction B cannot lock the state row A changed (SQLSTATE 40001) | B is read-only and only supplies candidates; sealing happens in fresh transactions, fenced by `status = rebasing`; crash recovery specified (4.3) |
+| R2 | High | A purged id reused by a new row matches the old chain entry | Trigger-stamped, never-reused `row_uid` as the chain identity; `legacy_id` only for `NULL`-`txid` history (3, 4.4) |
+| R3 | High | Foreign-xid rows sealed by rebase are selected again by the fast path, stalling it | Fast-path anti-join on `row_uid`; cursor never jumps to foreign xids; stale batches re-read (2, 4.1, 4.3) |
+| R4 | Medium | Definer functions accept caller hashes; hardening unspecified | Summary and chain hashes recomputed in SQL; exact hardening contract; honest scope of `ack`/`set_required` (4.5) |
+| R5 | Medium | Checkpoint timeline stale after promotion; `pg_upgrade` changes the identifier | WAL insertion timeline; explicit `rebind` for major upgrades (4.3) |
+| R6 | Medium | `--resume-after-seq` cannot be a clean continuation; `stream_id` not pinned | Clean continuation versus approved discontinuity; mandatory `stream_id` pinning; advisory tip (5.3) |
+| R7 | Medium | Earliest-available seq misses interior retention holes | Retention removes only a `seq` prefix; contiguous-or-error API; exclusive `after_seq` (5.1, 6) |
+| R8 | Medium | Malformed settings and missing rows unspecified; `greatest` ignores `NULL` | Explicit fail-closed algorithm; strict Go decoding with a parity test (6) |
+| R9 | Medium | Oversized handling contradicted "never downgrade" | Authenticated `oversized` envelope, chunked fetch and ack gating (4.4) |
