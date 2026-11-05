@@ -139,3 +139,21 @@ func TestAuditOversizedFetchAndAck(t *testing.T) {
 		t.Fatalf("ack after fetch: %d %s", code, body)
 	}
 }
+
+func TestAuditVerifyDeclaredGapMarker(t *testing.T) {
+	app := newTestApp(t, nil)
+	admin := app.signIn("admin")
+	ctx := context.Background()
+	owner := testutil.OwnerPool(t, app.Pool)
+	resume := int64(100)
+	if err := (auditstream.Sealer{Pool: owner}).Rebase(ctx, &resume); err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Valid bool `json:"valid"`
+	}
+	code, ec := admin.call("GET", "/v1/admin/audit/verify?from=101&to=101", nil, &result, nil)
+	if code != 200 || !result.Valid {
+		t.Fatalf("gap marker verify: %d %s %+v", code, ec, result)
+	}
+}

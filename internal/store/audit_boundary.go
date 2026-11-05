@@ -28,6 +28,8 @@ func inspectAuditBoundary(ctx context.Context, db RoleDB, role string, required 
  OR (NOT coalesce(p.oid=ANY(ARRAY[to_regprocedure('omp_audit.seal_batch(text,jsonb)'),to_regprocedure('omp_audit.ack(text,bigint)'),to_regprocedure('omp_audit.register_consumer(text,text,boolean,uuid)'),to_regprocedure('omp_audit.set_required(text,boolean)'),to_regprocedure('omp_audit.remove_consumer(text)'),to_regprocedure('omp_audit.record_oversized_fetch(text,bigint)')]),false) AND has_function_privilege($1,p.oid,'EXECUTE'))
  OR EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE')))
  OR NOT EXISTS(SELECT 1 FROM pg_catalog.pg_proc WHERE oid=to_regprocedure('omp_audit.seal_batch(text,jsonb)'))
+ OR (to_regclass('omp_audit.consumers') IS NOT NULL AND
+  (SELECT count(*) FROM unnest(ARRAY[to_regprocedure('omp_audit.ack(text,bigint)'),to_regprocedure('omp_audit.register_consumer(text,text,boolean,uuid)'),to_regprocedure('omp_audit.set_required(text,boolean)'),to_regprocedure('omp_audit.remove_consumer(text)'),to_regprocedure('omp_audit.record_oversized_fetch(text,bigint)')]) f(oid) WHERE f.oid IS NOT NULL)<>5)
  OR NOT EXISTS(SELECT 1 FROM pg_catalog.pg_trigger WHERE tgrelid='public.audit_log'::regclass AND tgname='audit_log_stream_stamp' AND tgfoid=to_regprocedure('omp_audit.stamp()') AND tgtype=7 AND tgenabled IN ('O','A'))
  OR NOT EXISTS(SELECT 1 FROM pg_catalog.pg_trigger WHERE tgrelid=to_regclass('omp_audit.chain') AND tgname='chain_append_only' AND tgfoid=to_regprocedure('omp_audit.append_only()') AND tgtype=27 AND tgenabled IN ('O','A'))`, role, required).Scan(&unsafe)
 	if err != nil {

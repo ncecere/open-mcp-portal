@@ -273,25 +273,39 @@ func (a *api) auditVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var prev [32]byte
-	if from == 1 {
-		var id string
-		err = tx.QueryRow(r.Context(), `SELECT stream_id::text FROM omp_audit.state`).Scan(&id)
-		if err == nil {
-			env, e := auditstream.Read(r.Context(), tx, 1, true)
-			err = e
-			prev = auditstream.Genesis(env.Stream)
-		}
-	} else {
-		var b []byte
-		err = tx.QueryRow(r.Context(), `SELECT chain_hash FROM omp_audit.chain WHERE seq=$1`, from-1).Scan(&b)
-		copy(prev[:], b)
+	first, err := auditstream.Read(r.Context(), tx, from, true)
+	if err == pgx.ErrNoRows {
+		httpx.JSON(w, 200, map[string]any{"valid": false, "first_bad_seq": from})
+		return
 	}
 	if failed(w, r, err) {
 		return
 	}
+	anchor := from - 1
+	if first.Kind == "epoch_start" && first.EpochSummary != nil {
+		anchor = first.EpochSummary.PredecessorSeq
+	}
+	var prev [32]byte
+	if anchor == 0 {
+		prev = auditstream.Genesis(first.Stream)
+	} else {
+		var b []byte
+		err = tx.QueryRow(r.Context(), `SELECT chain_hash FROM omp_audit.chain WHERE seq=$1`, anchor).Scan(&b)
+		if err == pgx.ErrNoRows || (err == nil && len(b) != 32) {
+			httpx.JSON(w, 200, map[string]any{"valid": false, "first_bad_seq": from})
+			return
+		}
+		if failed(w, r, err) {
+			return
+		}
+		copy(prev[:], b)
+	}
 	for n := from; n <= to; n++ {
-		env, err := auditstream.Read(r.Context(), tx, n, true)
+		env := first
+		var err error
+		if n != from {
+			env, err = auditstream.Read(r.Context(), tx, n, true)
+		}
 		if err == pgx.ErrNoRows {
 			var tip int64
 			if err = tx.QueryRow(r.Context(), `SELECT last_seq FROM omp_audit.state WHERE singleton`).Scan(&tip); err != nil {
