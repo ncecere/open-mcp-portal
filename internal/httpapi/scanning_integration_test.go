@@ -119,14 +119,14 @@ func TestScanningPrivacySentinel(t *testing.T) {
 			t.Fatal("metric leaked canary")
 		}
 	}
-	rows, err := app.Pool.Query(ctx, `SELECT tablename FROM pg_tables WHERE schemaname='public'`)
+	rows, err := app.Pool.Query(ctx, `SELECT schemaname,tablename FROM pg_tables WHERE schemaname IN ('public','omp_private')`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var tables []string
+	var tables [][2]string
 	for rows.Next() {
-		var table string
-		if err = rows.Scan(&table); err != nil {
+		var table [2]string
+		if err = rows.Scan(&table[0], &table[1]); err != nil {
 			t.Fatal(err)
 		}
 		tables = append(tables, table)
@@ -134,16 +134,16 @@ func TestScanningPrivacySentinel(t *testing.T) {
 	rows.Close()
 	for _, table := range tables {
 		query := `SELECT coalesce(json_agg(to_jsonb(t)`
-		if table == "mcp_capabilities" {
+		if table[0] == "public" && table[1] == "mcp_capabilities" {
 			query += `-'definition'`
 		}
-		query += `),'[]'::json)::text FROM ` + pgx.Identifier{table}.Sanitize() + ` t`
+		query += `),'[]'::json)::text FROM ` + pgx.Identifier{table[0], table[1]}.Sanitize() + ` t`
 		var dump string
 		if err = app.Pool.QueryRow(ctx, query).Scan(&dump); err != nil {
 			t.Fatal(err)
 		}
 		if strings.Contains(dump, canary) {
-			t.Fatalf("database canary in %s", table)
+			t.Fatalf("database canary in %v", table)
 		}
 	}
 }
