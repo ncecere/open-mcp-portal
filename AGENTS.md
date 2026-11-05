@@ -8,8 +8,9 @@ with an AI agent on this repository. For a fresh machine/session, start with
 - **Resumed 2026-11-05 after v0.13.1.** v0.13.1 (refreshed builder image, OIDC snapshot regression test) is the
   latest release; v0.13.0 shipped catalog search (#49 slice), the list-column fix and #38/#70 groundwork
   (docs/releases/). The owner resumed development with the batch in [docs/status.md](docs/status.md) ("Current
-  batch"): #72 definition scanning (migration 57) and the #38 audit-streaming design (decision 93; migration 58+ if
-  needed). Decisions 94+ and migrations 59+ are unallocated; allocate them from the main thread only. Parked on
+  batch"): #72 definition scanning (migration 57) and #38 audit streaming (decision 93, docs/audit-streaming.md;
+  migrations 58–59 reserved for its slice 1). Decisions 94+ and migrations 60+ are unallocated; allocate them from
+  the main thread only. Parked on
   GitHub: `parked/terraform-provider` (seed for the separate Terraform project) and `parked/keyprovider-transit`
   (#41, deferred). Do not infer v1.0.0 approval. Keep all four reusable Boat VMs and their fixtures/evidence up.
 - **Execution mode.** The main thread owns coordination, review, integration and releases. The owner has explicitly

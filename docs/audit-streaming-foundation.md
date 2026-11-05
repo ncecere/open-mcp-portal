@@ -1,5 +1,8 @@
 # Audit evidence foundation (#38, unwired experiment)
 
+> The build plan that uses this foundation, and settles its open ordering, gap and retention gate, is
+> [audit-streaming.md](audit-streaming.md) (decision 93). Its chain record is version 2 of this format.
+
 `internal/auditevidence` has no runtime callers, database mapping or product
 protocol commitment. Parent review is required before choosing this format.
 It does not implement #38 acceptance, delivery, export authorization or retention.

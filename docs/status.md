@@ -10,10 +10,10 @@ The owner resumed development after reviewing the backlog. 22 issues are open: 1
 | Lane | Issue | Allocation | State |
 | --- | --- | --- | --- |
 | Worker (isolated worktree, Codex) | #72 definition scanning at refresh, shadow only (content-scanning slice 1 backend, F3) | migration `00057`; no new decision (under decision 87) | in progress on `feat/72-definition-scanning`; not merged |
-| Main thread | #38 audit streaming: commit-order, gap-detection and retention design before any sink code | decision 93; migration `00058`+ only if the design needs it | in progress |
+| Main thread | #38 audit streaming: [design](audit-streaming.md) (ordering proven, slices 1–4) | decision 93; migrations `00058`–`00059` reserved for slice 1 | design done 2026-11-05; slice 1 (seal and pull) next |
 | Next | #73 findings UI after #72; #42 Helm when a pilot deployment needs it | – | not started |
 
-#70's acceptance (ledger test, no literal fixtures, CI harness with a recorded hosted baseline, licence refusals, no third-party text) is met for the secret rules; #72 adds the unicode, poison and length corpus groups, and #70 closes when #72 is integrated. Decisions 94+ and migrations 59+ are unallocated; the main thread allocates them.
+#70's acceptance (ledger test, no literal fixtures, CI harness with a recorded hosted baseline, licence refusals, no third-party text) is met for the secret rules; #72 adds the unicode, poison and length corpus groups, and #70 closes when #72 is integrated. Decisions 94+ and migrations 60+ are unallocated; the main thread allocates them.
 
 The development machine is fresh: there is no development instance or `omp` database on it. Integration tests use owned disposable PostgreSQL containers (`omp-test-pg-main` on 55452 for the main thread, `omp-test-pg-w72` on 55453 for the #72 worker), tmpfs-backed. Go 1.26.10 and sqlc 1.31.1 are installed under `~/.local/sdk/go` and `~/go/bin`.
 
