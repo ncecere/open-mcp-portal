@@ -15,6 +15,7 @@ import (
 
 	"github.com/ncecere/open-mcp-portal/internal/apikeys"
 	"github.com/ncecere/open-mcp-portal/internal/approvals"
+	"github.com/ncecere/open-mcp-portal/internal/auditstream"
 	"github.com/ncecere/open-mcp-portal/internal/auth"
 	"github.com/ncecere/open-mcp-portal/internal/automation"
 	"github.com/ncecere/open-mcp-portal/internal/buildinfo"
@@ -133,6 +134,9 @@ func Run(ctx context.Context, mode string, cfg config.Config, log *slog.Logger) 
 	go deps.Providers.RefreshLoop(loopCtx, cfg.ProviderRefreshInterval, log)
 	go deps.Identity.RotationLoop(loopCtx, log)
 	go deps.Retention.Loop(loopCtx)
+	if cfg.AuditStreamEnabled {
+		go (auditstream.Sealer{Pool: pool}).Loop(loopCtx, log)
+	}
 	go deps.Usage.Loop(loopCtx)
 	go rateCounterLoop(loopCtx, deps.RateStore, log)
 	servers := []*http.Server{srv}
