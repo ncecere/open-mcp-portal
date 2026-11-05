@@ -108,7 +108,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger, runtimeR
 		defer cancel()
 		_ = conn.Close(closeCtx) // also releases the session lock
 	}()
-	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", migrationLockKey); err != nil {
+	if err := acquireMigrationLock(ctx, conn); err != nil {
 		return fmt.Errorf("migration lock: %w", err)
 	}
 	defer func() {
@@ -176,4 +176,32 @@ func NotFound(err error) error {
 // ESCAPE '\'.
 func EscapeLike(s string) string {
 	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+}
+
+// acquireMigrationLock polls pg_try_advisory_lock instead of blocking in
+// pg_advisory_lock. A session blocked in pg_advisory_lock holds a snapshot for
+// as long as it waits, and CREATE INDEX CONCURRENTLY (migration 00059) waits for
+// every older snapshot: the lock holder would wait for the waiters while they
+// wait for it. PostgreSQL then aborts one side with "deadlock detected", and
+// replicas starting together (each runs migrate) kept failing. Between polls a
+// waiter is idle and holds no snapshot.
+func acquireMigrationLock(ctx context.Context, conn *pgx.Conn) error {
+	wait := 100 * time.Millisecond
+	for {
+		var got bool
+		if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", migrationLockKey).Scan(&got); err != nil {
+			return err
+		}
+		if got {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(wait):
+		}
+		if wait < time.Second {
+			wait *= 2
+		}
+	}
 }
