@@ -1,9 +1,25 @@
 # Status and handoff
 
-Last updated: 2026-11-01. Open MCP Portal (formerly Open MCP Gateway, decision46): **[v0.13.1](releases/v0.13.1.md) is the latest release, and `main` is exactly its tagged commit; development is paused.** v0.13.1 only refreshes the Go builder image and adds an OIDC group-snapshot regression test; its validation and independent verification are on the [GitHub Release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.13.1). Pick-up-later work is parked on `parked/terraform-provider` (for the separate Terraform project) and `parked/keyprovider-transit` (#41, deferred). Previous: **[v0.13.0](releases/v0.13.0.md) is published and independently verified.** Source `957d922` (tested runtime `77fe6f7`), image index `sha256:29259a050743d6e34eb0ceefd8e1f925da140277bc07e4877add500a1ba5e2eb`, pinned in the example overlay. It ships approved-capability catalog search (#49 slice), list columns that follow window resizing, unwired #38 audit-evidence and #70 scanning-corpus groundwork and dependency updates, with no migrations. Per the owner (merge the outstanding items, cut a release, then pause), **development and worker assignments are paused until the owner explicitly resumes them**; the four reusable Boat VMs stay up. The Terraform provider is a separate project and direct Vault/OpenBao integration (#41) is deferred. Previous release: **[v0.12.0](releases/v0.12.0.md), [SCIM 2.0 provisioning](scim.md) (#36), is published and independently verified.** Source `bf5660d` (tested runtime `5e5c788`), image index `sha256:be6969216aa7972d333c6ad9cae6de8eaa875a38c3fb1153f63c2e0deb4072ef`, pinned in the example overlay. Evidence covers four frozen full PostgreSQL suites, 900 browser tests, main CI, Kubernetes smoke, upgrade from v0.11.0 with the breaking-migration canary, load, keyless signatures/provenance/SBOMs, six byte-identical CLI rebuilds, and a published-image runtime acceptance against a local authentik. Decisions 93+ and migrations 57+ are unallocated. v1.0.0 remains the owner's decision. A fresh agent should read [agent-handoff.md](agent-handoff.md).
+Last updated: 2026-11-05. Open MCP Portal (formerly Open MCP Gateway, decision46): **[v0.13.1](releases/v0.13.1.md) is the latest release; the owner resumed development on 2026-11-05** with the batch below. v0.13.1 only refreshes the Go builder image and adds an OIDC group-snapshot regression test; its validation and independent verification are on the [GitHub Release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.13.1). Pick-up-later work is parked on `parked/terraform-provider` (for the separate Terraform project) and `parked/keyprovider-transit` (#41, deferred). Previous: **[v0.13.0](releases/v0.13.0.md)** (source `957d922`, image index `sha256:29259a050743d6e34eb0ceefd8e1f925da140277bc07e4877add500a1ba5e2eb`, pinned in the example overlay) ships approved-capability catalog search (#49 slice), list columns that follow window resizing, unwired #38 audit-evidence and #70 scanning-corpus groundwork and dependency updates, with no migrations. **[v0.12.0](releases/v0.12.0.md)** shipped [SCIM 2.0 provisioning](scim.md) (#36): source `bf5660d`, image index `sha256:be6969216aa7972d333c6ad9cae6de8eaa875a38c3fb1153f63c2e0deb4072ef`. The Terraform provider is a separate project and direct Vault/OpenBao integration (#41) is deferred. v1.0.0 remains the owner's decision. A fresh agent should read [agent-handoff.md](agent-handoff.md).
 (release notes: [releases/v0.10.0.md](releases/v0.10.0.md), [v0.9.0](releases/v0.9.0.md), [v0.8.0](releases/v0.8.0.md); earlier: [v0.7.0](releases/v0.7.0.md), [v0.6.0](releases/v0.6.0.md), [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
-## Current batch: SCIM provisioning (#36) and one catalog-search side lane
+## Current batch (resumed 2026-11-05)
+
+The owner resumed development after reviewing the backlog. 22 issues are open: 14 development and eight real-world evidence issues (#13–#20). Real-world evidence, not features, is the main gap; the owner-side checks (#14/#15 VS Code/Cursor, #17 token refresh, #20 pilot criteria) run alongside this batch.
+
+| Lane | Issue | Allocation | State |
+| --- | --- | --- | --- |
+| Worker (isolated worktree, Codex) | #72 definition scanning at refresh, shadow only (content-scanning slice 1 backend, F3) | migration `00057`; no new decision (under decision 87) | in progress on `feat/72-definition-scanning`; not merged |
+| Main thread → worker | #38 audit streaming: [design](audit-streaming.md) (ordering proven; two independent reviews, all findings addressed) | decision 93; migrations `00058`–`00059` | **Slice 1a merged locally** (`f3739af` + review fixes `365da93`, not pushed): `omp_audit` schema, forced `txid`/`row_uid` stamping, hardened `seal_batch` (SQL-recomputed summary/chain hashes, no skipped rows), [record v2 spec](audit-record-v2.md) with Go/SQL/Python vectors, disabled-by-default sealer (`AUDIT_STREAM_ENABLED`). Evidence: worker's full split-role gate passed (914 s); after the review fixes, `auditstream`/`testutil` pass with `-race` in both modes including the actual v0.13.1 executable at schema 58/59; full role0 gate rerunning. Next: 1b (incarnation halt, rebind/rebase, sweep), 1c (consumers, APIs, purge interlock), migrations 60+; the setting stays off until all of slice 1 passes. |
+| Next | #73 findings UI after #72; #42 Helm when a pilot deployment needs it | – | not started |
+
+#70's acceptance (ledger test, no literal fixtures, CI harness with a recorded hosted baseline, licence refusals, no third-party text) is met for the secret rules; #72 adds the unicode, poison and length corpus groups, and #70 closes when #72 is integrated. Decisions 94+ and migrations 60+ are unallocated; the main thread allocates them.
+
+The development machine is fresh: there is no development instance or `omp` database on it. Integration tests use owned disposable PostgreSQL containers (`omp-test-pg-main` on 55452 for the main thread, `omp-test-pg-w72` on 55453 for the #72 worker), tmpfs-backed. Go 1.26.10 and sqlc 1.31.1 are installed under `~/.local/sdk/go` and `~/go/bin`.
+
+### History: v0.12.0 SCIM batch notes (shipped)
+
+*Written before v0.12.0/v0.13.0; both have since shipped (see the release notes). Kept as the development record.*
 
 **[SCIM 2.0 provisioning](scim.md) is implemented on `feat/scim-lifecycle-contract`, not yet merged or released** (decision 92, migration54). One directory bound to the configured OIDC issuer; `ompscim_` directory tokens for `/scim/v2` only; Users/Groups with atomic ordered PATCH, `eq` filters, pagination, weak ETags and discovery; enrollment at verified sign-in (`externalId` = OIDC subject), explicit admin adoption, protected admins/owners, separate manual and directory standing derived into the existing effective status, deactivation as a non-key fence, deletion with bounded retried clean-up and admin re-enrollment, and group-to-team-role mappings that never change manual memberships. Admin › Provisioning manages it. Retained end-to-end tests drive enrollment, fencing, deletion, clean-up contention and the deactivation-versus-enrollment race through real sign-ins and HTTP. Full four-mode suites, previous-image schema54 compatibility, a real local Authentik push, CI and release gates are the remaining acceptance steps.
 
@@ -896,7 +912,7 @@ server allow-list).
   database. They were deliberately not exported or committed. Use a fresh development instance, or securely
   transfer a consistent database backup and its required keys separately under explicit operator control.
   Do not regenerate encryption keys for an existing database or migrate/reset the old instance implicitly.
-- **Development is paused after v0.13.1** until the owner explicitly resumes it. Inspect open issues and current
+- **Development resumed on 2026-11-05** (see "Current batch"). Inspect open issues and current
   Git/CI before choosing work; v1.0.0 requires the owner's explicit decision.
 
 For a **new** development instance, use [development setup](../CONTRIBUTING.md#development-setup), not a
@@ -905,8 +921,8 @@ blind restart/seed of an existing one. The historical dev-database migration hel
 
 ## Next steps
 
-0. **Paused after v0.13.1** (`main` = the tag; parked branches `parked/terraform-provider`, `parked/keyprovider-transit`). Wait for the owner's explicit resumption, then re-read
-   [agent-handoff.md](agent-handoff.md). The items below are historical.
+0. **Resumed 2026-11-05:** follow "Current batch" at the top of this file (#72 worker lane, #38 design on the
+   main thread, owner-side real-world checks). The items below are historical.
 1. v0.4.0 is published and verified; #26/#29/#30/#44/#68 are closed with acceptance evidence. Its follow-up
    documentation/image-pin CI and both smoke jobs also passed. Keep the immutable release tag/digest intact.
 2. **Historical machine-transfer stop point completed:** #31 shipped in verified v0.5.0 and is closed. The

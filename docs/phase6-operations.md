@@ -195,6 +195,7 @@ key, service account or request IDs.
 | `omp_machine_token_requests_total` | result (`ok`, `refused`, `unavailable`): token endpoint requests for servers in `machine_oauth` mode ([machine-oauth.md](machine-oauth.md)), not cache hits |
 | `omp_server_health_checks_total`, `omp_mcp_servers` (gauge) | result / health state |
 | `omp_http_requests_total`, `omp_http_request_duration_seconds` | route (registered pattern), method, code class |
+| `omp_audit_stream_lag_seconds`, `omp_audit_stream_sealed_total` | none; experimental sealing core, disabled by default |
 | `omp_retention_deleted_total`, `omp_retention_last_success_timestamp_seconds` | kind |
 | `omp_usage_rollup_last_success_timestamp_seconds`, `omp_loop_leader` | loop |
 | `omp_db_pool_*` (acquired, idle, total, max, acquire count and wait) | — |

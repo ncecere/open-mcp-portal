@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type AccessRequest struct {
@@ -146,6 +147,8 @@ type AuditLog struct {
 	ActorTokenID   uuid.NullUUID
 	ActorTokenName *string
 	ActorTokenKind *string
+	Txid           pgtype.Uint64
+	RowUid         uuid.NullUUID
 }
 
 type AuthProvider struct {
@@ -716,6 +719,36 @@ type OauthToken struct {
 	RotatedAt *time.Time
 	CreatedAt time.Time
 	PepperID  []byte
+}
+
+type OmpAuditChain struct {
+	Seq         int64
+	Kind        string
+	RowUid      uuid.NullUUID
+	LegacyID    *int64
+	AuditID     *int64
+	Epoch       int32
+	Flags       int16
+	OccurredAt  time.Time
+	SummaryHash []byte
+	EntryHash   []byte
+	ChainHash   []byte
+	SealedAt    time.Time
+}
+
+type OmpAuditState struct {
+	Singleton        bool
+	StreamID         uuid.UUID
+	SystemIdentifier string
+	Timeline         int64
+	Epoch            int32
+	Status           string
+	CursorTxid       pgtype.Uint64
+	CursorID         int64
+	HistoryID        int64
+	LastSeq          int64
+	LastChainHash    []byte
+	SweepAt          *time.Time
 }
 
 type OmpPrivateApprovalBindingKey struct {
