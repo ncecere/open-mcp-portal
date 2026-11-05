@@ -461,3 +461,8 @@ flag reserves 64 KiB of envelope space below the 16 MiB wire limit. Consumer lag
 metrics aggregate maxima with four bounded profile/required label combinations.
 No consumer-name labels are emitted. Checkpoints, signing, push delivery and UI
 remain future slices. The Vector example requires a durable cursor-aware adapter.
+
+New consumers enroll at the protected `purged_seq` boundary. Starting them at zero
+would permanently block a full consumer on a previously purged oversized row that
+can no longer be fetched. This enrollment boundary does not claim delivery of
+unavailable history; receiver approval of an initial anchor remains explicit.

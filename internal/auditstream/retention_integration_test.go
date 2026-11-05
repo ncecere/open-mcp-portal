@@ -133,7 +133,7 @@ func TestRetentionTenThousandTeams(t *testing.T) {
 func TestOversizedAckInterlock(t *testing.T) {
 	p, _ := testutil.NewDB(t)
 	cleanAuditFixture(t, p)
-	exec(t, p, `INSERT INTO public.audit_log(actor_kind,action,target_type,metadata) VALUES('system','test','test',jsonb_build_object('large',repeat('x',17*1024*1024)))`)
+	exec(t, p, `INSERT INTO public.audit_log(actor_kind,action,target_type,metadata,occurred_at) VALUES('system','test','test',jsonb_build_object('large',repeat('x',17*1024*1024)),now()-interval '500 days')`)
 	drain(t, p)
 	if count(t, p, `SELECT flags::bigint FROM omp_audit.chain WHERE seq=1`)&2 == 0 {
 		t.Fatal("missing oversized flag")
@@ -144,6 +144,15 @@ func TestOversizedAckInterlock(t *testing.T) {
 	}
 	exec(t, p, `SELECT omp_audit.record_oversized_fetch('full',1)`)
 	exec(t, p, `SELECT omp_audit.ack('full',1)`)
+	if n := count(t, p, `SELECT public.omp_purge_audit_log(30,100)`); n != 1 {
+		t.Fatalf("purged %d", n)
+	}
+	exec(t, p, `SELECT omp_audit.register_consumer('new-full','full',true,$1)`, uuid.New())
+	if n := count(t, p, `SELECT acked_seq FROM omp_audit.consumers WHERE name='new-full'`); n != 1 {
+		t.Fatalf("enrollment did not start at purged prefix: %d", n)
+	}
+	exec(t, p, `SELECT omp_audit.ack('new-full',1)`)
+
 }
 
 func cleanAuditFixture(t *testing.T, p *pgxpool.Pool) {

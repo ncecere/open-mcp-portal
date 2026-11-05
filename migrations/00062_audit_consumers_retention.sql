@@ -36,11 +36,12 @@ END $$;
 -- +goose StatementBegin
 CREATE FUNCTION omp_audit.register_consumer(consumer text, profile text, required boolean, created_by uuid) RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp SET TimeZone = 'UTC' AS $$
+DECLARE start_seq bigint;
 BEGIN
  IF consumer IS NULL OR consumer !~ '^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$' OR profile IS NULL OR profile NOT IN ('summary','full') OR required IS NULL OR created_by IS NULL THEN RAISE EXCEPTION 'invalid consumer'; END IF;
- PERFORM 1 FROM omp_audit.retention_floor WHERE singleton FOR UPDATE;
+ SELECT purged_seq INTO STRICT start_seq FROM omp_audit.retention_floor WHERE singleton FOR UPDATE;
  IF (SELECT count(*) FROM omp_audit.consumers)>=100 THEN RAISE EXCEPTION 'consumer limit'; END IF;
- INSERT INTO omp_audit.consumers(name,profile,required,created_by) VALUES(consumer,profile,required,created_by);
+ INSERT INTO omp_audit.consumers(name,profile,required,created_by,acked_seq) VALUES(consumer,profile,required,created_by,start_seq);
  UPDATE omp_audit.retention_floor SET consumer_revision=consumer_revision+1 WHERE singleton;
 END $$;
 -- +goose StatementEnd

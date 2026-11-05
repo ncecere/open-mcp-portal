@@ -985,6 +985,8 @@ including `?consumer=siem`, verify the canonical full-entry digest, and only the
 POST `{"consumer":"siem","seq":123}` to `/v1/admin/audit/stream/ack`.
 `sql_null_json` identifies SQL NULL JSON columns; JSON null remains a present
 canonical value. Full consumers cannot acknowledge past unfetched oversized rows.
+A newly registered consumer starts at the already-purged prefix; it never claims
+delivery of unavailable history. Reconcile that enrollment discontinuity explicitly.
 Required consumers block age-based purge at their acknowledged sequence. Removing
 or making one optional releases that protection, so investigate collector lag first.
 Consumer lag metrics aggregate the maximum by profile/required status, never names.
