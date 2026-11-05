@@ -911,7 +911,9 @@ and sets cursor `(F,0)`. It releases the lock before streaming snapshot candidat
 through fresh READ COMMITTED sealing transactions. Foreign xids never advance the
 cursor. A persisted pending marker separates the fence commit from the first
 chain record. Rerun the same command after a crash: it takes a fresh bounded
-snapshot, keeps the unfinished epoch, and never repeats a committed marker.
+snapshot, keeps the unfinished epoch, and never repeats a committed marker. A
+promotion during rebase adds its own timeline epoch before any further data
+records; a pending rebase marker is appended before that timeline marker.
 
 For a known rewind where receivers already hold higher sequences, use
 `open-mcp-portal audit-stream rebase --resume-after-seq=N` with N greater than the

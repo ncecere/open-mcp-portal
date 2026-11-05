@@ -19,6 +19,15 @@ func TestPhysicalPromotion(t *testing.T) {
 	if os.Getenv("OMP_TEST_PHYSICAL_PROMOTION") != "1" {
 		t.Skip("set OMP_TEST_PHYSICAL_PROMOTION=1 for the owned Docker promotion fixture")
 	}
+	for _, phase := range []string{"running", "pending", "marked"} {
+		t.Run(phase, func(t *testing.T) { physicalPromotionFixture(t, phase) })
+	}
+}
+
+func physicalPromotionFixture(t *testing.T, phase string) {
+	if os.Getenv("OMP_TEST_PHYSICAL_PROMOTION") != "1" {
+		t.Skip("set OMP_TEST_PHYSICAL_PROMOTION=1 for the owned Docker promotion fixture")
+	}
 	docker := func(args ...string) string {
 		t.Helper()
 		out, err := osexec.Command("docker", args...).CombinedOutput()
@@ -69,6 +78,13 @@ func TestPhysicalPromotion(t *testing.T) {
 	}
 	db.Close()
 	drain(t, p)
+	if phase != "running" {
+		exec(t, p, `SELECT omp_audit.prepare_epoch('rebase',NULL)`)
+		exec(t, p, `UPDATE omp_audit.state SET status='rebasing',rebase_f=pg_current_xact_id(),cursor_txid=pg_current_xact_id(),cursor_id=0`)
+		if phase == "marked" {
+			exec(t, p, `SELECT omp_audit.append_epoch(NULL)`)
+		}
+	}
 	docker("exec", primary, "sh", "-c", `printf '\nhost replication all 0.0.0.0/0 scram-sha-256\n' >> /var/lib/postgresql/data/pg_hba.conf`)
 	exec(t, p, `SELECT pg_reload_conf()`)
 	ip := docker("inspect", "--format", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", primary)
@@ -81,7 +97,12 @@ func TestPhysicalPromotion(t *testing.T) {
 	if count(t, r, `SELECT pg_is_in_recovery()::int`) != 0 {
 		t.Fatal("promotion did not complete")
 	}
-	if _, err = (Sealer{r}).Batch(ctx); err != nil {
+	if phase == "running" {
+		_, err = (Sealer{r}).Batch(ctx)
+	} else {
+		err = (Sealer{r}).Rebase(ctx, nil)
+	}
+	if err != nil {
 		t.Fatal(err)
 	}
 	checkEpoch(t, r)

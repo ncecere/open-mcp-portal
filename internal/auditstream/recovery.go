@@ -117,6 +117,9 @@ func (s Sealer) rebase(ctx context.Context, resume *int64, hook func(string)) er
 			return fmt.Errorf("incarnation changed while preparing rebase marker")
 		}
 	}
+	if _, err = s.Pool.Exec(ctx, `SELECT omp_audit.seal_batch('check','[]'::jsonb)`); err != nil {
+		return err
+	}
 	if hook != nil {
 		hook("marked")
 	}
@@ -219,6 +222,10 @@ func (s Sealer) Sweep(ctx context.Context) (int64, error) {
 }
 
 func (s Sealer) sealIDs(ctx context.Context, mode string, ids []int64, expected ...map[int64]*uuid.UUID) error {
+	// Commit an incarnation transition before reading the prefix used for hashes.
+	if _, err := s.Pool.Exec(ctx, `SELECT omp_audit.seal_batch('check','[]'::jsonb)`); err != nil {
+		return err
+	}
 	halted := false
 	err := pgx.BeginTxFunc(ctx, s.Pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
 		var stream uuid.UUID

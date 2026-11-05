@@ -521,3 +521,35 @@ func TestRebindRefreshesTimelineWithoutEpoch(t *testing.T) {
 		t.Fatal("rebind caused an unintended epoch")
 	}
 }
+
+func TestTimelineChangeDuringRebase(t *testing.T) {
+	for _, marked := range []bool{false, true} {
+		t.Run(fmt.Sprint(marked), func(t *testing.T) {
+			p, _ := testutil.NewDB(t)
+			o := testutil.OwnerPool(t, p)
+			drain(t, p)
+			exec(t, o, `SELECT omp_audit.prepare_epoch('rebase',NULL)`)
+			exec(t, o, `UPDATE omp_audit.state SET status='rebasing',rebase_f=pg_current_xact_id(),cursor_txid=pg_current_xact_id(),cursor_id=0`)
+			// Model the old incarnation in state and its already prepared declaration;
+			// the live insertion timeline now differs, exactly as after promotion.
+			exec(t, o, `UPDATE omp_audit.state SET timeline=timeline+1,epoch_pending=jsonb_set(jsonb_set(epoch_pending,'{summary,old_timeline}',to_jsonb(timeline+1)),'{summary,new_timeline}',to_jsonb(timeline+1))`)
+			if marked {
+				exec(t, o, `SELECT omp_audit.append_epoch(NULL)`)
+			}
+			var id int64
+			if err := p.QueryRow(ctx, insert).Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			if err := (Sealer{o}).Rebase(ctx, nil); err != nil {
+				t.Fatal(err)
+			}
+			if count(t, p, `SELECT count(*) FROM omp_audit.chain WHERE kind='epoch_start'`) != 2 {
+				t.Fatal("missing or duplicated transition")
+			}
+			if count(t, p, `SELECT count(*) FROM omp_audit.chain WHERE kind='entry' AND epoch=3 AND audit_id=$1`, id) != 1 {
+				t.Fatal("data used the pre-promotion epoch")
+			}
+			checkEpoch(t, p)
+		})
+	}
+}

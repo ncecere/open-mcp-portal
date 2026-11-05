@@ -50,24 +50,32 @@ END $$;
 CREATE OR REPLACE FUNCTION omp_audit.seal_batch(mode text, records jsonb) RETURNS bigint
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp SET TimeZone = 'UTC' AS $$
 DECLARE s omp_audit.state%ROWTYPE; a public.audit_log%ROWTYPE; r jsonb;
- n bigint := 0; sh bytea; eh bytea; ch bytea; ident bytea; uid uuid; lid bigint; seq bigint; flags integer; sweep_end bigint;
+ n bigint := 0; sh bytea; eh bytea; ch bytea; ident bytea; uid uuid; lid bigint; seq bigint; flags integer; sweep_end bigint; live_timeline bigint;
 BEGIN
  IF mode IS NULL OR mode NOT IN ('history','fast','rebase','sweep','check','epoch','sweep_done','sweep_begin') OR records IS NULL OR jsonb_typeof(records)<>'array' THEN RAISE EXCEPTION 'invalid batch'; END IF;
  IF mode NOT IN ('check','sweep_begin') AND jsonb_array_length(records) NOT BETWEEN 1 AND 1000 THEN RAISE EXCEPTION 'invalid batch length'; END IF;
  IF mode IN ('check','sweep_begin') AND jsonb_array_length(records)<>0 THEN RAISE EXCEPTION 'control batch must be empty'; END IF;
  SELECT * INTO STRICT s FROM omp_audit.state WHERE singleton FOR UPDATE;
+ live_timeline := ('x'||substr(pg_walfile_name(pg_current_wal_lsn()),1,8))::bit(32)::bigint;
  IF s.system_identifier<>(pg_control_system()).system_identifier::text THEN
   UPDATE omp_audit.state SET status='halted_incarnation' WHERE singleton;
   RETURN 0;
  END IF;
- IF s.status='running' AND s.timeline<>('x'||substr(pg_walfile_name(pg_current_wal_lsn()),1,8))::bit(32)::bigint THEN
+ IF s.status IN ('running','rebasing') AND s.epoch_pending IS NULL AND s.timeline<>live_timeline THEN
   PERFORM omp_audit.prepare_epoch('timeline',NULL);
   PERFORM omp_audit.append_epoch(NULL);
   SELECT * INTO STRICT s FROM omp_audit.state WHERE singleton;
  END IF;
  IF mode='epoch' THEN
   IF s.status<>'rebasing' OR jsonb_array_length(records)<>1 OR records->0->>'kind' IS DISTINCT FROM 'epoch_start' OR records->0->>'summary_hash' IS NULL OR records->0->>'row_uid' IS NOT NULL OR records->0->>'legacy_id' IS NOT NULL OR coalesce((records->0->>'flags')::int,0)<>0 THEN RAISE EXCEPTION 'invalid epoch batch'; END IF;
-  PERFORM omp_audit.append_epoch(records->0->>'summary_hash'); RETURN 1;
+  PERFORM omp_audit.append_epoch(records->0->>'summary_hash');
+  -- Preserve the lock-bounded rebase marker first, then describe a promotion
+  -- that happened while that marker was pending. No data uses the old epoch.
+  IF s.timeline<>live_timeline THEN
+   PERFORM omp_audit.prepare_epoch('timeline',NULL);
+   PERFORM omp_audit.append_epoch(NULL);
+  END IF;
+  RETURN 1;
  END IF;
  IF mode='check' THEN RETURN 0; END IF;
  IF (mode='rebase' AND s.status<>'rebasing') OR (mode<>'rebase' AND s.status<>'running') THEN RAISE EXCEPTION 'stale stream status' USING ERRCODE='40001'; END IF;
