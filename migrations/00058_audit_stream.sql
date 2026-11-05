@@ -16,6 +16,9 @@ CREATE TABLE omp_audit.state (
  stream_id uuid NOT NULL, system_identifier text NOT NULL, timeline bigint NOT NULL,
  epoch integer NOT NULL CHECK (epoch>0), status text NOT NULL CHECK (status IN ('running','halted_incarnation','rebasing')),
  cursor_txid xid8 NOT NULL DEFAULT '0', cursor_id bigint NOT NULL DEFAULT 0,
+ -- History rows (txid IS NULL) are sealed in id order; their set is final once this
+ -- migration commits, so the largest sealed legacy id is a complete history cursor.
+ history_id bigint NOT NULL DEFAULT 0 CHECK (history_id>=0),
  last_seq bigint NOT NULL DEFAULT 0 CHECK (last_seq>=0), last_chain_hash bytea NOT NULL CHECK (octet_length(last_chain_hash)=32), sweep_at timestamptz
 );
 INSERT INTO omp_audit.state (stream_id,system_identifier,timeline,epoch,status,last_chain_hash)
@@ -74,7 +77,8 @@ BEGIN
  IF jsonb_array_length(records) NOT BETWEEN 1 AND 1000 THEN RAISE EXCEPTION 'invalid batch length'; END IF;
  SELECT * INTO STRICT s FROM omp_audit.state WHERE singleton FOR UPDATE;
  IF (mode='rebase' AND s.status<>'rebasing') OR (mode<>'rebase' AND s.status<>'running') THEN RAISE EXCEPTION 'stale stream status' USING ERRCODE='40001'; END IF;
- IF mode='fast' AND EXISTS (SELECT 1 FROM public.audit_log h WHERE h.txid IS NULL AND NOT EXISTS (SELECT 1 FROM omp_audit.chain c WHERE c.legacy_id=h.id)) THEN RAISE EXCEPTION 'history pending'; END IF;
+ -- Index probes only (00059's partial indexes): no per-batch scan of audit_log.
+ IF mode='fast' AND EXISTS (SELECT 1 FROM public.audit_log h WHERE h.txid IS NULL AND h.id>s.history_id) THEN RAISE EXCEPTION 'history pending'; END IF;
  FOR r IN SELECT value FROM jsonb_array_elements(records) LOOP
   seq := (r->>'seq')::bigint; flags := (r->>'flags')::integer;
   uid := (r->>'row_uid')::uuid; lid := (r->>'legacy_id')::bigint;
@@ -85,9 +89,21 @@ BEGIN
    SELECT * INTO STRICT a FROM public.audit_log WHERE id=lid AND txid IS NULL;
   END IF;
   IF EXISTS (SELECT 1 FROM omp_audit.chain c WHERE c.row_uid=uid OR c.legacy_id=lid) THEN RAISE EXCEPTION 'stale identity' USING ERRCODE='40001'; END IF;
-  IF mode='history' AND a.txid IS NOT NULL THEN RAISE EXCEPTION 'not history'; END IF;
+  IF mode='history' THEN
+   IF a.txid IS NOT NULL OR lid<=s.history_id THEN RAISE EXCEPTION 'not history or history regression'; END IF;
+   -- A caller cannot skip history: this must be the next history row after the cursor
+   -- (an index probe on audit_log_history_idx).
+   IF (SELECT min(g.id) FROM public.audit_log g WHERE g.txid IS NULL AND g.id>s.history_id) IS DISTINCT FROM lid THEN RAISE EXCEPTION 'history gap'; END IF;
+  END IF;
   IF mode='fast' THEN
    IF a.txid IS NULL OR (a.txid,a.id)<=(s.cursor_txid,s.cursor_id) OR a.txid>=pg_snapshot_xmin(pg_current_snapshot()) THEN RAISE EXCEPTION 'cursor regression or unsafe watermark'; END IF;
+   -- A caller cannot skip rows: this must be the next unchained row after the cursor (rows
+   -- a rebase already sealed are passed over). Any earlier row has a txid below this row's,
+   -- which is below the watermark, so it is committed and visible: no false positives.
+   -- Written as ORDER BY ... LIMIT 1 so the plan is an ordered index scan with a unique-index
+   -- probe per row, not a range anti-join the planner cannot estimate for xid8 rows.
+   IF (SELECT g.row_uid FROM public.audit_log g WHERE g.txid IS NOT NULL AND (g.txid,g.id)>(s.cursor_txid,s.cursor_id)
+       AND NOT EXISTS (SELECT 1 FROM omp_audit.chain c WHERE c.row_uid=g.row_uid) ORDER BY g.txid,g.id LIMIT 1) IS DISTINCT FROM uid THEN RAISE EXCEPTION 'watermark gap'; END IF;
   END IF;
   sh := decode(r->>'summary_hash','hex'); eh := decode(r->>'entry_hash','hex'); ch := decode(r->>'chain_hash','hex');
   IF sh IS NULL OR eh IS NULL OR ch IS NULL OR octet_length(sh)<>32 OR octet_length(eh)<>32 OR octet_length(ch)<>32 THEN RAISE EXCEPTION 'invalid digest'; END IF;
@@ -98,9 +114,10 @@ BEGIN
   VALUES(seq,'entry',uid,lid,a.id,s.epoch,flags,a.occurred_at,sh,eh,ch);
   s.last_seq := seq; s.last_chain_hash := ch;
   IF mode='fast' THEN s.cursor_txid:=a.txid; s.cursor_id:=a.id; END IF;
+  IF mode='history' THEN s.history_id:=lid; END IF;
   n:=n+1;
  END LOOP;
- UPDATE omp_audit.state SET last_seq=s.last_seq,last_chain_hash=s.last_chain_hash,cursor_txid=s.cursor_txid,cursor_id=s.cursor_id WHERE singleton;
+ UPDATE omp_audit.state SET last_seq=s.last_seq,last_chain_hash=s.last_chain_hash,cursor_txid=s.cursor_txid,cursor_id=s.cursor_id,history_id=s.history_id WHERE singleton;
  RETURN n;
 END $$;
 -- +goose StatementEnd

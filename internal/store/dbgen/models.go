@@ -745,6 +745,7 @@ type OmpAuditState struct {
 	Status           string
 	CursorTxid       pgtype.Uint64
 	CursorID         int64
+	HistoryID        int64
 	LastSeq          int64
 	LastChainHash    []byte
 	SweepAt          *time.Time

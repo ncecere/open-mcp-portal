@@ -258,11 +258,15 @@ func candidate(t *testing.T, p *pgxpool.Pool) Record {
 	return rec
 }
 func TestSealBatchRejects(t *testing.T) {
-	for _, name := range []string{"summary", "chain", "seq", "digest", "oversize", "rebasing", "cursor", "reused", "kind", "flags", "empty"} {
+	for _, name := range []string{"summary", "chain", "seq", "digest", "oversize", "rebasing", "cursor", "reused", "kind", "flags", "empty", "gap"} {
 		t.Run(name, func(t *testing.T) {
 			p, _ := testutil.NewDB(t)
 			owner := testutil.OwnerPool(t, p)
 			drain(t, p)
+			if name == "gap" {
+				// An unsealed committed row below the candidate: sealing the candidate alone would skip it.
+				exec(t, p, `INSERT INTO public.audit_log(actor_kind,action,target_type) VALUES('system','skipped','test')`)
+			}
 			rec := candidate(t, p)
 			waitWatermark(t, p)
 			mode := "fast"
@@ -299,7 +303,7 @@ func TestSealBatchRejects(t *testing.T) {
 			}
 			before := count(t, p, `SELECT last_seq FROM omp_audit.state`)
 			_, err = p.Exec(ctx, `SELECT omp_audit.seal_batch($1,$2::jsonb)`, mode, raw)
-			expected := map[string]string{"summary": "summary mismatch", "chain": "chain mismatch", "seq": "invalid record", "digest": "invalid digest", "oversize": "invalid batch length", "rebasing": "stale stream status", "cursor": "cursor regression", "reused": "stale identity", "kind": "invalid record", "flags": "invalid record", "empty": "invalid batch length"}[name]
+			expected := map[string]string{"summary": "summary mismatch", "chain": "chain mismatch", "seq": "invalid record", "digest": "invalid digest", "oversize": "invalid batch length", "rebasing": "stale stream status", "cursor": "cursor regression", "reused": "stale identity", "kind": "invalid record", "flags": "invalid record", "empty": "invalid batch length", "gap": "watermark gap"}[name]
 			if err == nil || !strings.Contains(err.Error(), expected) {
 				t.Fatalf("expected %s, got %v", expected, err)
 			}
@@ -538,5 +542,73 @@ func TestBatchRollbackAndStaleReread(t *testing.T) {
 	drain(t, p)
 	if count(t, p, `SELECT last_seq FROM omp_audit.state`) != before+2 {
 		t.Fatal("rollback created gap or stale candidate stranded row")
+	}
+}
+
+// History is sealed strictly in id order: a caller cannot seal a later legacy
+// row past an unsealed earlier one, nor go back below the history cursor.
+func TestHistoryCannotSkip(t *testing.T) {
+	p, _ := testutil.NewDBWithMigration(t, func(ctx context.Context, owner *pgxpool.Pool, role string) error {
+		db := stdlib.OpenDBFromPool(owner)
+		defer db.Close()
+		provider, err := goose.NewProvider(goose.DialectPostgres, db, migrations.FS)
+		if err != nil {
+			return err
+		}
+		if _, err := provider.UpTo(ctx, 56); err != nil {
+			return err
+		}
+		exec(t, owner, `BEGIN; SET LOCAL omp.audit_purge='on'; DELETE FROM public.audit_log; COMMIT`)
+		exec(t, owner, `INSERT INTO public.audit_log(id,actor_kind,action,target_type) OVERRIDING SYSTEM VALUE VALUES(10,'system','legacy-a','test'),(20,'system','legacy-b','test')`)
+		return store.Migrate(ctx, owner, testutil.Logger(), role)
+	})
+	record := func(id int64) Record {
+		t.Helper()
+		var stream uuid.UUID
+		var epoch uint32
+		var seq int64
+		var prev []byte
+		if err := p.QueryRow(ctx, `SELECT stream_id,epoch,last_seq,last_chain_hash FROM omp_audit.state`).Scan(&stream, &epoch, &seq, &prev); err != nil {
+			t.Fatal(err)
+		}
+		var raw []byte
+		if err := p.QueryRow(ctx, `SELECT to_jsonb(a) FROM public.audit_log a WHERE id=$1`, id).Scan(&raw); err != nil {
+			t.Fatal(err)
+		}
+		var r Row
+		if err := json.Unmarshal(raw, &r); err != nil {
+			t.Fatal(err)
+		}
+		r.BeforeState, r.AfterState = nil, nil
+		var previous [32]byte
+		copy(previous[:], prev)
+		rec, _, err := NewRecord(stream, epoch, seq+1, previous, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rec
+	}
+	seal := func(id int64) error {
+		raw, err := json.Marshal([]Record{record(id)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = p.Exec(ctx, `SELECT omp_audit.seal_batch('history',$1::jsonb)`, raw)
+		return err
+	}
+	if err := seal(20); err == nil || !strings.Contains(err.Error(), "history gap") {
+		t.Fatalf("skipping legacy row 10: %v", err)
+	}
+	if err := seal(10); err != nil {
+		t.Fatal(err)
+	}
+	if err := seal(10); err == nil {
+		t.Fatal("history regression accepted")
+	}
+	if err := seal(20); err != nil {
+		t.Fatal(err)
+	}
+	if count(t, p, `SELECT history_id FROM omp_audit.state`) != 20 {
+		t.Fatal("history cursor")
 	}
 }

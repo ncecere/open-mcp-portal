@@ -251,7 +251,10 @@ role only. Arguments are bounded: batch length 1 to 1,000, digests exactly 32 by
   `mode => 'rebase'`), and for each record checks that `seq` is `last_seq + 1…`, that the referenced audit row exists
   with that `row_uid` or `legacy_id` and is not already chained, and that the fast-path cursor only moves forward.
   It **recomputes `summary_hash` from the audit row and `chain_hash` from the fields and the previous hash in SQL**,
-  and rejects any mismatch. Only `entry_hash`, which needs the jsonb canonicaliser, is caller-supplied; a wrong one
+  and rejects any mismatch. It also refuses to **skip** rows: a history record must be the next `txid IS NULL` row
+  after the history cursor (`history_id`), and a fast-path record must be the next unchained row after the
+  watermark cursor, both checked with index probes (`audit_log_history_idx`, `audit_log_stream_idx`, the chain's
+  unique `row_uid`), so a buggy or compromised caller cannot strand a row behind the cursor. Only `entry_hash`, which needs the jsonb canonicaliser, is caller-supplied; a wrong one
   is detected by `verify` and by full-profile receivers. So a compromised runtime can make the stream unverifiable
   (a denial of evidence), but cannot make it state something about a row's summary that the row does not say.
 - `ack(consumer, seq)`: monotonic, at most `last_seq`, subject to the oversized rule.

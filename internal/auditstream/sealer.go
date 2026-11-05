@@ -26,8 +26,8 @@ func (s Sealer) Batch(ctx context.Context) (int64, error) {
 		var seq int64
 		var previous []byte
 		var cursor string
-		var cursorID int64
-		if err := tx.QueryRow(ctx, `SELECT stream_id,epoch,last_seq,last_chain_hash,cursor_txid::text,cursor_id FROM omp_audit.state WHERE singleton`).Scan(&stream, &epoch, &seq, &previous, &cursor, &cursorID); err != nil {
+		var cursorID, historyID int64
+		if err := tx.QueryRow(ctx, `SELECT stream_id,epoch,last_seq,last_chain_hash,cursor_txid::text,cursor_id,history_id FROM omp_audit.state WHERE singleton`).Scan(&stream, &epoch, &seq, &previous, &cursor, &cursorID, &historyID); err != nil {
 			return err
 		}
 		mode := "history"
@@ -67,7 +67,7 @@ func (s Sealer) Batch(ctx context.Context) (int64, error) {
 		// JSONB renders xid8 as a string. Separately project JSON text to distinguish
 		// SQL NULL from the jsonb token null, without passing numbers through floats.
 		const projection = `SELECT to_jsonb(a),a.before_state::text,a.after_state::text,a.metadata::text FROM public.audit_log a `
-		candidates, err := read(projection + `WHERE a.txid IS NULL AND NOT EXISTS(SELECT 1 FROM omp_audit.chain c WHERE c.legacy_id=a.id) ORDER BY a.id LIMIT 500`)
+		candidates, err := read(projection+`WHERE a.txid IS NULL AND a.id>$1 ORDER BY a.id LIMIT 500`, historyID)
 		if err != nil {
 			return err
 		}
@@ -129,9 +129,18 @@ func (s Sealer) Loop(ctx context.Context, log *slog.Logger) {
 				log.Error("audit stream batch failed", "error", err)
 			}
 			var lag float64
-			if err := s.Pool.QueryRow(ctx, `SELECT coalesce(greatest(0,extract(epoch FROM clock_timestamp()-min(a.occurred_at))),0)::float8 FROM public.audit_log a WHERE NOT EXISTS(SELECT 1 FROM omp_audit.chain c WHERE c.row_uid=a.row_uid OR c.legacy_id=a.id AND a.txid IS NULL)`).Scan(&lag); err == nil {
+			if err := s.Pool.QueryRow(ctx, lagQuery).Scan(&lag); err == nil {
 				observability.AuditStreamLag.Set(lag)
 			}
 		}
 	}
 }
+
+// lagQuery is the age of the oldest unsealed row. It reads only the unsealed tail
+// (above the history and watermark cursors, through 00059's partial indexes),
+// never the whole audit log.
+const lagQuery = `WITH s AS (SELECT cursor_txid,cursor_id,history_id FROM omp_audit.state WHERE singleton)
+SELECT coalesce(greatest(0,extract(epoch FROM clock_timestamp()-least(
+ (SELECT min(a.occurred_at) FROM public.audit_log a,s WHERE a.txid IS NULL AND a.id>s.history_id),
+ (SELECT min(a.occurred_at) FROM public.audit_log a,s WHERE a.txid IS NOT NULL AND (a.txid,a.id)>(s.cursor_txid,s.cursor_id)
+   AND NOT EXISTS(SELECT 1 FROM omp_audit.chain c WHERE c.row_uid=a.row_uid))))),0)::float8`
