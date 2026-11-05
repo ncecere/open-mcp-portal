@@ -234,6 +234,15 @@ type CaptureSetting struct {
 	UpdatedAt time.Time
 }
 
+type DefinitionScan struct {
+	CapabilityID   uuid.UUID
+	Fingerprint    string
+	RulesetVersion string
+	Status         string
+	Reason         string
+	ScannedAt      time.Time
+}
+
 type DirectoryCleanupJob struct {
 	ID          uuid.UUID
 	UserID      uuid.UUID
@@ -800,6 +809,8 @@ type PlatformSetting struct {
 	GovernanceRevision             int64
 	GovernanceUpdatedBy            uuid.NullUUID
 	GovernanceUpdatedAt            time.Time
+	DefinitionScanMode             string
+	ScanRevision                   int64
 }
 
 type ProviderAuthState struct {
@@ -877,6 +888,20 @@ type RetentionSetting struct {
 	UpdatedBy uuid.NullUUID
 	UpdatedAt time.Time
 	LastRun   json.RawMessage
+}
+
+type ScanFinding struct {
+	ID             int64
+	OccurredAt     time.Time
+	CapabilityID   uuid.UUID
+	Fingerprint    string
+	Stage          string
+	RuleID         string
+	RulesetVersion string
+	Severity       string
+	Count          int32
+	Action         string
+	Location       string
 }
 
 type ScimDirectory struct {

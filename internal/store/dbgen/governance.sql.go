@@ -1418,7 +1418,7 @@ SET review_interval_days_public = $1, review_interval_days_internal = $2,
     governance_revision = governance_revision + 1, governance_updated_by = $6::uuid,
     governance_updated_at = now()
 WHERE id = 1
-RETURNING id, publish_default_policy, revision, updated_by, updated_at, review_interval_days_public, review_interval_days_internal, review_interval_days_confidential, review_interval_days_restricted, governance_return_overdue, governance_revision, governance_updated_by, governance_updated_at
+RETURNING id, publish_default_policy, revision, updated_by, updated_at, review_interval_days_public, review_interval_days_internal, review_interval_days_confidential, review_interval_days_restricted, governance_return_overdue, governance_revision, governance_updated_by, governance_updated_at, definition_scan_mode, scan_revision
 `
 
 type UpdateGovernanceSettingsParams struct {
@@ -1454,6 +1454,8 @@ func (q *Queries) UpdateGovernanceSettings(ctx context.Context, arg UpdateGovern
 		&i.GovernanceRevision,
 		&i.GovernanceUpdatedBy,
 		&i.GovernanceUpdatedAt,
+		&i.DefinitionScanMode,
+		&i.ScanRevision,
 	)
 	return i, err
 }

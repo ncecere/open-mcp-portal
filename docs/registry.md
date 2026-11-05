@@ -306,3 +306,55 @@ query-plan/latency validation and an indexed search design are follow-ups, not
 performance acceptance here.
 Category, icon, README, badge and popularity enrichment from issue #49 remain out
 of scope; no metadata is fabricated.
+
+## Definition scanning
+
+The platform defaults to `shadow`. Platform admins use the browser-session API
+`GET`/`PUT /v1/admin/settings/scanning` with `{"definitionMode":"off"}` or
+`{"definitionMode":"shadow"}` and the current ETag in `If-Match`. Concurrent
+changes return 409. Both states are audited without content. Automation tokens
+receive `403 token_not_allowed`; auditors may read settings and the rule catalog.
+There is no settings panel in this slice (#73 owns the UI).
+
+Shadow scans stored tool, prompt and resource definitions locally at refresh,
+before the storage transaction. Scanning calls no external service. Findings do not
+rewrite, approve, block or redact definitions, and never enter fingerprints or
+the review digest. `off` skips scanning and hides old findings; it does not erase
+existing evidence. A scan that found nothing means only that the heuristics found
+nothing, and does not mean the definition is safe.
+
+`GET /v1/admin/scanning/rules` lists ruleset `v1`.
+`GET /v1/teams/{team}/mcp-servers/{serverId}/scan-findings` (and its admin
+equivalent) returns per-capability status, ruleset and evidence. `POST` to the
+same server's `/scan` rescans stored definitions without contacting the upstream;
+it requires edit permission (platform admin for the admin path), and shares the
+management API's rate limits. Findings follow capability visibility; other teams
+receive the missing-server 404. These endpoints require browser sessions.
+
+A leader-elected worker runs at startup and every minute, at most ten servers per
+pass, to fill missing scans or changed fingerprints/rulesets. Completed scans
+for the current fingerprint/ruleset are skipped; pending definitions are ordered
+by last attempt, and unreached work keeps its queue age. A failed write is
+retried by a later pass. Scan failures are incomplete, not a successful empty scan.
+A refresh budget is two seconds; individual scans have a 25 ms cooperative deadline,
+64 KiB size limit, depth 32, 128 findings, and two concurrent scan batches per
+process. Regex calls cannot be interrupted mid-match; overruns are marked incomplete.
+Refresh continues after persistence failure, using a savepoint; logs hold only a
+fixed class. Metrics `omp_scan_findings_total`, `omp_scan_duration_seconds`,
+`omp_scan_incomplete_total` and `omp_scan_ruleset_info` have no object or person labels.
+
+Evidence holds ids, severity, count and bounded structural locations. Arbitrary
+JSON keys use positional `@N` segments, avoiding secrets embedded in a key; they
+are not literal RFC 6901 member names. The definition is already visible through
+the existing capability API. Evidence and scan metadata cascade when a capability,
+server or team is deleted; they are replaced at rescan and are independent of
+payload/call retention. No ciphertext or call child table is added.
+
+These are lexical heuristics: adaptive paraphrases, non-English instructions,
+split-field instructions, binary data and novel encodings remain misses. Server
+behaviour can change without changing its definition. Confusable skeletons use
+pinned Unicode 2020 tables; mixed-script detection handles script names and common
+East Asian combinations, but does not implement every UTS #39 Script_Extensions
+edge case. JWT-shaped strings are conservatively low severity. Description length
+starts at info; no enforcement calibration is claimed. Reviewer controls remain
+necessary. There is no scanning of arguments, results, progress or curation text.

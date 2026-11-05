@@ -344,8 +344,9 @@ func (s *Service) refresh(ctx context.Context, a authz.Actor, sv dbgen.McpServer
 		}
 		return nil, &res, nil
 	}
+	scans := s.scanDefinitions(ctx, d.Capabilities, sv.URL)
 	var out RefreshResult
-	err := store.InTx(context.WithoutCancel(ctx), s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
+	err := store.InTx(context.WithoutCancel(ctx), s.pool, func(q *dbgen.Queries, tx pgx.Tx) error {
 		cur, err := anyServer(ctx, q, sv.ID, true)
 		if err != nil {
 			return err
@@ -353,6 +354,7 @@ func (s *Service) refresh(ctx context.Context, a authz.Actor, sv dbgen.McpServer
 		if out, err = storeCapabilities(ctx, q, cur.ID, d.Capabilities); err != nil {
 			return err
 		}
+		s.writeScans(ctx, tx, cur.ID, scans)
 		// If-Match on owner edits must bind the capability definitions the
 		// owner read, even when a changed definition suggests the same class.
 		// Unchanged refreshes only update health/discovery timestamps.

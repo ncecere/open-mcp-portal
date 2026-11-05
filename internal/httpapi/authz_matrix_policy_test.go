@@ -100,6 +100,17 @@ func (r request) h(hs map[string]string) request { r.headers = hs; return r }
 var rev1 = map[string]string{"If-Match": `"1"`}
 
 var matrixPolicies = map[string]policy{
+	"adminGetScanningSettings": {own: platform, build: func(*mctx) request { return get("/v1/admin/settings/scanning") }},
+	"adminUpdateScanningSettings": {own: padmin, build: func(c *mctx) request {
+		rev := c.e.exec(`SELECT scan_revision::text FROM platform_settings`)
+		return request{method: "PUT", path: "/v1/admin/settings/scanning", body: map[string]any{"definitionMode": "shadow"}, headers: map[string]string{"If-Match": `"` + rev + `"`}}
+	}},
+	"adminListScanningRules":      {own: platform, build: func(*mctx) request { return get("/v1/admin/scanning/rules") }},
+	"teamListDefinitionFindings":  {scope: scopeTeam, own: members, foreign: platform, build: func(c *mctx) request { return get(c.team("/mcp-servers/" + c.tf.server + "/scan-findings")) }},
+	"teamRescanDefinitions":       {scope: scopeTeam, own: editors, build: func(c *mctx) request { return post(c.team("/mcp-servers/"+c.tf.server+"/scan"), nil) }},
+	"adminListDefinitionFindings": {own: platform, build: func(c *mctx) request { return get("/v1/admin/mcp-servers/" + c.tf.server + "/scan-findings") }},
+	"adminRescanDefinitions":      {own: padmin, build: func(c *mctx) request { return post("/v1/admin/mcp-servers/"+c.tf.server+"/scan", nil) }},
+
 	// Operations and sign-in.
 	"getHealthz":    {own: everyone, build: func(*mctx) request { return get("/healthz") }},
 	"getReadyz":     {own: everyone, build: func(*mctx) request { return get("/readyz") }},
