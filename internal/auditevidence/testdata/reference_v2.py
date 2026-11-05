@@ -106,17 +106,115 @@ def verify_records(records, stream_id, start_seq, previous, end_seq, final):
     if start_seq == 0:
         assert previous == digest(b'OMP-AUDIT-EVIDENCE\0GENESIS\0V2\0', pinned)
     seq = start_seq
-    for record, predecessor, claimed in records:
+    for item in records:
+        record, predecessor, claimed = item[:3]
         assert seq < end_seq
         assert len(record) == 119
-        assert record[0] == 2 and record[1] in (1, 2, 3) and record[2] & ~3 == 0
+        assert record[0] == 2 and record[1] in (1, 2) and record[2] & ~3 == 0
         assert record[3:19] == pinned
         epoch, number = struct.unpack('>IQ', record[19:31])
         assert epoch > 0 and number == seq + 1
-        if record[1] != 1:
+        if record[1] == 2:
+            assert len(item) == 4
+            e = item[3]
+            assert record[55:87] == epoch_summary(e)
+            assert e['gap_from'] is None and e['predecessor_seq'] == seq
+            assert bytes.fromhex(e['predecessor_hash']) == previous
+            assert epoch == e['previous_epoch'] + 1
             assert record[31:47] == bytes(16) and record[87:119] == bytes(32)
         assert bytes.fromhex(predecessor) == previous
         calculated = digest(b'OMP-AUDIT-EVIDENCE\0CHAIN\0V2\0', previous + record)
         assert bytes.fromhex(claimed) == calculated
         previous, seq = calculated, number
     assert seq == end_seq and previous == final
+
+
+def epoch_summary(e):
+    assert type(e['previous_epoch']) is int and 1 <= e['previous_epoch'] < 2**32
+    assert type(e['predecessor_seq']) is int and 0 <= e['predecessor_seq'] < 2**63
+    for prefix in ('old', 'new'):
+        identifier = e[prefix + '_system_identifier']
+        assert isinstance(identifier, str) and 1 <= len(identifier) <= 20
+        assert identifier.isascii() and identifier.isdigit()
+        assert (identifier == '0' or not identifier.startswith('0')) and int(identifier) < 2**64
+        timeline = e[prefix + '_timeline']
+        assert type(timeline) is int and 1 <= timeline < 2**32
+    for name in ('gap_from', 'gap_to'):
+        assert e[name] is None or (type(e[name]) is int and 1 <= e[name] < 2**63)
+    assert e['gap_from'] is None or e['reason'] == 'rebase'
+    result = struct.pack('>Iq', e['previous_epoch'], e['predecessor_seq'])
+    predecessor = bytes.fromhex(e['predecessor_hash'])
+    assert len(predecessor) == 32 and e['reason'] in ('timeline', 'rebase')
+    result += predecessor + scalar(e['reason'].encode())
+    for prefix in ('old', 'new'):
+        result += scalar(e[prefix + '_system_identifier'].encode())
+        result += struct.pack('>q', e[prefix + '_timeline'])
+    for name in ('gap_from', 'gap_to'):
+        result += fixed(None if e[name] is None else struct.pack('>q', e[name]))
+    assert (e['gap_from'] is None) == (e['gap_to'] is None)
+    if e['gap_from'] is not None:
+        assert e['gap_from'] == e['predecessor_seq'] + 1 <= e['gap_to']
+    return digest(b'OMP-AUDIT-EPOCH\0V1\0', result)
+
+
+class Receiver:
+    """Pinned stream-wide history. Approval preserves orphaned fork evidence.
+
+    This is a protocol harness, not a product API or a persistence layer.
+    """
+    def __init__(self, stream_id, seq, anchor):
+        self.pinned = uuid.UUID(stream_id).bytes
+        self.held = {seq: bytes.fromhex(anchor)}
+        self.tip = seq
+        self.records = {}
+        self.history = {seq: {bytes.fromhex(anchor): None}}
+        self.fork_keys = set()
+        self.forks = []
+        self.approvals = []
+
+    def accept(self, record, previous, claimed, declaration=None, approve=False):
+        assert len(record) == 119 and record[0] == 2
+        assert record[3:19] == self.pinned
+        assert record[1] in (1, 2) and record[2] & ~3 == 0
+        epoch, seq = struct.unpack('>IQ', record[19:31])
+        assert epoch > 0 and seq > 0
+        previous, claimed = bytes.fromhex(previous), bytes.fromhex(claimed)
+        assert len(previous) == len(claimed) == 32
+        assert digest(b'OMP-AUDIT-EVIDENCE\0CHAIN\0V2\0', previous + record) == claimed
+        known = self.history.setdefault(seq, {})
+        if seq in self.held:
+            known.setdefault(self.held[seq], self.records.get(seq))
+        for old, old_record in list(known.items()):
+            key = (seq, frozenset((old, claimed)))
+            if old != claimed and key not in self.fork_keys:
+                self.forks.append((seq, old, claimed, old_record, record))
+                self.fork_keys.add(key)
+        known[claimed] = record
+        if seq in self.held and self.held[seq] != claimed and not approve:
+            raise ValueError('fork; approval required')
+        clean = seq == self.tip + 1 and self.held.get(seq-1) == previous
+        if record[1] == 2:
+            e = declaration
+            assert record[2] == 0 and record[31:47] == bytes(16) and record[87:] == bytes(32)
+            assert record[55:87] == epoch_summary(e)
+            assert epoch == e['previous_epoch'] + 1
+            assert bytes.fromhex(e['predecessor_hash']) == previous
+            expected = e['predecessor_seq'] + 1 if e['gap_to'] is None else e['gap_to'] + 1
+            assert seq == expected
+            clean = clean and e['gap_from'] is None and e['predecessor_seq'] == seq-1
+            if not clean:
+                if not approve:
+                    raise ValueError('discontinuity; approval required')
+                self.approvals.append((record, dict(self.held), dict(self.records)))
+                # Keep old anchors/records as evidence, but they are no longer
+                # predecessors on the approved branch. Otherwise each orphaned
+                # future seq would demand approval again, preventing recovery.
+                for old_seq, old_hash in self.held.items():
+                    self.history.setdefault(old_seq, {}).setdefault(old_hash, self.records.get(old_seq))
+                self.held = {}
+                self.records = {}
+        else:
+            assert clean
+        self.held[seq] = claimed
+        self.records[seq] = record
+        self.tip = seq

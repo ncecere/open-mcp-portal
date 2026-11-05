@@ -40,6 +40,7 @@ commands:
             re-encrypt stored secrets from ENCRYPTION_KEY_PREVIOUS to
             ENCRYPTION_KEY and list keys on an old API key pepper
             (--dry-run, --batch-size, --help)
+  audit-stream status|rebind|rebase [--resume-after-seq=N]
   version   print the version
 
 Configuration comes from environment variables and the optional YAML file
@@ -68,6 +69,8 @@ func run(args []string) error {
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 		return nil
+	case "audit-stream":
+		return runAuditStream(args[1:], os.Stdout)
 	case "doctor":
 		return runDoctor(args[1:], os.Stdout)
 	case "rotate-keys":

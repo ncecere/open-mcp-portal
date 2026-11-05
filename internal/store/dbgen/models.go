@@ -731,33 +731,40 @@ type OauthToken struct {
 }
 
 type OmpAuditChain struct {
-	Seq         int64
-	Kind        string
-	RowUid      uuid.NullUUID
-	LegacyID    *int64
-	AuditID     *int64
-	Epoch       int32
-	Flags       int16
-	OccurredAt  time.Time
-	SummaryHash []byte
-	EntryHash   []byte
-	ChainHash   []byte
-	SealedAt    time.Time
+	Seq          int64
+	Kind         string
+	RowUid       uuid.NullUUID
+	LegacyID     *int64
+	AuditID      *int64
+	Epoch        int32
+	Flags        int16
+	OccurredAt   time.Time
+	SummaryHash  []byte
+	EntryHash    []byte
+	ChainHash    []byte
+	SealedAt     time.Time
+	EpochSummary json.RawMessage
 }
 
 type OmpAuditState struct {
-	Singleton        bool
-	StreamID         uuid.UUID
-	SystemIdentifier string
-	Timeline         int64
-	Epoch            int32
-	Status           string
-	CursorTxid       pgtype.Uint64
-	CursorID         int64
-	HistoryID        int64
-	LastSeq          int64
-	LastChainHash    []byte
-	SweepAt          *time.Time
+	Singleton         bool
+	StreamID          uuid.UUID
+	SystemIdentifier  string
+	Timeline          int64
+	Epoch             int32
+	Status            string
+	CursorTxid        pgtype.Uint64
+	CursorID          int64
+	HistoryID         int64
+	LastSeq           int64
+	LastChainHash     []byte
+	SweepAt           *time.Time
+	SweepScanID       *int64
+	SweepStartedXmin  pgtype.Uint64
+	EpochPending      json.RawMessage
+	RebaseF           pgtype.Uint64
+	RebaseResumeAfter *int64
+	SweepPending      bool
 }
 
 type OmpPrivateApprovalBindingKey struct {
