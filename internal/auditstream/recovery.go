@@ -30,7 +30,7 @@ func (s Sealer) Rebind(ctx context.Context) error {
 		if !safe {
 			return fmt.Errorf("snapshot xmin is below cursor; rebase required")
 		}
-		_, err := tx.Exec(ctx, `UPDATE omp_audit.state SET system_identifier=(pg_control_system()).system_identifier::text,status='running' WHERE singleton AND status='halted_incarnation'`)
+		_, err := tx.Exec(ctx, `UPDATE omp_audit.state SET system_identifier=(pg_control_system()).system_identifier::text,timeline=('x'||substr(pg_walfile_name(pg_current_wal_lsn()),1,8))::bit(32)::bigint,status='running' WHERE singleton AND status='halted_incarnation'`)
 		return err
 	})
 }

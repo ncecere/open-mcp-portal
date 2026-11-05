@@ -898,7 +898,7 @@ owner-only epoch helpers.
 
 After **pg_upgrade**, first confirm that xid history was preserved. A changed
 system identifier halts sealing as `halted_incarnation`; then run
-`open-mcp-portal audit-stream rebind`. It records the new identifier without
+`open-mcp-portal audit-stream rebind`. It records the live identifier and WAL insertion timeline without
 moving the epoch or cursor, refusing a snapshot xmin below the cursor. This is
 an operator assertion of continuity, not automatic proof. Rebind requires the
 halted state. Audit writes accumulated while halted are subsequently sealed.

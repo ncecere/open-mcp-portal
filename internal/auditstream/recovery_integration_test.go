@@ -494,3 +494,30 @@ func TestRebaseResumeNumberIsStable(t *testing.T) {
 		t.Fatal("same-number retry duplicated marker")
 	}
 }
+
+func TestRebindRefreshesTimelineWithoutEpoch(t *testing.T) {
+	p, _ := testutil.NewDB(t)
+	o := testutil.OwnerPool(t, p)
+	drain(t, p)
+	var epoch, cursorID int64
+	var cursor string
+	if err := p.QueryRow(ctx, `SELECT epoch,cursor_txid::text,cursor_id FROM omp_audit.state`).Scan(&epoch, &cursor, &cursorID); err != nil {
+		t.Fatal(err)
+	}
+	exec(t, o, `UPDATE omp_audit.state SET system_identifier='1',timeline=timeline+1`)
+	if _, err := (Sealer{p}).Batch(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Sealer{o}).Rebind(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Sealer{p}).Batch(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if count(t, p, `SELECT count(*) FROM omp_audit.state WHERE epoch=$1 AND cursor_txid=$2::xid8 AND cursor_id=$3 AND timeline=('x'||substr(pg_walfile_name(pg_current_wal_lsn()),1,8))::bit(32)::bigint`, epoch, cursor, cursorID) != 1 {
+		t.Fatal("rebind did not preserve epoch/cursor and refresh timeline")
+	}
+	if count(t, p, `SELECT count(*) FROM omp_audit.chain WHERE kind='epoch_start'`) != 0 {
+		t.Fatal("rebind caused an unintended epoch")
+	}
+}
