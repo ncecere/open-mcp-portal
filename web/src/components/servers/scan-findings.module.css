@@ -1,0 +1,10 @@
+.stack {
+  display: grid;
+  gap: var(--space-3);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.capability {
+  border-block-start: 1px solid var(--color-border);
+  padding-block: var(--space-3);
+}
