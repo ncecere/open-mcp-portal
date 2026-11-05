@@ -175,6 +175,7 @@ var settings = []setting{
 	{key: "OTEL_TRACES_SAMPLER", apply: lowerStr(func(c *Config) *string { return &c.Tracing.Sampler })},
 	{key: "OTEL_TRACES_SAMPLER_ARG", apply: samplerArg(func(c *Config) *float64 { return &c.Tracing.SamplerArg })},
 	{key: "TRACE_LINK_TEMPLATE", apply: str(func(c *Config) *string { return &c.Tracing.LinkTemplate })},
+	{key: "AUDIT_MIN_RETENTION_DAYS", apply: integer(func(c *Config) *int { return &c.AuditMinRetentionDays }, 30, 3650)},
 	{key: "AUDIT_STREAM_ENABLED", apply: boolean(func(c *Config) *bool { return &c.AuditStreamEnabled })},
 	{key: "RETENTION_INTERVAL", apply: duration(func(c *Config) *time.Duration { return &c.RetentionInterval }, time.Minute, 24*time.Hour)},
 	{key: "RETENTION_BATCH_SIZE", apply: integer(func(c *Config) *int { return &c.RetentionBatchSize }, 10, 100_000)},

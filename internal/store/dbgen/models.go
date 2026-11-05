@@ -746,6 +746,28 @@ type OmpAuditChain struct {
 	EpochSummary json.RawMessage
 }
 
+type OmpAuditConsumer struct {
+	Name      string
+	Profile   string
+	Required  bool
+	AckedSeq  int64
+	AckedAt   *time.Time
+	CreatedBy uuid.UUID
+	CreatedAt time.Time
+}
+
+type OmpAuditOversizedFetch struct {
+	Consumer string
+	Seq      int64
+}
+
+type OmpAuditRetentionFloor struct {
+	Singleton        bool
+	MinDays          int32
+	PurgedSeq        int64
+	ConsumerRevision int64
+}
+
 type OmpAuditState struct {
 	Singleton         bool
 	StreamID          uuid.UUID
