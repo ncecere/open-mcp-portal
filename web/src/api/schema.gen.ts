@@ -8269,6 +8269,7 @@ export interface operations {
             403: components["responses"]["ErrorReply"];
             404: components["responses"]["ErrorReply"];
             409: components["responses"]["ErrorReply"];
+            422: components["responses"]["ErrorReply"];
             428: components["responses"]["ErrorReply"];
         };
     };

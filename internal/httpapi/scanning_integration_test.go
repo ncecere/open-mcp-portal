@@ -90,6 +90,9 @@ func TestScanningPrivacySentinel(t *testing.T) {
 		if code != 200 {
 			t.Fatalf("%s: %d %s", p.path, code, body)
 		}
+		if p.method == "POST" && !strings.Contains(string(body), `"ruleId":"secret.github"`) {
+			t.Fatal("rescan did not detect the matched-span canary")
+		}
 		if strings.Contains(string(body), canary) {
 			t.Fatal("HTTP response leaked canary")
 		}
