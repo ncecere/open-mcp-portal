@@ -1,5 +1,5 @@
 -- +goose Up
-ALTER TABLE omp_audit.state ADD COLUMN sweep_scan_id bigint, ADD COLUMN sweep_started_xmin xid8, ADD COLUMN epoch_pending jsonb, ADD COLUMN rebase_f xid8, ADD COLUMN sweep_pending boolean NOT NULL DEFAULT false;
+ALTER TABLE omp_audit.state ADD COLUMN sweep_scan_id bigint, ADD COLUMN sweep_started_xmin xid8, ADD COLUMN epoch_pending jsonb, ADD COLUMN rebase_f xid8, ADD COLUMN rebase_resume_after bigint, ADD COLUMN sweep_pending boolean NOT NULL DEFAULT false;
 ALTER TABLE omp_audit.chain ADD COLUMN epoch_summary jsonb;
 -- +goose StatementBegin
 CREATE FUNCTION omp_audit.epoch_summary(e jsonb) RETURNS bytea LANGUAGE sql IMMUTABLE

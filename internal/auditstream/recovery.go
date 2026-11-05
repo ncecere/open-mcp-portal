@@ -78,11 +78,17 @@ func (s Sealer) rebase(ctx context.Context, resume *int64, hook func(string)) er
 		if _, err = a.Exec(ctx, `SELECT omp_audit.prepare_epoch('rebase',$1::bigint)`, resume); err != nil {
 			return err
 		}
-		if _, err = a.Exec(ctx, `UPDATE omp_audit.state SET status='rebasing',rebase_f=pg_current_xact_id(),cursor_txid=pg_current_xact_id(),cursor_id=0 WHERE singleton`); err != nil {
+		if _, err = a.Exec(ctx, `UPDATE omp_audit.state SET status='rebasing',rebase_f=pg_current_xact_id(),rebase_resume_after=$1,cursor_txid=pg_current_xact_id(),cursor_id=0 WHERE singleton`, resume); err != nil {
 			return err
 		}
 	} else if resume != nil {
-		return fmt.Errorf("cannot change resume sequence during an unfinished rebase")
+		var stored *int64
+		if err = a.QueryRow(ctx, `SELECT rebase_resume_after FROM omp_audit.state WHERE singleton`).Scan(&stored); err != nil {
+			return err
+		}
+		if stored == nil || *stored != *resume {
+			return fmt.Errorf("cannot change resume sequence during an unfinished rebase")
+		}
 	}
 	if err = a.Commit(ctx); err != nil {
 		return err

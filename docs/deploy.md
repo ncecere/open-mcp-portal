@@ -917,8 +917,8 @@ For a known rewind where receivers already hold higher sequences, use
 `open-mcp-portal audit-stream rebase --resume-after-seq=N` with N greater than the
 stored last sequence. The marker starts at N+1; when N exceeds the predecessor,
 it authenticates the missing interval. Receivers must approve that discontinuity
-locally and preserve fork evidence. A resume number cannot be changed during an
-unfinished rebase. Keep trusted receiver anchors and prior history throughout.
+locally and preserve fork evidence. The same resume number may be supplied again after a crash; it cannot be changed
+during an unfinished rebase. Keep trusted receiver anchors and prior history throughout.
 
 After **physical failover, switchover or PITR**, a changed WAL insertion timeline
 with the same system identifier automatically starts an epoch. Monitor

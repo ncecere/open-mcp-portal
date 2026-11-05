@@ -471,3 +471,26 @@ func TestSweepBoundaryRejectsDistantGap(t *testing.T) {
 		t.Fatalf("windowed sweep lost distant gap: %d", total)
 	}
 }
+
+func TestRebaseResumeNumberIsStable(t *testing.T) {
+	p, _ := testutil.NewDB(t)
+	o := testutil.OwnerPool(t, p)
+	drain(t, p)
+	n := count(t, p, `SELECT last_seq+10 FROM omp_audit.state`)
+	exec(t, o, `SELECT omp_audit.prepare_epoch('rebase',$1)`, n)
+	exec(t, o, `UPDATE omp_audit.state SET status='rebasing',rebase_resume_after=$1,rebase_f=pg_current_xact_id(),cursor_txid=pg_current_xact_id(),cursor_id=0`, n)
+	changed := n + 1
+	if err := (Sealer{o}).Rebase(ctx, &changed); err == nil {
+		t.Fatal("changed resume number accepted")
+	}
+	if err := (Sealer{o}).Rebase(ctx, &n); err != nil {
+		t.Fatal(err)
+	}
+	exec(t, o, `UPDATE omp_audit.state SET status='rebasing'`)
+	if err := (Sealer{o}).Rebase(ctx, &n); err != nil {
+		t.Fatal(err)
+	}
+	if count(t, p, `SELECT count(*) FROM omp_audit.chain WHERE kind='epoch_start'`) != 1 {
+		t.Fatal("same-number retry duplicated marker")
+	}
+}
