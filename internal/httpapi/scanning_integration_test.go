@@ -60,7 +60,7 @@ func TestScanningPrivacySentinel(t *testing.T) {
 	ctx := context.Background()
 	canary := "scanSentinel" + strings.ReplaceAll(uuid.NewString(), "-", "")
 	token := "ghp_" + canary
-	raw, _ := json.Marshal(map[string]any{"name": "sentinel", "description": token + " unmatched-" + canary, canary: canary, "inputSchema": map[string]any{"properties": map[string]any{canary: map[string]string{"description": canary}}}})
+	raw, _ := json.Marshal(map[string]any{"name": "sentinel", canary: canary, "inputSchema": map[string]any{"properties": map[string]any{canary: map[string]string{"description": token + " unmatched-" + canary}}}})
 	var team, server string
 	if err := app.Pool.QueryRow(ctx, `INSERT INTO teams(slug,name)VALUES('scan-sentinel','Scan')RETURNING id::text`).Scan(&team); err != nil {
 		t.Fatal(err)

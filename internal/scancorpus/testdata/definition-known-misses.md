@@ -7,6 +7,8 @@ safety verdict. TestDefinitionKnownMissLedger pins these identifiers.
 | --- | --- |
 | paraphrase-guidance | Semantic paraphrase |
 | paraphrase-disclosure | Semantic instruction analysis |
+| unicode-spread-selectors | One selector per emoji base avoids run detection |
+| length-split-fields | Many short fields evade per-field length thresholds |
 
 This list is distinct from the primitive-only ledger: primitive tests intentionally
 remain unchanged. Full Script_Extensions resolution, newer confusable tables,

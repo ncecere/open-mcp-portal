@@ -1,12 +1,10 @@
 # Content scanning: design (#52, decision 50)
 
-**Status: design with the shared secret-registry foundation implemented (#71).** No scanner, migration, API or
-setting is wired into refresh or call paths. The portal today fingerprints and withholds changed tool definitions, and redacts secret-looking values
-in *captured* payloads, but it does not read definitions, arguments or results for prompt injection, hidden
-Unicode or data loss ([threat model 7.5](threat-model.md#75-tool-poisoning-and-change-detection)). Everything below
-marked **proposed default (owner may override)** is the assistant's recommendation under the owner's delegation of
-the issue's open questions, not an owner decision. Latency and false-positive figures are targets to be proven by
-the acceptance tests in [section 11](#11-acceptance-tests-the-first-build-issue-must-pass), not measurements.
+**Status (2026-11-04): #72 backend implementation under local review.** Slice 1 adds a local definition scanner,
+migration 00057, refresh persistence, session-only management APIs and leader-elected rescan backfill. The UI is
+still #73; argument/result scanning and enforcement remain later slices. See [operator instructions](registry.md#definition-scanning).
+The acceptance evidence and remaining limitations are in [the implementation report](scanning-72-report.md).
+The defaults below remain delegated defaults, and latency figures remain proposed gates unless explicitly measured.
 
 A scanner that misses a novel injection makes people relax. The design therefore starts from what scanning cannot
 do ([section 9](#9-what-this-will-not-catch)) and treats findings as input for human review and for the controls
@@ -504,7 +502,7 @@ This is a note for the owner and the deployer's data-protection function, **not 
 
 ## 6. Data model and API sketch
 
-**Sketch only. No migration, query, endpoint or setting exists.** Names are proposals. Any migration is forward-only
+**Design sketch; slice 1 now implements definition-only tables and APIs.** Names are proposals. Any migration is forward-only
 and expand-only (CONTRIBUTING: the previous release must keep working on the new schema), numbered after `00047`
 when written. Per the repository rules, the build issues change `api/openapi.yaml` first and run `make generate`.
 

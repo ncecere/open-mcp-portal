@@ -155,3 +155,15 @@ the platform overview lists only published servers as failing; team attention ad
 
 ## Open questions
 
+
+
+
+**2026-11-04 implementation note under decision 87 (#72; no new decision):**
+The definition backend uses separate `definition_scans` status rows so zero findings
+are distinguishable from missing/incomplete scans. Arbitrary JSON keys use
+positional `@N` locations rather than reflecting potentially secret-bearing key
+text. Description thresholds start at info, JWT shapes at low. NFKC/case folding
+promotes the existing x/text dependency; same-server skeleton comparison adds
+pinned BSD-licensed mtibben/confusables (2020 Unicode tables). Mixed-script
+Script_Extensions coverage and full acceptance evidence remain review items.
+
