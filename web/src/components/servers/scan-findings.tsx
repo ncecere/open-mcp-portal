@@ -51,7 +51,7 @@ export function ScanFindings({ scope, serverId, canRescan = false, capabilityId 
     : unwrap(await api.POST("/v1/admin/mcp-servers/{serverId}/scan", { params: { path: { serverId } } })),
     onSuccess: (data) => qc.setQueryData(queryKey, data) });
   return <section aria-label="Definition scan findings" className={m.stack}>
-    <h3>Definition scan findings</h3>
+    <h2>Definition scan findings</h2>
     <p>Shadow mode only: findings inform review; nothing is blocked, redacted or rewritten. <a href={scanningDocs}>What scanning will not catch</a>.</p>
     {canRescan && <Button variant="secondary" disabled={rescan.isPending} onClick={() => rescan.mutate()}>{rescan.isPending ? "Rescanning…" : "Rescan definitions"}</Button>}
     <ErrorAlert error={rescan.error} describe={describeScanError} />
@@ -59,7 +59,7 @@ export function ScanFindings({ scope, serverId, canRescan = false, capabilityId 
     <ErrorAlert error={findings.error} describe={describeScanError} onRetry={() => void findings.refetch()} />
     {findings.data?.length === 0 && <p>No capability definitions to scan.</p>}
     {findings.data?.filter((c) => !capabilityId || c.capabilityId === capabilityId).map((c) => <section key={c.capabilityId} className={m.capability} aria-label={`Findings for ${caps.data?.find((cap) => cap.id === c.capabilityId)?.name ?? c.capabilityId}`}>
-      <h4>{caps.data?.find((cap) => cap.id === c.capabilityId)?.name ?? c.capabilityId}</h4>
+      <h3>{caps.data?.find((cap) => cap.id === c.capabilityId)?.name ?? c.capabilityId}</h3>
       <CapabilityFindings scan={c.scan} />
     </section>)}
   </section>;

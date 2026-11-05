@@ -64,7 +64,7 @@ describe("Definition findings", () => {
   it.each(["member", "editor", "auditor", "admin"])("rescan visibility for %s follows the server abilities", async (role) => {
     const admin = role === "auditor" || role === "admin";
     mockApi(routes(admin ? adminBase : base));
-    const { container } = renderBare(<CapabilitiesTab server={sv} scope={admin ? { kind: "admin" } : { kind: "team", team: sv.teamSlug }} abilities={admin ? adminAbilities(role === "admin") : { ...readOnly, canEdit: role === "editor" }} />);
+    const { container } = renderBare(<><h1>Server</h1><CapabilitiesTab server={sv} scope={admin ? { kind: "admin" } : { kind: "team", team: sv.teamSlug }} abilities={admin ? adminAbilities(role === "admin") : { ...readOnly, canEdit: role === "editor" }} /></>);
     await screen.findByText(/Heuristics found nothing/);
     expect(Boolean(screen.queryByRole("button", { name: "Rescan definitions" }))).toBe(role === "editor" || role === "admin");
     expect(await axe(container)).toHaveNoViolations();
