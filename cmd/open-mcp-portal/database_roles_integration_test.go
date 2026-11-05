@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -59,5 +60,27 @@ func TestAuditRecoveryUsesOwnerAndStatusUsesRuntime(t *testing.T) {
 	}
 	if err := runAuditStream([]string{"rebase"}, &out); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAuditStatusPreservesBigint(t *testing.T) {
+	p, url := testutil.NewDB(t)
+	o := testutil.OwnerPool(t, p)
+	if _, err := o.Exec(context.Background(), `UPDATE omp_audit.state SET last_seq=9007199254740993`); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OMP_CONFIG_FILE", "")
+	t.Setenv("DATABASE_URL", url)
+	t.Setenv("DATABASE_MIGRATE_URL", "invalid-unused-owner-sentinel")
+	var out bytes.Buffer
+	if err := runAuditStream([]string{"status"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(out.Bytes(), &fields); err != nil {
+		t.Fatal(err)
+	}
+	if string(fields["last_seq"]) != "9007199254740993" {
+		t.Fatalf("status rounded sequence: %s", fields["last_seq"])
 	}
 }

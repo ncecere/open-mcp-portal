@@ -54,11 +54,7 @@ func runAuditStream(args []string, out io.Writer) error {
 		if err = p.QueryRow(ctx, `SELECT to_jsonb(s) FROM omp_audit.state s WHERE singleton`).Scan(&raw); err != nil {
 			return err
 		}
-		var v any
-		if err = json.Unmarshal(raw, &v); err != nil {
-			return err
-		}
-		return json.NewEncoder(out).Encode(v)
+		return json.NewEncoder(out).Encode(json.RawMessage(raw))
 	case "rebind":
 		return s.Rebind(ctx)
 	case "rebase":
