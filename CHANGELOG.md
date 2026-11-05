@@ -8,6 +8,8 @@ breaking changes; the entry says how to adapt.
 
 ## Unreleased
 
+- Add audit stream incarnation recovery commands, epoch declarations and safety sweeps behind the disabled audit stream setting.
+
 - Add the disabled audit-stream sealing core, record v2 and protected schema (#38, slice 1a).
 
 ## [0.13.1] - 2026-11-01
