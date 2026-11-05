@@ -30,17 +30,57 @@ def scalar(v):
 def digest(domain, v):
     return hashlib.sha256(domain + v).digest()
 
+def fixed(v):
+    return b'\0' if v is None else b'\1' + v
+
+
+def summary_bytes(row):
+    result = fixed(struct.pack('>q', row['occurred_at_unix_micros']))
+    for name in ('action', 'actor_kind', 'actor_user_id', 'team_id',
+                 'target_type', 'target_id', 'request_id', 'actor_token_id'):
+        value = row.get(name)
+        if name in ('actor_user_id', 'team_id', 'actor_token_id'):
+            result += fixed(None if value is None else uuid.UUID(value).bytes)
+        else:
+            result += scalar(None if value is None else value.encode())
+    return result
+
+
+def entry_bytes(row):
+    result = summary_bytes(row)
+    # JSON columns contain stored jsonb text, or None for SQL NULL. The
+    # nonnil text "null" therefore remains distinct from an absent column.
+    for name in ('before_state', 'after_state', 'metadata'):
+        value = row.get(name)
+        encoded = None if value is None else canonical(json.loads(
+            value, parse_int=Number, parse_float=Number)).encode()
+        result += scalar(encoded)
+    for name in ('client_ip', 'actor_token_name', 'actor_token_kind', 'txid'):
+        value = row.get(name)
+        result += scalar(None if value is None else value.encode())
+    return result
+
+
+def verify_entry(record, row):
+    assert len(record) == 119 and record[:2] == b'\2\1'
+    assert record[47:55] == struct.pack('>q', row['occurred_at_unix_micros'])
+    assert record[55:87] == digest(b'OMP-AUDIT-SUMMARY\0V1\0', summary_bytes(row))
+    assert record[87:119] == digest(b'OMP-AUDIT-ENTRY\0V1\0', entry_bytes(row))
+
+
 def vector(raw):
     c = canonical(json.loads(raw, parse_int=Number, parse_float=Number))
-    values = [struct.pack('>q', 1700000000123456), b'team.create', b'system', None, None, b'team', b'', 'é\n'.encode(), None]
-    summary = b''.join((b'\0' if value is None else b'\1' + value) if i in (0, 3, 4, 8) else scalar(value) for i, value in enumerate(values))
-    full = summary + b''.join(map(scalar, [None, b'null', c.encode(), b'', None, None, None]))
+    row = dict(occurred_at_unix_micros=1700000000123456, action='team.create',
+               actor_kind='system', target_type='team', target_id='',
+               request_id='é\n', after_state='null', metadata=raw, client_ip='')
+    summary, full = summary_bytes(row), entry_bytes(row)
     sh = digest(b'OMP-AUDIT-SUMMARY\0V1\0', summary)
     eh = digest(b'OMP-AUDIT-ENTRY\0V1\0', full)
     stream = uuid.UUID('00112233-4455-4677-8899-aabbccddeeff').bytes
     genesis = digest(b'OMP-AUDIT-EVIDENCE\0GENESIS\0V2\0', stream)
     record = b'\2\1\0' + stream + struct.pack('>IQ', 1, 1) + b'\xff'*8 + struct.pack('>qq', 42, 1700000000123456) + sh + eh
     assert len(record) == 119
+    verify_entry(record, row)
     chain = digest(b'OMP-AUDIT-EVIDENCE\0CHAIN\0V2\0', genesis + record)
     return dict(JSON=raw, Canonical=c, Summary=sh.hex(), Entry=eh.hex(), Record=record.hex(), Genesis=genesis.hex(), Chain=chain.hex())
 
