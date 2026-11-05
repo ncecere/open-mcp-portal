@@ -95,7 +95,7 @@ CREATE OR REPLACE FUNCTION public.omp_purge_audit_log(days integer, batch_size i
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp SET TimeZone = 'UTC' AS $$
 DECLARE previous_flag text:=current_setting('omp.audit_purge',true); settings jsonb; floor_days integer; calls integer; team_calls integer; tip bigint; stop_seq bigint; prefix bigint; old_prefix bigint; cutoff timestamptz; r record; deleted bigint:=0; locked_id bigint;
 BEGIN
- IF days IS NULL OR days NOT BETWEEN 1 AND 3650 OR batch_size IS NULL OR batch_size NOT BETWEEN 1 AND 100000 THEN RAISE EXCEPTION 'invalid purge arguments'; END IF;
+ IF days IS NULL OR days>3650 OR batch_size IS NULL OR batch_size NOT BETWEEN 1 AND 100000 THEN RAISE EXCEPTION 'invalid purge arguments' USING ERRCODE='22023'; END IF;
  SELECT periods INTO STRICT settings FROM public.retention_settings WHERE id=1;
  SELECT last_seq INTO STRICT tip FROM omp_audit.state WHERE singleton;
  -- Serializes purges and consumer configuration, avoiding an ack/configuration race.
