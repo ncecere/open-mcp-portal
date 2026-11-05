@@ -37,6 +37,7 @@ import { capabilitiesQuery, invalidateServer, type ServerAbilities, type ServerS
 import { OverrideDialog } from "./override-dialog";
 import { overrideLabels } from "./requirement";
 import m from "./servers.module.css";
+import { ScanFindings } from "./scan-findings";
 
 const stateOf = (c: McpCapability) => (c.goneAt ? "gone" : c.changed ? "changed" : c.approved ? "approved" : "listed");
 
@@ -79,6 +80,7 @@ export function CapabilitiesTab({ server, scope, abilities }: Props) {
           {needsText(server.requirement)} unless a capability says otherwise (its badge shows what it receives). {serviceAccountsCant}
         </Alert>
       )}
+      <ScanFindings scope={scope} serverId={server.id} canRescan={scope.kind === "team" ? abilities.canEdit : abilities.canReview} />
       <Card title="Capabilities" description={server.refreshedAt ? <>As listed at the last refresh, <Time value={server.refreshedAt} />.</> : "Not read yet."}>
         <div className={m.stack}>
           {scope.kind === "team" && abilities.canManage && all.some((c) => c.kind === "tool" && !c.goneAt) && (
@@ -234,7 +236,9 @@ function CapabilityRow({ cap, server, scope, abilities, inCatalog }: { cap: McpC
                   title={`Approve the change to ${cap.name}?`}
                   description="The catalog shows its new definition from now on, and a model will read it. Read the definition before you approve."
                   confirmLabel="Approve change"
-                />
+                >
+                  {confirming && <ScanFindings scope={scope} serverId={server.id} capabilityId={cap.id} canRescan={scope.kind === "team" ? abilities.canEdit : abilities.canReview} />}
+                </ConfirmMutationDialog>
               </>
             )}
           </div>

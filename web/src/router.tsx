@@ -46,6 +46,7 @@ const pages = {
   connect: () => import("./pages/connect/routes"),
   teamUsage: () => import("./pages/team/usage"),
   teamCalls: () => import("./pages/team/calls/routes"),
+  adminScanning: () => import("./pages/admin/operations/scanning"),
   adminOperations: () => import("./pages/admin/operations/routes"),
   adminOverview: () => import("./pages/admin/overview/routes"),
   adminNotifications: () => import("./pages/admin/notifications/routes"),
@@ -282,6 +283,7 @@ const appTree = appRoute.addChildren([
   ]),
   adminRoute.addChildren([
     adminIndexRoute,
+    adminList("scanning", lazy(pages.adminScanning, "AdminScanningPage")),
     adminList("approval-rules", lazy(pages.approvals, "AdminApprovalRulesPage")),
     adminList("users", lazy(pages.people, "AdminUsersPage")),
     adminList("users/$userId", lazy(pages.people, "AdminUserPage")),

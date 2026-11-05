@@ -26,6 +26,7 @@ import { invalidateServer, type ServerScope, storeServer } from "./scope";
 import { SignInSummary } from "./sign-in-card";
 import { authModeOf } from "./upstream-auth";
 import { EndpointsSummary } from "./endpoints-summary";
+import { ScanFindings } from "./scan-findings";
 
 const maxNote = 2000;
 
@@ -109,6 +110,7 @@ export function PublishDialog({ server, onClose }: { server: McpServer; onClose:
       submitLabel={self ? "Publish" : "Request review"}
       busy={publish.isPending}
     >
+      <ScanFindings scope={{ kind: "team", team: server.teamSlug }} serverId={server.id} canRescan />
       <ServerReceives server={server} scope={{ kind: "team", team: server.teamSlug }} />
       <Field label={self ? "Note" : "Note for the reviewer"} labelHint="Optional" description={self ? "Kept with the server's publishing record." : "What the server is for, who should use it, anything they should check."}>
         <Textarea rows={3} maxLength={maxNote} value={note} onChange={(e) => setNote(e.target.value)} />
@@ -235,6 +237,7 @@ export function ReviewDialog({ server, decision, onClose }: { server: McpServer;
       submitDisabled={Boolean(blocked)}
       busy={review.isPending}
     >
+      {decision === "approve" && <ScanFindings scope={{ kind: "admin" }} serverId={server.id} canRescan />}
       {decision === "approve" && <ApproveChecks server={server} />}
       {decision === "approve" && <ServerReceives server={server} scope={{ kind: "admin" }} />}
       {server.publishRequestNote && decision !== "remove" && (
