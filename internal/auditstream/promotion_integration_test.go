@@ -19,7 +19,7 @@ func TestPhysicalPromotion(t *testing.T) {
 	if os.Getenv("OMP_TEST_PHYSICAL_PROMOTION") != "1" {
 		t.Skip("set OMP_TEST_PHYSICAL_PROMOTION=1 for the owned Docker promotion fixture")
 	}
-	for _, phase := range []string{"running", "pending", "marked"} {
+	for _, phase := range []string{"running", "pending", "marked", "orphaned"} {
 		t.Run(phase, func(t *testing.T) { physicalPromotionFixture(t, phase) })
 	}
 }
@@ -96,6 +96,14 @@ func physicalPromotionFixture(t *testing.T, phase string) {
 	docker("exec", standby, "pg_ctl", "-D", "/var/lib/postgresql/data", "promote", "-w")
 	if count(t, r, `SELECT pg_is_in_recovery()::int`) != 0 {
 		t.Fatal("promotion did not complete")
+	}
+	if phase == "orphaned" {
+		if n, e := (Sealer{r}).Batch(ctx); e != nil || n != 0 {
+			t.Fatalf("orphaned rebase fence: %d %v", n, e)
+		}
+		if count(t, r, `SELECT count(*) FROM omp_audit.chain WHERE kind='epoch_start'`) != 2 {
+			t.Fatal("promotion required owner intervention")
+		}
 	}
 	if phase == "running" {
 		_, err = (Sealer{r}).Batch(ctx)

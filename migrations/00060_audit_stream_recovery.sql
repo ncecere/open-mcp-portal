@@ -61,6 +61,13 @@ BEGIN
   UPDATE omp_audit.state SET status='halted_incarnation' WHERE singleton;
   RETURN 0;
  END IF;
+ -- A surviving leader may observe promotion after the rebase owner died.
+ -- Finalize its durable original declaration before the automatic timeline
+ -- marker; keep status rebasing so no data can escape the rebase fence.
+ IF mode='check' AND s.status='rebasing' AND s.epoch_pending IS NOT NULL AND s.timeline<>live_timeline THEN
+  PERFORM omp_audit.append_epoch(NULL);
+  SELECT * INTO STRICT s FROM omp_audit.state WHERE singleton;
+ END IF;
  IF s.status IN ('running','rebasing') AND s.epoch_pending IS NULL AND s.timeline<>live_timeline THEN
   PERFORM omp_audit.prepare_epoch('timeline',NULL);
   PERFORM omp_audit.append_epoch(NULL);

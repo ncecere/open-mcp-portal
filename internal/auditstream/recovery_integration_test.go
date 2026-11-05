@@ -550,6 +550,12 @@ func TestTimelineChangeDuringRebase(t *testing.T) {
 			if err := p.QueryRow(ctx, insert).Scan(&id); err != nil {
 				t.Fatal(err)
 			}
+			if n, err := (Sealer{p}).Batch(ctx); err != nil || n != 0 {
+				t.Fatalf("rebasing data escaped fence: %d %v", n, err)
+			}
+			if count(t, p, `SELECT count(*) FROM omp_audit.chain WHERE kind='epoch_start'`) != 2 {
+				t.Fatal("leader did not automatically record promotion")
+			}
 			if err := (Sealer{o}).Rebase(ctx, nil); err != nil {
 				t.Fatal(err)
 			}
