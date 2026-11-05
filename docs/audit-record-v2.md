@@ -77,6 +77,8 @@ of `OMP-AUDIT-EPOCH\0V1\0` followed by, in order:
 - `new_system_identifier` text, `new_timeline` i64.
 - `gap_from`, `gap_to`: nullable i64, using fixed-width presence framing.
 
+In this kind-specific summary, mandatory fixed-width fields are raw and
+unframed; only text and nullable gap endpoints use presence framing.
 All fields except the gap endpoints MUST be present. Identifiers are unsigned
 PostgreSQL decimal text. Both gap endpoints MUST be NULL together, or describe
 `predecessor_seq + 1 … resume_after_seq`, inclusive. An absent gap starts the
@@ -91,7 +93,9 @@ clean continuation requires the declared predecessor at `seq - 1` with the held
 hash, no declared gap, and no held records beyond that predecessor. All other
 epoch starts require local approval, which installs the marker as a new trusted
 anchor while retaining the previous anchors and orphaned records as fork evidence.
-A different hash at an already held sequence MUST alert and preserve both hashes.
+Archived orphaned records MUST NOT block verified continuation from the approved
+anchor; conflicting records remain fork evidence. A different hash at an already
+held sequence MUST alert and preserve both hashes.
 An unsigned tip MUST NOT replace trusted local state. The Python `Receiver`
 harness implements these rules; it does not define a delivery API.
 
