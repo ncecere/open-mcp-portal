@@ -166,4 +166,6 @@ text. Description thresholds start at info, JWT shapes at low. NFKC/case folding
 promotes the existing x/text dependency; same-server skeleton comparison adds
 pinned BSD-licensed mtibben/confusables (2020 Unicode tables). Mixed-script
 Script_Extensions coverage and full acceptance evidence remain review items.
+Backfill preserves completed results and orders pending definitions by their last
+attempt; work not reached inside the batch budget retains its queue age.
 
