@@ -155,6 +155,8 @@ class Receiver:
         self.held = {seq: bytes.fromhex(anchor)}
         self.tip = seq
         self.records = {}
+        self.history = {seq: {bytes.fromhex(anchor): None}}
+        self.fork_keys = set()
         self.forks = []
         self.approvals = []
 
@@ -167,10 +169,17 @@ class Receiver:
         previous, claimed = bytes.fromhex(previous), bytes.fromhex(claimed)
         assert len(previous) == len(claimed) == 32
         assert digest(b'OMP-AUDIT-EVIDENCE\0CHAIN\0V2\0', previous + record) == claimed
-        if seq in self.held and self.held[seq] != claimed:
-            self.forks.append((seq, self.held[seq], claimed, self.records.get(seq), record))
-            if not approve:
-                raise ValueError('fork; approval required')
+        known = self.history.setdefault(seq, {})
+        if seq in self.held:
+            known.setdefault(self.held[seq], self.records.get(seq))
+        for old, old_record in list(known.items()):
+            key = (seq, frozenset((old, claimed)))
+            if old != claimed and key not in self.fork_keys:
+                self.forks.append((seq, old, claimed, old_record, record))
+                self.fork_keys.add(key)
+        known[claimed] = record
+        if seq in self.held and self.held[seq] != claimed and not approve:
+            raise ValueError('fork; approval required')
         clean = seq == self.tip + 1 and self.held.get(seq-1) == previous
         if record[1] == 2:
             e = declaration
@@ -185,6 +194,13 @@ class Receiver:
                 if not approve:
                     raise ValueError('discontinuity; approval required')
                 self.approvals.append((record, dict(self.held), dict(self.records)))
+                # Keep old anchors/records as evidence, but they are no longer
+                # predecessors on the approved branch. Otherwise each orphaned
+                # future seq would demand approval again, preventing recovery.
+                for old_seq, old_hash in self.held.items():
+                    self.history.setdefault(old_seq, {}).setdefault(old_hash, self.records.get(old_seq))
+                self.held = {}
+                self.records = {}
         else:
             assert clean
         self.held[seq] = claimed

@@ -49,5 +49,27 @@ class RecoveryTests(unittest.TestCase):
                 fork.accept(r, e['predecessor_hash'], v['chain'], e)
             self.assertEqual(len(fork.forks), 1)
 
+    def test_approved_rewind_continues_past_orphaned_sequences(self):
+        from reference_v2 import Receiver, digest
+        import struct
+        v = json.loads((Path(__file__).parents[2] / 'auditstream/testdata/epoch_vectors.json').read_text())[0]
+        e = v['summary']
+        recv = Receiver('00112233-4455-4677-8899-aabbccddeeff', 14, 'cd'*32)
+        recv.held[12] = bytes.fromhex(e['predecessor_hash'])
+        marker = bytes.fromhex(v['record'])
+        with self.assertRaises(ValueError):
+            recv.accept(marker, e['predecessor_hash'], v['chain'], e)
+        recv.accept(marker, e['predecessor_hash'], v['chain'], e, approve=True)
+        self.assertEqual(recv.approvals[0][1][14], bytes.fromhex('cd'*32))
+        entry = bytearray(bytes.fromhex(json.loads((Path(__file__).parents[2] / 'auditstream/testdata/vectors.json').read_text())[0]['Record']))
+        entry[19:31] = struct.pack('>IQ', 2, 14)
+        entry = bytes(entry)
+        chain = digest(b'OMP-AUDIT-EVIDENCE\0CHAIN\0V2\0', bytes.fromhex(v['chain']) + entry).hex()
+        recv.accept(entry, v['chain'], chain)
+        self.assertEqual(recv.tip, 14)
+        self.assertEqual(len(recv.approvals), 1)
+        self.assertEqual(len(recv.history[14]), 2)
+        self.assertEqual(recv.forks[-1][0], 14)
+
 if __name__ == '__main__':
     unittest.main()
