@@ -314,7 +314,9 @@ The platform defaults to `shadow`. Platform admins use the browser-session API
 `{"definitionMode":"shadow"}` and the current ETag in `If-Match`. Concurrent
 changes return 409. Both states are audited without content. Automation tokens
 receive `403 token_not_allowed`; auditors may read settings and the rule catalog.
-There is no settings panel in this slice (#73 owns the UI).
+In **Admin › Settings › Definition scanning**, platform admins choose Off or Shadow; auditors
+read the mode and rule catalog. A conflicting save keeps your edits and asks you to review
+the latest settings before saving again.
 
 Shadow scans stored tool, prompt and resource definitions locally at refresh,
 before the storage transaction. Scanning calls no external service. Findings do not
@@ -322,6 +324,17 @@ rewrite, approve, block or redact definitions, and never enter fingerprints or
 the review digest. `off` skips scanning and hides old findings; it does not erase
 existing evidence. A scan that found nothing means only that the heuristics found
 nothing, and does not mean the definition is safe.
+
+The server **Capabilities** tab, publish dialog, server approval dialog and capability-change
+review dialog show findings per capability: rule id, group, severity, count and inert location,
+with ruleset version and scan time. **Incomplete** includes its reason; **stale** means the
+current definition/ruleset has not been scanned; **off** means scanning is disabled. None
+is a safety verdict. An empty completed scan explicitly says heuristics found nothing and
+that this does not mean the definition is safe. Review the definition yourself; see
+[what scanning will not catch](content-scanning.md#9-what-this-will-not-catch).
+
+Team server editors can **Rescan definitions**; in Admin views only platform admins can.
+Rescan reads stored definitions without contacting the upstream.
 
 `GET /v1/admin/scanning/rules` lists ruleset `v1`.
 `GET /v1/teams/{team}/mcp-servers/{serverId}/scan-findings` (and its admin

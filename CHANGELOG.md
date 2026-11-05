@@ -8,6 +8,8 @@ breaking changes; the entry says how to adapt.
 
 ## Unreleased
 
+- Show definition scan findings and scan times in Capabilities and publish/approval reviews, with explicit incomplete/stale/off states and heuristic limitations; add Admin scanning mode and rule catalog (shadow only, #73).
+
 - Add audit stream incarnation recovery commands, epoch declarations and safety sweeps behind the disabled audit stream setting.
 
 - Add the disabled audit-stream sealing core, record v2 and protected schema (#38, slice 1a).
