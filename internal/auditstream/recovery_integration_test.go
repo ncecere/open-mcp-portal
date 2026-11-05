@@ -344,6 +344,16 @@ func TestRebaseCrashProcess(t *testing.T) {
 			if err = child.Run(); err == nil {
 				t.Fatal("child survived")
 			}
+			if exit, ok := err.(*osexec.ExitError); !ok || exit.ExitCode() != -1 {
+				t.Fatalf("child did not die by signal: %v", err)
+			}
+			markers := int64(0)
+			if stage == "marked" {
+				markers = 1
+			}
+			if got := count(t, p, `SELECT count(*) FROM omp_audit.chain WHERE kind='epoch_start'`); got != markers {
+				t.Fatalf("wrong kill boundary: markers=%d want=%d", got, markers)
+			}
 			if count(t, p, `SELECT count(*) FROM omp_audit.state WHERE status='rebasing'`) != 1 {
 				t.Fatal("missing persisted fence")
 			}
