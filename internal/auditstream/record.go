@@ -48,6 +48,14 @@ func scalar(b *bytes.Buffer, v []byte) {
 	_ = binary.Write(b, binary.BigEndian, uint32(len(v)))
 	b.Write(v)
 }
+func fixed(b *bytes.Buffer, v []byte) {
+	if v == nil {
+		b.WriteByte(0)
+	} else {
+		b.WriteByte(1)
+		b.Write(v)
+	}
+}
 func text(b *bytes.Buffer, v string) { scalar(b, []byte(v)) }
 func optional(b *bytes.Buffer, v *string) {
 	if v == nil {
@@ -60,7 +68,7 @@ func id(b *bytes.Buffer, v *uuid.UUID) {
 	if v == nil {
 		scalar(b, nil)
 	} else {
-		scalar(b, v[:])
+		fixed(b, v[:])
 	}
 }
 func i64(v int64) []byte { b := make([]byte, 8); binary.BigEndian.PutUint64(b, uint64(v)); return b }
@@ -68,7 +76,7 @@ func i64(v int64) []byte { b := make([]byte, 8); binary.BigEndian.PutUint64(b, u
 // SummaryBytes encodes every summary field, including explicit presence and length.
 func SummaryBytes(r Row) []byte {
 	var b bytes.Buffer
-	scalar(&b, i64(r.OccurredAt.UnixMicro()))
+	fixed(&b, i64(r.OccurredAt.UnixMicro()))
 	text(&b, r.Action)
 	text(&b, r.ActorKind)
 	id(&b, r.ActorUserID)

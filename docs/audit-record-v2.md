@@ -5,7 +5,8 @@ Implementations MUST hash bytes, never a JSON serialization of the record envelo
 The v1 experiment in `internal/auditevidence` remains a separate protocol.
 
 All integers are big-endian. Every canonical field is encoded as `00` for SQL NULL,
-or `01 || length u32 || value`. This framing applies even to fixed-width fields.
+or `01 || length u32 || value` for variable-length fields. Fixed-width values
+use `01 || value` without a length.
 Lengths count bytes. Text is UTF-8 without normalization; UUID is its 16 raw bytes;
 time is signed i64 microseconds since Unix epoch in UTC. PostgreSQL timestamps must
 be finite and representable in signed Unix microseconds. Empty text is `01 00000000`.
@@ -13,7 +14,7 @@ A zero UUID is present, and differs from SQL NULL.
 
 Summary fields, in exact order: occurred_at (time), action (text), actor_kind (text),
 actor_user_id (UUID), team_id (UUID), target_type (text), target_id (text), request_id
-(text), actor_token_id (UUID). All fields use the presence/length framing above.
+(text), actor_token_id (UUID). All fields use the presence framing above, with lengths only for text.
 
 Full entry bytes start with those summary bytes and append, in order: before_state,
 after_state, metadata (canonical JSON text), client_ip (text), actor_token_name

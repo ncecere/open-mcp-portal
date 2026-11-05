@@ -33,7 +33,7 @@ def digest(domain, v):
 def vector(raw):
     c = canonical(json.loads(raw, parse_int=Number, parse_float=Number))
     values = [struct.pack('>q', 1700000000123456), b'team.create', b'system', None, None, b'team', b'', 'é\n'.encode(), None]
-    summary = b''.join(map(scalar, values))
+    summary = b''.join((b'\0' if value is None else b'\1' + value) if i in (0, 3, 4, 8) else scalar(value) for i, value in enumerate(values))
     full = summary + b''.join(map(scalar, [None, b'null', c.encode(), b'', None, None, None]))
     sh = digest(b'OMP-AUDIT-SUMMARY\0V1\0', summary)
     eh = digest(b'OMP-AUDIT-ENTRY\0V1\0', full)

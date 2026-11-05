@@ -44,18 +44,24 @@ SET search_path = pg_catalog, pg_temp SET TimeZone = 'UTC' AS $$
 $$;
 -- +goose StatementEnd
 -- +goose StatementBegin
+CREATE FUNCTION omp_audit.fixed(v bytea) RETURNS bytea LANGUAGE sql IMMUTABLE
+SET search_path = pg_catalog, pg_temp SET TimeZone = 'UTC' AS $$
+ SELECT CASE WHEN v IS NULL THEN decode('00','hex') ELSE decode('01','hex')||v END
+$$;
+-- +goose StatementEnd
+-- +goose StatementBegin
 CREATE FUNCTION omp_audit.summary(a public.audit_log) RETURNS bytea LANGUAGE sql IMMUTABLE
 SET search_path = pg_catalog, pg_temp SET TimeZone = 'UTC' AS $$
  SELECT sha256(decode('4f4d502d41554449542d53554d4d41525900563100','hex')||
-omp_audit.scalar(int8send((extract(epoch FROM a.occurred_at)*1000000)::bigint))||
+omp_audit.fixed(int8send((extract(epoch FROM a.occurred_at)*1000000)::bigint))||
 omp_audit.scalar(convert_to(a.action,'UTF8'))||
 omp_audit.scalar(convert_to(a.actor_kind,'UTF8'))||
-omp_audit.scalar(uuid_send(a.actor_user_id))||
-omp_audit.scalar(uuid_send(a.team_id))||
+omp_audit.fixed(uuid_send(a.actor_user_id))||
+omp_audit.fixed(uuid_send(a.team_id))||
 omp_audit.scalar(convert_to(a.target_type,'UTF8'))||
 omp_audit.scalar(convert_to(a.target_id,'UTF8'))||
 omp_audit.scalar(convert_to(a.request_id,'UTF8'))||
-omp_audit.scalar(uuid_send(a.actor_token_id)))
+omp_audit.fixed(uuid_send(a.actor_token_id)))
 $$;
 -- +goose StatementEnd
 -- +goose StatementBegin
