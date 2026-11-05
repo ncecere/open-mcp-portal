@@ -48,11 +48,12 @@ var phrases = []struct{ id, severity, pattern string }{
 	{"sensitive_path", "low", `~/\.ssh|\bid_rsa\b|\.env\b|mcp\.json|/etc/passwd|\.aws/credentials|\.config/gcloud`},
 	{"pseudo_tag", "medium", `<important>|<system>|\[system\]|<instructions>`},
 	{"precondition", "info", `before using this tool, (you must|first)|always call [a-z0-9_.-]+ first`},
-	{"cross_tool_reference", "info", `\binstead of\b|\bwhen [a-z0-9_]+__[a-z0-9_]+ is (called|used)\b`},
+	{"cross_tool_reference", "info", `\binstead of\b|\boverride\b|\bwhen [a-z0-9_.-]+ is (called|used)\b`},
 	{"parameter_sink", "low", `\b(conversation history|file contents|credentials|sidenote)\b`},
 	{"external_url", "info", `https?://[^\s<>]+`},
 	{"encoded_blob", "info", `\b[A-Za-z0-9+/]{200,}={0,2}\b|\b[0-9a-f]{200,}\b`},
 }
+var instructionVerb = regexp.MustCompile(`\b(read|send|upload|copy|open)\b`)
 var compiled = func() []*regexp.Regexp {
 	var out []*regexp.Regexp
 	for _, p := range phrases {
@@ -179,7 +180,7 @@ func scan(ctx context.Context, raw []byte, origin string, testRule func(string))
 			}
 			n := len(compiled[i].FindAllStringIndex(normalized, 100000))
 			sev := p.severity
-			if p.id == "sensitive_path" && regexp.MustCompile(`\b(read|send|upload|copy|open)\b`).MatchString(normalized) {
+			if n > 0 && p.id == "sensitive_path" && instructionVerb.MatchString(normalized) {
 				sev = "high"
 			}
 			add("poison."+p.id, sev, ptr, n)
@@ -294,6 +295,12 @@ func unicodeFind(s, key string, add func(string, string, int)) {
 			if i == 0 || payloadVariationSelector(rs[i-1]) || rs[i-1] < 0x2300 {
 				counts["variation_selector"]++
 			}
+		case r == 0xad:
+			if i > 1 && invisible(rs[i-1]) && invisible(rs[i-2]) {
+				counts["invisible"]++
+			} else if between {
+				add("invisible", "low", 1)
+			}
 		case r == 0x200b || r == 0x2060 || r == 0xfeff || r == 0xad || r == 0x180e || r == 0x34f:
 			if between || i > 1 && invisible(rs[i-1]) && invisible(rs[i-2]) {
 				counts["invisible"]++
@@ -332,13 +339,18 @@ func phraseCandidate(id, s string) bool {
 	case "concealment":
 		return strings.Contains(s, "user")
 	case "sensitive_path":
-		return strings.ContainsAny(s, "./_")
+		for _, path := range []string{"~/.ssh", "id_rsa", ".env", "mcp.json", "/etc/passwd", ".aws/credentials", ".config/gcloud"} {
+			if strings.Contains(s, path) {
+				return true
+			}
+		}
+		return false
 	case "pseudo_tag":
 		return strings.ContainsAny(s, "<[")
 	case "precondition":
 		return strings.Contains(s, "before") || strings.Contains(s, "always call")
 	case "cross_tool_reference":
-		return strings.Contains(s, "instead of") || strings.Contains(s, "__")
+		return strings.Contains(s, "instead of") || strings.Contains(s, "override") || strings.Contains(s, "when ")
 	case "parameter_sink":
 		return strings.Contains(s, "history") || strings.Contains(s, "contents") || strings.Contains(s, "credentials") || strings.Contains(s, "sidenote")
 	case "external_url":

@@ -94,3 +94,33 @@ func TestSchemaLengthAcrossKindsAndMongolianVariation(t *testing.T) {
 		t.Fatalf("legitimate Mongolian selector: %+v", r)
 	}
 }
+
+func TestSoftHyphenAndCrossToolPhrasing(t *testing.T) {
+	raw, _ := json.Marshal(map[string]string{"description": "hy" + string(rune(0xad)) + "phenation"})
+	r := Scan(context.Background(), raw)
+	found := false
+	for _, f := range r.Findings {
+		if f.Severity == "medium" || f.Severity == "high" {
+			t.Fatal("benign soft hyphen escalated")
+		}
+		if f.RuleID == "unicode.invisible" && f.Severity == "low" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("soft hyphen missing low count")
+	}
+	for _, text := range []string{"when lookup is called", "override another tool"} {
+		raw, _ := json.Marshal(map[string]string{"description": text})
+		r := Scan(context.Background(), raw)
+		found = false
+		for _, f := range r.Findings {
+			if f.RuleID == "poison.cross_tool_reference" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("cross-tool phrasing missed: %+v", r)
+		}
+	}
+}

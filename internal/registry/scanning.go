@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -65,7 +66,13 @@ func (s *Service) UpdateScanningSettings(ctx context.Context, a authz.Actor, mod
 
 var scanSlots = make(chan struct{}, 2)
 
-func (s *Service) scanDefinitions(ctx context.Context, caps []upstream.Capability, origin string) map[string]definitionscan.Result {
+func (s *Service) scanDefinitions(ctx context.Context, caps []upstream.Capability, origin string, allNames ...string) map[string]definitionscan.Result {
+	return s.scanDefinitionBatch(ctx, caps, origin, false, allNames)
+}
+
+// Pending-only batches leave unattempted rows untouched, so their age keeps
+// them ahead of repeatedly incomplete definitions on the next backfill pass.
+func (s *Service) scanDefinitionBatch(ctx context.Context, caps []upstream.Capability, origin string, onlyAttempted bool, allNames []string) map[string]definitionscan.Result {
 	st, err := s.q.GetPlatformSettings(ctx)
 	if err != nil {
 		s.scanFailed(ctx, "settings")
@@ -78,6 +85,10 @@ func (s *Service) scanDefinitions(ctx context.Context, caps []upstream.Capabilit
 	case scanSlots <- struct{}{}:
 		defer func() { <-scanSlots }()
 	default:
+		if onlyAttempted {
+			s.scanFailed(ctx, "busy")
+			return nil
+		}
 		out := make(map[string]definitionscan.Result, len(caps))
 		for _, c := range caps {
 			out[c.Kind+" "+c.Name] = definitionscan.Result{Status: "incomplete", RulesetVersion: definitionscan.Version, Reason: "busy", Findings: []definitionscan.Finding{}}
@@ -87,35 +98,44 @@ func (s *Service) scanDefinitions(ctx context.Context, caps []upstream.Capabilit
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
+
+	names := allNames
+	if len(names) == 0 {
+		names = make([]string, len(caps))
+		for i, c := range caps {
+			names[i] = c.Name
+		}
+	}
+	// Compare the whole inventory before the per-definition budget can expire.
+	// Completed scans then remain usable when later definitions exceed the batch budget.
+	confusable := map[string]bool{}
+	for i, found := range definitionscan.ConfusableNames(ctx, names) {
+		if found {
+			confusable[names[i]] = true
+		}
+	}
 	out := make(map[string]definitionscan.Result, len(caps))
-	for _, cp := range caps {
+	for i, cp := range caps {
+		if onlyAttempted && ctx.Err() != nil {
+			observability.ScanIncomplete.WithLabelValues("definition", "budget").Add(float64(len(caps) - i))
+			break
+		}
 		start := time.Now()
 		r := definitionscan.ScanOrigin(ctx, cp.Definition, origin)
+		if confusable[cp.Name] && len(r.Findings) < definitionscan.MaxFindings {
+			location := "/name"
+			switch cp.Kind {
+			case upstream.KindResource:
+				location = "/uri"
+			case upstream.KindResourceTemplate:
+				location = "/uriTemplate"
+			}
+			r.Findings = append(r.Findings, definitionscan.Finding{RuleID: "unicode.confusable_name", Severity: "medium", Count: 1, Location: location})
+		}
 		out[cp.Kind+" "+cp.Name] = r
 		observeDefinitionScan(r, time.Since(start))
 	}
-	names := make([]string, len(caps))
-	for i, c := range caps {
-		names[i] = c.Name
-	}
-	for i, found := range definitionscan.ConfusableNames(ctx, names) {
-		if found {
-			key := caps[i].Kind + " " + caps[i].Name
-			r := out[key]
-			if len(r.Findings) < definitionscan.MaxFindings {
-				r.Findings = append(r.Findings, definitionscan.Finding{RuleID: "unicode.confusable_name", Severity: "medium", Count: 1, Location: "/name"})
-				observability.ScanFindings.WithLabelValues("definition", "unicode.confusable_name", "annotated").Inc()
-				out[key] = r
-			}
-		}
-	}
-	if ctx.Err() != nil {
-		for key, r := range out {
-			r.Status = "incomplete"
-			r.Reason = "budget"
-			out[key] = r
-		}
-	}
+
 	return out
 }
 func (s *Service) scanFailed(ctx context.Context, reason string) {
@@ -246,17 +266,41 @@ func (s *Service) DefinitionFindings(ctx context.Context, a authz.Actor, ref str
 	}
 	return out, nil
 }
-func (s *Service) rescanDefinitions(ctx context.Context, sv dbgen.McpServer) error {
+func (s *Service) rescanDefinitions(ctx context.Context, sv dbgen.McpServer, staleOnly ...bool) error {
 	rows, err := s.q.ListMCPCapabilities(ctx, dbgen.ListMCPCapabilitiesParams{ServerID: sv.ID})
 	if err != nil {
 		return err
 	}
 	var caps []upstream.Capability
+	ages := map[string]time.Time{}
+	pending := len(staleOnly) > 0 && staleOnly[0]
+	var names []string
+	for _, row := range rows {
+		names = append(names, row.McpCapability.Name)
+	}
 	for _, row := range rows {
 		c := row.McpCapability
+		if pending {
+			if c.GoneAt != nil {
+				continue
+			}
+			scan, e := s.q.GetDefinitionScan(ctx, c.ID)
+			if e != nil && !errors.Is(e, pgx.ErrNoRows) {
+				return e
+			}
+			if e == nil {
+				ages[c.Kind+" "+c.Name] = scan.ScannedAt
+			}
+			if e == nil && scan.Status == "scanned" && scan.Fingerprint == c.Fingerprint && scan.RulesetVersion == definitionscan.Version {
+				continue
+			}
+		}
 		caps = append(caps, upstream.Capability{Kind: c.Kind, Name: c.Name, Definition: c.Definition, Fingerprint: c.Fingerprint})
 	}
-	results := s.scanDefinitions(ctx, caps, sv.URL)
+	if pending {
+		orderPendingDefinitions(caps, ages)
+	}
+	results := s.scanDefinitionBatch(ctx, caps, sv.URL, pending, names)
 	return store.InTx(ctx, s.pool, func(q *dbgen.Queries, tx pgx.Tx) error {
 		if _, err := anyServer(ctx, q, sv.ID, true); err != nil {
 			return err
@@ -309,7 +353,7 @@ func (s *Service) RunScanBackfill(ctx context.Context) error {
 		if e != nil {
 			return e
 		}
-		if e = s.rescanDefinitions(ctx, sv); e != nil {
+		if e = s.rescanDefinitions(ctx, sv, true); e != nil {
 			return e
 		}
 	}
@@ -347,4 +391,10 @@ func observeDefinitionScan(r definitionscan.Result, d time.Duration) {
 		}
 		observability.ScanFindings.WithLabelValues("definition", rule, "annotated").Add(float64(f.Count))
 	}
+}
+
+func orderPendingDefinitions(caps []upstream.Capability, ages map[string]time.Time) {
+	sort.SliceStable(caps, func(i, j int) bool {
+		return ages[caps[i].Kind+" "+caps[i].Name].Before(ages[caps[j].Kind+" "+caps[j].Name])
+	})
 }

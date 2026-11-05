@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/prometheus/client_golang/prometheus"
 	"log/slog"
 	"strings"
@@ -307,5 +308,94 @@ func TestScanMetricCardinality(t *testing.T) {
 	}
 	if !unknownCollapsed {
 		t.Fatal("unknown id not collapsed")
+	}
+}
+
+func TestBackfillSkipsCompletedDefinitions(t *testing.T) {
+	s, exec := testService(t)
+	ctx := context.Background()
+	team := exec(`INSERT INTO teams(slug,name)VALUES('scan','Scan')RETURNING id::text`)
+	server := exec(`INSERT INTO mcp_servers(team_id,slug,name,url)VALUES($1,'s','S','https://example.org')RETURNING id::text`, team)
+	first := uuid.MustParse(exec(`INSERT INTO mcp_capabilities(server_id,kind,name,definition,fingerprint)VALUES($1,'tool','a','{}',repeat('a',64))RETURNING id::text`, server))
+	second := uuid.MustParse(exec(`INSERT INTO mcp_capabilities(server_id,kind,name,definition,fingerprint)VALUES($1,'tool','b','{}',repeat('b',64))RETURNING id::text`, server))
+	if err := s.q.StoreDefinitionScan(ctx, dbgen.StoreDefinitionScanParams{CapabilityID: first, Fingerprint: strings.Repeat("a", 64), RulesetVersion: definitionscan.Version, Status: "scanned"}); err != nil {
+		t.Fatal(err)
+	}
+	exec(`UPDATE definition_scans SET scanned_at='2000-01-01T00:00:00Z' WHERE capability_id=$1 RETURNING capability_id::text`, first)
+	if err := s.RunScanBackfill(ctx); err != nil {
+		t.Fatal(err)
+	}
+	existing, err := s.q.GetDefinitionScan(ctx, first)
+	if err != nil || !existing.ScannedAt.Equal(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("completed scan was repeated: %+v %v", existing, err)
+	}
+	next, err := s.q.GetDefinitionScan(ctx, second)
+	if err != nil || next.Status != "scanned" {
+		t.Fatalf("missing definition was not reached: %+v %v", next, err)
+	}
+}
+func TestBatchBudgetPreservesCompletedScan(t *testing.T) {
+	s, _ := testService(t)
+	ctx := context.Background()
+	raw, _ := json.Marshal(map[string]string{"description": strings.Repeat("ab12", 15000)})
+	caps := make([]upstream.Capability, 2000)
+	caps[0] = upstream.Capability{Kind: "tool", Name: "first", Definition: []byte(`{}`)}
+	for i := 1; i < len(caps); i++ {
+		caps[i] = upstream.Capability{Kind: "tool", Name: fmt.Sprintf("name%d", i), Definition: raw}
+	}
+	results := s.scanDefinitions(ctx, caps, "https://example.org")
+	if results["tool first"].Status != "scanned" {
+		t.Fatal("batch expiry invalidated an earlier completed scan")
+	}
+	if last := results["tool "+caps[len(caps)-1].Name]; last.Status != "incomplete" || last.Reason != "budget" {
+		t.Fatalf("last definition: %+v", last)
+	}
+}
+
+func TestConfusableCapabilityLocations(t *testing.T) {
+	s, _ := testService(t)
+	for _, tc := range []struct{ kind, field, prefix, suffix string }{{upstream.KindTool, "name", "", ""}, {upstream.KindResource, "uri", "resource://", ""}, {upstream.KindResourceTemplate, "uriTemplate", "resource://", "/{item}"}} {
+		var caps []upstream.Capability
+		for _, name := range []string{"paypal", "p" + string(rune(0x430)) + "ypal"} {
+			name = tc.prefix + name + tc.suffix
+			raw, _ := json.Marshal(map[string]string{tc.field: name})
+			caps = append(caps, upstream.Capability{Kind: tc.kind, Name: name, Definition: raw})
+		}
+		results := s.scanDefinitions(context.Background(), caps, "https://example.org")
+		for _, cp := range caps {
+			found := false
+			for _, f := range results[cp.Kind+" "+cp.Name].Findings {
+				if f.RuleID == "unicode.confusable_name" && f.Location == "/"+tc.field && f.Severity == "medium" {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("missing %s location", tc.field)
+			}
+		}
+	}
+}
+
+func TestPendingDefinitionOrder(t *testing.T) {
+	caps := []upstream.Capability{{Kind: "tool", Name: "recent"}, {Kind: "tool", Name: "missing"}, {Kind: "tool", Name: "old"}}
+	orderPendingDefinitions(caps, map[string]time.Time{"tool recent": time.Now(), "tool old": time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)})
+	if caps[0].Name != "missing" || caps[1].Name != "old" || caps[2].Name != "recent" {
+		t.Fatal("repeated failures would starve older pending definitions")
+	}
+}
+func TestPendingBatchLeavesUnreachedDefinitions(t *testing.T) {
+	s, _ := testService(t)
+	raw, _ := json.Marshal(map[string]string{"description": strings.Repeat("ab12", 15000)})
+	caps := make([]upstream.Capability, 2000)
+	caps[0] = upstream.Capability{Kind: "tool", Name: "first", Definition: []byte(`{}`)}
+	for i := 1; i < len(caps); i++ {
+		caps[i] = upstream.Capability{Kind: "tool", Name: fmt.Sprintf("pending%d", i), Definition: raw}
+	}
+	results := s.scanDefinitionBatch(context.Background(), caps, "https://example.org", true, nil)
+	if results["tool first"].Status != "scanned" {
+		t.Fatal("lost completed result")
+	}
+	if _, ok := results["tool "+caps[len(caps)-1].Name]; ok {
+		t.Fatal("unreached definition would lose its queue age")
 	}
 }
