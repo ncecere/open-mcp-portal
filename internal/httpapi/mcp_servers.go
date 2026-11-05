@@ -22,6 +22,8 @@ import (
 func (a *api) mcpServerRoutes() []route {
 	const base = "/v1/teams/{team}/mcp-servers"
 	return []route{
+		{"GET", base + "/{serverId}/scan-findings", a.session(a.teamListDefinitionFindings)},
+		{"POST", base + "/{serverId}/scan", a.session(a.teamRescanDefinitions)},
 		{"GET", base, a.session(a.listTeamMcpServers)},
 		{"POST", base, a.session(a.createTeamMcpServer)},
 		{"GET", base + "/{serverId}", a.session(a.getTeamMcpServer)},
@@ -44,6 +46,11 @@ func (a *api) mcpServerRoutes() []route {
 // internal networks.
 func (a *api) mcpAdminRoutes() []route {
 	return []route{
+		{"GET", "/v1/admin/settings/scanning", a.admin(a.adminGetScanningSettings)},
+		{"PUT", "/v1/admin/settings/scanning", a.admin(a.adminUpdateScanningSettings)},
+		{"GET", "/v1/admin/scanning/rules", a.admin(a.adminListScanningRules)},
+		{"GET", "/v1/admin/mcp-servers/{serverId}/scan-findings", a.admin(a.adminListDefinitionFindings)},
+		{"POST", "/v1/admin/mcp-servers/{serverId}/scan", a.admin(a.adminRescanDefinitions)},
 		{"GET", "/v1/admin/mcp-servers", a.admin(a.adminListMcpServers)},
 		{"GET", "/v1/admin/mcp-servers/{serverId}", a.admin(a.adminGetMcpServer)},
 		{"GET", "/v1/admin/mcp-servers/{serverId}/capabilities", a.admin(a.adminListMcpCapabilities)},

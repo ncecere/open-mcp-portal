@@ -13,12 +13,33 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/store"
 )
 
-// Sealer provides normal history and watermark sealing. Recovery operations
-// are deliberately separate from this slice's normal-operation interface.
+// Sealer provides history/watermark sealing and owner-directed recovery.
 type Sealer struct{ Pool *pgxpool.Pool }
 
 // Batch re-reads candidates each time. A failed/stale batch never advances state.
 func (s Sealer) Batch(ctx context.Context) (int64, error) {
+	if _, err := s.Pool.Exec(ctx, `SELECT omp_audit.seal_batch('check','[]'::jsonb)`); err != nil {
+		return 0, err
+	}
+	var status string
+	var currentEpoch float64
+	if err := s.Pool.QueryRow(ctx, `SELECT epoch FROM omp_audit.state WHERE singleton`).Scan(&currentEpoch); err != nil {
+		return 0, err
+	}
+	observability.AuditStreamEpoch.Set(currentEpoch)
+	if err := s.Pool.QueryRow(ctx, `SELECT status FROM omp_audit.state WHERE singleton`).Scan(&status); err != nil {
+		return 0, err
+	}
+	for _, v := range []string{"running", "rebasing", "halted_incarnation"} {
+		n := float64(0)
+		if status == v {
+			n = 1
+		}
+		observability.AuditStreamState.WithLabelValues(v).Set(n)
+	}
+	if status != "running" {
+		return 0, nil
+	}
 	var count int64
 	err := pgx.BeginTxFunc(ctx, s.Pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
 		var stream uuid.UUID
@@ -31,49 +52,16 @@ func (s Sealer) Batch(ctx context.Context) (int64, error) {
 			return err
 		}
 		mode := "history"
-		read := func(query string, args ...any) ([]Row, error) {
-			rows, err := tx.Query(ctx, query, args...)
-			if err != nil {
-				return nil, err
-			}
-			defer rows.Close()
-			var result []Row
-			for rows.Next() {
-				var raw []byte
-				var before, after, meta *string
-				if err := rows.Scan(&raw, &before, &after, &meta); err != nil {
-					return nil, err
-				}
-				var r Row
-				if err := json.Unmarshal(raw, &r); err != nil {
-					return nil, err
-				}
-				r.BeforeState = nil
-				r.AfterState = nil
-				r.Metadata = nil
-				if before != nil {
-					r.BeforeState = json.RawMessage(*before)
-				}
-				if after != nil {
-					r.AfterState = json.RawMessage(*after)
-				}
-				if meta != nil {
-					r.Metadata = json.RawMessage(*meta)
-				}
-				result = append(result, r)
-			}
-			return result, rows.Err()
-		}
 		// JSONB renders xid8 as a string. Separately project JSON text to distinguish
 		// SQL NULL from the jsonb token null, without passing numbers through floats.
 		const projection = `SELECT to_jsonb(a),a.before_state::text,a.after_state::text,a.metadata::text FROM public.audit_log a `
-		candidates, err := read(projection+`WHERE a.txid IS NULL AND a.id>$1 ORDER BY a.id LIMIT 500`, historyID)
+		candidates, err := readRows(ctx, tx, projection+`WHERE a.txid IS NULL AND a.id>$1 AND NOT EXISTS(SELECT 1 FROM omp_audit.chain c WHERE c.legacy_id=a.id) ORDER BY a.id LIMIT 500`, historyID)
 		if err != nil {
 			return err
 		}
 		if len(candidates) == 0 {
 			mode = "fast"
-			candidates, err = read(projection+`WHERE a.txid<pg_snapshot_xmin(pg_current_snapshot()) AND (a.txid,a.id)>($1::xid8,$2::bigint) AND NOT EXISTS(SELECT 1 FROM omp_audit.chain c WHERE c.row_uid=a.row_uid) ORDER BY a.txid,a.id LIMIT 500`, cursor, cursorID)
+			candidates, err = readRows(ctx, tx, projection+`WHERE a.txid<pg_snapshot_xmin(pg_current_snapshot()) AND (a.txid,a.id)>($1::xid8,$2::bigint) AND NOT EXISTS(SELECT 1 FROM omp_audit.chain c WHERE c.row_uid=a.row_uid) ORDER BY a.txid,a.id LIMIT 500`, cursor, cursorID)
 			if err != nil {
 				return err
 			}
@@ -106,7 +94,8 @@ func (s Sealer) Batch(ctx context.Context) (int64, error) {
 }
 
 // Loop elects one leader per pass; all SQL and hashing stays within the local
-// database transaction. No delivery or recovery is implied by this loop.
+// database transaction. Incarnation checks and safety sweeps run here; owner
+// rebase/rebind operations remain explicit commands.
 func (s Sealer) Loop(ctx context.Context, log *slog.Logger) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -124,6 +113,9 @@ func (s Sealer) Loop(ctx context.Context, log *slog.Logger) {
 				continue
 			}
 			_, err = s.Batch(ctx)
+			if err == nil {
+				_, err = s.Sweep(ctx)
+			}
 			release()
 			if err != nil {
 				log.Error("audit stream batch failed", "error", err)
@@ -141,6 +133,40 @@ func (s Sealer) Loop(ctx context.Context, log *slog.Logger) {
 // never the whole audit log.
 const lagQuery = `WITH s AS (SELECT cursor_txid,cursor_id,history_id FROM omp_audit.state WHERE singleton)
 SELECT coalesce(greatest(0,extract(epoch FROM clock_timestamp()-least(
- (SELECT min(a.occurred_at) FROM public.audit_log a,s WHERE a.txid IS NULL AND a.id>s.history_id),
+ (SELECT min(a.occurred_at) FROM public.audit_log a,s WHERE a.txid IS NULL AND a.id>s.history_id AND NOT EXISTS(SELECT 1 FROM omp_audit.chain c WHERE c.legacy_id=a.id)),
  (SELECT min(a.occurred_at) FROM public.audit_log a,s WHERE a.txid IS NOT NULL AND (a.txid,a.id)>(s.cursor_txid,s.cursor_id)
    AND NOT EXISTS(SELECT 1 FROM omp_audit.chain c WHERE c.row_uid=a.row_uid))))),0)::float8`
+
+func readRows(ctx context.Context, tx pgx.Tx, query string, args ...any) ([]Row, error) {
+	rows, err := tx.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []Row
+	for rows.Next() {
+		var raw []byte
+		var before, after, meta *string
+		if err := rows.Scan(&raw, &before, &after, &meta); err != nil {
+			return nil, err
+		}
+		var r Row
+		if err := json.Unmarshal(raw, &r); err != nil {
+			return nil, err
+		}
+		r.BeforeState = nil
+		r.AfterState = nil
+		r.Metadata = nil
+		if before != nil {
+			r.BeforeState = json.RawMessage(*before)
+		}
+		if after != nil {
+			r.AfterState = json.RawMessage(*after)
+		}
+		if meta != nil {
+			r.Metadata = json.RawMessage(*meta)
+		}
+		result = append(result, r)
+	}
+	return result, rows.Err()
+}

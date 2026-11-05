@@ -20,7 +20,7 @@ Decided out of scope:
   server runs a bridge next to it and registers the bridge.
 - **Sampling, roots and logging.** The 2026-07-28 revision deprecates them; new work doesn't add them.
 - **The old HTTP+SSE transport** for upstream servers: deprecated by the same revision.
-- **Content scanning** (prompt-injection and data-loss checks): wanted, **not scheduled** (decision 50). The design is written ([content-scanning.md](content-scanning.md), #52) and proposes a narrow first slice (static checks of tool definitions at refresh, in shadow mode, shown at review); decision 87 records a narrow go; the first-slice follow-ups are #70–#73. **Nothing is built**, and it proposes no hosted model.
+- **Hosted scanning models and enforcement.** The portal hosts no model. Decision 87 permits narrow local shadow detection: the definition backend (#72) is under local review, the UI is #73, and later call stages and enforcement remain future work. See [content-scanning.md](content-scanning.md).
 
 ## Where things stand
 

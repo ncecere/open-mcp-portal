@@ -883,3 +883,55 @@ recomputed without the key, so rotation happens on use:
 - The kind smoke test ([Smoke test](#smoke-test)) covers one ingress controller (Envoy Gateway), a self-signed CA, one OIDC provider (Dex), the upgrade from the previous release, a plain `pg_dump` restore and a loose load gate. It does not cover other controllers or providers, the default CNI's (kindnet) NetworkPolicy enforcement, zones, a real node drain, CloudNativePG or production sizing; see [What it does not prove](#what-it-does-not-prove).
 - Images are published only for releases (`v*` tags), not for every commit on `main`. The example overlay pins the digest of the release it names: use the digest from the release you install.
 - No Helm chart and no HorizontalPodAutoscaler.
+
+### Audit stream incarnation recovery (decision 93, slice 1b)
+
+`AUDIT_STREAM_ENABLED` remains false by default. Slice 1b provides local sealing
+and recovery; delivery and retention integration require slice 1c.
+
+Use `open-mcp-portal audit-stream status` to read the stream UUID, incarnation,
+epoch, status, cursor, pending epoch and sweep state. This uses `DATABASE_URL`
+and writes nothing. Recovery commands use `DATABASE_MIGRATE_URL` (falling back to
+`DATABASE_URL`) and require the migration owner. Do not give this credential to
+the serving process. Runtime credentials cannot update recovery state or execute
+owner-only epoch helpers.
+
+After **pg_upgrade**, first confirm that xid history was preserved. A changed
+system identifier halts sealing as `halted_incarnation`; then run
+`open-mcp-portal audit-stream rebind`. It records the live identifier and WAL insertion timeline without
+moving the epoch or cursor, refusing a snapshot xmin below the cursor. This is
+an operator assertion of continuity, not automatic proof. Rebind requires the
+halted state. Audit writes accumulated while halted are subsequently sealed.
+
+After a **logical restore or logical-replication cutover**, stop application
+writers and run `open-mcp-portal audit-stream rebase` before serving writes. It
+briefly takes a SHARE lock on audit_log, establishes a read-only REPEATABLE READ
+snapshot while holding that lock, records the new incarnation, advances the epoch,
+and sets cursor `(F,0)`. It releases the lock before streaming snapshot candidates
+through fresh READ COMMITTED sealing transactions. Foreign xids never advance the
+cursor. A persisted pending marker separates the fence commit from the first
+chain record. Rerun the same command after a crash: it takes a fresh bounded
+snapshot, keeps the unfinished epoch, and never repeats a committed marker. A
+promotion during rebase adds its own timeline epoch before any further data
+records; a pending rebase marker is appended before that timeline marker.
+
+For a known rewind where receivers already hold higher sequences, use
+`open-mcp-portal audit-stream rebase --resume-after-seq=N` with N greater than the
+stored last sequence. The marker starts at N+1; when N exceeds the predecessor,
+it authenticates the missing interval. Receivers must approve that discontinuity
+locally and preserve fork evidence. The same resume number may be supplied again after a crash; it cannot be changed
+during an unfinished rebase. Keep trusted receiver anchors and prior history throughout.
+
+After **physical failover, switchover or PITR**, a changed WAL insertion timeline
+with the same system identifier automatically starts an epoch. Monitor
+`omp_audit_stream_epoch` for changes and `omp_audit_stream_state{state="halted_incarnation"}`
+for halts. Investigate any `omp_audit_stream_late_total` increase. A clean epoch
+continuation needs no receiver approval; a rewind conflicting with held history
+requires approval under the normative receiver rules.
+
+The leader checks for gaps daily and after epoch changes/rebases. Each pass reads at most 5000 primary-key entries and
+seals at most 500 eligible missing identities with the authenticated late flag.
+A persisted scan cursor bounds clean scans too. It never takes rows still owned by normal history/watermark sealing. Rebase keeps
+the sweep pending until the cluster watermark passes F, so an older-xid writer
+blocked by the SHARE lock is recovered after commit. Keep the sealer running to
+complete this post-rebase sweep; inspect `sweep_pending` and `sweep_at` in status.

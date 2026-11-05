@@ -156,7 +156,10 @@ A sweep runs daily and after every rebase or epoch change. It is an anti-join on
 rows that should already be sealed: `txid IS NULL`, or `(txid, id) <= cursor` with `txid` below the watermark. It
 seals anything it finds with the `late` flag and increments `omp_audit_stream_late_total`, which should always be
 zero; any hit alerts. Correctness does not rest on the sweep, but it bounds the damage of an unforeseen bypass to
-"late and flagged" rather than "never". The re-check confirmed it catches a REPEATABLE READ writer that held an xid
+"late and flagged" rather than "never".
+As built (slice 1b), a pass checks at most 5,000 ids after its persisted scan position and seals at most 500. A
+cycle completes on a pass that finds no newer audit rows; on a busy install it keeps making passes over only the
+rows written since the last one, which costs a few index probes per new row. The re-check confirmed it catches a REPEATABLE READ writer that held an xid
 below a rebase's `F` and was blocked by its lock (`fast_hits=0, sweep_hits=1`), without sealing it before commit.
 
 ### 4.3 Incarnation, epochs, rebind and rebase

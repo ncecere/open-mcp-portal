@@ -234,6 +234,15 @@ type CaptureSetting struct {
 	UpdatedAt time.Time
 }
 
+type DefinitionScan struct {
+	CapabilityID   uuid.UUID
+	Fingerprint    string
+	RulesetVersion string
+	Status         string
+	Reason         string
+	ScannedAt      time.Time
+}
+
 type DirectoryCleanupJob struct {
 	ID          uuid.UUID
 	UserID      uuid.UUID
@@ -722,33 +731,40 @@ type OauthToken struct {
 }
 
 type OmpAuditChain struct {
-	Seq         int64
-	Kind        string
-	RowUid      uuid.NullUUID
-	LegacyID    *int64
-	AuditID     *int64
-	Epoch       int32
-	Flags       int16
-	OccurredAt  time.Time
-	SummaryHash []byte
-	EntryHash   []byte
-	ChainHash   []byte
-	SealedAt    time.Time
+	Seq          int64
+	Kind         string
+	RowUid       uuid.NullUUID
+	LegacyID     *int64
+	AuditID      *int64
+	Epoch        int32
+	Flags        int16
+	OccurredAt   time.Time
+	SummaryHash  []byte
+	EntryHash    []byte
+	ChainHash    []byte
+	SealedAt     time.Time
+	EpochSummary json.RawMessage
 }
 
 type OmpAuditState struct {
-	Singleton        bool
-	StreamID         uuid.UUID
-	SystemIdentifier string
-	Timeline         int64
-	Epoch            int32
-	Status           string
-	CursorTxid       pgtype.Uint64
-	CursorID         int64
-	HistoryID        int64
-	LastSeq          int64
-	LastChainHash    []byte
-	SweepAt          *time.Time
+	Singleton         bool
+	StreamID          uuid.UUID
+	SystemIdentifier  string
+	Timeline          int64
+	Epoch             int32
+	Status            string
+	CursorTxid        pgtype.Uint64
+	CursorID          int64
+	HistoryID         int64
+	LastSeq           int64
+	LastChainHash     []byte
+	SweepAt           *time.Time
+	SweepScanID       *int64
+	SweepStartedXmin  pgtype.Uint64
+	EpochPending      json.RawMessage
+	RebaseF           pgtype.Uint64
+	RebaseResumeAfter *int64
+	SweepPending      bool
 }
 
 type OmpPrivateApprovalBindingKey struct {
@@ -800,6 +816,8 @@ type PlatformSetting struct {
 	GovernanceRevision             int64
 	GovernanceUpdatedBy            uuid.NullUUID
 	GovernanceUpdatedAt            time.Time
+	DefinitionScanMode             string
+	ScanRevision                   int64
 }
 
 type ProviderAuthState struct {
@@ -877,6 +895,20 @@ type RetentionSetting struct {
 	UpdatedBy uuid.NullUUID
 	UpdatedAt time.Time
 	LastRun   json.RawMessage
+}
+
+type ScanFinding struct {
+	ID             int64
+	OccurredAt     time.Time
+	CapabilityID   uuid.UUID
+	Fingerprint    string
+	Stage          string
+	RuleID         string
+	RulesetVersion string
+	Severity       string
+	Count          int32
+	Action         string
+	Location       string
 }
 
 type ScimDirectory struct {

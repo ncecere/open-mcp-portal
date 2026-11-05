@@ -8,7 +8,10 @@ breaking changes; the entry says how to adapt.
 
 ## Unreleased
 
+- Add audit stream incarnation recovery commands, epoch declarations and safety sweeps behind the disabled audit stream setting.
+
 - Add the disabled audit-stream sealing core, record v2 and protected schema (#38, slice 1a).
+- Definition scanning backend (#72): local shadow findings at refresh, session-only settings and rescan APIs, bounded evidence, and upgrade backfill. Findings do not approve or alter definitions; no call-path scanning or enforcement. UI remains #73.
 
 ## [0.13.1] - 2026-11-01
 

@@ -791,6 +791,30 @@ func (e ConnectionNeedsReconsentDataReason) Valid() bool {
 	}
 }
 
+// Defines values for DefinitionScanPageScanStatus.
+const (
+	DefinitionScanPageScanStatusIncomplete DefinitionScanPageScanStatus = "incomplete"
+	DefinitionScanPageScanStatusOff        DefinitionScanPageScanStatus = "off"
+	DefinitionScanPageScanStatusScanned    DefinitionScanPageScanStatus = "scanned"
+	DefinitionScanPageScanStatusStale      DefinitionScanPageScanStatus = "stale"
+)
+
+// Valid indicates whether the value is a known member of the DefinitionScanPageScanStatus enum.
+func (e DefinitionScanPageScanStatus) Valid() bool {
+	switch e {
+	case DefinitionScanPageScanStatusIncomplete:
+		return true
+	case DefinitionScanPageScanStatusOff:
+		return true
+	case DefinitionScanPageScanStatusScanned:
+		return true
+	case DefinitionScanPageScanStatusStale:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DetectAuthMachineTokenAuthMethods.
 const (
 	DetectAuthMachineTokenAuthMethodsClientSecretBasic DetectAuthMachineTokenAuthMethods = "client_secret_basic"
@@ -2462,6 +2486,42 @@ func (e RetentionKind) Valid() bool {
 	case CapturedPayloads:
 		return true
 	case UsageRollups:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScanningSettingsDefinitionMode.
+const (
+	ScanningSettingsDefinitionModeOff    ScanningSettingsDefinitionMode = "off"
+	ScanningSettingsDefinitionModeShadow ScanningSettingsDefinitionMode = "shadow"
+)
+
+// Valid indicates whether the value is a known member of the ScanningSettingsDefinitionMode enum.
+func (e ScanningSettingsDefinitionMode) Valid() bool {
+	switch e {
+	case ScanningSettingsDefinitionModeOff:
+		return true
+	case ScanningSettingsDefinitionModeShadow:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScanningSettingsUpdateDefinitionMode.
+const (
+	ScanningSettingsUpdateDefinitionModeOff    ScanningSettingsUpdateDefinitionMode = "off"
+	ScanningSettingsUpdateDefinitionModeShadow ScanningSettingsUpdateDefinitionMode = "shadow"
+)
+
+// Valid indicates whether the value is a known member of the ScanningSettingsUpdateDefinitionMode enum.
+func (e ScanningSettingsUpdateDefinitionMode) Valid() bool {
+	switch e {
+	case ScanningSettingsUpdateDefinitionModeOff:
+		return true
+	case ScanningSettingsUpdateDefinitionModeShadow:
 		return true
 	default:
 		return false
@@ -4221,6 +4281,25 @@ type ConnectionNeedsReconsentData struct {
 
 // ConnectionNeedsReconsentDataReason defines model for ConnectionNeedsReconsentData.Reason.
 type ConnectionNeedsReconsentDataReason string
+
+// DefinitionScanPage defines model for DefinitionScanPage.
+type DefinitionScanPage = []struct {
+	CapabilityId openapi_types.UUID `json:"capabilityId"`
+	Scan         struct {
+		Findings []struct {
+			Count    int    `json:"count"`
+			Location string `json:"location"`
+			RuleId   string `json:"ruleId"`
+			Severity string `json:"severity"`
+		} `json:"findings"`
+		Reason         *string                      `json:"reason,omitempty"`
+		RulesetVersion string                       `json:"rulesetVersion"`
+		Status         DefinitionScanPageScanStatus `json:"status"`
+	} `json:"scan"`
+}
+
+// DefinitionScanPageScanStatus defines model for DefinitionScanPage.Scan.Status.
+type DefinitionScanPageScanStatus string
 
 // DetectAuthChallenge The parsed WWW-Authenticate header of the 401
 type DetectAuthChallenge struct {
@@ -6740,6 +6819,34 @@ type RevokeSessionsInput struct {
 	KeepCurrent *bool `json:"keepCurrent,omitempty"`
 }
 
+// ScanningCatalog defines model for ScanningCatalog.
+type ScanningCatalog struct {
+	Rules []struct {
+		Description string `json:"description"`
+		Group       string `json:"group"`
+		Id          string `json:"id"`
+		Severity    string `json:"severity"`
+	} `json:"rules"`
+	RulesetVersion string `json:"rulesetVersion"`
+}
+
+// ScanningSettings defines model for ScanningSettings.
+type ScanningSettings struct {
+	DefinitionMode ScanningSettingsDefinitionMode `json:"definitionMode"`
+	Revision       int64                          `json:"revision"`
+}
+
+// ScanningSettingsDefinitionMode defines model for ScanningSettings.DefinitionMode.
+type ScanningSettingsDefinitionMode string
+
+// ScanningSettingsUpdate defines model for ScanningSettingsUpdate.
+type ScanningSettingsUpdate struct {
+	DefinitionMode ScanningSettingsUpdateDefinitionMode `json:"definitionMode"`
+}
+
+// ScanningSettingsUpdateDefinitionMode defines model for ScanningSettingsUpdate.DefinitionMode.
+type ScanningSettingsUpdateDefinitionMode string
+
 // ScopeList OAuth scopes exactly as the provider names them (RFC 6749 scope characters, no spaces or quotes); duplicates collapse. Use the provider's canonical names (the ones its token response returns), otherwise the gateway can't tell that they were granted.
 type ScopeList = []string
 
@@ -8008,6 +8115,12 @@ type AdminUpdateRetentionSettingsParams struct {
 	IfMatch IfMatchHeader `json:"If-Match"`
 }
 
+// AdminUpdateScanningSettingsParams defines parameters for AdminUpdateScanningSettings.
+type AdminUpdateScanningSettingsParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
 // AdminListTeamsParams defines parameters for AdminListTeams.
 type AdminListTeamsParams struct {
 	// Q Case-insensitive substring match
@@ -8500,6 +8613,9 @@ type AdminUpdatePublishingSettingsJSONRequestBody = PublishingSettingsUpdate
 
 // AdminUpdateRetentionSettingsJSONRequestBody defines body for AdminUpdateRetentionSettings for application/json ContentType.
 type AdminUpdateRetentionSettingsJSONRequestBody = RetentionSettingsUpdate
+
+// AdminUpdateScanningSettingsJSONRequestBody defines body for AdminUpdateScanningSettings for application/json ContentType.
+type AdminUpdateScanningSettingsJSONRequestBody = ScanningSettingsUpdate
 
 // AdminCreateTeamJSONRequestBody defines body for AdminCreateTeam for application/json ContentType.
 type AdminCreateTeamJSONRequestBody = TeamCreate
