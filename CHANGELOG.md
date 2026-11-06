@@ -6,20 +6,12 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
-## Unreleased
+## [0.15.0] - 2026-11-06
 
-- Add Admin › Audit stream with read-only auditor visibility, retention effects, sink and consumer management, one-time signing secrets, recovery confirmations and notification routing (#38 slice 2b).
-
-- Add browser-session audit sink management, secret rotation, test/recovery actions, secret-free status, sink notification links and explicit sink rollout/rollback gates.
-
-
-- Wire opt-in signed audit checkpoints: leader cadence, acknowledged minimum reader version enablement, atomic key rotation, public Ed25519 keys, checkpoint pull envelopes and signature/range verification, metrics and a stale-checkpoint alert (#38 slice 2a).
-
-
-- Capability filter counts now match their accessible labels; real Chromium desktop/mobile scanning checks are recorded (#73).
-
-- Definition scanning evidence: aggregate v1 corpus results, CPU/allocation gates, a 2,000-definition real refresh and off/shadow refresh byte comparison (#72).
-- Audit streaming slice 2a, database part (#38, decision 94; checkpoints off, no operator command yet): migration 63 adds the migration-owned `omp_audit_ext` schema with a manifest-driven role boundary, Ed25519 checkpoint keys sealed with `ENCRYPTION_KEY` (covered by key rotation), checkpoint chain records checked by `seal_batch`, and atomic handover rotation. The checkpoint codec, normative spec and Go/SQL/Python vectors are included. v0.14.0 replicas keep working against it.
+- **Signed audit checkpoints (#38 slice 2a; off until enabled).** The sealer leader signs the chain position with a dedicated, install-local Ed25519 key every 10,000 entries, or every 15 minutes when there was activity. Keys are sealed with `ENCRYPTION_KEY`, published at `/.well-known/omp-audit-keys.json`, rotated through an atomic handover (`audit-stream rotate-checkpoint-key`), and limited to the sequence range they may sign. `audit-stream verify` and the pull API check signatures and authority. Turn it on with `audit-stream enable-checkpoints --min-reader-version-ack`, a one-way minimum-reader-version step, after every replica runs 0.15.0. Migration 63 (`omp_audit_ext`, a manifest-driven protected schema).
+- **Audit webhook sinks (#38 slice 2b; off until enabled).** The portal pushes the sealed audit stream to a receiver (a SIEM): in order, at least once, HMAC-signed, outside transactions, with no redirects. Destinations are restricted by `AUDIT_STREAM_ALLOWED_NETWORKS` and resolved when saved. Admins get failure and recovery notices. Required sinks hold audit retention until delivery. Manage sinks under **Admin › Audit stream** (browser session, platform admins; auditors read-only). Turn delivery on with `audit-stream enable-sinks --min-reader-version-ack` after every replica runs 0.15.0. Older releases' notification dispatchers drop unknown events, so run `disable-sinks` before any rollback. Migration 64.
+- **Scanning follow-ups (#72, #73).** An aggregate per-rule corpus report, CPU and allocation gates, a real 2,000-definition refresh test, and a byte comparison of refreshes with scanning off and in shadow. Capability filter counts now match their accessible labels.
+- **Fixes.** Three flaky tests fixed (#83, #85); audit log entries for audit sinks, the stream gates and checkpoint keys now show live labels.
 
 ## [0.14.0] - 2026-11-05
 
