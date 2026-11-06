@@ -38,11 +38,19 @@ func EnvelopeLine(e Envelope, full bool) (Envelope, []byte, error) {
 }
 
 func ReadRange(ctx context.Context, tx pgx.Tx, after int64, limit int, full bool, last int64) (Range, error) {
+	return readRange(ctx, tx, after, limit, full, last, 0)
+}
+
+func readRange(ctx context.Context, tx pgx.Tx, after int64, limit int, full bool, last int64, target int) (Range, error) {
 	var result Range
-	earliest, err := CheckRange(ctx, tx, after, limit)
-	result.Earliest = earliest
+	var expired int64
+	err := tx.QueryRow(ctx, `SELECT purged_seq FROM omp_audit.retention_floor WHERE singleton`).Scan(&expired)
+	result.Earliest = expired + 1
 	if err != nil {
 		return result, err
+	}
+	if after < expired {
+		return result, ErrRangeExpired
 	}
 	var tip int64
 	if err = tx.QueryRow(ctx, `SELECT last_seq FROM omp_audit.state WHERE singleton`).Scan(&tip); err != nil {
@@ -68,6 +76,8 @@ func ReadRange(ctx context.Context, tx pgx.Tx, after int64, limit int, full bool
 		return result, err
 	}
 	previous := after
+	size := 0
+	truncated := false
 	for _, seq := range seqs {
 		env, e := Read(ctx, tx, seq, full)
 		if e != nil {
@@ -80,12 +90,21 @@ func ReadRange(ctx context.Context, tx pgx.Tx, after int64, limit int, full bool
 		if e != nil {
 			return Range{}, e
 		}
+		if last == 0 && target > 0 && size > 0 && (env.Oversized || size+len(line) > target) {
+			truncated = true
+			break
+		}
+		size += len(line)
 		result.Envelopes = append(result.Envelopes, env)
 		result.Lines = append(result.Lines, line)
 		previous = seq
+		if last == 0 && target > 0 && (env.Oversized || size >= target) {
+			truncated = true
+			break
+		}
 	}
 	// Detect a missing tail as well as interior holes, including an exact retry.
-	if (last != 0 && previous != last) || (last == 0 && len(seqs) < limit && previous < tip) {
+	if (last != 0 && previous != last) || (last == 0 && !truncated && len(seqs) < limit && previous < tip) {
 		return Range{}, rangeIntegrity()
 	}
 	return result, nil
