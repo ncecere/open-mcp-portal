@@ -29,6 +29,7 @@ const (
 	LinkApproval             = "approval"
 	LinkAccessRequest        = "access_request"
 	LinkGateways             = "gateways"
+	LinkAuditStream          = "audit_stream"
 )
 
 // Link is where an inbox row goes.
@@ -108,9 +109,11 @@ func compose(ev dbgen.NotificationEvent, team *teamInfo) Message {
 	m := Message{Title: ev.Event, Body: ""}
 	switch ev.Event {
 	case AuditSinkFailing:
+		m.Link = &Link{Type: LinkAuditStream}
 		m.Title = "Audit sink delivery is failing"
 		m.Body = "Three consecutive delivery attempts failed. Review the audit sink status and receiver availability."
 	case AuditSinkRecovered:
+		m.Link = &Link{Type: LinkAuditStream}
 		m.Title = "Audit sink delivery recovered"
 		m.Body = "Audit delivery succeeded after a notified failure streak."
 
@@ -310,6 +313,8 @@ func (l *Link) path() string {
 		return team + "/servers/" + url.PathEscape(l.ID)
 	case LinkServers:
 		return team + "/servers?publishState=pending"
+	case LinkAuditStream:
+		return "/admin/audit-stream"
 	case LinkGateways:
 		if l.TeamSlug != "" {
 			return team + "/gateways"

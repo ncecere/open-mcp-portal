@@ -529,3 +529,12 @@ func TestInternalTargetsAreIndistinguishable(t *testing.T) {
 		}
 	}
 }
+
+func TestAuditSinkStatusLink(t *testing.T) {
+	for _, typ := range []string{AuditSinkFailing, AuditSinkRecovered} {
+		m := compose(dbgen.NotificationEvent{Event: typ}, nil)
+		if m.Link == nil || m.Link.path() != "/admin/audit-stream" || m.Title == "" || m.Body == "" {
+			t.Fatalf("missing sink status composition: %+v", m)
+		}
+	}
+}

@@ -659,3 +659,36 @@ func TestSinkStrictNotificationInsert(t *testing.T) {
 		t.Fatal("strict insertion error did not roll back transaction")
 	}
 }
+
+func TestSinkNotificationChannelsAndPreferences(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, nil)
+	admin := e.user("platform_admin")
+	person := e.user("none")
+	auditor := e.user("platform_auditor")
+	receiver := newReceiver(t)
+	e.destination(adminActor(admin), Scope{}, "json", receiver.URL, AuditSinkFailing, AuditSinkRecovered)
+	for _, typ := range []string{AuditSinkFailing, AuditSinkRecovered} {
+		off := false
+		for _, actor := range []authz.Actor{personActor(person), {UserID: auditor, PlatformRole: authz.PlatformAuditor}} {
+			if _, err := e.svc.UpdatePreferences(ctx, actor, []Change{{Event: typ, Email: &off}}); err == nil {
+				t.Fatal("non-admin sink preference accepted")
+			}
+		}
+		if _, err := InsertStrict(ctx, e.q, Event{Type: typ, DedupKey: typ, Data: map[string]string{"sink_id": uuid.NewString()}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.runOnce()
+	if e.inbox(admin) != 2 || e.inbox(person) != 0 || e.inbox(auditor) != 0 {
+		t.Fatal("sink recipients escaped platform admins")
+	}
+	if len(e.mail.mails()) != 2 || len(receiver.deliveries()) != 2 {
+		t.Fatalf("sink routing email=%d webhook=%d", len(e.mail.mails()), len(receiver.deliveries()))
+	}
+	for _, mail := range e.mail.mails() {
+		if !strings.Contains(fmt.Sprint(mail), "/admin/audit-stream") {
+			t.Fatal("email missing status link")
+		}
+	}
+}
