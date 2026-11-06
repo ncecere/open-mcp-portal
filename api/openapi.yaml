@@ -1418,11 +1418,15 @@ paths:
     get:
       tags: [admin]
       operationId: adminAuditStreamStatus
-      summary: Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+      summary: Audit stream status (platform admins, auditors or platform:read)
+      description: >-
+        The stream tip and checkpoint state, `sealer_enabled` (AUDIT_STREAM_ENABLED on the replica that answered), the
+        sink gate, every sink's secret-free view (including `last_ok_at`, lag and retention effect), every pull consumer
+        and checkpoint key metadata. Never contains a sink URL or secret.
       x-omp-token-scopes: [platform:read]
       responses:
         '200':
-          description: Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409
+          description: Audit stream status
           content:
             application/json:
               schema: {type: object, additionalProperties: true}

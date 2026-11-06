@@ -41,6 +41,7 @@ describe("link targets", () => {
       [{ type: "automation_tokens" }, "/admin/automation-tokens"],
       [{ type: "team_automation_tokens", teamSlug: t }, `/teams/${t}/settings?tab=automation-tokens`],
       [{ type: "auth_providers" }, "/admin/auth-providers"],
+      [{ type: "audit_stream" }, "/admin/audit-stream"],
       [{ type: "usage" }, "/admin/usage"],
       [{ type: "notification_settings" }, "/admin/notifications"],
       [{ type: "team_notification_settings", teamSlug: t }, `/teams/${t}/settings?tab=notifications`],

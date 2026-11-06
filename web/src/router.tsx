@@ -29,6 +29,7 @@ const pages = {
   home: () => import("./pages/home"),
   account: () => import("./pages/account/routes"),
   people: () => import("./pages/admin/people/routes"),
+  adminAuditStream: () => import("./pages/admin/audit-stream/page"),
   adminAudit: () => import("./pages/admin/audit/page"),
   teamLayout: () => import("./pages/team/layout"),
   teamSettings: () => import("./pages/team/settings/page"),
@@ -307,6 +308,7 @@ const appTree = appRoute.addChildren([
     adminList("limits", lazy(pages.adminOperations, "AdminLimitsPage")),
     adminList("retention", lazy(pages.adminOperations, "AdminRetentionPage")),
     adminList("capture", lazy(pages.adminOperations, "AdminCapturePage")),
+    adminList("audit-stream", lazy(pages.adminAuditStream, "AdminAuditStreamPage")),
     adminList("audit", lazy(pages.adminAudit, "AdminAuditPage")),
   ]),
 ]);

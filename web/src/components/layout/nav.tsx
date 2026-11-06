@@ -146,6 +146,7 @@ export type AdminPath =
   | "/admin/auth-providers"
   | "/admin/automation-tokens"
   | "/admin/provisioning"
+  | "/admin/audit-stream"
   | "/admin/audit"
   | "/admin/calls"
   | "/admin/usage"
@@ -206,6 +207,7 @@ export const adminSections: { label?: string; defaultOpen?: boolean; items: Admi
     label: "Operations",
     defaultOpen: true,
     items: [
+      { to: "/admin/audit-stream", label: "Audit stream", icon: icon(FileClock) },
       { to: "/admin/limits", label: terms.limits, icon: icon(Gauge) },
       { to: "/admin/retention", label: terms.retention, icon: icon(Timer) },
       { to: "/admin/capture", label: terms.payloadCapture, icon: icon(Eraser) },

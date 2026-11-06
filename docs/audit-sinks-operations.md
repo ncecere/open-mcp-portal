@@ -2,7 +2,7 @@
 
 Use a platform-admin browser session and its CSRF protection for `/v1/admin/settings/audit-sinks`. Automation tokens
 cannot manage or read sink configuration. Auditors may list and inspect sinks; stream status also accepts a
-`platform:read` token at `/v1/admin/audit/stream/status`. The Admin Audit stream page is a separate implementation part.
+`platform:read` token at `/v1/admin/audit/stream/status`. Open Admin › Audit stream (`/admin/audit-stream`) to inspect stream status, retention effects and pull consumers, or manage sinks. Auditors see the page read-only. The API currently omits the sealer configuration flag and sink last-success time; the page labels these unavailable rather than inferring them from database state. The key fingerprint is SHA-256 of the published Ed25519 public-key bytes; publication alone is not authenticated enrollment.
 
 Create with POST, for example `{"name":"Evidence","url":"https://receiver.example/audit","profile":"full",
 "required":true,"enabled":true,"batch_max_records":100}`. Store the returned `secret` immediately: it is generated
