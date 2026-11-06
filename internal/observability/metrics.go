@@ -33,6 +33,9 @@ var callBuckets = []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30
 var httpBuckets = []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30, 60}
 
 var (
+	AuditStreamSinkFailing        = prometheus.NewGauge(prometheus.GaugeOpts{Name: "omp_audit_stream_sinks_failing", Help: "Count of sinks with an open delivery failure streak."})
+	AuditStreamSinkLag            = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "omp_audit_stream_sink_lag_records", Help: "Maximum sink lag by kind and requirement."}, []string{"kind", "required"})
+	AuditStreamSinkDeliveries     = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "omp_audit_stream_sink_deliveries_total", Help: "Sink deliveries by kind and result."}, []string{"kind", "result"})
 	AuditStreamIntegrity          = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "omp_audit_stream_integrity_errors_total", Help: "Audit integrity failures."}, []string{"kind"})
 	AuditStreamConsumerLag        = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "omp_audit_stream_consumer_lag", Help: "Maximum unacknowledged sequence count by profile and requirement."}, []string{"profile", "required"})
 	AuditStreamState              = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "omp_audit_stream_state", Help: "Current audit stream state."}, []string{"state"})
@@ -133,7 +136,7 @@ var (
 func appCollectors() []prometheus.Collector {
 	return append([]prometheus.Collector{ScanFindings, ScanDuration, ScanIncomplete, ScanRuleset, BuildInfo, MCPRequests, MCPRequestDuration, MCPCallDuration, MCPRateLimited, ServerCircuitState, PayloadCaptures,
 		PayloadRedactions, PayloadCaptureErrors, ProviderTokenRefresh, MachineTokenRequests, ServerHealthChecks, HTTPRequests, HTTPRequestDuration,
-		AuditStreamCheckpoints, AuditStreamLastCheckpoint, AuditStreamCheckpointsEnabled, AuditStreamCheckpointPending, AuditStreamIntegrity, AuditStreamConsumerLag, AuditStreamState, AuditStreamLate, AuditStreamEpoch, AuditStreamLag, AuditStreamSealed, RetentionDeleted, RetentionLastSuccess, UsageRollupLastSuccess, LoopLeader}, v02Collectors()...)
+		AuditStreamSinkFailing, AuditStreamSinkLag, AuditStreamSinkDeliveries, AuditStreamCheckpoints, AuditStreamLastCheckpoint, AuditStreamCheckpointsEnabled, AuditStreamCheckpointPending, AuditStreamIntegrity, AuditStreamConsumerLag, AuditStreamState, AuditStreamLate, AuditStreamEpoch, AuditStreamLag, AuditStreamSealed, RetentionDeleted, RetentionLastSuccess, UsageRollupLastSuccess, LoopLeader}, v02Collectors()...)
 }
 
 // Metrics owns a registry with the Go and process collectors, the

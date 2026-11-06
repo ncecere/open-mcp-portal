@@ -152,6 +152,7 @@ func Run(ctx context.Context, mode string, cfg config.Config, log *slog.Logger) 
 			return err
 		}
 		go (auditstream.Sealer{Pool: pool}).Loop(loopCtx, log, box)
+		go (&auditstream.Sender{Pool: pool, Box: box, Client: notify.NewWebhookClient(cfg.AuditStreamAllowedNetworks, log)}).Loop(loopCtx, log)
 	}
 	go deps.Usage.Loop(loopCtx)
 	go rateCounterLoop(loopCtx, deps.RateStore, log)

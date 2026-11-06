@@ -479,3 +479,15 @@ enable baseline) is over an hour old. Check sealer leadership, stream status,
 incarnation recovery, database errors and the encryption key configuration.
 Do not reset the baseline or bypass the minimum reader version. The unsigned tip
 is advisory; confirm off-host receiver progress and investigate conflicting hashes.
+
+### OMPAuditSinkFailing
+
+A sink has an open delivery failure streak for 15 minutes. Inspect audit sink status,
+its fixed error class, destination policy and receiver availability. Restore delivery;
+keep required sinks enrolled to preserve their retention hold.
+
+### OMPAuditSinkLag
+
+A sink is more than 100,000 sequences behind. Inspect receiver throughput and sink
+status. A required sink holds retention even while disabled; resolve delivery or make
+an explicit retention decision before disk pressure grows.

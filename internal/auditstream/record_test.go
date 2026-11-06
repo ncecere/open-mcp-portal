@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/google/uuid"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -88,5 +89,37 @@ func TestPresenceDistinctions(t *testing.T) {
 	r.ActorUserID = &zero
 	if before == SummaryHash(r) {
 		t.Fatal("absent and zero UUID collision")
+	}
+}
+
+// The oversized flag counts the summary fields a full envelope repeats: a row
+// whose own JSON is under the limit but whose target id pushes the envelope
+// over the 16 MiB line cap is flagged at sealing. The full envelope of an
+// unflagged row always fits the line cap.
+func TestOversizedFlagCountsSummaryFields(t *testing.T) {
+	big := strings.Repeat("x", 9<<20) // row ~9 MiB; envelope ~18 MiB
+	r := vectorRow(`{}`)
+	r.TargetID = big
+	rec, _, err := NewRecord(uuid.New(), 1, 1, [32]byte{}, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Flags&2 == 0 {
+		t.Fatal("envelope over the line cap was not flagged oversized")
+	}
+	r.TargetID = strings.Repeat("x", 7<<20) // envelope ~14 MiB: fits
+	rec, _, err = NewRecord(uuid.New(), 1, 1, [32]byte{}, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Flags&2 != 0 {
+		t.Fatal("row that fits was flagged")
+	}
+	env := Envelope{Record: rec, Stream: uuid.New(), Epoch: 1, OccurredAt: r.OccurredAt}
+	env.SummaryFields, _ = SummaryFieldsJSON(r)
+	env.Full = &r
+	_, line, err := EnvelopeLine(env, true)
+	if err != nil || len(line) > LineCap {
+		t.Fatalf("unflagged full line %d > cap %d (%v)", len(line), LineCap, err)
 	}
 }

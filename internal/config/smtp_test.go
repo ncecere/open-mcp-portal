@@ -171,3 +171,13 @@ func TestNotifyWebhookAllowedNetworks(t *testing.T) {
 		t.Error("the MCP servers' list must not open webhook destinations")
 	}
 }
+
+func TestAuditStreamAllowedNetworks(t *testing.T) {
+	c, err := LoadFrom("", env(map[string]string{"AUDIT_STREAM_ALLOWED_NETWORKS": "10.20.0.0/16,http:*.audit.internal"}))
+	if err != nil || len(c.AuditStreamAllowedNetworks) != 2 || len(c.NotifyWebhookAllowedNetworks) != 0 || len(c.UpstreamAllowedNetworks) != 0 {
+		t.Fatalf("audit policy not isolated: %v", err)
+	}
+	if _, err = LoadFrom("", env(map[string]string{"AUDIT_STREAM_ALLOWED_NETWORKS": "invalid!"})); err == nil {
+		t.Fatal("invalid audit policy accepted")
+	}
+}

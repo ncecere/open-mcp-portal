@@ -128,3 +128,39 @@ tests:
       - eval_time: 80m
         alertname: OMPAuditCheckpointStale
         exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: omp_audit_stream_sinks_failing
+        values: '1x20 0x10'
+      - series: 'omp_audit_stream_sink_lag_records{kind="webhook",required="true"}'
+        values: '100001x20 0x10'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: OMPAuditSinkFailing
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: OMPAuditSinkFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Audit sink delivery is failing
+              description: At least one audit sink has an open failure streak. Inspect sink status and receiver health.
+              runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompauditsinkfailing
+      - eval_time: 16m
+        alertname: OMPAuditSinkLag
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              kind: webhook
+              required: 'true'
+            exp_annotations:
+              summary: Audit sink lag exceeds 100000 records
+              description: Inspect sink status and restore delivery before retention pressure grows.
+              runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompauditsinklag
+      - eval_time: 25m
+        alertname: OMPAuditSinkFailing
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: OMPAuditSinkLag
+        exp_alerts: []

@@ -246,9 +246,16 @@ func NewRecord(stream uuid.UUID, epoch uint32, seq int64, previous [32]byte, r R
 	if err != nil {
 		return Record{}, [32]byte{}, err
 	}
-	// Reserve 64 KiB for bounded envelope/summary fields. No full profile
-	// record at or above the protocol limit is ever silently downgraded.
-	if len(raw) > (16<<20)-(64<<10) {
+	// A full-profile envelope carries the row and, again, its summary fields.
+	// Count both and reserve 64 KiB for the fixed envelope fields, so a row whose
+	// envelope would exceed the 16 MiB line cap is always flagged oversized here,
+	// at sealing, where the flag becomes part of the chain. (Before this rule only
+	// the row was counted; such older rows fail closed at delivery.)
+	summary, err := SummaryFieldsJSON(r)
+	if err != nil {
+		return Record{}, [32]byte{}, err
+	}
+	if len(raw)+len(summary) > (16<<20)-(64<<10) {
 		flags = 2
 	}
 	b := append([]byte("OMP-AUDIT-EVIDENCE\x00CHAIN\x00V2\x00"), previous[:]...)

@@ -10,7 +10,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -134,21 +133,42 @@ func Verify(secret, header string, timestamp int64, body []byte, now time.Time, 
 // are 422 url_not_allowed with details.reason: invalid, too_long, userinfo,
 // fragment, scheme, private_address, blocked_address.
 func (s *Service) CheckURL(ctx context.Context, raw string) error {
+	return CheckWebhookURL(ctx, s.client, raw, MaxURL, false)
+}
+
+// CheckWebhookURL checks the full shape before applying origin-only policy.
+// resolve is enabled for sink save-time validation; notification defaults remain unchanged.
+func CheckWebhookURL(ctx context.Context, client *upstream.Client, raw string, limit int, resolve bool) error {
 	raw = strings.TrimSpace(raw)
-	refuse := func(reason, msg string) error {
-		e := apperr.New(422, "url_not_allowed", msg)
+	refuse := func(reason string) error {
+		e := apperr.New(422, "url_not_allowed", "The webhook URL is not allowed.")
 		e.Details = map[string]any{"reason": reason}
 		return e
 	}
-	if len(raw) > MaxURL {
-		return refuse(upstream.ReasonTooLong, fmt.Sprintf("The URL is too long: at most %d characters.", MaxURL))
+	if len(raw) > limit {
+		return refuse(upstream.ReasonTooLong)
 	}
 	if strings.Contains(raw, "#") {
-		return refuse(upstream.ReasonFragment, "The URL can't have a fragment (#…).")
+		return refuse(upstream.ReasonFragment)
 	}
-	probe, _, _ := strings.Cut(raw, "?")
-	_, err := s.client.NormalizeURL(ctx, probe)
-	return err
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || u.Hostname() == "" || u.Opaque != "" {
+		return refuse(upstream.ReasonInvalid)
+	}
+	if u.User != nil {
+		return refuse(upstream.ReasonUserInfo)
+	}
+	origin := u.Scheme + "://" + u.Host
+	if _, err = client.NormalizeURL(ctx, origin); err != nil {
+		return err
+	}
+	if resolve {
+		check := client.Check(ctx, origin)
+		if !check.Allowed {
+			return refuse(check.Reason)
+		}
+	}
+	return nil
 }
 
 // display is the part of a URL that is shown: scheme and host.

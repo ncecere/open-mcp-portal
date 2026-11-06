@@ -74,63 +74,24 @@ func (a *api) auditStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(r.Context())
-	earliest, err := auditstream.CheckRange(r.Context(), tx, after, int(limit))
+	buffered, err := auditstream.ReadRange(r.Context(), tx, after, int(limit), profile == "full", 0)
 	if err != nil {
 		if err.Error() == "range_expired" {
-			httpx.ErrorDetails(w, 410, "range_expired", "Requested range expired", map[string]any{"earliest_seq": earliest})
+			httpx.ErrorDetails(w, 410, "range_expired", "Requested range expired", map[string]any{"earliest_seq": buffered.Earliest})
+		} else if errors.Is(err, auditstream.ErrIntegrity) {
+			httpx.Error(w, 500, "audit_chain_gap", "Noncontiguous chain range")
 		} else {
 			streamFailure(w, r, err)
 		}
 		return
 	}
-	rows, err := tx.Query(r.Context(), `SELECT seq FROM omp_audit.chain WHERE seq>$1 ORDER BY seq LIMIT $2`, after, limit)
-	if failed(w, r, err) {
-		return
-	}
-	var seqs []int64
-	for rows.Next() {
-		var n int64
-		if err = rows.Scan(&n); err != nil {
-			break
-		}
-		if n != after+int64(len(seqs))+1 {
-			rows.Close()
-			observability.AuditStreamIntegrity.WithLabelValues("chain_gap").Inc()
-			httpx.Error(w, 500, "audit_chain_gap", "Noncontiguous chain range")
-			return
-		}
-		seqs = append(seqs, n)
-	}
-	rows.Close()
-	if err == nil {
-		err = rows.Err()
-	}
-	if failed(w, r, err) {
-		return
-	}
 	w.Header().Set("Content-Type", "application/x-ndjson")
-	for _, n := range seqs {
-		env, err := auditstream.Read(r.Context(), tx, n, profile == "full")
-		if err != nil {
-			return
-		}
-		raw, err := json.Marshal(env)
-		if err != nil {
-			return
-		}
-		if profile == "full" && (env.Flags&2 != 0 || len(raw)+1 > 16<<20) {
-			env.Full = nil
-			env.Oversized = true
-			env.Reference = fmt.Sprintf("/v1/admin/audit/entries/%d/full", n)
-			raw, err = json.Marshal(env)
-			if err != nil {
-				return
-			}
-		}
-		if _, err = w.Write(append(raw, '\n')); err != nil {
+	for _, line := range buffered.Lines {
+		if _, err = w.Write(line); err != nil {
 			return
 		}
 	}
+
 }
 func (a *api) auditTip(w http.ResponseWriter, r *http.Request) {
 	var raw []byte

@@ -104,17 +104,7 @@ func Read(ctx context.Context, tx pgx.Tx, seq int64, full bool) (Envelope, error
 	if meta != nil {
 		row.Metadata = json.RawMessage(*meta)
 	}
-	e.SummaryFields, _ = json.Marshal(struct {
-		OccurredAt   time.Time  `json:"occurred_at"`
-		Action       string     `json:"action"`
-		ActorKind    string     `json:"actor_kind"`
-		ActorUserID  *uuid.UUID `json:"actor_user_id"`
-		TeamID       *uuid.UUID `json:"team_id"`
-		TargetType   string     `json:"target_type"`
-		TargetID     string     `json:"target_id"`
-		RequestID    string     `json:"request_id"`
-		ActorTokenID *uuid.UUID `json:"actor_token_id"`
-	}{row.OccurredAt, row.Action, row.ActorKind, row.ActorUserID, row.TeamID, row.TargetType, row.TargetID, row.RequestID, row.ActorTokenID})
+	e.SummaryFields, _ = SummaryFieldsJSON(row)
 	if full {
 		e.Full = &row
 	}
@@ -160,4 +150,21 @@ func VerifyEpoch(e Envelope, prev [32]byte) bool {
 	b = append(b, EpochRecordBytes(e.Stream, e.Epoch, e.Seq, e.OccurredAt, sh)...)
 	ch := sha256.Sum256(b)
 	return hex.EncodeToString(ch[:]) == e.Chain
+}
+
+// SummaryFieldsJSON is the summary projection carried in every envelope. The
+// sealer uses it too, so the oversized flag accounts for the summary fields a
+// full-profile envelope carries next to the row.
+func SummaryFieldsJSON(row Row) ([]byte, error) {
+	return json.Marshal(struct {
+		OccurredAt   time.Time  `json:"occurred_at"`
+		Action       string     `json:"action"`
+		ActorKind    string     `json:"actor_kind"`
+		ActorUserID  *uuid.UUID `json:"actor_user_id"`
+		TeamID       *uuid.UUID `json:"team_id"`
+		TargetType   string     `json:"target_type"`
+		TargetID     string     `json:"target_id"`
+		RequestID    string     `json:"request_id"`
+		ActorTokenID *uuid.UUID `json:"actor_token_id"`
+	}{row.OccurredAt, row.Action, row.ActorKind, row.ActorUserID, row.TeamID, row.TargetType, row.TargetID, row.RequestID, row.ActorTokenID})
 }

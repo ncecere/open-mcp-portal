@@ -138,6 +138,14 @@ func init() {
 			c.SMTP.TLS = strings.ToLower(strings.TrimSpace(v))
 			return nil
 		}},
+		setting{key: "AUDIT_STREAM_ALLOWED_NETWORKS", apply: func(c *Config, v string) error {
+			entries, err := netpolicy.ParseList(v)
+			if err != nil {
+				return err
+			}
+			c.AuditStreamAllowedNetworks = entries
+			return nil
+		}},
 		setting{key: "NOTIFY_WEBHOOK_ALLOWED_NETWORKS", apply: func(c *Config, v string) error {
 			entries, err := netpolicy.ParseList(v)
 			if err != nil {
