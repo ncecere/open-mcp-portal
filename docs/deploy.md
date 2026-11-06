@@ -996,3 +996,49 @@ and obeys its interlock, but has no sealer. It therefore retains new rows indefi
 Keep the schema and budget disk space; do not revert migration 62 or replace the
 purge function as a routine rollback. Disabling the interlock would deliberately
 sacrifice evidence and requires a separately reviewed migration-role operation.
+
+
+### Signed audit checkpoints: rollout and rotation
+
+At schema 63, checkpoints remain off. Roll out the checkpoint-capable release to **every**
+serving replica and receiver before enabling. Confirm `audit-stream status` is running,
+then, with the migration credentials configured, run:
+
+```sh
+open-mcp-portal audit-stream enable-checkpoints --min-reader-version-ack
+open-mcp-portal audit-stream status
+```
+
+This is a **one-way minimum-reader-version transition**. The command records the release
+version and the enable-time cadence baseline. After enabling, roll back only to a release
+at or above that minimum. v0.14.0 can start and serve schema 63 before enabling; it must
+never serve a stream containing checkpoints. Database fencing of every old reader is
+not claimed. Release preparation must set the binary's version to the checkpoint-capable
+release before enabling on an installation.
+
+The elected leader signs after 10,000 entries or 15 minutes with at least one entry.
+Idle streams emit no checkpoints. Epoch markers and declared gaps do not count.
+Status includes enablement, minimum reader version, last checkpoint sequence/time,
+and the active key fingerprint; the HTTP tip is advisory only.
+
+Rotate the signing key manually (recommended yearly), using runtime credentials and
+the same encryption key configuration as the portal:
+
+```sh
+open-mcp-portal audit-stream rotate-checkpoint-key
+```
+
+Rotation appends a dual-signed handover atomically, then retires the old signing key
+and clears its private ciphertext. Retired public keys remain published at
+`/.well-known/omp-audit-keys.json` with inclusive authority ranges. Rotation and enablement
+are audited without key material.
+
+**Encryption-key retirement:** once extension ciphertext exists, use this release's
+`rotate-keys` utility to rewrap it before retiring a previous `ENCRYPTION_KEY`.
+Older utilities (including v0.14.0) omit checkpoint private keys and cannot establish
+that retirement is safe.
+
+Enroll receivers by pinning the stream ID and current public key over TLS with
+out-of-band confirmation. Follow the normative enrollment, anchor, handover and
+discontinuity rules in [audit-record-v2.md](audit-record-v2.md#signed-checkpoints-slice-2a).
+Publication alone grants no authority; a retired key cannot regain authority after a restore.

@@ -5287,7 +5287,7 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/admin/audit (the `AdminListAudit` operationId).
 	AdminListAudit(ctx context.Context, params *AdminListAuditParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// AdminAuditFull Bounded full-row JSON chunks; consumer query records an oversized fetch
+	// AdminAuditFull Bounded full-row JSON chunks, or normative checkpoint envelope for checkpoint sequences; consumer query records an oversized entry fetch
 	//
 	// Corresponds with GET /v1/admin/audit/entries/{seq}/full (the `AdminAuditFull` operationId).
 	AdminAuditFull(ctx context.Context, seq int64, params *AdminAuditFullParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5311,12 +5311,12 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/admin/audit/stream/ack (the `AdminAuditAck` operationId).
 	AdminAuditAck(ctx context.Context, body AdminAuditAckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// AdminAuditStreamTip Advisory unsigned stream tip; never replaces a pinned receiver anchor
+	// AdminAuditStreamTip Advisory unsigned stream tip with checkpoint enablement, minimum reader version, last sequence and time; never replaces a pinned receiver anchor
 	//
 	// Corresponds with GET /v1/admin/audit/stream/tip (the `AdminAuditStreamTip` operationId).
 	AdminAuditStreamTip(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// AdminAuditVerify Recompute retained summary, entry and chain hashes; report first bad sequence
+	// AdminAuditVerify Verify retained hashes and checkpoint bindings, Ed25519 signatures and authority ranges; report first bad sequence
 	//
 	// Corresponds with GET /v1/admin/audit/verify (the `AdminAuditVerify` operationId).
 	AdminAuditVerify(ctx context.Context, params *AdminAuditVerifyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5853,7 +5853,7 @@ func (c *Client) AdminListAudit(ctx context.Context, params *AdminListAuditParam
 	return c.Client.Do(req)
 }
 
-// AdminAuditFull Bounded full-row JSON chunks; consumer query records an oversized fetch
+// AdminAuditFull Bounded full-row JSON chunks, or normative checkpoint envelope for checkpoint sequences; consumer query records an oversized entry fetch
 //
 // Corresponds with GET /v1/admin/audit/entries/{seq}/full (the `AdminAuditFull` operationId).
 func (c *Client) AdminAuditFull(ctx context.Context, seq int64, params *AdminAuditFullParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -5917,7 +5917,7 @@ func (c *Client) AdminAuditAck(ctx context.Context, body AdminAuditAckJSONReques
 	return c.Client.Do(req)
 }
 
-// AdminAuditStreamTip Advisory unsigned stream tip; never replaces a pinned receiver anchor
+// AdminAuditStreamTip Advisory unsigned stream tip with checkpoint enablement, minimum reader version, last sequence and time; never replaces a pinned receiver anchor
 //
 // Corresponds with GET /v1/admin/audit/stream/tip (the `AdminAuditStreamTip` operationId).
 func (c *Client) AdminAuditStreamTip(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -5932,7 +5932,7 @@ func (c *Client) AdminAuditStreamTip(ctx context.Context, reqEditors ...RequestE
 	return c.Client.Do(req)
 }
 
-// AdminAuditVerify Recompute retained summary, entry and chain hashes; report first bad sequence
+// AdminAuditVerify Verify retained hashes and checkpoint bindings, Ed25519 signatures and authority ranges; report first bad sequence
 //
 // Corresponds with GET /v1/admin/audit/verify (the `AdminAuditVerify` operationId).
 func (c *Client) AdminAuditVerify(ctx context.Context, params *AdminAuditVerifyParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -10788,7 +10788,7 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/admin/audit (the `AdminListAudit` operationId).
 	AdminListAuditWithResponse(ctx context.Context, params *AdminListAuditParams, reqEditors ...RequestEditorFn) (*AdminListAuditResponse, error)
 
-	// AdminAuditFullWithResponse Bounded full-row JSON chunks; consumer query records an oversized fetch
+	// AdminAuditFullWithResponse Bounded full-row JSON chunks, or normative checkpoint envelope for checkpoint sequences; consumer query records an oversized entry fetch
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -10816,14 +10816,14 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/admin/audit/stream/ack (the `AdminAuditAck` operationId).
 	AdminAuditAckWithResponse(ctx context.Context, body AdminAuditAckJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminAuditAckResponse, error)
 
-	// AdminAuditStreamTipWithResponse Advisory unsigned stream tip; never replaces a pinned receiver anchor
+	// AdminAuditStreamTipWithResponse Advisory unsigned stream tip with checkpoint enablement, minimum reader version, last sequence and time; never replaces a pinned receiver anchor
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/admin/audit/stream/tip (the `AdminAuditStreamTip` operationId).
 	AdminAuditStreamTipWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminAuditStreamTipResponse, error)
 
-	// AdminAuditVerifyWithResponse Recompute retained summary, entry and chain hashes; report first bad sequence
+	// AdminAuditVerifyWithResponse Verify retained hashes and checkpoint bindings, Ed25519 signatures and authority ranges; report first bad sequence
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -15839,7 +15839,7 @@ func (c *ClientWithResponses) AdminListAuditWithResponse(ctx context.Context, pa
 	return ParseAdminListAuditResponse(rsp)
 }
 
-// AdminAuditFullWithResponse Bounded full-row JSON chunks; consumer query records an oversized fetch
+// AdminAuditFullWithResponse Bounded full-row JSON chunks, or normative checkpoint envelope for checkpoint sequences; consumer query records an oversized entry fetch
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -15891,7 +15891,7 @@ func (c *ClientWithResponses) AdminAuditAckWithResponse(ctx context.Context, bod
 	return ParseAdminAuditAckResponse(rsp)
 }
 
-// AdminAuditStreamTipWithResponse Advisory unsigned stream tip; never replaces a pinned receiver anchor
+// AdminAuditStreamTipWithResponse Advisory unsigned stream tip with checkpoint enablement, minimum reader version, last sequence and time; never replaces a pinned receiver anchor
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -15904,7 +15904,7 @@ func (c *ClientWithResponses) AdminAuditStreamTipWithResponse(ctx context.Contex
 	return ParseAdminAuditStreamTipResponse(rsp)
 }
 
-// AdminAuditVerifyWithResponse Recompute retained summary, entry and chain hashes; report first bad sequence
+// AdminAuditVerifyWithResponse Verify retained hashes and checkpoint bindings, Ed25519 signatures and authority ranges; report first bad sequence
 //
 // Returns a wrapper object for the known response body format(s).
 //

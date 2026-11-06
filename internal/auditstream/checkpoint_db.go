@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/ncecere/open-mcp-portal/internal/observability"
 	"github.com/ncecere/open-mcp-portal/internal/secrets"
 )
 
@@ -80,6 +81,10 @@ func checkpointRetry(err error) bool {
 // SubmitCheckpoint rereads and resigns on serialization conflicts. No network
 // calls occur while a state lock is held. Retries are bounded and cancellable.
 func SubmitCheckpoint(ctx context.Context, pool *pgxpool.Pool, box *secrets.Box) (int64, error) {
+	return submitCheckpointWithHook(ctx, pool, box, nil)
+}
+
+func submitCheckpointWithHook(ctx context.Context, pool *pgxpool.Pool, box *secrets.Box, signed func()) (int64, error) {
 	var seq int64
 	var err error
 	for range 8 {
@@ -102,11 +107,17 @@ func SubmitCheckpoint(ctx context.Context, pool *pgxpool.Pool, box *secrets.Box)
 			if e != nil {
 				return e
 			}
+			if signed != nil {
+				signed()
+			}
 			_, e = tx.Exec(ctx, `SELECT omp_audit.seal_batch('checkpoint',$1::jsonb)`, b)
 			seq = s.statement.Seq
 			return e
 		})
 		if !checkpointRetry(err) || ctx.Err() != nil {
+			if err == nil {
+				observability.AuditStreamCheckpoints.Inc()
+			}
 			return seq, err
 		}
 	}
@@ -172,6 +183,9 @@ func RotateCheckpointKey(ctx context.Context, pool *pgxpool.Pool, box *secrets.B
 			return e
 		})
 		if !checkpointRetry(err) || ctx.Err() != nil {
+			if err == nil {
+				observability.AuditStreamCheckpoints.Inc()
+			}
 			return seq, err
 		}
 	}

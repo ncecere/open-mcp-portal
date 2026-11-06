@@ -8,6 +8,9 @@ breaking changes; the entry says how to adapt.
 
 ## Unreleased
 
+- Wire opt-in signed audit checkpoints: leader cadence, acknowledged minimum reader version enablement, atomic key rotation, public Ed25519 keys, checkpoint pull envelopes and signature/range verification, metrics and a stale-checkpoint alert (#38 slice 2a).
+
+
 - Capability filter counts now match their accessible labels; real Chromium desktop/mobile scanning checks are recorded (#73).
 
 - Definition scanning evidence: aggregate v1 corpus results, CPU/allocation gates, a 2,000-definition real refresh and off/shadow refresh byte comparison (#72).
