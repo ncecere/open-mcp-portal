@@ -402,6 +402,107 @@ Platform-admin browser sessions only. Tokens get `403 token_not_allowed`, and au
   Auditors see it read-only. The wording says "tamper-evident with pinned keys and stream id" and never claims
   tamper-proofing.
 
+## 4.6 Implementation contract for 2b (revision 4, binding)
+
+A third review checked section 4 against the 2a code as built. It found no critical issue and three high and four
+medium gaps. Where this section and 4.1–4.5 differ, **this section wins.**
+
+**Parts.** 2b ships in four reviewable parts:
+1. the database contract and migration `00064`;
+2. the reader and sender engine;
+3. the management API and notification integration, with rollout gating;
+4. the Admin › Audit stream UI.
+
+**Locking.**
+- All sink transitions run inside migration-owned definer functions.
+- Lock order is **`retention_floor` → sink row**. `omp_audit.state` is read **without** a lock. There is never a
+  floor → state order, because the first seal already takes state → floor.
+- Every retention-affecting transition **updates** the locked floor row by bumping `consumer_revision`, as
+  `register_consumer` does. A REPEATABLE READ writer that started earlier then fails with `40001` instead of computing
+  a cap that ignores the change. The 2b review reproduced this on PostgreSQL 17. Retention-affecting transitions are:
+  create, `required` on or off, enable or disable, delete, expire, resume, and oversized acknowledgement.
+
+**Sink state, in addition to 4.1.**
+- Each attempt stores `inflight_kind`, the revision and its immutable endpoints.
+- A token is **consumed** by `finish_attempt`, so retrying a failed finish cannot count one HTTP attempt twice.
+- The retry identity is kept separately: `kind:first-last:revision`. A data range and a later gap with the same bounds
+  are therefore distinct deliveries.
+- Every cursor or gap mutation invalidates outstanding attempts: resume, oversized acknowledgement and settings edits.
+- `finish_attempt` moves the cursor using the recorded endpoints only, after consistency checks under the lock.
+- Resume and oversized acknowledgement take the expected revision and cursor. A second resume while a gap is
+  outstanding is a conflict.
+
+**Creating a sink and making it required.**
+- `create_sink` starts the cursor at the current `purged_seq`. That is the enrollment boundary, the same as consumers,
+  and it is set under the floor lock.
+- Turning `required` on locks floor then sink and refuses unless `cursor_seq >= purged_seq` and no gap is pending. It
+  checks actual availability, never the cached `state`. Recovering an expired or behind sink comes first, through
+  resume.
+
+**Oversized rows.**
+- The sender **splits each batch before the first blocking oversized row**: a full-profile sink, `Flags & 2`, or a
+  serialized line above the cap. The envelope construction is extracted from `internal/httpapi/audit_stream.go` into
+  one shared function, used both there and by the sender.
+- **Not required:** the envelope is delivered on its own and the cursor advances past it.
+- **Required full:** the envelope is delivered on its own, then `finish_attempt` returns the outcome `held`, leaving
+  `cursor_seq = seq - 1`. Only `acknowledge_oversized(id, expected_revision, seq)` moves past it. That function:
+  - requires `seq = cursor_seq + 1`, a confirmed oversized entry, and a current required full-profile configuration;
+  - advances exactly one sequence;
+  - invalidates outstanding tokens;
+  - writes its audit entry in the same transaction.
+
+  The admin acknowledges after retrieving the row. Nobody else's fetch can release the hold.
+
+**Purge (restated `omp_purge_audit_log`, same signature, owner, `SECURITY DEFINER`, `search_path`, UTC and ACLs).**
+1. Validate arguments and read retention settings.
+2. Lock `retention_floor FOR UPDATE`.
+3. Read `state.last_seq` without a lock.
+4. Compute the age and call-metadata cutoff.
+5. Use the age-only path only when the tip is 0 **and neither consumers nor sinks exist**.
+6. Compute `prefix = least(tip, coalesce(min required consumer acked_seq, tip), coalesce(min required sink cursor_seq,
+   tip))`. The sink cap applies **no** `enabled`, `state`, expiry or profile filter.
+7. Keep 00062's `stop_seq` age and oversized checks, the ordered loop, the first-locked-entry stop, the missing-row
+   exception, floor advancement and purge-flag restoration.
+
+A v0.14.0 or 2a retention worker calls the same function and gets the sink cap without knowing about sinks.
+
+**Declared sequence gaps.** A shared range reader, extracted from `CheckRange` and the handler's contiguity check,
+distinguishes three cases:
+- an expired prefix, which leads to `range_expired`;
+- an **undeclared** missing sequence or audit row, which fails closed with `integrity`;
+- a sequence jump **declared by an `epoch_start`** with exactly matching endpoints. The sink delivers that record, which
+  is the authenticated discontinuity, and continues.
+
+The reader validates the whole buffered request before sending a byte. Tests cover a rebase with a declared gap, with
+a required sink and with an in-flight range.
+
+**Notifications and rollout.**
+- Events are inserted strictly inside the `finish_attempt` transaction, through a new wrapper over
+  `dbgen.InsertNotificationEvent`. It returns rows affected: 0 with no error means the dedup key already exists, and an
+  error rolls back the finish. `notify.Emit` is not used.
+- New event types go through validation, `ListPlatformAdminRecipients`, admin-only preferences, composition, and the
+  CHECK constraints.
+- **Older dispatchers mark unknown events as fanned out**, in `fanOutNext`, and drop them. Both v0.14.0 and 2a do this.
+  So **sinks stay inert until `open-mcp-portal audit-stream enable-sinks`** is run with the migration role, after every
+  replica runs 2b. That records a minimum version, as `enable-checkpoints` does, with the same release-version guard.
+  Until then, sinks can be configured, but no attempt runs and no event is produced.
+- Rolling back below that version requires stopping sink delivery first: `disable-sinks`, then draining unfanned sink
+  events. The runbook says so. Tests use real v0.14.0 **and 2a** dispatchers at schema 64 with pending sink events.
+
+**Destination validation.**
+- A shared webhook validator, extracted from `notify.Service.CheckURL`, takes a client, a URL limit and a
+  resolve option. It checks the full URL's shape first, up to 2,048 characters for sinks. It then normalizes and
+  resolves the **origin** with `upstream.Client.NormalizeURLWith` and `upstream.Client.Check`. That avoids the upstream
+  validator's 500-byte limit and keeps the query.
+- The transport is adapted from `notify.Service.httpClient`, not `sendWebhook`: `notify.NewWebhookClient` with the
+  audit allowlist entries, `GuardedDial`, `Proxy: nil`, no redirects, verified TLS, finite timeouts and bounded
+  response draining.
+- Signing uses `notify.SignatureHeader`.
+- Notification defaults stay unchanged.
+
+**Key rotation coverage.** Sink ciphertext joins `keyrotation.Columns`. The key-retirement restriction for older
+key-rotation utilities now covers 2a utilities as well as v0.14.0, and has a regression test.
+
 ## 5. Migrations
 
 - **`00063` (2a):**
@@ -410,8 +511,8 @@ Platform-admin browser sessions only. Tokens get `403 token_not_allowed`, and au
   - `seal_batch` restated with `checkpoint` mode;
   - inspector and reconciler move to the manifest for `omp_audit_ext`, while `omp_audit` keeps its exact v0.14.0
     shape.
-- **`00064` (2b):** `sinks` and its functions plus their manifest rows, and the purge function restated with the
-  sink cap.
+- **`00064` (2b):** `sinks` and the attempt, gap, resume, oversized and management functions with their manifest rows;
+  `enable-sinks` gating state; notification CHECK constraint expansions; the purge function restated per 4.6.
 
 ## 6. Metrics and alerts
 

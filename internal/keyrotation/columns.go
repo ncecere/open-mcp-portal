@@ -78,6 +78,9 @@ func callAAD(part string) func(string) []byte {
 // come from the environment and are rotated there. A test fails if the
 // schema gains a *_cipher column that is not listed here.
 var Columns = []Column{
+	{Table: "omp_audit_ext.sinks", Column: "url_cipher", Key: "id", KeyType: "uuid", AAD: func(k string) []byte { return []byte("audit_sink:" + k + ":url") }},
+	{Table: "omp_audit_ext.sinks", Column: "secret_cipher", Key: "id", KeyType: "uuid", AAD: func(k string) []byte { return []byte("audit_sink:" + k + ":secret") }},
+	{Table: "omp_audit_ext.sinks", Column: "secret_previous_cipher", Key: "id", KeyType: "uuid", AAD: func(k string) []byte { return []byte("audit_sink:" + k + ":secret_previous") }},
 	{Table: "omp_audit_ext.checkpoint_keys", Column: "private_key_cipher", Key: "kid", KeyType: "bytea", AAD: func(k string) []byte {
 		raw, _ := hex.DecodeString(strings.TrimPrefix(k, `\x`))
 		return []byte("audit_checkpoint_key:" + base64.RawURLEncoding.EncodeToString(raw))

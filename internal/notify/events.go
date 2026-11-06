@@ -3,6 +3,7 @@ package notify
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -77,4 +78,22 @@ func Emit(ctx context.Context, q *dbgen.Queries, ev Event) bool {
 		observability.NotificationsEmitted.WithLabelValues(ev.Type).Inc()
 	}
 	return n > 0
+}
+
+// InsertStrict stores an event in the caller's transaction. A duplicate is
+// (false, nil); every other failure must abort the caller's transition.
+// Unlike Emit it never creates a savepoint or suppresses an insertion error.
+func InsertStrict(ctx context.Context, q *dbgen.Queries, ev Event) (bool, error) {
+	if !ValidEvent(ev.Type) || ev.DedupKey == "" || len(ev.DedupKey) > 200 {
+		return false, fmt.Errorf("invalid notification event")
+	}
+	raw, err := json.Marshal(ev.Data)
+	if err != nil {
+		return false, err
+	}
+	if len(raw) > MaxPayload {
+		return false, fmt.Errorf("notification payload too large")
+	}
+	n, err := q.InsertNotificationEvent(ctx, dbgen.InsertNotificationEventParams{Event: ev.Type, DedupKey: ev.DedupKey, TeamID: nullUUID(ev.TeamID), SubjectType: ev.SubjectType, SubjectID: ev.SubjectID, RecipientUserID: nullUUID(ev.Recipient), ActorUserID: nullUUID(ev.Actor), Payload: raw})
+	return n > 0, err
 }

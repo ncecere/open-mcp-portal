@@ -37,7 +37,7 @@ var TeamDestinationEvents = []string{ServerUnhealthy, ServerRecovered, Capabilit
 // subscribe to: publish.requested and key.expiring always, the team events
 // with teamEvents on.
 func PlatformDestinationEvents(teamEventsOn bool) []string {
-	out := []string{PublishRequested, KeyExpiring}
+	out := []string{PublishRequested, KeyExpiring, AuditSinkFailing, AuditSinkRecovered}
 	if teamEventsOn {
 		out = append(out, ServerUnhealthy, ServerRecovered, CapabilityChanged, PublishDecided, UpstreamSigninLapsed)
 	}
@@ -117,7 +117,7 @@ func (s *Service) recipients(ctx context.Context, q *dbgen.Queries, ev dbgen.Not
 		err = team(editorsUp)
 	case PublishDecided:
 		err = team(adminsUp)
-	case PublishRequested:
+	case PublishRequested, AuditSinkFailing, AuditSinkRecovered:
 		err = platform()
 	case ConnectionNeedsReconsent:
 		if ev.SubjectType == "service_connection" {
@@ -152,7 +152,7 @@ func webhookRoute(ev dbgen.NotificationEvent) (team, platform, platformNeedsTeam
 	switch ev.Event {
 	case ServerUnhealthy, ServerRecovered, CapabilityChanged, PublishDecided, UpstreamSigninLapsed:
 		return true, true, true
-	case PublishRequested:
+	case PublishRequested, AuditSinkFailing, AuditSinkRecovered:
 		return false, true, false
 	case KeyExpiring:
 		switch keyKindOf(ev) {
@@ -216,7 +216,7 @@ func (s *Service) receivable(ctx context.Context, userID uuid.UUID, platformRole
 			if !held(adminsUp...) {
 				continue
 			}
-		case PublishRequested:
+		case PublishRequested, AuditSinkFailing, AuditSinkRecovered:
 			if platformRole != authz.PlatformAdmin {
 				continue
 			}

@@ -30,6 +30,8 @@ const (
 	ServerUnhealthy          = "server.unhealthy"
 	ServerRecovered          = "server.recovered"
 	CapabilityChanged        = "capability.changed"
+	AuditSinkFailing         = "audit.sink_failing"
+	AuditSinkRecovered       = "audit.sink_recovered"
 	PublishRequested         = "publish.requested"
 	PublishDecided           = "publish.decided"
 	ConnectionNeedsReconsent = "connection.needs_reconsent"
@@ -48,7 +50,7 @@ const (
 )
 
 // Events lists every event in the order the API shows them.
-var Events = []string{ServerUnhealthy, ServerRecovered, CapabilityChanged, PublishRequested, PublishDecided,
+var Events = []string{AuditSinkFailing, AuditSinkRecovered, ServerUnhealthy, ServerRecovered, CapabilityChanged, PublishRequested, PublishDecided,
 	ConnectionNeedsReconsent, UpstreamSigninLapsed, KeyExpiring, ApprovalRequested, ApprovalDecided, AccessRequested, AccessDecided,
 	ServerReviewDue, ServerSunsetSoon, ServerDeprecated}
 
