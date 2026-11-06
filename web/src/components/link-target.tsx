@@ -32,9 +32,9 @@ const server: Resolver = {
   },
 };
 
-/** Sink notifications already carry audit_stream; its page/resolver ships in slice 2b part 4.
- * Every other contract type requires a resolver here. Unknown targets render without a link. */
-export const linkTargets: Record<Exclude<LinkType, "audit_stream">, Resolver> = {
+/** Every contract type requires a resolver here. Unknown targets render without a link. */
+export const linkTargets: Record<LinkType, Resolver> = {
+  audit_stream: { route: "/admin/audit-stream", element: () => <Link to="/admin/audit-stream" /> },
   server,
   servers: {
     route: "/teams/$team/servers",

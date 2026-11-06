@@ -44,6 +44,7 @@ describe("navigation lists", () => {
       "/admin/calls",
       "/admin/usage",
       "/admin/scanning",
+      "/admin/audit-stream",
       "/admin/limits",
       "/admin/retention",
       "/admin/capture",
