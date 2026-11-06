@@ -70,6 +70,16 @@ describe("Definition findings", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
+  it("keeps capability filter counts in their visible accessible labels", async () => {
+    mockApi({ ...routes(), [`GET ${base}/capabilities`]: () => [capability({ id: "cap-1" })] });
+    renderBare(<CapabilitiesTab server={sv} scope={{ kind: "team", team: sv.teamSlug }} abilities={readOnly} />);
+    const tools = await screen.findByRole("button", { name: "Tools 1" });
+    expect(tools).toHaveTextContent("Tools 1");
+    expect(tools).not.toHaveAttribute("aria-label");
+    await userEvent.setup().click(tools);
+    expect(tools).toHaveAttribute("aria-pressed", "true");
+  });
+
   it.each(["publish", "review"])("includes findings and limitations in the %s dialog", async (dialog) => {
     mockApi(routes(dialog === "publish" ? base : adminBase));
     const { container } = renderBare(dialog === "publish" ? <PublishDialog server={sv} onClose={() => {}} /> : <ReviewDialog server={sv} decision="approve" onClose={() => {}} />);
