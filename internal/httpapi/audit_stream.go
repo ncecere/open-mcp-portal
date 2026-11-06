@@ -109,6 +109,10 @@ func (a *api) auditAck(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 400, "invalid_ack", "consumer and seq required")
 		return
 	}
+	if strings.HasPrefix(*in.Consumer, "sink.") || strings.HasPrefix(*in.Consumer, "sink-") {
+		httpx.Error(w, 400, "invalid_consumer", "Sink cursors cannot be acknowledged through the consumer API")
+		return
+	}
 	_, err := a.Pool.Exec(r.Context(), `SELECT omp_audit.ack($1,$2)`, *in.Consumer, *in.Seq)
 	if err != nil {
 		code := "invalid_ack"

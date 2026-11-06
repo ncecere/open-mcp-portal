@@ -1044,3 +1044,33 @@ Enroll receivers by pinning the stream ID and current public key over TLS with
 out-of-band confirmation. Follow the normative enrollment, anchor, handover and
 discontinuity rules in [audit-record-v2.md](audit-record-v2.md#signed-checkpoints-slice-2a).
 Publication alone grants no authority; a retired key cannot regain authority after a restore.
+
+### Audit sink rollout and rollback (slice 2b)
+
+Schema 64 is compatible with older replicas, but their notification dispatchers silently consume unknown sink
+notifications. Keep sinks disabled throughout a mixed-version rollout. Configure and test receivers first; after
+**all replicas** run the sink-aware release, run with the migration role:
+
+```
+open-mcp-portal audit-stream status
+open-mcp-portal audit-stream enable-sinks --min-reader-version-ack
+```
+
+The command requires a clean release version newer than 0.14.0 and records that minimum reader version. Development,
+describe and prerelease versions cannot enable it. Configured sinks remain inert before enabling: no delivery attempt
+or sink notification is produced. Checkpoints have their own independent, one-way compatibility gate.
+
+Before starting a release below the sink minimum version, run `audit-stream disable-sinks`, stop all sink senders,
+and use the current release's notification dispatcher to drain pending sink events. Confirm with the migration role:
+
+```sql
+SELECT count(*) FROM public.notification_events
+WHERE event IN ('audit.sink_failing','audit.sink_recovered') AND fanned_out_at IS NULL;
+```
+
+Proceed only when the result is zero and delivery is stopped. Do not mark pending events fanned out manually: that
+would discard the notices. Disabling sinks does not release a required sink's retention hold. The checkpoint rollback
+restriction still applies even after sinks are disabled. Retire encryption keys only with a utility that covers
+all three sink cipher columns; v0.14.0 and 2a key-rotation utilities do not.
+
+See [Audit sinks](audit-sinks-operations.md) for receiver setup and recovery.
