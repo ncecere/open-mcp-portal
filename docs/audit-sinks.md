@@ -1,6 +1,6 @@
 # Audit streaming slice 2: signed checkpoints and webhook sinks (#38, decision 94)
 
-Status: **design, revised twice on 2026-11-06 after two independent adversarial reviews (section 9). Nothing here is built.** It
+Status: **slice 2a implemented locally for review (2026-11-06); slice 2b remains design.** Migration 63 supplies the protected extension and keys; the leader, CLI, key publication, pull verification and checkpoint alerts are wired. Acceptance evidence and outstanding coverage are recorded in the implementation handoff. It
 builds on slice 1, which shipped in v0.14.0: [audit-streaming.md](audit-streaming.md) (decision 93) and
 [audit-record-v2.md](audit-record-v2.md). The owner delegated the defaults in section 8.
 

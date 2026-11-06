@@ -471,3 +471,11 @@ Backend and web UI. **No contract changes**: every operation and field in `api/o
 - **Not done:** CI has never run on GitHub (only actionlint locally); no kind smoke test (`k8s-smoke`);
   provider-token redaction is covered by the redactor's exact-value rule and unit tests, not by an end-to-end test
   that captures a call to a server requiring a provider and echoing its token.
+
+### OMPAuditCheckpointStale
+
+Checkpoints are enabled and entries are pending, but the last checkpoint (or initial
+enable baseline) is over an hour old. Check sealer leadership, stream status,
+incarnation recovery, database errors and the encryption key configuration.
+Do not reset the baseline or bypass the minimum reader version. The unsigned tip
+is advisory; confirm off-host receiver progress and investigate conflicting hashes.
