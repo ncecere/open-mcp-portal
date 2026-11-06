@@ -3,6 +3,9 @@ package keyrotation_test
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"slices"
@@ -98,6 +101,12 @@ func seed(t *testing.T, pool *pgxpool.Pool, b *secrets.Box) map[string]string {
 		VALUES(gen_random_uuid(),1,omp_private.omp_current_approval_context(),'user',$1,$2,$3,gen_random_uuid(),
 		 's__sensitive',repeat('a',64),repeat('b',64),repeat('c',64),'https://x','\x00',now()+interval '1 hour') RETURNING id::text`, user, gw, keys["mcp_servers"])
 	keys["omp_private.approval_binding_keys"] = "1"
+	pub := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{8}, 32)).Public().(ed25519.PublicKey)
+	kid := sha256.Sum256(pub)
+	keys["omp_audit_ext.checkpoint_keys"] = `\x` + hex.EncodeToString(kid[:16])
+	if _, err := pool.Exec(context.Background(), `SELECT omp_audit_ext.ensure_checkpoint_key($1,$2,$3)`, kid[:16], []byte(pub), []byte{1}); err != nil {
+		t.Fatal(err)
+	}
 	for _, c := range keyrotation.Columns {
 		ct, err := b.Seal(columnPlaintext(c), c.AAD(keys[c.Table]))
 		if err != nil {
@@ -128,7 +137,7 @@ func columnPlaintext(c keyrotation.Column) []byte {
 func TestColumnsCoverTheSchema(t *testing.T) {
 	pool, _ := testutil.NewDB(t)
 	rows, err := pool.Query(context.Background(), `SELECT CASE WHEN table_schema='public' THEN table_name ELSE table_schema||'.'||table_name END || '.' || column_name FROM information_schema.columns
-		WHERE table_schema IN ('public','omp_private') AND data_type = 'bytea' AND column_name LIKE '%cipher%'`)
+		WHERE table_schema IN ('public','omp_private','omp_audit_ext') AND data_type = 'bytea' AND column_name LIKE '%cipher%'`)
 	if err != nil {
 		t.Fatal(err)
 	}

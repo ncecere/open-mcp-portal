@@ -17,6 +17,8 @@
 package keyrotation
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"strconv"
 	"strings"
 
@@ -76,6 +78,10 @@ func callAAD(part string) func(string) []byte {
 // come from the environment and are rotated there. A test fails if the
 // schema gains a *_cipher column that is not listed here.
 var Columns = []Column{
+	{Table: "omp_audit_ext.checkpoint_keys", Column: "private_key_cipher", Key: "kid", KeyType: "bytea", AAD: func(k string) []byte {
+		raw, _ := hex.DecodeString(strings.TrimPrefix(k, `\x`))
+		return []byte("audit_checkpoint_key:" + base64.RawURLEncoding.EncodeToString(raw))
+	}},
 	{Table: "mcp_servers", Column: "auth_value_cipher", Key: "id", KeyType: "uuid", AAD: uuidAAD(registry.ServerAAD)},
 	// A server's own credential parts (registry.CredentialAAD): the value (or
 	// Basic user name) and the Basic password.

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -122,6 +123,11 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
 				return out, err
 			}
 		}
+		if privileges {
+			if err := inspectAuditExtension(ctx, db, r.name, slices.Contains(roots, r.name), &out); err != nil {
+				return out, err
+			}
+		}
 		if r.admin || r.grant {
 			out.Problems = append(out.Problems, "administrative role rights: "+r.name)
 		}
@@ -130,8 +136,8 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
  EXISTS (SELECT 1 FROM pg_catalog.pg_database WHERE datname = current_database() AND datdba = $1)
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_namespace WHERE nspowner = $1
  AND nspname NOT LIKE 'pg_temp_%' AND nspname NOT LIKE 'pg_toast_temp_%')
- OR EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname IN ('public','omp_private','omp_audit') AND c.relowner = $1)
- OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname IN ('public','omp_private','omp_audit') AND p.proowner = $1)`, r.oid).Scan(&owns)
+ OR EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname IN ('public','omp_private','omp_audit','omp_audit_ext') AND c.relowner = $1)
+ OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname IN ('public','omp_private','omp_audit','omp_audit_ext') AND p.proowner = $1)`, r.oid).Scan(&owns)
 		if err != nil {
 			return out, err
 		}
@@ -206,14 +212,14 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
 		var options bool
 		err = db.QueryRow(ctx, `SELECT
  EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace,
- LATERAL aclexplode(c.relacl) a WHERE n.nspname IN ('public','omp_private','omp_audit') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
+ LATERAL aclexplode(c.relacl) a WHERE n.nspname IN ('public','omp_private','omp_audit','omp_audit_ext') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_attribute at JOIN pg_catalog.pg_class c ON c.oid = at.attrelid
  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace, LATERAL aclexplode(at.attacl) a
- WHERE n.nspname IN ('public','omp_private','omp_audit') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
+ WHERE n.nspname IN ('public','omp_private','omp_audit','omp_audit_ext') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_namespace n, LATERAL aclexplode(n.nspacl) a
- WHERE n.nspname IN ('public','omp_private','omp_audit') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
+ WHERE n.nspname IN ('public','omp_private','omp_audit','omp_audit_ext') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace,
- LATERAL aclexplode(p.proacl) a WHERE n.nspname IN ('public','omp_private','omp_audit') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
+ LATERAL aclexplode(p.proacl) a WHERE n.nspname IN ('public','omp_private','omp_audit','omp_audit_ext') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_database d, LATERAL aclexplode(d.datacl) a
  WHERE d.datname = current_database() AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))`, r.oid).Scan(&options)
 		if err != nil {
@@ -408,6 +414,9 @@ func ReconcileRuntimeGrants(ctx context.Context, conn *pgx.Conn, role string) er
 			}
 		}
 		if err := reconcileAuditGrants(ctx, tx, quoted); err != nil {
+			return err
+		}
+		if err := reconcileAuditExtension(ctx, tx, quoted); err != nil {
 			return err
 		}
 		safety, err := InspectRoles(ctx, tx, role, true)

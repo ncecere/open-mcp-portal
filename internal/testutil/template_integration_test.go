@@ -30,18 +30,19 @@ func catalog(t *testing.T, pool *pgxpool.Pool) []string {
 	}
 	queries := map[string]string{
 		"relation": `SELECT n.nspname||'.'||c.relname||' '||c.relkind::text||' owner='||pg_get_userbyid(c.relowner)||' acl='||coalesce(c.relacl::text,'')
-			FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','omp_private','omp_audit')`,
+			FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','omp_private','omp_audit','omp_audit_ext')`,
 		"function": `SELECT n.nspname||'.'||p.proname||'('||pg_get_function_identity_arguments(p.oid)||') owner='||pg_get_userbyid(p.proowner)||
 			' definer='||p.prosecdef||' config='||coalesce(p.proconfig::text,'')||' acl='||coalesce(p.proacl::text,'')||' src='||md5(p.prosrc)
-			FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname IN ('public','omp_private','omp_audit')`,
-		"schema":     `SELECT nspname||' owner='||pg_get_userbyid(nspowner)||' acl='||coalesce(nspacl::text,'') FROM pg_namespace WHERE nspname IN ('public','omp_private','omp_audit')`,
+			FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname IN ('public','omp_private','omp_audit','omp_audit_ext')`,
+		"schema":     `SELECT nspname||' owner='||pg_get_userbyid(nspowner)||' acl='||coalesce(nspacl::text,'') FROM pg_namespace WHERE nspname IN ('public','omp_private','omp_audit','omp_audit_ext')`,
 		"trigger":    `SELECT tgrelid::regclass::text||'.'||tgname||' '||tgfoid::regprocedure::text||' type='||tgtype||' enabled='||tgenabled::text FROM pg_trigger WHERE NOT tgisinternal`,
-		"constraint": `SELECT conrelid::regclass::text||'.'||conname||' '||pg_get_constraintdef(oid) FROM pg_constraint WHERE connamespace IN ('public'::regnamespace,'omp_private'::regnamespace,'omp_audit'::regnamespace)`,
-		"index":      `SELECT indexdef FROM pg_indexes WHERE schemaname IN ('public','omp_private','omp_audit')`,
+		"constraint": `SELECT conrelid::regclass::text||'.'||conname||' '||pg_get_constraintdef(oid) FROM pg_constraint WHERE connamespace IN ('public'::regnamespace,'omp_private'::regnamespace,'omp_audit'::regnamespace,'omp_audit_ext'::regnamespace)`,
+		"index":      `SELECT indexdef FROM pg_indexes WHERE schemaname IN ('public','omp_private','omp_audit','omp_audit_ext')`,
 		"column": `SELECT c.oid::regclass::text||'.'||a.attname||' '||format_type(a.atttypid,a.atttypmod)||' notnull='||a.attnotnull||' default='||coalesce(pg_get_expr(d.adbin,d.adrelid),'')||' acl='||coalesce(a.attacl::text,'')
 			FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum
-			WHERE n.nspname IN ('public','omp_private','omp_audit') AND a.attnum>0 AND NOT a.attisdropped AND c.relkind IN ('r','p','v')`,
-		"migration": `SELECT version_id::text||' '||is_applied FROM goose_db_version`,
+			WHERE n.nspname IN ('public','omp_private','omp_audit','omp_audit_ext') AND a.attnum>0 AND NOT a.attisdropped AND c.relkind IN ('r','p','v')`,
+		"audit extension manifest": `SELECT kind||' '||identity||' '||privileges::text FROM omp_audit_ext.manifest`,
+		"migration":                `SELECT version_id::text||' '||is_applied FROM goose_db_version`,
 	}
 	var out []string
 	for kind, q := range queries {
