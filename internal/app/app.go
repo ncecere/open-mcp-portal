@@ -147,7 +147,11 @@ func Run(ctx context.Context, mode string, cfg config.Config, log *slog.Logger) 
 	go deps.Identity.RotationLoop(loopCtx, log)
 	go deps.Retention.Loop(loopCtx)
 	if cfg.AuditStreamEnabled {
-		go (auditstream.Sealer{Pool: pool}).Loop(loopCtx, log)
+		box, err := secretBox(cfg)
+		if err != nil {
+			return err
+		}
+		go (auditstream.Sealer{Pool: pool}).Loop(loopCtx, log, box)
 	}
 	go deps.Usage.Loop(loopCtx)
 	go rateCounterLoop(loopCtx, deps.RateStore, log)
