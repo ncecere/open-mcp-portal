@@ -95,6 +95,14 @@ func TestAuditCheckpointCommands(t *testing.T) {
 		t.Setenv(k, v)
 	}
 	var out bytes.Buffer
+	// A build still reporting the last pre-checkpoint release must not enable.
+	prev := buildinfo.Version
+	buildinfo.Version = "0.14.0"
+	if err := runAuditStream([]string{"enable-checkpoints", "--min-reader-version-ack"}, &out); err == nil || !strings.Contains(err.Error(), "newer than 0.14.0") {
+		t.Fatalf("0.14.0 build enabled checkpoints: %v", err)
+	}
+	buildinfo.Version = "0.15.0"
+	t.Cleanup(func() { buildinfo.Version = prev })
 	if err := runAuditStream([]string{"enable-checkpoints"}, &out); err == nil || !strings.Contains(out.String(), "one-way") {
 		t.Fatal("missing acknowledgement fence")
 	}

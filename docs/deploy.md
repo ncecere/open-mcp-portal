@@ -1009,6 +1009,8 @@ open-mcp-portal audit-stream enable-checkpoints --min-reader-version-ack
 open-mcp-portal audit-stream status
 ```
 
+The command refuses unless the binary is a clean release newer than 0.14.0 (the last release that cannot read checkpoint records), so a development build cannot record an unusable minimum reader version.
+
 This is a **one-way minimum-reader-version transition**. The command records the release
 version and the enable-time cadence baseline. After enabling, roll back only to a release
 at or above that minimum. v0.14.0 can start and serve schema 63 before enabling; it must

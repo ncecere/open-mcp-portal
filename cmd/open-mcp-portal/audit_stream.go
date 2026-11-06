@@ -45,6 +45,9 @@ func runAuditStream(args []string, out io.Writer) error {
 		if !*ack {
 			return fmt.Errorf("--min-reader-version-ack is required")
 		}
+		if err := checkpointReaderVersionOK(buildinfo.Version); err != nil {
+			return err
+		}
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -110,4 +113,26 @@ func runAuditStream(args []string, out io.Writer) error {
 	default:
 		return fmt.Errorf("unknown audit-stream command %q", args[0])
 	}
+}
+
+// lastNonCheckpointRelease is the newest release whose pull/verify code does not
+// understand checkpoint records (it answers a partial 200 on them). The recorded
+// minimum reader version must be a clean release above it, so a development build
+// still reporting that release (or a describe/dev string) cannot enable checkpoints.
+var lastNonCheckpointRelease = [3]int{0, 14, 0}
+
+func checkpointReaderVersionOK(v string) error {
+	var p [3]int
+	if _, err := fmt.Sscanf(v, "%d.%d.%d", &p[0], &p[1], &p[2]); err != nil || fmt.Sprintf("%d.%d.%d", p[0], p[1], p[2]) != v {
+		return fmt.Errorf("enable-checkpoints needs a released build (got version %q); run it from a checkpoint-capable release", v)
+	}
+	for i := range p {
+		if p[i] != lastNonCheckpointRelease[i] {
+			if p[i] > lastNonCheckpointRelease[i] {
+				return nil
+			}
+			break
+		}
+	}
+	return fmt.Errorf("enable-checkpoints needs a release newer than %d.%d.%d (got %s): older releases cannot read checkpoint records", lastNonCheckpointRelease[0], lastNonCheckpointRelease[1], lastNonCheckpointRelease[2], v)
 }
