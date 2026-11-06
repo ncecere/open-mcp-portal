@@ -64,6 +64,15 @@ export function CapabilitiesTab({ server, scope, abilities }: Props) {
   const [classifying, setClassifying] = useState(false);
   const { values, setValues } = useListFilters(facets);
   const all = caps.data ?? [];
+  // Keep each count in the visible label itself. The shared FilterBar's
+  // separate count span and comma-separated aria-label fail WCAG label-in-name
+  // in Chromium; product labels avoid that mismatch without editing shared UI.
+  const counts = facetCounts(all, facets, values);
+  const countedFacets = facets.map((facet) => facet.type === "toggle" ? {
+    ...facet,
+    options: facet.options.map((option) => ({ ...option, label: `${option.label} ${(counts[facet.id]?.[option.value] ?? 0).toLocaleString()}` })),
+  } : facet);
+
   const shown = filterRows(all, facets, values);
   const inCatalog = server.publishState !== "private";
   const changed = all.some((c) => c.changed && !c.goneAt);
@@ -87,7 +96,7 @@ export function CapabilitiesTab({ server, scope, abilities }: Props) {
             <Button variant="secondary" onClick={() => setClassifying(true)}>Classify tools…</Button>
           )}
           {classifying && scope.kind === "team" && <ClassificationDialog caps={all} server={server} scope={scope} onClose={() => setClassifying(false)} />}
-          {all.length > 0 && <FilterBar facets={facets} value={values} onValueChange={setValues} counts={facetCounts(all, facets, values)} />}
+          {all.length > 0 && <FilterBar facets={countedFacets} value={values} onValueChange={setValues} />}
           {caps.isLoading ? (
             <div role="status" aria-label="Loading capabilities…">
               <SkeletonText lines={4} />

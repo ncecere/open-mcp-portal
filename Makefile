@@ -164,5 +164,5 @@ smoke-selftest: ## The smoke scripts' assertion helpers against stubs, and the s
 	python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 
 .PHONY: test-scanning-corpus
-test-scanning-corpus: ## Original scanning corpus/known misses, offline downloader refusals and unchanged registry/capture tests
-	$(GO) test -count=1 -timeout=20m ./internal/scancorpus/... ./internal/secretrules ./internal/capture
+test-scanning-corpus: ## Primitive and definition-v1 corpus/known misses, offline downloader refusals and unchanged registry/capture tests
+	$(GO) test -count=1 -timeout=20m ./internal/scancorpus/... ./internal/definitionscan ./internal/secretrules ./internal/capture
