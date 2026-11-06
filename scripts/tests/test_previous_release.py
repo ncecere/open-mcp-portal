@@ -121,6 +121,22 @@ class PreviousReleaseTests(unittest.TestCase):
         r = self.run_script("--tag-only")
         self.assertEqual((r.returncode, r.stdout.strip()), (0, "v0.7.0"), r.stderr)
 
+    def test_unpublished_tags_are_skipped(self):
+        git(self.repo, "tag", "v0.14.0")
+        self.commit("two")
+        git(self.repo, "tag", "v0.15.0")  # tagged, never published
+        self.commit("three")
+        r = self.run_script("--tag-only")
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "v0.14.0"), r.stderr)
+        r = self.run_script_env({"OMP_UNPUBLISHED_TAGS": ""}, "--tag-only")
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "v0.15.0"), r.stderr)
+
+    def run_script_env(self, extra, *args):
+        env = dict(os.environ, OMP_REGISTRY_URL=self.url, OMP_IMAGE_REPO=REPO, NO_PROXY="127.0.0.1",
+                   no_proxy="127.0.0.1", **extra)
+        return subprocess.run(["bash", str(self.repo / "scripts" / "previous-release.sh"), *args],
+                              env=env, capture_output=True, text=True, timeout=30)
+
     def test_versions_sort_numerically(self):
         for tag in ("v0.9.0", "v0.10.0", "v0.2.1"):
             self.commit("c" + tag)
