@@ -731,19 +731,21 @@ type OauthToken struct {
 }
 
 type OmpAuditChain struct {
-	Seq          int64
-	Kind         string
-	RowUid       uuid.NullUUID
-	LegacyID     *int64
-	AuditID      *int64
-	Epoch        int32
-	Flags        int16
-	OccurredAt   time.Time
-	SummaryHash  []byte
-	EntryHash    []byte
-	ChainHash    []byte
-	SealedAt     time.Time
-	EpochSummary json.RawMessage
+	Seq                  int64
+	Kind                 string
+	RowUid               uuid.NullUUID
+	LegacyID             *int64
+	AuditID              *int64
+	Epoch                int32
+	Flags                int16
+	OccurredAt           time.Time
+	SummaryHash          []byte
+	EntryHash            []byte
+	ChainHash            []byte
+	SealedAt             time.Time
+	EpochSummary         json.RawMessage
+	CheckpointStatement  []byte
+	CheckpointSignatures []byte
 }
 
 type OmpAuditConsumer struct {
@@ -754,6 +756,22 @@ type OmpAuditConsumer struct {
 	AckedAt   *time.Time
 	CreatedBy uuid.UUID
 	CreatedAt time.Time
+}
+
+type OmpAuditExtCheckpointKey struct {
+	Kid              []byte
+	PublicKey        []byte
+	State            string
+	PrivateKeyCipher []byte
+	CreatedAt        time.Time
+	ActiveFromSeq    *int64
+	RetiredAtSeq     *int64
+}
+
+type OmpAuditExtManifest struct {
+	Kind       string
+	Identity   string
+	Privileges []string
 }
 
 type OmpAuditOversizedFetch struct {
@@ -769,24 +787,29 @@ type OmpAuditRetentionFloor struct {
 }
 
 type OmpAuditState struct {
-	Singleton         bool
-	StreamID          uuid.UUID
-	SystemIdentifier  string
-	Timeline          int64
-	Epoch             int32
-	Status            string
-	CursorTxid        pgtype.Uint64
-	CursorID          int64
-	HistoryID         int64
-	LastSeq           int64
-	LastChainHash     []byte
-	SweepAt           *time.Time
-	SweepScanID       *int64
-	SweepStartedXmin  pgtype.Uint64
-	EpochPending      json.RawMessage
-	RebaseF           pgtype.Uint64
-	RebaseResumeAfter *int64
-	SweepPending      bool
+	Singleton              bool
+	StreamID               uuid.UUID
+	SystemIdentifier       string
+	Timeline               int64
+	Epoch                  int32
+	Status                 string
+	CursorTxid             pgtype.Uint64
+	CursorID               int64
+	HistoryID              int64
+	LastSeq                int64
+	LastChainHash          []byte
+	SweepAt                *time.Time
+	SweepScanID            *int64
+	SweepStartedXmin       pgtype.Uint64
+	EpochPending           json.RawMessage
+	RebaseF                pgtype.Uint64
+	RebaseResumeAfter      *int64
+	SweepPending           bool
+	CheckpointsEnabled     *bool
+	MinReaderVersion       *string
+	EntriesSinceCheckpoint *int64
+	LastCheckpointSeq      *int64
+	LastCheckpointAt       *time.Time
 }
 
 type OmpPrivateApprovalBindingKey struct {

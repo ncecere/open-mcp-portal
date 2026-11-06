@@ -69,3 +69,27 @@ func TestAuditExtensionManifestBoundary(t *testing.T) {
 	roleDenied(t, runtime, `UPDATE omp_audit_ext.future SET y=1`, "42501")
 	roleExec(t, runtime, `UPDATE omp_audit_ext.future SET x=1`)
 }
+
+func TestAuditExtensionInheritedPrivilege(t *testing.T) {
+	_, owner, role := splitFixture(t)
+	ctx := context.Background()
+	_, admin := auxiliaryRole(t, owner, "ext_"+role)
+	aux := pgx.Identifier{"ext_" + role}.Sanitize()
+	runtime := pgx.Identifier{role}.Sanitize()
+	roleExec(t, owner, "GRANT USAGE ON SCHEMA omp_audit_ext TO "+aux)
+	roleExec(t, owner, "GRANT UPDATE(state) ON omp_audit_ext.checkpoint_keys TO "+aux)
+	roleExec(t, admin, "GRANT "+aux+" TO "+runtime+" WITH INHERIT FALSE")
+	defer roleExec(t, admin, "REVOKE "+aux+" FROM "+runtime)
+	safety, err := store.InspectRoles(ctx, owner, role, true)
+	if err != nil || safety.Safe() {
+		t.Fatalf("NOINHERIT extension write missed: %v %s", err, safety.Detail())
+	}
+	c, err := owner.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Release()
+	if err := store.ReconcileRuntimeGrants(ctx, c.Conn(), role); err == nil {
+		t.Fatal("direct revoke hid inherited write")
+	}
+}

@@ -282,6 +282,16 @@ func TestCheckpointHelpersRotationProgress(t *testing.T) {
 	if _, err := SubmitCheckpoint(ctx, p, box); err != nil {
 		t.Fatal(err)
 	}
+	// Concurrent submissions must rebuild signed statements after a stale tip.
+	for range 4 {
+		wg.Go(func() { _, err := SubmitCheckpoint(ctx, p, box); errs <- err })
+	}
+	wg.Wait()
+	for range 4 {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
 	var old []byte
 	if err := p.QueryRow(ctx, `SELECT kid FROM omp_audit_ext.checkpoint_keys WHERE state='active'`).Scan(&old); err != nil {
 		t.Fatal(err)
