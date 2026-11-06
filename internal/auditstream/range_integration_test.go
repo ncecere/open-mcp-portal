@@ -49,3 +49,21 @@ func TestRangeSnapshotCases(t *testing.T) {
 		t.Fatalf("hole accepted: %v", err)
 	}
 }
+
+func TestRangePurgeBeforeBegin(t *testing.T) {
+	p, owner, id := sinkFixture(t, false)
+	exec(t, p, `INSERT INTO public.audit_log(actor_kind,action,target_type,occurred_at) VALUES('system','old','test',now()-interval '4000 days')`)
+	drain(t, p)
+	tx, err := p.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		t.Fatal(err)
+	}
+	batch, err := ReadRange(ctx, tx, 0, 100, true, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec(t, p, `SELECT public.omp_purge_audit_log(30,100)`)
+	_ = tx.Rollback(ctx)
+	exec(t, owner, `SELECT omp_audit_ext.set_sinks_enabled(true,'0.15.0')`)
+	sinkReject(t, p, `SELECT omp_audit_ext.begin_attempt($1,1,0,'data',1,$2)`, id, batch.Envelopes[len(batch.Envelopes)-1].Seq)
+}
