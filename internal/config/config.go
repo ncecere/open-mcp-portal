@@ -67,8 +67,9 @@ type Config struct {
 	MetricsMaxObjects int
 
 	// AuditStreamEnabled enables only the experimental normal-operation sealer.
-	AuditStreamEnabled    bool
-	AuditMinRetentionDays int
+	AuditStreamEnabled         bool
+	AuditStreamAllowedNetworks []netpolicy.Entry
+	AuditMinRetentionDays      int
 
 	// RetentionInterval is how often the retention loop runs (one replica
 	// at a time); RetentionBatchSize is how many rows one transaction
