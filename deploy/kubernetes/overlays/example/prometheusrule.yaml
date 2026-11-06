@@ -153,3 +153,12 @@ spec:
             summary: Notifications are failing to be delivered
             description: "{{ $value | humanize }} {{ $labels.channel }} notifications failed for good in the last hour."
             runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompnotificationdeliveryfailures
+        - alert: OMPAuditCheckpointStale
+          expr: time() - max(omp_audit_stream_last_checkpoint_timestamp_seconds) > 3600 and max(omp_audit_stream_checkpoints_enabled) == 1 and max(omp_audit_stream_entries_since_checkpoint) > 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: Audit checkpoints are stale
+            description: Checkpoints are enabled with pending entries but none has been signed for an hour.
+            runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompauditcheckpointstale

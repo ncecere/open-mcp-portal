@@ -3,13 +3,16 @@ package auditstream
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ncecere/open-mcp-portal/internal/observability"
+	"github.com/ncecere/open-mcp-portal/internal/secrets"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 )
 
@@ -40,7 +43,7 @@ func (s Sealer) Batch(ctx context.Context) (int64, error) {
 	if status != "running" {
 		return 0, nil
 	}
-	var count int64
+	var count, snapshotSeq int64
 	err := pgx.BeginTxFunc(ctx, s.Pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
 		var stream uuid.UUID
 		var epoch uint32
@@ -51,6 +54,7 @@ func (s Sealer) Batch(ctx context.Context) (int64, error) {
 		if err := tx.QueryRow(ctx, `SELECT stream_id,epoch,last_seq,last_chain_hash,cursor_txid::text,cursor_id,history_id FROM omp_audit.state WHERE singleton`).Scan(&stream, &epoch, &seq, &previous, &cursor, &cursorID, &historyID); err != nil {
 			return err
 		}
+		snapshotSeq = seq
 		mode := "history"
 		// JSONB renders xid8 as a string. Separately project JSON text to distinguish
 		// SQL NULL from the jsonb token null, without passing numbers through floats.
@@ -90,13 +94,18 @@ func (s Sealer) Batch(ctx context.Context) (int64, error) {
 	if err == nil {
 		observability.AuditStreamSealed.Add(float64(count))
 	}
+	// Rotation can advance the tip between candidate hashing and seal_batch.
+	// Only suppress the specific invalid-record rejection when the tip moved.
+	if s.staleBatch(ctx, err, snapshotSeq) {
+		return 0, nil
+	}
 	return count, err
 }
 
 // Loop elects one leader per pass; all SQL and hashing stays within the local
 // database transaction. Incarnation checks and safety sweeps run here; owner
 // rebase/rebind operations remain explicit commands.
-func (s Sealer) Loop(ctx context.Context, log *slog.Logger) {
+func (s Sealer) Loop(ctx context.Context, log *slog.Logger, boxes ...*secrets.Box) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -104,6 +113,7 @@ func (s Sealer) Loop(ctx context.Context, log *slog.Logger) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			s.observeCheckpointState(ctx)
 			release, ok, err := store.TryAdvisoryLockText(ctx, s.Pool, "omp.auditstream")
 			if err != nil {
 				log.Error("audit stream leadership failed", "error", err)
@@ -112,12 +122,21 @@ func (s Sealer) Loop(ctx context.Context, log *slog.Logger) {
 			if !ok {
 				continue
 			}
+			var passTip int64
+			if err := s.Pool.QueryRow(ctx, `SELECT last_seq FROM omp_audit.state WHERE singleton`).Scan(&passTip); err != nil {
+				release()
+				log.Error("audit stream tip read failed", "error", err)
+				continue
+			}
 			_, err = s.Batch(ctx)
 			if err == nil {
 				_, err = s.Sweep(ctx)
 			}
+			if err == nil && len(boxes) > 0 {
+				err = s.checkpointIfDue(ctx, boxes[0], time.Now(), 10000, 15*time.Minute)
+			}
 			release()
-			if err != nil {
+			if err != nil && !s.staleBatch(ctx, err, passTip) {
 				log.Error("audit stream batch failed", "error", err)
 			}
 			var lag float64
@@ -170,4 +189,53 @@ func readRows(ctx context.Context, tx pgx.Tx, query string, args ...any) ([]Row,
 		result = append(result, r)
 	}
 	return result, rows.Err()
+}
+
+// checkpointIfDue is called only by the elected leader. Clock and thresholds
+// are arguments so tests exercise cadence without changing public settings.
+func (s Sealer) checkpointIfDue(ctx context.Context, box *secrets.Box, now time.Time, threshold int64, interval time.Duration) error {
+	var enabled, running bool
+	var entries int64
+	var last *time.Time
+	if err := s.Pool.QueryRow(ctx, `SELECT coalesce(checkpoints_enabled,false),status='running' AND epoch_pending IS NULL,coalesce(entries_since_checkpoint,0),last_checkpoint_at FROM omp_audit.state WHERE singleton`).Scan(&enabled, &running, &entries, &last); err != nil {
+		return err
+	}
+	if !enabled || !running || entries == 0 || (entries < threshold && (last == nil || now.Sub(*last) < interval)) {
+		return nil
+	}
+	if _, err := EnsureCheckpointKey(ctx, s.Pool, box); err != nil {
+		return err
+	}
+	_, err := SubmitCheckpoint(ctx, s.Pool, box)
+	return err
+}
+
+// staleBatch distinguishes a rotation racing candidate hashing from a malformed
+// record at the same tip. A stale sweep is retried on the next leader pass.
+func (s Sealer) staleBatch(ctx context.Context, err error, snapshotSeq int64) bool {
+	var pe *pgconn.PgError
+	if !errors.As(err, &pe) || pe.Code != "P0001" || pe.Message != "invalid record" {
+		return false
+	}
+	var tip int64
+	return s.Pool.QueryRow(ctx, `SELECT last_seq FROM omp_audit.state WHERE singleton`).Scan(&tip) == nil && tip != snapshotSeq
+}
+
+// Every replica samples these gauges, including followers, so a former leader's
+// pending count cannot leave a stale alert firing after an idle failover.
+func (s Sealer) observeCheckpointState(ctx context.Context) {
+	var enabled bool
+	var entries int64
+	var last *time.Time
+	if err := s.Pool.QueryRow(ctx, `SELECT coalesce(checkpoints_enabled,false),coalesce(entries_since_checkpoint,0),last_checkpoint_at FROM omp_audit.state WHERE singleton`).Scan(&enabled, &entries, &last); err != nil {
+		return
+	}
+	observability.AuditStreamCheckpointsEnabled.Set(0)
+	if enabled {
+		observability.AuditStreamCheckpointsEnabled.Set(1)
+	}
+	observability.AuditStreamCheckpointPending.Set(float64(entries))
+	if last != nil {
+		observability.AuditStreamLastCheckpoint.Set(float64(last.UnixMicro()) / 1e6)
+	}
 }

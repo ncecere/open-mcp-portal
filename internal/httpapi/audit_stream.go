@@ -23,6 +23,7 @@ import (
 
 func (a *api) auditStreamRoutes() []route {
 	return []route{
+		{"GET", "/.well-known/omp-audit-keys.json", http.HandlerFunc(a.auditKeys)},
 		{"GET", "/v1/admin/audit/stream", a.admin(a.auditStream)},
 		{"GET", "/v1/admin/audit/stream/tip", a.admin(a.auditTip)},
 		{"GET", "/v1/admin/audit/verify", a.admin(a.auditVerify)},
@@ -133,7 +134,7 @@ func (a *api) auditStream(w http.ResponseWriter, r *http.Request) {
 }
 func (a *api) auditTip(w http.ResponseWriter, r *http.Request) {
 	var raw []byte
-	err := a.Pool.QueryRow(r.Context(), `SELECT jsonb_build_object('stream_id',s.stream_id,'epoch',s.epoch,'last_seq',s.last_seq,'last_chain_hash',encode(s.last_chain_hash,'hex'),'earliest_seq',f.purged_seq+1,'advisory',true,'epochs',coalesce((SELECT jsonb_agg(jsonb_build_object('seq',seq,'epoch_summary',epoch_summary) ORDER BY seq) FROM omp_audit.chain WHERE kind='epoch_start'),'[]'::jsonb)) FROM omp_audit.state s CROSS JOIN omp_audit.retention_floor f`).Scan(&raw)
+	err := a.Pool.QueryRow(r.Context(), `SELECT jsonb_build_object('stream_id',s.stream_id,'epoch',s.epoch,'last_seq',s.last_seq,'last_chain_hash',encode(s.last_chain_hash,'hex'),'earliest_seq',f.purged_seq+1,'advisory',true,'checkpoint',jsonb_build_object('checkpoints_enabled',coalesce(s.checkpoints_enabled,false),'min_reader_version',s.min_reader_version,'last_checkpoint_seq',s.last_checkpoint_seq,'last_checkpoint_at',s.last_checkpoint_at),'epochs',coalesce((SELECT jsonb_agg(jsonb_build_object('seq',seq,'epoch_summary',epoch_summary) ORDER BY seq) FROM omp_audit.chain WHERE kind='epoch_start'),'[]'::jsonb)) FROM omp_audit.state s CROSS JOIN omp_audit.retention_floor f`).Scan(&raw)
 	if !failed(w, r, err) {
 		httpx.JSON(w, 200, json.RawMessage(raw))
 	}
@@ -195,6 +196,15 @@ func (a *api) auditFull(w http.ResponseWriter, r *http.Request) {
 			httpx.ErrorDetails(w, 410, "range_expired", "Requested range expired", map[string]any{"earliest_seq": earliest})
 		} else {
 			streamFailure(w, r, err)
+		}
+		return
+	}
+	var kind string
+	if err := tx.QueryRow(r.Context(), `SELECT kind FROM omp_audit.chain WHERE seq=$1`, seq).Scan(&kind); err == nil && kind == "checkpoint" {
+		env, e := auditstream.Read(r.Context(), tx, seq, true)
+		if !failed(w, r, e) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(env)
 		}
 		return
 	}
@@ -278,7 +288,8 @@ func (a *api) auditVerify(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, 200, map[string]any{"valid": false, "first_bad_seq": from})
 		return
 	}
-	if failed(w, r, err) {
+	if err != nil {
+		httpx.JSON(w, 200, map[string]any{"valid": false, "first_bad_seq": from})
 		return
 	}
 	anchor := from - 1
@@ -300,6 +311,10 @@ func (a *api) auditVerify(w http.ResponseWriter, r *http.Request) {
 		}
 		copy(prev[:], b)
 	}
+	_, authorities, err := auditstream.CheckpointKeys(r.Context(), tx)
+	if failed(w, r, err) {
+		return
+	}
 	for n := from; n <= to; n++ {
 		env := first
 		var err error
@@ -318,7 +333,8 @@ func (a *api) auditVerify(w http.ResponseWriter, r *http.Request) {
 			}
 			break
 		}
-		if failed(w, r, err) {
+		if err != nil {
+			httpx.JSON(w, 200, map[string]any{"valid": false, "first_bad_seq": n})
 			return
 		}
 		ok := false
@@ -327,6 +343,10 @@ func (a *api) auditVerify(w http.ResponseWriter, r *http.Request) {
 		} else {
 			ok = env.EpochSummary != nil
 		} // epoch verification implemented by canonical helper below
+		if env.Kind == "checkpoint" && env.Checkpoint != nil {
+			err = auditstream.VerifyCheckpoint(env, *env.Checkpoint, prev, authorities)
+			ok = err == nil
+		}
 		if env.Kind == "epoch_start" {
 			ok = auditstream.VerifyEpoch(env, prev)
 		}
@@ -418,4 +438,19 @@ func (a *api) auditConsumerChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeOK(w, r, err)
+}
+
+func (a *api) auditKeys(w http.ResponseWriter, r *http.Request) {
+	tx, err := a.snapshot(r)
+	if failed(w, r, err) {
+		return
+	}
+	defer tx.Rollback(r.Context())
+	keys, _, err := auditstream.CheckpointKeys(r.Context(), tx)
+	if failed(w, r, err) {
+		return
+	}
+	w.Header().Set("Cache-Control", "public, max-age=60")
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"keys": keys})
 }

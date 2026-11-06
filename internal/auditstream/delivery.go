@@ -17,15 +17,16 @@ import (
 // projection. Full rows contain only columns already readable in the audit API.
 type Envelope struct {
 	Record
-	Stream        uuid.UUID       `json:"stream_id"`
-	Epoch         uint32          `json:"epoch"`
-	OccurredAt    time.Time       `json:"occurred_at"`
-	EpochSummary  *EpochSummary   `json:"epoch_summary,omitempty"`
-	SummaryFields json.RawMessage `json:"summary_fields,omitempty"`
-	Full          *Row            `json:"full,omitempty"`
-	Oversized     bool            `json:"oversized,omitempty"`
-	FullLength    int             `json:"full_length,omitempty"`
-	Reference     string          `json:"reference,omitempty"`
+	Stream        uuid.UUID           `json:"stream_id"`
+	Epoch         uint32              `json:"epoch"`
+	OccurredAt    time.Time           `json:"occurred_at"`
+	Checkpoint    *CheckpointEnvelope `json:"checkpoint,omitempty"`
+	EpochSummary  *EpochSummary       `json:"epoch_summary,omitempty"`
+	SummaryFields json.RawMessage     `json:"summary_fields,omitempty"`
+	Full          *Row                `json:"full,omitempty"`
+	Oversized     bool                `json:"oversized,omitempty"`
+	FullLength    int                 `json:"full_length,omitempty"`
+	Reference     string              `json:"reference,omitempty"`
 }
 
 // FullRowJSONSQL is shared by envelope length and bounded fetch, so the
@@ -58,14 +59,18 @@ func CheckRange(ctx context.Context, tx pgx.Tx, after int64, limit int) (int64, 
 
 func Read(ctx context.Context, tx pgx.Tx, seq int64, full bool) (Envelope, error) {
 	var e Envelope
-	var raw, epochRaw []byte
+	var raw, epochRaw, statement, signatures []byte
 	var before, after, meta *string
 	var timestamp time.Time
-	err := tx.QueryRow(ctx, `SELECT s.stream_id,c.seq,c.kind,c.flags,c.row_uid,c.legacy_id,coalesce(c.audit_id,0),c.epoch,c.occurred_at,encode(c.summary_hash,'hex'),encode(c.entry_hash,'hex'),encode(c.chain_hash,'hex'),c.epoch_summary,to_jsonb(a),a.before_state::text,a.after_state::text,a.metadata::text,coalesce(octet_length(`+FullRowJSONSQL+`),0) FROM omp_audit.chain c CROSS JOIN omp_audit.state s `+joinAudit+` WHERE c.seq=$1`, seq).Scan(&e.Stream, &e.Seq, &e.Kind, &e.Flags, &e.RowUID, &e.LegacyID, &e.AuditID, &e.Epoch, &timestamp, &e.Record.Summary, &e.Entry, &e.Chain, &epochRaw, &raw, &before, &after, &meta, &e.FullLength)
+	err := tx.QueryRow(ctx, `SELECT s.stream_id,c.seq,c.kind,c.flags,c.row_uid,c.legacy_id,coalesce(c.audit_id,0),c.epoch,c.occurred_at,encode(c.summary_hash,'hex'),encode(c.entry_hash,'hex'),encode(c.chain_hash,'hex'),c.epoch_summary,c.checkpoint_statement,c.checkpoint_signatures,to_jsonb(a),a.before_state::text,a.after_state::text,a.metadata::text,coalesce(octet_length(`+FullRowJSONSQL+`),0) FROM omp_audit.chain c CROSS JOIN omp_audit.state s `+joinAudit+` WHERE c.seq=$1`, seq).Scan(&e.Stream, &e.Seq, &e.Kind, &e.Flags, &e.RowUID, &e.LegacyID, &e.AuditID, &e.Epoch, &timestamp, &e.Record.Summary, &e.Entry, &e.Chain, &epochRaw, &statement, &signatures, &raw, &before, &after, &meta, &e.FullLength)
 	if err != nil {
 		return e, err
 	}
 	e.OccurredAt = timestamp
+	if e.Kind == "checkpoint" {
+		e.Checkpoint, err = NewCheckpointEnvelope(statement, signatures)
+		return e, err
+	}
 	if e.Kind != "entry" {
 		err = json.Unmarshal(epochRaw, &e.EpochSummary)
 		return e, err

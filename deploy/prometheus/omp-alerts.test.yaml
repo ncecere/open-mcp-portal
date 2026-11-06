@@ -103,3 +103,28 @@ tests:
               summary: Retention has not purged a kind of data for over an hour
               description: "Nothing has purged calls successfully for 1h 30m 0s (it runs every RETENTION_INTERVAL, 15 minutes by default)."
               runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompretentionstale
+
+  - interval: 1m
+    input_series:
+      - series: omp_audit_stream_last_checkpoint_timestamp_seconds
+        values: '0x90'
+      - series: omp_audit_stream_checkpoints_enabled
+        values: '1x70 0x20'
+      - series: omp_audit_stream_entries_since_checkpoint
+        values: '0x10 1x80'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: OMPAuditCheckpointStale
+        exp_alerts: []
+      - eval_time: 62m
+        alertname: OMPAuditCheckpointStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Audit checkpoints are stale
+              description: Checkpoints are enabled with pending entries but none has been signed for an hour.
+              runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompauditcheckpointstale
+      - eval_time: 80m
+        alertname: OMPAuditCheckpointStale
+        exp_alerts: []

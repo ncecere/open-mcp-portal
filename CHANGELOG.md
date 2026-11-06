@@ -8,9 +8,13 @@ breaking changes; the entry says how to adapt.
 
 ## Unreleased
 
+- Wire opt-in signed audit checkpoints: leader cadence, acknowledged minimum reader version enablement, atomic key rotation, public Ed25519 keys, checkpoint pull envelopes and signature/range verification, metrics and a stale-checkpoint alert (#38 slice 2a).
+
+
 - Capability filter counts now match their accessible labels; real Chromium desktop/mobile scanning checks are recorded (#73).
 
 - Definition scanning evidence: aggregate v1 corpus results, CPU/allocation gates, a 2,000-definition real refresh and off/shadow refresh byte comparison (#72).
+- Audit streaming slice 2a, database part (#38, decision 94; checkpoints off, no operator command yet): migration 63 adds the migration-owned `omp_audit_ext` schema with a manifest-driven role boundary, Ed25519 checkpoint keys sealed with `ENCRYPTION_KEY` (covered by key rotation), checkpoint chain records checked by `seal_batch`, and atomic handover rotation. The checkpoint codec, normative spec and Go/SQL/Python vectors are included. v0.14.0 replicas keep working against it.
 
 ## [0.14.0] - 2026-11-05
 
