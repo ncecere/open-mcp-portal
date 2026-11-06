@@ -94,6 +94,19 @@ func TestTokenScopesMatchSpecAndRoutes(t *testing.T) {
 			t.Errorf("%s is in the generated table but the spec does not annotate it", key)
 		}
 	}
+	// Public key publication is anonymous, never a platform-scoped operation.
+	if !served["GET /.well-known/omp-audit-keys.json"] {
+		t.Fatal("missing anonymous audit key publication")
+	}
+	if _, ok := apitypes.TokenOperations["GET /.well-known/omp-audit-keys.json"]; ok {
+		t.Fatal("public keys must not require token scopes")
+	}
+	// Existing audit reads retain platform:read.
+	for _, key := range []string{"GET /v1/admin/audit/stream", "GET /v1/admin/audit/stream/tip", "GET /v1/admin/audit/verify"} {
+		if !slices.Equal(annotated[key], []string{"platform:read"}) {
+			t.Fatalf("audit read scope changed: %s", key)
+		}
+	}
 	// Every token-management operation is a served route and not annotated.
 	for key := range tokenManagement {
 		if !served[key] {
