@@ -192,6 +192,12 @@ func (s *Sender) deliver(ctx context.Context, leader *pgx.Conn, id uuid.UUID) er
 			body = append(body, line...)
 			stream = e.Stream
 			if e.Oversized {
+				if e.Flags&2 == 0 && sink.Required && sink.Profile == "full" {
+					// Sealed before summary fields counted toward the oversized flag:
+					// the database cannot hold or acknowledge it. Stop, fail closed.
+					observability.AuditStreamSinkDeliveries.WithLabelValues("webhook", "integrity").Inc()
+					return errUnflaggedOverflow
+				}
 				held = sink.Required && sink.Profile == "full"
 				if last == 0 {
 					last = e.Seq
@@ -341,3 +347,9 @@ func sinkDue(s dbgen.OmpAuditExtSink) time.Time {
 	delay := math.Min(300, base*(0.8+0.4*fraction))
 	return s.NextAttemptAt.Add(time.Duration((delay - base) * float64(time.Second)))
 }
+
+// errUnflaggedOverflow: a full-profile line exceeds the cap although the row was
+// not sealed as oversized (only rows sealed before the summary-aware rule). A
+// required full sink cannot pass it; an admin switches the sink to the summary
+// profile or unrequires it. Logged with a fixed class, never the content.
+var errUnflaggedOverflow = errors.New("audit sink: unflagged oversized envelope")
