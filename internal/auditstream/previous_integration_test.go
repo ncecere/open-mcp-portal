@@ -64,6 +64,9 @@ func TestPreviousImageCurrentSchemas(t *testing.T) {
 			}
 
 			if version == 63 {
+				if count(t, p, `SELECT count(*) FROM omp_audit.state WHERE coalesce(checkpoints_enabled,false) OR min_reader_version IS NOT NULL`) != 0 {
+					t.Fatal("previous release fixture must remain pre-enable")
+				}
 				exec(t, p, `SELECT omp_audit.register_consumer('compat.hold','summary',true,gen_random_uuid())`)
 			}
 			listener, err := net.Listen("tcp", "127.0.0.1:0")

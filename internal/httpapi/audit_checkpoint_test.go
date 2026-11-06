@@ -89,11 +89,27 @@ for line in sys.stdin:
 		t.Fatal(err)
 	}
 	// Owner tampering is detected, with the exact first bad sequence.
-	if _, err := owner.Exec(ctx, `UPDATE omp_audit.chain SET checkpoint_signatures=set_byte(checkpoint_signatures,0,get_byte(checkpoint_signatures,0)#1) WHERE seq=$1`, first); err != nil {
+
+	var originalStatement, originalSignatures []byte
+	if err := owner.QueryRow(ctx, `SELECT checkpoint_statement,checkpoint_signatures FROM omp_audit.chain WHERE seq=$1`, first).Scan(&originalStatement, &originalSignatures); err != nil {
 		t.Fatal(err)
 	}
-	code, body = admin.raw("GET", path, nil, nil)
-	if code != 200 || !bytes.Contains(body, []byte(fmt.Sprintf(`"first_bad_seq":%d`, first))) {
-		t.Fatalf("tamper: %d %s", code, body)
+	for _, tc := range []struct{ name, sql string }{
+		{"bad signature", `UPDATE omp_audit.chain SET checkpoint_signatures=set_byte(checkpoint_signatures,0,get_byte(checkpoint_signatures,0)#1) WHERE seq=$1`},
+		{"transplanted statement", `UPDATE omp_audit.chain SET checkpoint_statement=(SELECT checkpoint_statement FROM omp_audit.chain WHERE seq=$1+1) WHERE seq=$1`},
+		{"key outside range", `UPDATE omp_audit_ext.checkpoint_keys SET active_from_seq=$1+1 WHERE retired_at_seq IS NOT NULL`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := owner.Exec(ctx, tc.sql, first); err != nil {
+				t.Fatal(err)
+			}
+			code, body := admin.raw("GET", path, nil, nil)
+			if code != 200 || !bytes.Contains(body, []byte(fmt.Sprintf(`"first_bad_seq":%d`, first))) {
+				t.Fatalf("tamper: %d %s", code, body)
+			}
+			if _, err := owner.Exec(ctx, `UPDATE omp_audit.chain SET checkpoint_statement=$2,checkpoint_signatures=$3 WHERE seq=$1`, first, originalStatement, originalSignatures); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }

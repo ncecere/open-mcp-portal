@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/ncecere/open-mcp-portal/internal/auditstream"
+	"github.com/ncecere/open-mcp-portal/internal/buildinfo"
+	"github.com/ncecere/open-mcp-portal/internal/secrets"
 	"strings"
 	"testing"
 
@@ -82,5 +85,60 @@ func TestAuditStatusPreservesBigint(t *testing.T) {
 	}
 	if string(fields["last_seq"]) != "9007199254740993" {
 		t.Fatalf("status rounded sequence: %s", fields["last_seq"])
+	}
+}
+
+func TestAuditCheckpointCommands(t *testing.T) {
+	p, url := testutil.NewDB(t)
+	owner := testutil.OwnerPool(t, p)
+	for k, v := range map[string]string{"OMP_CONFIG_FILE": "", "DATABASE_URL": url, "DATABASE_MIGRATE_URL": owner.Config().ConnString(), "ENCRYPTION_KEY": "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="} {
+		t.Setenv(k, v)
+	}
+	var out bytes.Buffer
+	if err := runAuditStream([]string{"enable-checkpoints"}, &out); err == nil || !strings.Contains(out.String(), "one-way") {
+		t.Fatal("missing acknowledgement fence")
+	}
+	if _, err := owner.Exec(context.Background(), `UPDATE omp_audit.state SET status='halted_incarnation'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := runAuditStream([]string{"enable-checkpoints", "--min-reader-version-ack"}, &out); err == nil {
+		t.Fatal("enabled while halted")
+	}
+	if _, err := owner.Exec(context.Background(), `UPDATE omp_audit.state SET status='running'`); err != nil {
+		t.Fatal(err)
+	}
+	// Enable uses only the owner URL.
+	t.Setenv("DATABASE_URL", "invalid-unused-runtime-sentinel")
+	if err := runAuditStream([]string{"enable-checkpoints", "--min-reader-version-ack"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	var version string
+	if err := p.QueryRow(context.Background(), `SELECT min_reader_version FROM omp_audit.state`).Scan(&version); err != nil || version != buildinfo.Version {
+		t.Fatalf("version %s %v", version, err)
+	}
+	t.Setenv("DATABASE_URL", url)
+	t.Setenv("DATABASE_MIGRATE_URL", "invalid-unused-owner-sentinel")
+	key, _ := secrets.ParseKey("MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=")
+	box, _ := secrets.New(key)
+	if _, err := auditstream.EnsureCheckpointKey(context.Background(), p, box); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for ctx.Err() == nil {
+			_, _ = (auditstream.Sealer{Pool: p}).Batch(ctx)
+		}
+	}()
+	err := runAuditStream([]string{"rotate-checkpoint-key"}, &out)
+	cancel()
+	<-done
+	if err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := runAuditStream([]string{"status"}, &out); err != nil || !strings.Contains(out.String(), "active_key_fingerprint") {
+		t.Fatalf("status %v %s", err, out.String())
 	}
 }

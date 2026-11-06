@@ -96,12 +96,8 @@ func (s Sealer) Batch(ctx context.Context) (int64, error) {
 	}
 	// Rotation can advance the tip between candidate hashing and seal_batch.
 	// Only suppress the specific invalid-record rejection when the tip moved.
-	var pe *pgconn.PgError
-	if errors.As(err, &pe) && pe.Code == "P0001" && pe.Message == "invalid record" {
-		var tip int64
-		if e := s.Pool.QueryRow(ctx, `SELECT last_seq FROM omp_audit.state WHERE singleton`).Scan(&tip); e == nil && tip != snapshotSeq {
-			return 0, nil
-		}
+	if s.staleBatch(ctx, err, snapshotSeq) {
+		return 0, nil
 	}
 	return count, err
 }
@@ -125,6 +121,12 @@ func (s Sealer) Loop(ctx context.Context, log *slog.Logger, boxes ...*secrets.Bo
 			if !ok {
 				continue
 			}
+			var passTip int64
+			if err := s.Pool.QueryRow(ctx, `SELECT last_seq FROM omp_audit.state WHERE singleton`).Scan(&passTip); err != nil {
+				release()
+				log.Error("audit stream tip read failed", "error", err)
+				continue
+			}
 			_, err = s.Batch(ctx)
 			if err == nil {
 				_, err = s.Sweep(ctx)
@@ -133,7 +135,7 @@ func (s Sealer) Loop(ctx context.Context, log *slog.Logger, boxes ...*secrets.Bo
 				err = s.checkpointIfDue(ctx, boxes[0], time.Now(), 10000, 15*time.Minute)
 			}
 			release()
-			if err != nil {
+			if err != nil && !s.staleBatch(ctx, err, passTip) {
 				log.Error("audit stream batch failed", "error", err)
 			}
 			var lag float64
@@ -197,6 +199,14 @@ func (s Sealer) checkpointIfDue(ctx context.Context, box *secrets.Box, now time.
 	if err := s.Pool.QueryRow(ctx, `SELECT coalesce(checkpoints_enabled,false),status='running' AND epoch_pending IS NULL,coalesce(entries_since_checkpoint,0),last_checkpoint_at FROM omp_audit.state WHERE singleton`).Scan(&enabled, &running, &entries, &last); err != nil {
 		return err
 	}
+	observability.AuditStreamCheckpointsEnabled.Set(0)
+	if enabled {
+		observability.AuditStreamCheckpointsEnabled.Set(1)
+	}
+	observability.AuditStreamCheckpointPending.Set(float64(entries))
+	if last != nil {
+		observability.AuditStreamLastCheckpoint.Set(float64(last.UnixMicro()) / 1e6)
+	}
 	if !enabled || !running || entries == 0 || (entries < threshold && (last == nil || now.Sub(*last) < interval)) {
 		return nil
 	}
@@ -205,4 +215,15 @@ func (s Sealer) checkpointIfDue(ctx context.Context, box *secrets.Box, now time.
 	}
 	_, err := SubmitCheckpoint(ctx, s.Pool, box)
 	return err
+}
+
+// staleBatch distinguishes a rotation racing candidate hashing from a malformed
+// record at the same tip. A stale sweep is retried on the next leader pass.
+func (s Sealer) staleBatch(ctx context.Context, err error, snapshotSeq int64) bool {
+	var pe *pgconn.PgError
+	if !errors.As(err, &pe) || pe.Code != "P0001" || pe.Message != "invalid record" {
+		return false
+	}
+	var tip int64
+	return s.Pool.QueryRow(ctx, `SELECT last_seq FROM omp_audit.state WHERE singleton`).Scan(&tip) == nil && tip != snapshotSeq
 }
