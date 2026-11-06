@@ -159,3 +159,21 @@ groups:
           summary: Audit checkpoints are stale
           description: Checkpoints are enabled with pending entries but none has been signed for an hour.
           runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompauditcheckpointstale
+      - alert: OMPAuditSinkFailing
+        expr: max(omp_audit_stream_sinks_failing) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Audit sink delivery is failing
+          description: At least one audit sink has an open failure streak. Inspect sink status and receiver health.
+          runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompauditsinkfailing
+      - alert: OMPAuditSinkLag
+        expr: max by (kind, required) (omp_audit_stream_sink_lag_records) > 100000
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Audit sink lag exceeds 100000 records
+          description: Inspect sink status and restore delivery before retention pressure grows.
+          runbook_url: https://github.com/ncecere/open-mcp-portal/blob/main/docs/phase6-operations.md#ompauditsinklag
