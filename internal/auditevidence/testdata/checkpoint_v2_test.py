@@ -77,13 +77,14 @@ class CheckpointTests(unittest.TestCase):
                 verify_checkpoint(bytes(record), v['envelope'], previous, {})
             kid = next(iter(authority))
             public, first, _ = authority[kid]
-            for limits in ((public, first, 12), (public, 14, None)):
+            for limits in ((public, first, 12), (public, 14, None), (public, True, None)):
                 bad = dict(authority)
                 bad[kid] = limits
                 with self.assertRaises(AssertionError):
                     verify_checkpoint(bytes(record), v['envelope'], previous, bad)
             for field, value in (('seq', 14), ('covered_seq', 11), ('epoch', True),
                                  ('issued_at', '2023-11-14T22:13:20.123457Z'),
+                                 ('issued_at', '2023-11-14T22:13:20.1234567Z'),
                                  ('statement', v['envelope']['statement'] + '=')):
                 bad = copy.deepcopy(v['envelope'])
                 bad[field] = value

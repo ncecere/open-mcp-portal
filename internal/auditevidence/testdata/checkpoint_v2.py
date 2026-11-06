@@ -5,6 +5,7 @@ anchor and authenticate historical ranges through handovers or local approval.
 """
 import base64
 import hashlib
+import re
 import struct
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -54,7 +55,15 @@ def verify_checkpoint(record, checkpoint, previous, authorities):
     assert type(checkpoint['seq']) is int and checkpoint['seq'] == seq
     assert type(checkpoint['covered_seq']) is int and checkpoint['covered_seq'] == covered
     assert checkpoint['covered_chain_hash'] == prev.hex()
-    timestamp = datetime.fromisoformat(checkpoint['issued_at'].replace('Z', '+00:00'))
+    # datetime silently truncates sub-microsecond fractions. Reject any lost
+    # precision instead of accepting a projection different from signed time.
+    issued = checkpoint['issued_at']
+    assert isinstance(issued, str)
+    match = re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.(\d{1,9}))?(?:Z|[+-]\d{2}:\d{2})', issued)
+    assert match is not None
+    fraction = match.group(1) or ''
+    assert not fraction[6:] or set(fraction[6:]) == {'0'}
+    timestamp = datetime.fromisoformat(issued.replace('Z', '+00:00'))
     assert timestamp.tzinfo is not None
     assert timestamp == datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(microseconds=micros)
     assert len(checkpoint['kids']) == len(checkpoint['signatures']) == len(kids)
@@ -64,7 +73,8 @@ def verify_checkpoint(record, checkpoint, previous, authorities):
         signature = unbase64(checkpoint['signatures'][i])
         public, first, last = authorities[kid]
         assert hashlib.sha256(public).digest()[:16] == kid
-        assert 1 <= first <= seq and (last is None or seq <= last)
+        assert type(first) is int and 1 <= first <= seq
+        assert last is None or (type(last) is int and seq <= last < 2**63)
         if len(kids) == 2:
             assert (last == seq) if i == 0 else (first == seq)
         assert verify(public, raw, signature)
