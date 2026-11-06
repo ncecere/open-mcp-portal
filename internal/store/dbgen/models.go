@@ -774,6 +774,44 @@ type OmpAuditExtManifest struct {
 	Privileges []string
 }
 
+type OmpAuditExtSink struct {
+	ID                   uuid.UUID
+	Name                 string
+	Kind                 string
+	Profile              string
+	Required             bool
+	Enabled              bool
+	BatchMaxRecords      int32
+	Revision             int64
+	UrlCipher            []byte
+	UrlHint              string
+	SecretCipher         []byte
+	SecretHint           string
+	SecretPreviousCipher []byte
+	SecretPreviousUntil  *time.Time
+	CursorSeq            int64
+	InflightKind         *string
+	InflightFirst        *int64
+	InflightLast         *int64
+	InflightToken        uuid.NullUUID
+	InflightRevision     *int64
+	NextAttemptAt        time.Time
+	ConsecutiveFailures  int32
+	LastErrorClass       *string
+	LastOkAt             *time.Time
+	State                string
+	StreakID             uuid.NullUUID
+	StreakNotified       bool
+	GapFirst             *int64
+	GapLast              *int64
+}
+
+type OmpAuditExtSinkSetting struct {
+	Singleton        bool
+	Enabled          bool
+	MinReaderVersion *string
+}
+
 type OmpAuditOversizedFetch struct {
 	Consumer string
 	Seq      int64

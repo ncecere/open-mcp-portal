@@ -613,3 +613,49 @@ func TestServerCertificateExpiryScan(t *testing.T) {
 		t.Errorf("message = %+v", m)
 	}
 }
+
+func TestSinkStrictNotificationInsert(t *testing.T) {
+	e := newEnv(t, nil)
+	ctx := context.Background()
+	admin := e.user("platform_admin")
+	person := e.user("none")
+	for _, typ := range []string{AuditSinkFailing, AuditSinkRecovered} {
+		ev := Event{Type: typ, DedupKey: typ, SubjectType: "audit_sink", SubjectID: uuid.NewString(), Data: map[string]string{"streakId": uuid.NewString()}}
+		for i := 0; i < 2; i++ {
+			inserted, err := InsertStrict(ctx, e.q, ev)
+			if err != nil || inserted != (i == 0) {
+				t.Fatalf("strict insert %d: %v %v", i, inserted, err)
+			}
+		}
+	}
+	e.fanOutAll()
+	if e.inbox(admin) != 2 || e.inbox(person) != 0 {
+		t.Fatal("sink events must reach only platform admins")
+	}
+	for _, role := range []string{"none", "platform_admin"} {
+		events, err := e.svc.receivable(ctx, person, role)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, typ := range []string{AuditSinkFailing, AuditSinkRecovered} {
+			found := false
+			for _, event := range events {
+				found = found || event == typ
+			}
+			if found != (role == "platform_admin") {
+				t.Fatalf("preference %s exposed to %s", typ, role)
+			}
+		}
+	}
+	// A genuine insertion error is returned and aborts the entire transaction.
+	err := store.InTx(ctx, e.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
+		if _, err := InsertStrict(ctx, q, Event{Type: AuditSinkFailing, DedupKey: "rollback", Data: 1}); err != nil {
+			return err
+		}
+		_, err := InsertStrict(ctx, q, Event{Type: AuditSinkFailing, DedupKey: "bad-fk", TeamID: uuid.New(), Data: 1})
+		return err
+	})
+	if err == nil || e.count(`SELECT count(*) FROM notification_events WHERE dedup_key='rollback'`) != 0 {
+		t.Fatal("strict insertion error did not roll back transaction")
+	}
+}
