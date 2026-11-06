@@ -334,11 +334,22 @@ func TestCheckpointHelpersRotationProgress(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	for range 2 {
+		wg.Go(func() { _, err := RotateCheckpointKey(c, p, box); errs <- err })
+	}
+	wg.Wait()
+	for range 2 {
+		if err := <-errs; err != nil {
+			cancel()
+			<-done
+			t.Fatal(err)
+		}
+	}
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if n := count(t, p, `SELECT count(*) FROM omp_audit_ext.checkpoint_keys WHERE state='retired' AND private_key_cipher IS NULL`); n != 3 {
+	if n := count(t, p, `SELECT count(*) FROM omp_audit_ext.checkpoint_keys WHERE state='retired' AND private_key_cipher IS NULL`); n != 5 {
 		t.Fatalf("retired keys %d", n)
 	}
 }
