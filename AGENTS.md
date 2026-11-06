@@ -5,15 +5,17 @@ Conventions for building and testing are in [CONTRIBUTING.md](CONTRIBUTING.md), 
 with an AI agent on this repository. For a fresh machine/session, start with
 [docs/agent-handoff.md](docs/agent-handoff.md); confirm its release stop point against `docs/status.md` and GitHub.
 
-- **v0.14.0 released 2026-11-06; batch complete.** v0.14.0 ships definition scanning in shadow (#72/#73) and audit
-  streaming slice 1 (#38, decision 93, docs/audit-streaming.md; `AUDIT_STREAM_ENABLED` off by default), migrations
-  58–62. Nothing is in progress; follow-ups are in [docs/status.md](docs/status.md) ("Current batch"). Decisions 94+
-  and migrations 63+ are unallocated; allocate them from the main thread only. Parked on GitHub:
-  `parked/terraform-provider` (seed for the separate Terraform project) and `parked/keyprovider-transit` (#41,
-  deferred). Do not infer v1.0.0 approval. Keep all four reusable Boat VMs and their fixtures/evidence up.
-- **Release lessons (v0.14.0).** Run frozen-candidate validation in a dedicated worktree (never switch branches in a
-  checkout a run is using), set `GOTMPDIR` on disk (`/tmp` is a small shared tmpfs), and run the Kubernetes
-  smoke/upgrade/load gates before tagging: they caught a multi-replica migration deadlock no unit test could.
+- **v0.15.1 released 2026-11-06; batch complete.** v0.15.1 ships signed audit checkpoints and audit webhook sinks
+  (#38 slice 2, decision 94, docs/audit-sinks.md; off until `enable-checkpoints`/`enable-sinks` after rollout),
+  migrations 63–64. v0.15.0 was tagged but never published (image CVE gate); it is listed as unpublished in
+  scripts/previous-release.sh. Nothing is in progress; follow-ups are in [docs/status.md](docs/status.md). Decisions
+  95+ and migrations 65+ are unallocated; allocate them from the main thread only. Parked on GitHub:
+  `parked/terraform-provider` and `parked/keyprovider-transit` (#41, deferred). Do not infer v1.0.0 approval.
+- **Release lessons (v0.14.0, v0.15.x).** Run frozen-candidate validation in a dedicated worktree (never switch
+  branches in a checkout a run is using), set `GOTMPDIR` on disk (`/tmp` is a small shared tmpfs), run the Kubernetes
+  smoke/upgrade/load gates before tagging (they caught a multi-replica migration deadlock), and Trivy-scan a locally
+  built image before tagging (a new upstream CVE failed v0.15.0's publication after the tag). Tags are immutable: a
+  failed publication becomes an unpublished tag listed in scripts/previous-release.sh and a new patch version.
 - **Execution mode.** The main thread owns coordination, review, integration and releases. The owner has explicitly
   re-authorized parallel Boat/Codex coding agents for bounded development issues. Give each writer an isolated
   sandbox/checkout, only the required model credentials, and a narrow task; never forward production or infrastructure
