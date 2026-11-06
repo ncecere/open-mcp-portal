@@ -45,8 +45,9 @@ Unknown kinds/flag bits are invalid. Epoch and sequence are positive.
 For entries, row_identity is row_uid, or eight FF bytes followed by legacy_id as
 signed i64 big-endian for historical NULL-txid rows. A v4 row UUID cannot collide
 with that prefix. Non-entry kinds use a zero identity and zero entry hash. Their
-summary is kind-specific: epoch starts are specified below; checkpoints remain
-reserved and are not accepted by the sealing boundary.
+summary is kind-specific: epoch starts and checkpoints are specified below.
+Checkpoint append requires the explicit minimum-reader-version transition in
+[audit-sinks.md](audit-sinks.md#34-enabling-checkpoints-only-after-the-rollout).
 
 `chain_hash = SHA256(ASCII("OMP-AUDIT-EVIDENCE\0CHAIN\0V2\0") || previous_hash_32 || record_bytes_119)`.
 The predecessor before seq 1 is
@@ -120,3 +121,108 @@ An oversized envelope omits `full`, sets `oversized`, and provides `full_length`
 and a relative `reference`. The authenticated flags contain bit 2; the server
 reserves 64 KiB for envelope overhead below the 16 MiB line cap. Receivers fetch
 and verify the full entry instead of treating the smaller envelope as full evidence.
+
+
+## Signed checkpoints (slice 2a)
+
+These protocol requirements extend v2 without changing the 119-byte record. They
+specify the target protocol; checkpoint codec availability alone does not enable
+the database writer or the rollout command.
+
+A checkpoint statement is exactly the concatenation below. All integers are big
+endian; timestamps are signed Unix microseconds, with no presence framing:
+
+```
+ASCII("OMP-AUDIT-CHECKPOINT\0V1\0")
+stream_id          16 raw UUID bytes
+epoch               4 bytes, positive u32
+seq                 8 bytes, positive u64 limited to PostgreSQL bigint
+covered_seq         8 bytes, u64, exactly seq - 1
+covered_chain_hash 32 bytes
+issued_at           8 bytes, signed i64 Unix microseconds
+kid_count           1 byte, exactly 1 or 2
+kids               16 bytes per kid, in signature order
+```
+
+There are no trailing bytes. `kid` is the first 16 bytes of SHA-256 of the raw
+32-byte Ed25519 public key. A normal checkpoint has one kid, the current key. A
+handover has two distinct kids, old first and new second. Each signature is the
+64-byte RFC 8032 Ed25519 signature of the entire exact statement, without an
+additional prehash or context. Concatenated signatures follow kid order.
+
+`summary_hash = SHA256(ASCII("OMP-AUDIT-CHECKPOINT-SUMMARY\0V1\0") || statement || signatures)`.
+
+The checkpoint record has kind 3, flags zero, zero row identity, zero entry hash,
+and the statement's stream, epoch, seq and issued_at. The statement covers the
+held chain hash at `seq - 1`. The ordinary v2 chain hash commits to this record
+and therefore to both the statement and its signatures. No additional timestamp
+is authenticated. Signature byte lengths MUST equal `kid_count * 64`.
+
+The SQL boundary MUST validate the enabled flag, running status, absent pending
+epoch and live incarnation under the state-row lock for every checkpoint append,
+including handover. It MUST recompute summary and chain hashes and bind all
+statement fields to locked state. Ordinary `seal_batch` MUST reject two-kid
+statements; only atomic key rotation may append a handover. PostgreSQL does not
+verify Ed25519. The writer MUST verify its own signatures before submitting;
+verifiers and receivers MUST verify every signature independently. A valid chain
+digest with a bad signature is invalid evidence.
+
+### Checkpoint JSON envelope
+
+The common envelope fields are unchanged, with `kind: "checkpoint"`. There is
+no `summary_fields`, `full` or `epoch_summary`. A `checkpoint` object contains:
+
+- `statement`: exact statement bytes as unpadded base64url.
+- `kids`: unpadded base64url 16-byte kids in statement order.
+- `signatures`: unpadded base64url 64-byte signatures in that order.
+- `stream_id`, `epoch`, `seq`, `covered_seq`, `covered_chain_hash`, `issued_at`:
+  decoded projections of the statement. UUID, lower-case hex hash and RFC 3339
+  timestamp use the common envelope conventions.
+
+Receivers MUST reject padding, noncanonical base64url, wrong counts, duplicate
+kids and extra or missing binary bytes. They MUST check every decoded projection
+against the signed statement, then check the statement stream, epoch, seq and
+issued_at against the enclosing record. `covered_seq` MUST be `seq - 1`, and
+`covered_chain_hash` MUST equal the locally held predecessor. JSON numbers MUST
+be decoded losslessly; booleans are not numbers. A statement transplanted into
+another record is invalid even when its Ed25519 signature is valid.
+
+### Receiver enrollment and key authority
+
+A receiver MUST pin stream id and explicitly approve the currently active key
+from the TLS-authenticated `/.well-known/omp-audit-keys.json` response, confirmed
+out of band. The response is a JWK set; each key has `kty: "OKP"`, `crv:
+"Ed25519"`, raw-public-key `x`, the derived `kid`, `active_from_seq` and
+`retired_at_seq`. Publishing a key does not confer authority. Retired keys remain
+published solely for verifying their historical range.
+
+Enrollment is forward-only by default. Its approved anchor MUST be a checkpoint
+at or after the pinned key's `active_from_seq`, signed by that key. A receiver
+MUST track each key's inclusive authority interval. A normal checkpoint outside
+that interval is invalid. A verified handover requires both signatures, closes
+the old key's interval at the handover seq and opens the new key's interval at
+that same seq. The new key's signature at its initial handover is permitted;
+there is no authority to sign any earlier record. The old key cannot authorize
+any subsequent checkpoint or handover.
+
+To verify older history, a receiver MAY walk backwards through authenticated,
+dual-signed handovers: an already pinned new key authenticates the old key for
+its historical interval, recursively. Historical-key approval by a local operator
+is an alternative. Merely downloading all published keys MUST NOT enroll them.
+Unknown kids, out-of-range signatures or suspected compromise require explicit
+local key approval; automatic handover is not compromise recovery.
+
+Approving a chain discontinuity, including restore or rebase, MUST NOT restore a
+retired key's authority. The current approved keys remain authoritative, unless a
+new explicit key approval changes that. Chain approval and key approval are
+separate decisions, and old anchors and fork evidence MUST be retained.
+
+Receivers MUST discard only identical duplicates. A different hash at any held
+seq is a fork, including late deliveries and conflicts with an archived branch.
+They MUST preserve and alert on both hashes; `seq <= tip` is never sufficient to
+silently discard a record.
+
+`internal/auditstream/testdata/checkpoint_vectors.json` contains ordinary and
+handover statement, signature, summary, fixed-record, chain and JSON vectors.
+The Go codec and stdlib-only Python checkpoint harness consume the same vectors.
+The Python Ed25519 verifier also checks RFC 8032 section 7.1 test cases 1–3.
