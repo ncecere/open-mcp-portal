@@ -5,14 +5,15 @@ Conventions for building and testing are in [CONTRIBUTING.md](CONTRIBUTING.md), 
 with an AI agent on this repository. For a fresh machine/session, start with
 [docs/agent-handoff.md](docs/agent-handoff.md); confirm its release stop point against `docs/status.md` and GitHub.
 
-- **Resumed 2026-11-05 after v0.13.1.** v0.13.1 (refreshed builder image, OIDC snapshot regression test) is the
-  latest release; v0.13.0 shipped catalog search (#49 slice), the list-column fix and #38/#70 groundwork
-  (docs/releases/). The owner resumed development with the batch in [docs/status.md](docs/status.md) ("Current
-  batch"): #72 definition scanning (migration 61; renumbered from 57 at integration) and #38 audit streaming (decision 93, docs/audit-streaming.md;
-  migrations 58–60 and 62 for its slice 1). Decisions 94+ and migrations 63+ are unallocated; allocate them from
-  the main thread only. Parked on
-  GitHub: `parked/terraform-provider` (seed for the separate Terraform project) and `parked/keyprovider-transit`
-  (#41, deferred). Do not infer v1.0.0 approval. Keep all four reusable Boat VMs and their fixtures/evidence up.
+- **v0.14.0 released 2026-11-06; batch complete.** v0.14.0 ships definition scanning in shadow (#72/#73) and audit
+  streaming slice 1 (#38, decision 93, docs/audit-streaming.md; `AUDIT_STREAM_ENABLED` off by default), migrations
+  58–62. Nothing is in progress; follow-ups are in [docs/status.md](docs/status.md) ("Current batch"). Decisions 94+
+  and migrations 63+ are unallocated; allocate them from the main thread only. Parked on GitHub:
+  `parked/terraform-provider` (seed for the separate Terraform project) and `parked/keyprovider-transit` (#41,
+  deferred). Do not infer v1.0.0 approval. Keep all four reusable Boat VMs and their fixtures/evidence up.
+- **Release lessons (v0.14.0).** Run frozen-candidate validation in a dedicated worktree (never switch branches in a
+  checkout a run is using), set `GOTMPDIR` on disk (`/tmp` is a small shared tmpfs), and run the Kubernetes
+  smoke/upgrade/load gates before tagging: they caught a multi-replica migration deadlock no unit test could.
 - **Execution mode.** The main thread owns coordination, review, integration and releases. The owner has explicitly
   re-authorized parallel Boat/Codex coding agents for bounded development issues. Give each writer an isolated
   sandbox/checkout, only the required model credentials, and a narrow task; never forward production or infrastructure
