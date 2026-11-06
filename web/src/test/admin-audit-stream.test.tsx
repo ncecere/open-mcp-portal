@@ -122,7 +122,7 @@ describe("Admin audit stream", () => {
   it("shows each sink's last success time, or Never", async () => {
     const data = status(); data.sinks = [{ ...sink, last_ok_at: "2026-11-06T10:00:00Z" }, { ...sink, id: "s2", name: "Fresh", last_ok_at: null }];
     setup(data); await loaded();
-    const table = screen.getAllByRole("table")[0];
+    const table = screen.getAllByRole("table")[0]!;
     expect(within(table).getByText("Never")).toBeInTheDocument();
     expect(within(table).queryByText("Unavailable")).not.toBeInTheDocument();
     expect(within(table).getAllByRole("row")).toHaveLength(3);
