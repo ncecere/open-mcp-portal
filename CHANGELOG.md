@@ -6,15 +6,11 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
-## Unreleased
+## [0.14.0] - 2026-11-05
 
-- Show definition scan findings and scan times in Capabilities and publish/approval reviews, with explicit incomplete/stale/off states and heuristic limitations; add Admin scanning mode and rule catalog (shadow only, #73).
-- Experimental audit pull delivery, consumer acknowledgements and sealed-prefix retention interlock (migration 62); strict retention decoding and operator-owned retention floor. Disabled by default pending complete slice-1 acceptance.
-
-- Add audit stream incarnation recovery commands, epoch declarations and safety sweeps behind the disabled audit stream setting.
-
-- Add the disabled audit-stream sealing core, record v2 and protected schema (#38, slice 1a).
-- Definition scanning backend (#72): local shadow findings at refresh, session-only settings and rescan APIs, bounded evidence, and upgrade backfill. Findings do not approve or alter definitions; no call-path scanning or enforcement. UI remains #73.
+- **Definition scanning, shadow only (#72, #73).** Every capability definition is scanned at refresh with local heuristics: 32 rules in the secret, unicode, poison and length groups. Findings appear in the Capabilities tab and the publish and review dialogs, and Admin › Settings switches scanning between `off` and `shadow` (the default on upgrade). Nothing is blocked, redacted or approved, and zero findings never means safe. Migration 61.
+- **Audit streaming, slice 1 (#38; off by default).** Audit rows are sealed into a gapless hash chain (record v2) in a protected `omp_audit` schema. The release adds the `audit-stream status|rebind|rebase` recovery commands, automatic failover epochs and a daily safety sweep. It also adds pull delivery with collector acknowledgements and tip/verify/full-entry APIs, and a sealed-prefix purge interlock once streaming has started. Enable it with `AUDIT_STREAM_ENABLED=true`. Migrations 58–60 and 62.
+- **Audit retention floor (H-10).** Audit rows are kept at least as long as the longest platform or team call-metadata period and never below `AUDIT_MIN_RETENTION_DAYS` (default 30), enforced in the database. The settings API refuses periods that would break this. Malformed retention settings fail closed.
 
 ## [0.13.1] - 2026-11-01
 
