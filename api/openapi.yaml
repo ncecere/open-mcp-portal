@@ -1005,7 +1005,7 @@ paths:
             application/x-ndjson:
               schema:
                 type: string
-                description: One AuditStreamEnvelope per line; at most 16 MiB per line; oversized full rows use a reference
+                description: One AuditStreamEnvelope per line, including normative checkpoint.statement, kids, signatures and decoded binding fields (docs/audit-record-v2.md); at most 16 MiB per line; oversized full rows use a reference
         '400':
           $ref: '#/components/responses/ErrorReply'
         '403':
@@ -1022,7 +1022,7 @@ paths:
     get:
       tags: [admin]
       operationId: adminAuditStreamTip
-      summary: Advisory unsigned stream tip; never replaces a pinned receiver anchor
+      summary: Advisory unsigned stream tip with checkpoint enablement, minimum reader version, last sequence and time; never replaces a pinned receiver anchor
       x-omp-token-scopes: [platform:read]
       responses:
         '200':
@@ -1048,7 +1048,7 @@ paths:
     get:
       tags: [admin]
       operationId: adminAuditVerify
-      summary: Recompute retained summary, entry and chain hashes; report first bad sequence
+      summary: Verify retained hashes and checkpoint bindings, Ed25519 signatures and authority ranges; report first bad sequence
       x-omp-token-scopes: [platform:read]
       parameters:
       - name: from

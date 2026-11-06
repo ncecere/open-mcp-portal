@@ -40,7 +40,7 @@ commands:
             re-encrypt stored secrets from ENCRYPTION_KEY_PREVIOUS to
             ENCRYPTION_KEY and list keys on an old API key pepper
             (--dry-run, --batch-size, --help)
-  audit-stream status|rebind|rebase [--resume-after-seq=N]
+  audit-stream status|rebind|rebase|enable-checkpoints|rotate-checkpoint-key [--min-reader-version-ack] [--resume-after-seq=N]
   version   print the version
 
 Configuration comes from environment variables and the optional YAML file
