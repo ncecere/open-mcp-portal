@@ -10,9 +10,9 @@ The owner is running the real-world checks (#14/#15/#17/#20) against v0.14.0. In
 | Lane | Work | Allocation | State |
 | --- | --- | --- | --- |
 | Worker (isolated worktree) | Cleanup: flaky #83/#85 (test-only fixes), #72 measurement gaps A1/A2/A5, #73 real-browser/axe check | none | in progress on `chore/cleanup-after-0140` |
-| Main thread | #38 slice 2: [design](audit-sinks.md) for signed checkpoints and webhook sinks | decision 94; migration `00063` | design written, under independent review; implementation follows |
+| Main thread | #38 slice 2: [design](audit-sinks.md), split into 2a (protected extension schema and signed checkpoints) and 2b (webhook sinks and Admin › Audit stream page) | decision 94; migrations `00063` (2a), `00064` (2b) | design revised after the first review (6 high, 8 medium, all addressed); re-check running |
 
-Decisions 95+ and migrations 64+ are unallocated.
+Decisions 95+ and migrations 65+ are unallocated.
 
 v0.14.0 (2026-11-06) completed the previous batch: #70 and #73 closed, the #72 backend and #38 slice 1 released.
 
