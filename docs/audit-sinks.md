@@ -1,6 +1,6 @@
 # Audit streaming slice 2: signed checkpoints and webhook sinks (#38, decision 94)
 
-Status: **design, revised 2026-11-06 after an independent adversarial review (section 9). Nothing here is built.** It
+Status: **design, revised twice on 2026-11-06 after two independent adversarial reviews (section 9). Nothing here is built.** It
 builds on slice 1, which shipped in v0.14.0: [audit-streaming.md](audit-streaming.md) (decision 93) and
 [audit-record-v2.md](audit-record-v2.md). The owner delegated the defaults in section 8.
 
@@ -40,13 +40,27 @@ migration-owned schema, `omp_audit_ext`.
 
 Hard-coding the protected object set is what made this necessary, so `omp_audit_ext` fixes it going forward:
 
-- **The manifest.** `omp_audit_ext.manifest` (`kind`, `name`, `runtime_privilege`) lists every object in the schema and
-  the exact privilege the runtime gets on it: `none`, `select`, `execute`, or `update:<columns>`.
+- **The manifest.** `omp_audit_ext.manifest` lists every object in the schema and the exact **set** of privileges the
+  runtime gets on it. Its columns:
+  - `kind`: `table` or `function`;
+  - `identity`: the schema-qualified table name, or the full function signature as `regprocedure` text;
+  - `privileges`: a sorted, de-duplicated text array whose elements are `select`, `execute` or `update(<column>)`, one
+    element per column.
+
+  A table may combine `select` and column updates. For example, `checkpoint_keys` is `{select, update(private_key_cipher)}`,
+  because key rotation selects ids and ciphertext before rewrapping them. A function may have only `execute`.
+  `(kind, identity)` is unique.
+
+  Owner, `PUBLIC`, inherited-privilege and grant-option checks stay independent of the manifest. It describes allowed
+  runtime operations, never trust.
 - **Inspector and reconciler from 2a on.** They read the manifest instead of a hard-coded list. They reject any object
   not in the manifest, and any runtime privilege beyond it. They grant exactly what it lists.
 - **Writes.** Only migrations, which run as the migration role, write the manifest. The runtime has `SELECT` on it.
 - **Effect.** Later slices add objects and manifest rows in one migration, and every release from 2a on accepts
-  them without a code change. v0.14.0 never sees the schema. `omp_audit` itself stays exactly as v0.14.0 expects:
+  them without a code change. v0.14.0 applies its all-schema `CREATE` and schema-ownership checks to this schema, and the proposed grants pass
+  them. Its table, function and grant-option checks are limited to schemas it knows, so it ignores everything else
+  here; the re-check confirmed this with the real v0.14.0 inspector and reconciler. `omp_audit` itself stays exactly as
+  v0.14.0 expects:
   five tables, the same functions, and the same grants.
 
 Changes to `omp_audit` are limited to what v0.14.0 tolerates:
@@ -62,7 +76,12 @@ Each test uses the actual v0.14.0 executable:
   are intact;
 - run the new release's reconcile after v0.14.0's;
 - restart v0.14.0 after the new release has written checkpoints, with checkpoints still disabled (section 3.4);
-- roll back from the new release to v0.14.0 and confirm the retention loop, sealer and pull API.
+- roll back from the new release to v0.14.0 **before** checkpoints are enabled, and confirm the retention loop,
+  sealer and pull API;
+- after checkpoints are enabled, refuse v0.14.0 (section 3.4);
+- run the actual v0.14.0 key-rotation utility against schema 63/64. It does not know the extension ciphertext, so the
+  runbook forbids retiring a previous `ENCRYPTION_KEY` with an older utility whenever extension ciphertext exists, and
+  a test pins that the new utility covers it.
 
 ## 3. Checkpoints (2a)
 
@@ -82,13 +101,19 @@ Each test uses the actual v0.14.0 executable:
 first. It inserts the key only if no active key exists, and returns the active key either way. A replica that loses
 the race discards its generated key and loads the winner's.
 
-**Rotation is atomic.** `open-mcp-portal audit-stream rotate-checkpoint-key` uses the runtime URL, because it seals
-with `ENCRYPTION_KEY`. It:
-1. reads the tip;
-2. generates the new key;
-3. builds the handover checkpoint statement (3.2) covering the tip, listing the old then the new `kid`;
-4. signs it with **both** keys;
-5. calls `omp_audit_ext.rotate_checkpoint_key(new_kid, new_public, new_cipher, statement, signatures)`.
+**Rotation is atomic, and it completes even on a busy stream.** `open-mcp-portal audit-stream rotate-checkpoint-key`
+uses the runtime URL, because it seals with `ENCRYPTION_KEY`. It:
+1. generates and seals the new key;
+2. opens one transaction and locks `omp_audit.state` `FOR UPDATE`, so sealing waits for milliseconds;
+3. reads the tip from that locked row;
+4. builds the handover statement (3.2), listing the old then the new `kid`;
+5. signs it locally with **both** keys;
+6. calls `omp_audit_ext.rotate_checkpoint_key(new_kid, new_public, new_cipher, statement, signatures)` **in the same
+   transaction**.
+
+A concurrent rotation waits on the lock, then fails its tip check and retries from step 2. An incarnation change or a
+non-`running` status aborts the rotation with a clear error. Rotation, like every checkpoint append, requires
+`checkpoints_enabled` (3.4).
 
 The function, under the state-row lock and in one transaction:
 - checks that the statement covers the current tip;
@@ -126,8 +151,9 @@ exactly when `kind = 'checkpoint'`.
 
 **Database checks.** `seal_batch(mode => 'checkpoint')` is the existing function with a new mode, restated with every
 existing check and setting. In one locked transaction it requires:
-- `status = running`, no pending epoch, and the live incarnation unchanged. These are the same fences as data sealing;
-  stale submissions are rejected with SQLSTATE `40001`.
+- `checkpoints_enabled`, `status = running`, no pending epoch, and the live incarnation unchanged. These are the same
+  fences as data sealing plus the enable flag, and they apply to **every** checkpoint append path, rotation included.
+  Stale submissions are rejected with SQLSTATE `40001`.
 - `seq = last_seq + 1`, `covered_seq = last_seq` and `covered_chain_hash = last_chain_hash`.
 - The stream id and epoch from state.
 - `kid_count = 1` and `kid` equal to the active key, outside rotation. The handover goes only through
@@ -158,7 +184,13 @@ off until an operator runs `open-mcp-portal audit-stream enable-checkpoints` wit
 serving replica runs 2a or later. It sets `state.checkpoints_enabled`.
 
 The status page and `audit-stream status` show this state, and the command refuses if the stream is not `running`.
-This is documented in the upgrade notes like the drain requirements of earlier releases.
+
+**Enabling is a minimum-reader-version transition, a one-way door.** Once a checkpoint record exists, v0.14.0 must
+not serve again, because disabling future checkpoints cannot remove existing ones. The command says so and requires
+`--min-reader-version-ack`. It records `state.min_reader_version` (the 2a version), and the runbook makes "rollback
+only to a release at or above it" explicit. Fencing a returning v0.14.0 from inside the database is not possible
+for every role mode, so it is not claimed. Acceptance tests cover pre-enable rollback (allowed) and post-enable
+behaviour separately.
 
 ### 3.5 Receiver rules, added to the slice-1 protocol
 
@@ -174,6 +206,23 @@ A receiver must:
   handover.
 - **Treat anything else as a discontinuity** needing local operator approval: an unknown `kid`, a key outside its range,
   or a suspected key compromise. Automatic handover is not compromise recovery.
+- **Enrollment is forward-only by default.** It starts from an approved anchor: a checkpoint at or after the active
+  key's `active_from_seq`, signed by the pinned key. To verify older history, a receiver walks back through
+  authenticated handovers. Each handover is signed by both keys, so a pinned K2 vouches for K1 within K1's range, and
+  so on. An explicit historical-key approval is the alternative. During a handover, the new key's signature on that
+  record is the only signature it may make outside its own range, at its first `seq`.
+- **Restores and rebases.** Approving a chain discontinuity (slice 1, 5.3) **never** restores a retired key's authority.
+  Authority after an approved discontinuity comes only from the keys the receiver already holds as current, or from a
+  new explicit key approval.
+- **Duplicates and conflicts.** A receiver discards only **identical** duplicates. A record at a `seq` it holds with a
+  different hash is a fork, preserved and alerted, even when it arrives late or belongs to an archived branch.
+
+The checkpoint's JSON envelope is normative in `audit-record-v2.md`. Next to the common fields, it carries:
+- `checkpoint.statement`: the base64url of the exact bytes;
+- `checkpoint.kids`: unpadded base64url, in order;
+- `checkpoint.signatures`: base64url, in kid order;
+- the decoded `stream_id`, `epoch`, `seq`, `covered_seq`, `covered_chain_hash` and `issued_at`, which receivers must
+  check equal the statement's.
 
 The Python reference verifier implements these rules. It stays standard-library only, with a small pure-Python
 RFC 8032 Ed25519 verify tested against the RFC's vectors. It is slow, which is acceptable for a reference verifier.
@@ -210,15 +259,37 @@ confirmed a delivery. The table is `omp_audit_ext.sinks`, with all writes throug
 bounded arguments):
 - `create_sink`, `update_sink(id, expected_revision, …)` and `delete_sink`. These are the only way to change settings;
   each bumps `revision` and **clears any in-flight attempt**.
-- `begin_attempt(id, first, last)`. It requires a cleared in-flight slot or the same range, and returns the token.
-- `finish_attempt(id, token, ok, error_class)`. It succeeds only for the current token and revision, so a stale
-  leader's late result is rejected. On success it advances `cursor_seq` to `inflight_last`, never backwards.
+- `begin_attempt(id, expected_revision, expected_cursor, kind, first, last)`, where `kind` is `data` or `gap`. Under
+  the sink-row lock it requires that:
+  - the revision and cursor equal the snapshot's, so a read taken under an older configuration cannot start an attempt;
+  - `first = cursor_seq + 1` for data, or the persisted gap endpoints for a gap;
+  - the in-flight slot is empty, or holds the same kind, range and revision.
+
+  It **always issues a new token**, which replaces any previous one, so a previous leader's late result is rejected.
+  The token is bound to the revision, kind and range.
+- `finish_attempt(id, token, ok, error_class, notify_intent)`. It succeeds only for the current token. On a successful
+  data attempt it advances `cursor_seq` to `inflight_last`, never backwards. A successful gap attempt sets
+  `cursor_seq = gap_last` and clears the gap. The streak transition and its notification intent are written in the
+  same transaction (4.3).
 - `resume_sink(id)` and `acknowledge_oversized(id, seq)`, both audited by the API layer.
 
-**Retention.** The purge function (`public.omp_purge_audit_log`, replaced with every setting restated) also caps the
-deletable prefix at the minimum `cursor_seq` of **required, enabled or not, non-`range_expired`** sinks, alongside
-required consumers. A required sink that is disabled still holds back retention, and the page says so. Unrequiring
-or deleting it is the explicit way out, and both are audited.
+**Retention.** The purge function (`public.omp_purge_audit_log`, replaced with every setting restated) caps the
+deletable prefix at the minimum `cursor_seq` of **every required sink, whatever its `enabled` or `state`**, alongside
+required consumers. A required sink can never be `range_expired`:
+- expiry applies only to sinks that are not required;
+- making a sink required is refused while it is `range_expired`, so it must be resumed first;
+- every retention-affecting transition (create, `required` on or off, enable or disable, delete, expire, resume) and
+  the purge itself serialize on the `omp_audit.retention_floor` row lock;
+- an expiry decided from a stale read re-checks `required` under that lock.
+
+The purge's age-only path before streaming starts now also requires that no sink exists. Unrequiring or deleting a
+sink is the explicit way to release retention, and both are audited.
+
+**Threat limit.** These functions protect against mistakes, auditors, tokens, stale leaders and previous releases.
+They do **not** protect against a compromised runtime. It can call the runtime-executable functions, including
+`finish_attempt(ok=true)` and the management functions, so it can release a sink's retention hold or claim deliveries
+that never happened. Receiver-side completeness checks (gapless `seq`, checkpoints) and receiver alerting on silence
+are what detect that.
 
 ### 4.2 Delivery
 
@@ -230,7 +301,9 @@ For each due sink:
 
 1. **Read** in one read-only REPEATABLE READ transaction, using `auditstream`'s contiguity check and row reads on that
    same snapshot. If there is an in-flight range, re-read exactly that range. Otherwise read records after the cursor,
-   up to `batch_max_records` or 4 MiB. An expired range reports `range_expired` (step 6). A missing row reports
+   up to `batch_max_records` or a 4 MiB **target**. A single envelope larger than the target, up to the pull API's
+   16 MiB line cap, is sent alone in its own request, so the cap never stalls delivery. The 4–16 MiB interval has a
+   test. An expired range reports `range_expired` (step 6). A missing row reports
    `integrity`, and nothing is sent.
 2. **Begin.** `begin_attempt` records the range before any byte is sent.
 3. **POST** the NDJSON lines of the pull API for that profile, envelopes included. Headers:
@@ -247,29 +320,43 @@ For each due sink:
    or `integrity`. Failures back off from 1 s, doubling, capped at 5 minutes, with 20% jitter.
 5. **Ordering.** The portal guarantees that a sink's cursor only advances over a range the destination acknowledged, in
    `seq` order, and that it sends every sealed record at least once. It does **not** guarantee arrival order. A stale
-   leader's delayed request can arrive after newer ranges. Receivers apply records by `seq` and discard duplicates
-   and anything at or below what they hold, as slice 1 already requires. Tests cover lock-session loss while an HTTP
+   leader's delayed request can arrive after newer ranges. Receivers apply records by `seq`, discard only identical duplicates, and
+   preserve a conflicting hash at a held `seq` as fork evidence, as slice 1 requires. Tests cover lock-session loss while an HTTP
    request is still running.
 6. **Expired range** (optional sinks only, since required ones hold retention). The sink is set to `range_expired`,
-   an alert fires, and delivery **stops**. An admin calls `POST …/{id}/resume`, which is audited. It records `gap_first`
-   and `gap_last`, sends one separate signed request with `X-OMP-Event: audit.gap` and the exact endpoints, outside the
-   NDJSON stream, resending it until a 2xx, and then continues from the earliest available record. The gap request is
+   an alert fires, and delivery **stops**. An admin calls `POST …/{id}/resume`, which is audited. Under the floor lock it
+   records `gap_first = cursor_seq + 1` and `gap_last = earliest_available - 1`. The sender then delivers the gap as a
+   fenced `gap` attempt:
+   - one signed request with `X-OMP-Event: audit.gap`, whose **HMAC-covered body** carries the stream id and the exact
+     endpoints;
+   - resent with the same delivery id until a 2xx;
+   - on success, `cursor_seq = gap_last`.
+
+   Normal delivery then resumes and re-checks availability. If retention advanced meanwhile, the sink expires again
+   and a second, explicit resume covers the new hole. A gap is never stretched silently. The gap request is
    **advisory**. Under 3.5 the receiver needs local approval of a new trusted predecessor, or the next checkpoint, to
    continue verifying, and it keeps its old evidence. A portal resume never implies receiver trust.
-7. **Oversized full-profile rows.** These are sent as the **same oversized envelope as the pull API** (`entry_hash`,
-   length, reference). Delivery continues, but a **required** full-profile sink holds retention at that `seq` until
-   either a collector fetches the row in full through the existing entries API, or an admin acknowledges it explicitly
-   (`acknowledge_oversized`, audited) after retrieving it. The page lists such rows. There is no special wire format
-   and no large request.
+7. **Oversized full-profile rows** (above the 16 MiB line cap). These are sent as the **same oversized envelope as the
+   pull API** (`entry_hash`, length, reference).
+   - A sink that is not required passes the envelope and continues.
+   - A **required** full-profile sink **stops at that `seq`**: its cursor does not pass the envelope, so the cursor
+     itself holds retention, and no separate bookkeeping is needed. An admin resolves it with
+     `POST …/{id}/oversized/{seq}/acknowledge`, which is audited. It calls `acknowledge_oversized(id, revision, seq)`,
+     which lets the sink pass that one `seq` after the admin has retrieved the row through the entries API.
+
+   Another party's fetch never releases a sink. There is no special wire format and no large request.
 
 ### 4.3 Failure notifications
 
 - **Streaks.** `finish_attempt` opens a streak, with a new `streak_id`, on the first failure after a success, and
   closes it on success.
-- **Failing notice.** At the third consecutive failure, the sender emits `audit.sink_failing` with dedup key
-  `audit-sink:<id>:<streak_id>:failing` through the notification outbox, and marks `streak_notified` once emission
-  succeeds. Failed emission is retried on the next pass, and the dedup key prevents duplicates after a crash.
-- **Recovery notice.** `audit.sink_recovered` uses `…:recovered` and is sent only for a notified streak.
+- **Failing notice.** When `finish_attempt` records the third consecutive failure, the **same transaction** writes the
+  notification event `audit.sink_failing` (dedup key `audit-sink:<id>:<streak_id>:failing`) through the notification
+  service's transactional insert, and sets `streak_notified`. They commit together or not at all.
+- **Recovery notice.** A success that closes a notified streak writes `audit.sink_recovered` (`…:recovered`) in the
+  same transaction. It keeps the closed streak's id on the event, so a crash cannot lose it.
+- **Duplicates versus failures.** The event insert distinguishes "already exists", which is success for an idempotent
+  retry, from failure. It does not use `notify.Emit`'s single boolean.
 - **Plumbing.** These are new platform-admin event types, wired through validation, recipients, preferences,
   composition and routing. Tests cover flapping, repeated streaks and crash boundaries.
 - **Not a substitute for receiver monitoring.** A compromised runtime can simply stop sending, so receivers should
@@ -419,3 +506,26 @@ critical finding, six high and eight medium. All are addressed above.
 | 12 | Medium | Sink configuration and cursor can diverge | All sink state protected; configuration changes clear in-flight attempts and bump the revision; effect on retention shown (4.1, 4.5) |
 | 13 | Medium | URL validation does not resolve and has the wrong bounds | Dedicated validator, save-time resolution, `AllowHTTP`, notification transport (4.4) |
 | 14 | Medium | Notification streaks lack durable identity | Persisted streak id, outbox dedup keys, retried emission, full event plumbing (4.3) |
+
+**Re-check of the revision:** no critical finding, five high and seven medium. It closed findings 1, 2, 3, 6, 8, 11
+and 13, and partly closed 4, 5, 7, 9, 10, 12 and 14. Using the real v0.14.0 inspector and reconciler it confirmed:
+- the extension schema and its grant set pass, and survive a v0.14.0 reconcile;
+- runtime cannot tamper with the manifest (SQLSTATE `42501`);
+- reconciliation converges in either order;
+- the statement binding prevents transplantation;
+- first-key creation has no lock inversion.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| R1 | High | A read under an old configuration can begin an attempt under a newer revision | `begin_attempt` takes the expected revision and cursor, checks the range, and always issues a fresh token bound to revision, kind and range (4.1) |
+| R2 | High | No safe rollback after enabling checkpoints; rotation bypasses the gate | Every append path requires `checkpoints_enabled`; enabling is an acknowledged minimum-reader-version transition; separate pre- and post-enable tests (2.3, 3.2, 3.4) |
+| R3 | High | No sink-specific bookkeeping for oversized rows | A required full sink's cursor stops at the envelope (the cursor is the hold) until an audited, sink- and revision-bound acknowledgement; others' fetches never release it (4.2) |
+| R4 | High | Envelopes of 4–16 MiB have no delivery path | 4 MiB is a target; one envelope up to the 16 MiB cap is sent alone; tested (4.2) |
+| R5 | High | `required` plus `range_expired` fails open; transitions race the purge | Required sinks never expire; requiring an expired sink is refused; all retention transitions serialize on the floor lock; the age-only path checks sinks; compromised-runtime threat limit stated (4.1) |
+| R6 | Medium | A durable gap can become obsolete while waiting | Fenced gap attempts with HMAC-covered endpoints; the cursor moves to `gap_last`; a new hole needs a new explicit resume (4.2) |
+| R7 | Medium | Notification transitions not crash-safe | The streak transition and event insert commit in one transaction; "exists" is distinguished from failure (4.1, 4.3) |
+| R8 | Medium | Rotation may never succeed on a busy stream | Lock the state row, read the tip, sign locally and rotate in one transaction; retry rules (3.1) |
+| R9 | Medium | Receiver bootstrap and checkpoint JSON incomplete | Forward-only enrollment from an approved anchor, historical verification through handovers, no authority restored by discontinuity approval, normative JSON (3.5) |
+| R10 | Medium | Manifest cannot express SELECT plus column UPDATE | Privilege sets per object, signature identity, independent owner/`PUBLIC`/grant-option checks (2.2) |
+| R11 | Medium | The old key-rotation utility ignores extension ciphertext | Runbook restriction and an actual-old-utility regression test (2.3) |
+| R12 | Medium | "Discard at or below held" hides forks | Discard identical duplicates only; preserve conflicts (3.5, 4.2) |
