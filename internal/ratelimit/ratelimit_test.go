@@ -53,3 +53,22 @@ func TestBucketHashesTheValue(t *testing.T) {
 		t.Fatal("RetryAfter")
 	}
 }
+
+// Reproduce #85 without a wall-clock wait: twenty allowed requests in the
+// final instant of one window do not exhaust the next window's allowance.
+func TestTwentyAllowsAcrossBoundary(t *testing.T) {
+	now := time.Unix(1019, 999999999)
+	l := NewWithClock(func() time.Time { return now })
+	for range 20 {
+		if ok, _ := l.Allow("person", 20, Window); !ok {
+			t.Fatal("early refusal")
+		}
+	}
+	if ok, _ := l.Allow("person", 20, Window); ok {
+		t.Fatal("21st in same window allowed")
+	}
+	now = now.Add(time.Nanosecond)
+	if ok, _ := l.Allow("person", 20, Window); !ok {
+		t.Fatal("new window refused")
+	}
+}

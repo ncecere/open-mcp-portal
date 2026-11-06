@@ -3,10 +3,13 @@ package httpapi_test
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/ncecere/open-mcp-portal/internal/httpapi"
+	"github.com/ncecere/open-mcp-portal/internal/ratelimit"
 	"net/http"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ncecere/open-mcp-portal/internal/httpapi/apitypes"
 	"github.com/ncecere/open-mcp-portal/internal/testutil"
@@ -380,7 +383,11 @@ func TestAllowServerRequiresTheProviderAndVisibility(t *testing.T) {
 // automation token, connected app or service account can do it (and none is
 // counted against the person's limit).
 func TestAllowServerIsSessionOnlyAndRateLimited(t *testing.T) {
-	e := newProvEnv(t)
+	// This fixture exposes the limiter store. Freeze its minute so the burst
+	// cannot straddle a fixed-window reset under slow/race-instrumented runs.
+	e := newProvEnvHook(t, func(d *httpapi.Deps) {
+		d.RateStore = ratelimit.NewWithClock(func() time.Time { return time.Unix(960, 0) })
+	})
 	sa := createSA(t, e.owner, map[string]any{"name": "ordinary", "role": "editor"})
 	saKey := createSAKey(t, e.owner, sa.Id.String(), map[string]any{"name": "key"}).Secret
 	e.connectBroadly("repo")
