@@ -162,9 +162,6 @@ func TestPreviousImageCurrentSchemas(t *testing.T) {
 				}
 				time.Sleep(50 * time.Millisecond)
 			}
-			if version == 64 && count(t, p, `SELECT count(*) FROM public.audit_log WHERE action='sink.cap.fixture'`) != 1 {
-				t.Fatal("old retention bypassed sink cap")
-			}
 			if version >= 62 && signedIn {
 				deadline := time.Now().Add(5 * time.Second)
 				for count(t, p, `SELECT count(*) FROM public.retention_settings WHERE last_run IS NOT NULL`) == 0 && time.Now().Before(deadline) {
@@ -174,6 +171,9 @@ func TestPreviousImageCurrentSchemas(t *testing.T) {
 					cancel()
 					_ = cmd.Wait()
 					t.Fatal("previous retention loop did not complete successfully")
+				}
+				if version == 64 && count(t, p, `SELECT count(*) FROM public.audit_log WHERE action='sink.cap.fixture'`) != 1 {
+					t.Fatal("old retention bypassed sink cap")
 				}
 				if count(t, p, `SELECT count(*) FROM public.audit_log WHERE action='old.fixture'`) != 1 {
 					cancel()

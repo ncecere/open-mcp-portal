@@ -58,6 +58,12 @@ func TestSinkAttemptFences(t *testing.T) {
 	}
 	a := sinkBegin(t, p, id, 1, 0, "data", 1, 1)
 	b := sinkBegin(t, p, id, 1, 0, "data", 1, 1)
+	exec(t, o, `SELECT omp_audit_ext.set_sinks_enabled(false,'0.15.0')`)
+	sinkReject(t, p, `SELECT omp_audit_ext.finish_attempt($1,$2,'failed','timeout',false)`, id, b)
+	if count(t, p, `SELECT count(*) FROM public.notification_events WHERE event='audit.sink_failing'`) != 0 {
+		t.Fatal("disabled finish produced a pending event")
+	}
+	exec(t, o, `SELECT omp_audit_ext.set_sinks_enabled(true,'0.15.0')`)
 	sinkReject(t, p, `SELECT omp_audit_ext.finish_attempt($1,$2,'ok',NULL,false)`, id, a)
 	exec(t, p, `SELECT omp_audit_ext.finish_attempt($1,$2,'failed','timeout',false)`, id, b)
 	sinkReject(t, p, `SELECT omp_audit_ext.finish_attempt($1,$2,'failed','timeout',false)`, id, b)
