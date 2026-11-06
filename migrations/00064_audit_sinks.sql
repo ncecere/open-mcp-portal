@@ -121,7 +121,7 @@ BEGIN
  IF p_kind IS NULL OR p_kind NOT IN ('data','gap') OR p_first IS NULL OR p_last IS NULL OR p_first<1 OR p_last<p_first THEN RAISE EXCEPTION 'invalid attempt'; END IF;
  IF p_kind='data' THEN
   IF s.gap_first IS NOT NULL OR p_first<>s.cursor_seq+1 OR p_first<=f.purged_seq OR p_last>(SELECT last_seq FROM omp_audit.state WHERE singleton)
-  OR NOT EXISTS(SELECT 1 FROM omp_audit.chain WHERE seq=p_first) OR NOT EXISTS(SELECT 1 FROM omp_audit.chain WHERE seq=p_last)
+  OR NOT EXISTS(SELECT 1 FROM omp_audit.chain WHERE seq=p_last)
   OR (SELECT count(*) FROM omp_audit.chain WHERE seq BETWEEN p_first AND p_last)>s.batch_max_records THEN RAISE EXCEPTION 'invalid data range'; END IF;
  ELSE
   IF p_first IS DISTINCT FROM s.gap_first OR p_last IS DISTINCT FROM s.gap_last THEN RAISE EXCEPTION 'invalid gap range'; END IF;
@@ -132,6 +132,11 @@ BEGIN
  RETURN token;
 END $$;
 -- +goose StatementEnd
+-- notify_intent is the caller's transactional notification decision. The caller
+-- must use notify.InsertStrict in the SAME transaction, preserving the pre-finish
+-- streak id for recovery. Part 1 deliberately does not emit notification events.
+-- A consumed token leaves the retry identity (kind, endpoints, revision) intact
+-- on failure. A new begin always replaces the token, even for that same identity.
 -- +goose StatementBegin
 CREATE FUNCTION omp_audit_ext.finish_attempt(p_id uuid,p_token uuid,p_outcome text,p_error_class text,p_notify_intent boolean) RETURNS omp_audit_ext.sinks
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp SET TimeZone = 'UTC' AS $$
@@ -266,6 +271,9 @@ EXCEPTION WHEN OTHERS THEN
  RAISE;
 END $$;
 -- +goose StatementEnd
+-- Nine platform subscription choices now exist (including the two sink notices).
+ALTER TABLE public.notification_destinations DROP CONSTRAINT notification_destinations_events_check;
+ALTER TABLE public.notification_destinations ADD CONSTRAINT notification_destinations_events_check CHECK(cardinality(events) BETWEEN 1 AND 10);
 -- Expand existing CHECKs rather than copying their historical event lists.
 -- +goose StatementBegin
 DO $$ DECLARE r record; body text; BEGIN
