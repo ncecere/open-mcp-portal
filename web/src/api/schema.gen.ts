@@ -597,6 +597,139 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/settings/audit-sinks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once */
+        get: operations["adminAuditSinks"];
+        put?: never;
+        /** Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once */
+        post: operations["adminAuditCreateSink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/settings/audit-sinks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once */
+        get: operations["adminAuditSink"];
+        /** Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once */
+        put: operations["adminAuditUpdateSink"];
+        post?: never;
+        /** Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once */
+        delete: operations["adminAuditDeleteSink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/settings/audit-sinks/{id}/rotate-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once */
+        post: operations["adminAuditRotateSinkSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/settings/audit-sinks/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once */
+        post: operations["adminAuditTestSink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/settings/audit-sinks/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once */
+        post: operations["adminAuditResumeSink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/settings/audit-sinks/{id}/oversized/{seq}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                seq: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once */
+        post: operations["adminAuditAcknowledgeSinkOversized"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/audit/stream/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once */
+        get: operations["adminAuditStreamStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/settings/audit-consumers": {
         parameters: {
             query?: never;
@@ -4064,6 +4197,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AuditSinkRequest: {
+            name?: string;
+            url?: string;
+            /** @enum {string} */
+            profile?: "summary" | "full";
+            required?: boolean;
+            enabled?: boolean;
+            batch_max_records?: number;
+            /** Format: int64 */
+            cursor_seq?: number;
+        };
         AuditConsumerRequest: {
             consumer?: string;
             /** @enum {string} */
@@ -7297,7 +7441,7 @@ export interface components {
         /** @description Where the web app goes for an item (docs/admin-overview.md, Link targets). server: the server page (team page for members, Admin > Servers for platform staff); servers: the team's server list; review_queue: Admin > Publishing; gateways: Admin > Gateways (the team's Gateways when teamSlug is set); service_account / service_accounts: the team's service accounts; automation_tokens: Admin > Automation tokens; team_automation_tokens: the team's Settings > Automation tokens; auth_providers: Admin > Auth providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team's Settings > Notifications; service_connections: the team's Service accounts > Connections tab; account_connections: Account > Connections; account_api_keys: Account > API keys; approval: the private receipt page. */
         LinkTarget: {
             /** @enum {string} */
-            type: "server" | "servers" | "review_queue" | "gateways" | "service_account" | "service_accounts" | "automation_tokens" | "team_automation_tokens" | "auth_providers" | "usage" | "notification_settings" | "team_notification_settings" | "service_connections" | "account_connections" | "account_api_keys" | "approval" | "access_request" | "access_requests";
+            type: "server" | "servers" | "review_queue" | "gateways" | "service_account" | "service_accounts" | "automation_tokens" | "team_automation_tokens" | "auth_providers" | "usage" | "notification_settings" | "audit_stream" | "team_notification_settings" | "service_connections" | "account_connections" | "account_api_keys" | "approval" | "access_request" | "access_requests";
             /** @description The object's ID for singular types (server, service_account, approval) */
             id?: string;
             /** @description The team's slug, for team pages and for the team's server or service account */
@@ -9394,6 +9538,331 @@ export interface operations {
             403: components["responses"]["ErrorReply"];
             409: components["responses"]["ErrorReply"];
             410: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+            500: components["responses"]["ErrorReply"];
+        };
+    };
+    adminAuditSinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+            500: components["responses"]["ErrorReply"];
+        };
+    };
+    adminAuditCreateSink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuditSinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+            500: components["responses"]["ErrorReply"];
+        };
+    };
+    adminAuditSink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+            500: components["responses"]["ErrorReply"];
+        };
+    };
+    adminAuditUpdateSink: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuditSinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+            500: components["responses"]["ErrorReply"];
+        };
+    };
+    adminAuditDeleteSink: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+            500: components["responses"]["ErrorReply"];
+        };
+    };
+    adminAuditRotateSinkSecret: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+            500: components["responses"]["ErrorReply"];
+        };
+    };
+    adminAuditTestSink: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+            500: components["responses"]["ErrorReply"];
+        };
+    };
+    adminAuditResumeSink: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuditSinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+            500: components["responses"]["ErrorReply"];
+        };
+    };
+    adminAuditAcknowledgeSinkOversized: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+            };
+            path: {
+                id: string;
+                seq: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
+            428: components["responses"]["ErrorReply"];
+            500: components["responses"]["ErrorReply"];
+        };
+    };
+    adminAuditStreamStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["ErrorReply"];
+            403: components["responses"]["ErrorReply"];
+            404: components["responses"]["ErrorReply"];
+            409: components["responses"]["ErrorReply"];
             428: components["responses"]["ErrorReply"];
             500: components["responses"]["ErrorReply"];
         };

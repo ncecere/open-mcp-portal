@@ -35,6 +35,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/serviceaccounts"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
 	"github.com/ncecere/open-mcp-portal/internal/teams"
+	"github.com/ncecere/open-mcp-portal/internal/upstream"
 	"github.com/ncecere/open-mcp-portal/internal/usage"
 )
 
@@ -71,7 +72,9 @@ type Deps struct {
 	// attention (docs/admin-overview.md).
 	Automation *automation.Service
 	Notify     *notify.Service
-	Overview   *overview.Service
+	// AuditSinkClient optionally supplies the dedicated audit destination guard.
+	AuditSinkClient *upstream.Client
+	Overview        *overview.Service
 	// MCP serves /mcp/{slug} (internal/mcpgw).
 	MCP http.Handler
 	// Limits, Capture, Retention and Usage are Phase 6's operations
@@ -134,7 +137,7 @@ func apiRoutes(d Deps) []route {
 	for _, group := range [][]route{a.authRoutes(), a.teamRoutes(), a.platformAdminRoutes(), a.mcpServerRoutes(), a.mcpAdminRoutes(),
 		a.gatewayRoutes(), a.gatewayAdminRoutes(), a.meGatewayRoutes(), a.mcpRoutes(), a.oauthRoutes(), a.oauthRESTRoutes(),
 		a.serviceAccountRoutes(), a.serviceAccountAdminRoutes(), a.serviceConnectionRoutes(), a.providerRoutes(), a.operationsRoutes(), a.operationsAdminRoutes(),
-		a.upstreamOAuthRoutes(), a.v02Routes(), a.classificationRoutes(), a.personSecretRoutes(), a.sessionRoutes(), a.approvalRoutes(), a.accessRequestRoutes(), a.governanceRoutes(), a.governanceAdminRoutes(), a.provisioningRoutes(), a.auditStreamRoutes()} {
+		a.upstreamOAuthRoutes(), a.v02Routes(), a.classificationRoutes(), a.personSecretRoutes(), a.sessionRoutes(), a.approvalRoutes(), a.accessRequestRoutes(), a.governanceRoutes(), a.governanceAdminRoutes(), a.provisioningRoutes(), a.auditStreamRoutes(), a.sinkRoutes()} {
 		routes = append(routes, group...)
 	}
 	return routes

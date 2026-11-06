@@ -100,6 +100,19 @@ func (r request) h(hs map[string]string) request { r.headers = hs; return r }
 var rev1 = map[string]string{"If-Match": `"1"`}
 
 var matrixPolicies = map[string]policy{
+	"adminAuditSinks":        {own: platform, build: func(*mctx) request { return get("/v1/admin/settings/audit-sinks") }},
+	"adminAuditStreamStatus": {own: platform, build: func(*mctx) request { return get("/v1/admin/audit/stream/status") }},
+	"adminAuditSink":         {own: platform, build: func(c *mctx) request { return sinkMatrixRequest(c, "GET", "", nil) }},
+	"adminAuditCreateSink": {own: padmin, build: func(c *mctx) request {
+		return post("/v1/admin/settings/audit-sinks", map[string]any{"name": fmt.Sprintf("sink-%d", c.e.next()), "url": "https://example.com/receiver"})
+	}},
+	"adminAuditUpdateSink":               {own: padmin, build: func(c *mctx) request { return sinkMatrixRequest(c, "PUT", "", map[string]any{"enabled": false}) }},
+	"adminAuditDeleteSink":               {own: padmin, build: func(c *mctx) request { return sinkMatrixRequest(c, "DELETE", "", nil) }},
+	"adminAuditRotateSinkSecret":         {own: padmin, build: func(c *mctx) request { return sinkMatrixRequest(c, "POST", "/rotate-secret", nil) }},
+	"adminAuditTestSink":                 {own: padmin, build: func(c *mctx) request { return sinkMatrixRequest(c, "POST", "/test", nil) }},
+	"adminAuditResumeSink":               {own: padmin, build: func(c *mctx) request { return sinkMatrixRequest(c, "POST", "/resume", map[string]any{"cursor_seq": 0}) }},
+	"adminAuditAcknowledgeSinkOversized": {own: padmin, anyStatus: true, build: func(c *mctx) request { return sinkMatrixRequest(c, "POST", "/oversized/1/acknowledge", nil) }},
+
 	"adminAuditStream":    {own: platform, build: func(*mctx) request { return get("/v1/admin/audit/stream") }},
 	"adminAuditStreamTip": {own: platform, build: func(*mctx) request { return get("/v1/admin/audit/stream/tip") }},
 	"adminAuditVerify":    {own: platform, build: func(c *mctx) request { c.sealAudit(); return get("/v1/admin/audit/verify?from=1&to=1") }},

@@ -17,6 +17,7 @@ var TokenOperations = map[string]TokenOperation{
 	"GET /v1/admin/audit":                                                {OperationID: "adminListAudit", Scopes: []string{"platform:read"}},
 	"GET /v1/admin/audit/entries/{seq}/full":                             {OperationID: "adminAuditFull", Scopes: []string{"platform:read"}},
 	"GET /v1/admin/audit/stream":                                         {OperationID: "adminAuditStream", Scopes: []string{"platform:read"}},
+	"GET /v1/admin/audit/stream/status":                                  {OperationID: "adminAuditStreamStatus", Scopes: []string{"platform:read"}},
 	"GET /v1/admin/audit/stream/tip":                                     {OperationID: "adminAuditStreamTip", Scopes: []string{"platform:read"}},
 	"GET /v1/admin/audit/verify":                                         {OperationID: "adminAuditVerify", Scopes: []string{"platform:read"}},
 	"GET /v1/admin/audit/{entryId}":                                      {OperationID: "adminGetAuditEntry", Scopes: []string{"platform:read"}},

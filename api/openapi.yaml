@@ -1151,6 +1151,293 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '500':
           $ref: '#/components/responses/ErrorReply'
+  /v1/admin/settings/audit-sinks:
+    get:
+      tags: [admin]
+      operationId: adminAuditSinks
+      summary: Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+      responses:
+        '200':
+          description: Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags: [admin]
+      operationId: adminAuditCreateSink
+      summary: Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditSinkRequest'
+      responses:
+        '200':
+          description: Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/settings/audit-sinks/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    get:
+      tags: [admin]
+      operationId: adminAuditSink
+      summary: Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+      responses:
+        '200':
+          description: Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+    put:
+      tags: [admin]
+      operationId: adminAuditUpdateSink
+      summary: Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditSinkRequest'
+      responses:
+        '200':
+          description: Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+    delete:
+      tags: [admin]
+      operationId: adminAuditDeleteSink
+      summary: Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      responses:
+        '200':
+          description: Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/settings/audit-sinks/{id}/rotate-secret:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    post:
+      tags: [admin]
+      operationId: adminAuditRotateSinkSecret
+      summary: Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      responses:
+        '200':
+          description: Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/settings/audit-sinks/{id}/test:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    post:
+      tags: [admin]
+      operationId: adminAuditTestSink
+      summary: Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      responses:
+        '200':
+          description: Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/settings/audit-sinks/{id}/resume:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    post:
+      tags: [admin]
+      operationId: adminAuditResumeSink
+      summary: Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditSinkRequest'
+      responses:
+        '200':
+          description: Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/settings/audit-sinks/{id}/oversized/{seq}/acknowledge:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    - name: seq
+      in: path
+      required: true
+      schema: {type: integer, format: int64}
+    post:
+      tags: [admin]
+      operationId: adminAuditAcknowledgeSinkOversized
+      summary: Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      responses:
+        '200':
+          description: Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/audit/stream/status:
+    get:
+      tags: [admin]
+      operationId: adminAuditStreamStatus
+      summary: Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+      x-omp-token-scopes: [platform:read]
+      responses:
+        '200':
+          description: Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+        '500':
+          $ref: '#/components/responses/ErrorReply'
   /v1/admin/settings/audit-consumers:
     get:
       tags: [admin]
@@ -8175,6 +8462,16 @@ components:
               data:
                 $ref: '#/components/schemas/UsageReport'
   schemas:
+    AuditSinkRequest:
+      type: object
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        url: {type: string, maxLength: 2048, writeOnly: true}
+        profile: {type: string, enum: [summary, full]}
+        required: {type: boolean}
+        enabled: {type: boolean}
+        batch_max_records: {type: integer, minimum: 1, maximum: 1000}
+        cursor_seq: {type: integer, format: int64, minimum: 0}
     AuditConsumerRequest:
       type: object
       properties:
@@ -15012,6 +15309,7 @@ components:
           - auth_providers
           - usage
           - notification_settings
+          - audit_stream
           - team_notification_settings
           - service_connections
           - account_connections
