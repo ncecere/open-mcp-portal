@@ -78,7 +78,7 @@ BEGIN
  END IF;
  SELECT kid INTO STRICT old_kid FROM omp_audit_ext.checkpoint_keys WHERE state='active';
  IF raw IS NULL OR sigs IS NULL OR octet_length(raw)<>133 OR octet_length(sigs)<>128 THEN RAISE EXCEPTION 'invalid checkpoint payload'; END IF;
- -- issued_at is the sole timestamp. Retain its exact signed microseconds.
+ -- issued_at is the sole timestamp (24-byte domain, micros at byte 93).
  micros := (('x'||encode(substring(raw FROM 93 FOR 8),'hex'))::bit(64)::bigint);
  t := timestamptz 'epoch' + (micros / 1000000) * interval '1 second' + (micros % 1000000) * interval '1 microsecond';
  expected := decode('4f4d502d41554449542d434845434b504f494e5400563100','hex')||uuid_send(s.stream_id)||int4send(s.epoch)||int8send(s.last_seq+1)||int8send(s.last_seq)||s.last_chain_hash||int8send(micros)||decode('02','hex')||old_kid||new_kid;
@@ -122,7 +122,7 @@ DO $patch$ DECLARE body text; patched text; needle text; replacement text; BEGIN
  END IF;
  SELECT kid INTO STRICT old_kid FROM omp_audit_ext.checkpoint_keys WHERE state='active';
  IF raw IS NULL OR sigs IS NULL OR octet_length(raw)<>117 OR octet_length(sigs)<>64 THEN RAISE EXCEPTION 'invalid checkpoint payload'; END IF;
- -- issued_at is the sole timestamp. Retain its exact signed microseconds.
+ -- issued_at is the sole timestamp (24-byte domain, micros at byte 93).
  micros := (('x'||encode(substring(raw FROM 93 FOR 8),'hex'))::bit(64)::bigint);
  t := timestamptz 'epoch' + (micros / 1000000) * interval '1 second' + (micros % 1000000) * interval '1 microsecond';
  expected := decode('4f4d502d41554449542d434845434b504f494e5400563100','hex')||uuid_send(s.stream_id)||int4send(s.epoch)||int8send(s.last_seq+1)||int8send(s.last_seq)||s.last_chain_hash||int8send(micros)||decode('01','hex')||old_kid;

@@ -19,9 +19,15 @@ type auditExtensionObject struct {
 // Catalog identity and trust are checked independently of the migration-owned
 // policy. The manifest may authorize operations, never ownership or delegation.
 func auditExtensionManifest(ctx context.Context, db RoleDB) ([]auditExtensionObject, error) {
-	var exists bool
-	if err := db.QueryRow(ctx, `SELECT to_regnamespace('omp_audit_ext') IS NOT NULL`).Scan(&exists); err != nil || !exists {
+	var exists, expected bool
+	if err := db.QueryRow(ctx, `SELECT to_regnamespace('omp_audit_ext') IS NOT NULL,coalesce(max(version_id),0)>=63 FROM public.goose_db_version WHERE is_applied`).Scan(&exists, &expected); err != nil {
 		return nil, err
+	}
+	if !exists {
+		if expected {
+			return nil, fmt.Errorf("missing protected audit extension schema")
+		}
+		return nil, nil
 	}
 	var bad bool
 	if err := db.QueryRow(ctx, `WITH owner AS (SELECT relowner oid FROM pg_class WHERE oid='public.audit_log'::regclass)
