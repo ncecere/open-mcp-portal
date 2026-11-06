@@ -20,7 +20,7 @@ Decided out of scope:
   server runs a bridge next to it and registers the bridge.
 - **Sampling, roots and logging.** The 2026-07-28 revision deprecates them; new work doesn't add them.
 - **The old HTTP+SSE transport** for upstream servers: deprecated by the same revision.
-- **Hosted scanning models and enforcement.** The portal hosts no model. Decision 87 permits narrow local shadow detection: the definition backend (#72) is under local review, the UI is #73, and later call stages and enforcement remain future work. See [content-scanning.md](content-scanning.md).
+- **Hosted scanning models and enforcement.** The portal hosts no model. Decision 87 permits narrow local shadow detection: definition scanning at refresh with its review UI shipped in v0.14.0 (#72, #73), shadow only; later call stages and enforcement remain future work. See [content-scanning.md](content-scanning.md).
 
 ## Where things stand
 
