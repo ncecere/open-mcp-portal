@@ -304,3 +304,49 @@ A2 remains partial: no before/after call-path performance benchmark is claimed;
 the unchanged import check proves only absence of the scanner dependency.
 A10's previous-image compatibility evidence remains as documented above.
 Consequently **not every A-item is met**; do not close #72 on this evidence alone.
+
+## Real Chromium accessibility check (#73, 2026-11-06)
+
+Built embedded UI and scratch binary; served on `127.0.0.1:18088` with a fake MCP
+upstream on `18091`, disposable `cleanup_browser` on worker Postgres `55453`,
+separate LOGIN NOINHERIT `cleanup_owner` / `cleanup_runtime` identities and
+`DB_REQUIRE_SPLIT_ROLES=true`. Migration used only the owner URL; serve used only
+the runtime URL. Playwright and axe dependencies, extracted Chromium libraries,
+script, screenshots and JSON are outside the repository under
+`~/.cache/cleanup-browser/`. Cached Chromium 1248 was used; no browser downloaded.
+The T3 preview attempt failed because host libraries were missing. Scratch-local
+libraries allowed the requested Playwright run without changing host packages.
+
+The initial Capabilities check found WCAG `label-content-name-mismatch` on the
+seven counted filter buttons in both viewports. Capability filters now include
+the count directly in each visible label, preserving values/counts/filtering and
+avoiding the shared FilterBar's separate-span/comma-label mismatch. No shared UI
+component or axe assertion was edited. A regression checks count text, accessible
+name and actual filter selection. All findings are still untrusted text; found
+nothing ≠ safe.
+
+Final run: WCAG 2 A/AA and 2.1 A/AA tags, desktop 1280×800 and phone 390×844.
+Axe counts below are rule categories; JSON retains every affected node.
+
+| State | Desktop violations / incompletes / overflow | Phone violations / incompletes / overflow |
+| --- | --- | --- |
+| Capabilities: findings | 0 / 0 / no | 0 / 0 / no |
+| Capabilities: zero findings | 0 / 0 / no | 0 / 0 / no |
+| Capabilities: incomplete | 0 / 0 / no | 0 / 0 / no |
+| Publish dialog with findings | 0 / 2 / no | 0 / 2 / no |
+| Review dialog with findings | 0 / 2 / no | 0 / 2 / no |
+| Admin scanning settings and rule catalog | 0 / 0 / no | 0 / 0 / no |
+
+Dialogs retain `aria-hidden-focus` (seven background/focus-guard nodes each) and
+`color-contrast` incompletes. Contrast nodes: desktop publish 2 / review 5;
+phone publish 2 / review 4. Axe reports backgrounds obscured/overlapping in the
+scrolling dialog; it does not establish a contrast failure. These remain manual
+review items, **not a complete accessibility pass**. Rescan was reached through
+Tab navigation at both sizes. No screen-reader check was performed.
+
+The fake upstream produces the finding; zero and incomplete states use owned
+disposable definition fixtures and the real rescan endpoint (ordinary text or
+70 KiB oversized text). No API response interception is used. Original definition
+and scan rows are restored afterward. Screenshots and per-state node-level JSON
+are in `~/.cache/cleanup-browser/results/`, initial evidence in `results/before/`,
+and the script is `~/.cache/cleanup-browser/check.cjs` (intentionally untracked).
