@@ -3,9 +3,18 @@
 Last updated: 2026-11-06. Open MCP Portal (formerly Open MCP Gateway, decision46): **[v0.14.0](releases/v0.14.0.md) is the latest release, published and independently verified.** It ships definition scanning in shadow mode (#72, #73) and audit streaming slice 1 (#38, decision 93, off by default), migrations `00058`–`00062`. Source `8860ced`, annotated tag `b105995`, image index `sha256:11f89d86684f7201311979f88b47012660d7d6cd528f954eeb20e87a01f9978d`, pinned in the example overlay. Its validation, the deadlock fix found by the Kubernetes gates (#82), publication and verification are in the [release notes](releases/v0.14.0.md). Previous: [v0.13.1](releases/v0.13.1.md) (index `sha256:cec6a9e1…`, signature verified with cosign 2026-11-05). Parked: `parked/terraform-provider`, `parked/keyprovider-transit` (#41, deferred). v1.0.0 remains the owner's decision. A fresh agent should read [agent-handoff.md](agent-handoff.md).
 (release notes: [releases/v0.10.0.md](releases/v0.10.0.md), [v0.9.0](releases/v0.9.0.md), [v0.8.0](releases/v0.8.0.md); earlier: [v0.7.0](releases/v0.7.0.md), [v0.6.0](releases/v0.6.0.md), [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
-## Current batch: complete (v0.14.0, 2026-11-06)
+## Current batch (started 2026-11-06, after v0.14.0)
 
-The batch resumed on 2026-11-05 shipped in v0.14.0: #70, #73 closed; #72 backend and #38 slice 1 released. Nothing is in progress. 19 issues are open (11 development, eight real-world evidence).
+The owner is running the real-world checks (#14/#15/#17/#20) against v0.14.0. In parallel:
+
+| Lane | Work | Allocation | State |
+| --- | --- | --- | --- |
+| Worker (isolated worktree) | Cleanup: flaky #83/#85 (test-only fixes), #72 measurement gaps A1/A2/A5, #73 real-browser/axe check | none | in progress on `chore/cleanup-after-0140` |
+| Main thread | #38 slice 2: [design](audit-sinks.md) for signed checkpoints and webhook sinks | decision 94; migration `00063` | design written, under independent review; implementation follows |
+
+Decisions 95+ and migrations 64+ are unallocated.
+
+v0.14.0 (2026-11-06) completed the previous batch: #70 and #73 closed, the #72 backend and #38 slice 1 released.
 
 Follow-ups, none blocking:
 
@@ -15,7 +24,7 @@ Follow-ups, none blocking:
 - **Flaky tests:** [#83](https://github.com/ncecere/open-mcp-portal/issues/83) (approvals detail 409 under contention) and [#85](https://github.com/ncecere/open-mcp-portal/issues/85) (allow-server rate limit across a window boundary).
 - **Real-world evidence:** #13–#20, which need the owner (#14/#15 clients, #17 token refresh, #20 pilot team).
 
-Decisions 94+ and migrations 63+ are unallocated; the main thread allocates them. The development machine has no development instance or `omp` database. Owned disposable test PostgreSQL containers are `omp-test-pg-main` (55452), `omp-test-pg-w72` (55453) and `omp-test-pg-w38` (55454), all tmpfs-backed. Go 1.26.10, sqlc 1.31.1 and cosign v3.1.4 are installed under `~/.local`. `/tmp` is a shared 7.5 GB tmpfs: set `GOTMPDIR` to a directory on disk for full suites.
+The development machine has no development instance or `omp` database. Owned disposable test PostgreSQL containers are `omp-test-pg-main` (55452), `omp-test-pg-w72` (55453) and `omp-test-pg-w38` (55454), all tmpfs-backed. Go 1.26.10, sqlc 1.31.1 and cosign v3.1.4 are installed under `~/.local`. `/tmp` is a shared 7.5 GB tmpfs: set `GOTMPDIR` to a directory on disk for full suites.
 
 ### History: v0.12.0 SCIM batch notes (shipped)
 
