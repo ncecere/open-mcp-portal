@@ -138,6 +138,9 @@ CROSS JOIN LATERAL (
                                         JOIN scim_groups sg ON sg.id = sm.group_id JOIN teams t ON t.id = sm.team_id WHERE sm.id = ids.target_uuid)
         WHEN 'oidc_identity' THEN 'Sign-in identity'
         WHEN 'notification_destination' THEN (SELECT nd.name FROM notification_destinations nd WHERE nd.id = ids.target_uuid)
+        WHEN 'audit_sink' THEN (SELECT 'Audit sink · ' || sk.name FROM omp_audit_ext.sinks sk WHERE sk.id = ids.target_uuid)
+        WHEN 'audit_stream' THEN (CASE a.target_id WHEN 'sinks' THEN 'Audit sinks' WHEN 'checkpoints' THEN 'Audit checkpoints' END)
+        WHEN 'audit_checkpoint_key' THEN 'Audit checkpoint key ' || a.target_id
         WHEN 'service_connection' THEN (SELECT sc.name FROM service_connections sc WHERE sc.id = ids.target_uuid)
         WHEN 'service_account' THEN (SELECT sa.name FROM service_accounts sa WHERE sa.id = ids.target_uuid)
         WHEN 'service_account_key' THEN (SELECT sa.name || ' · ' || k.name FROM service_account_keys k
