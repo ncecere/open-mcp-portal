@@ -1,18 +1,22 @@
 # Status and handoff
 
-Last updated: 2026-11-06. Open MCP Portal (formerly Open MCP Gateway, decision46): **[v0.14.0](releases/v0.14.0.md) is the latest release, published and independently verified.** It ships definition scanning in shadow mode (#72, #73) and audit streaming slice 1 (#38, decision 93, off by default), migrations `00058`–`00062`. Source `8860ced`, annotated tag `b105995`, image index `sha256:11f89d86684f7201311979f88b47012660d7d6cd528f954eeb20e87a01f9978d`, pinned in the example overlay. Its validation, the deadlock fix found by the Kubernetes gates (#82), publication and verification are in the [release notes](releases/v0.14.0.md). Previous: [v0.13.1](releases/v0.13.1.md) (index `sha256:cec6a9e1…`, signature verified with cosign 2026-11-05). Parked: `parked/terraform-provider`, `parked/keyprovider-transit` (#41, deferred). v1.0.0 remains the owner's decision. A fresh agent should read [agent-handoff.md](agent-handoff.md).
+Last updated: 2026-11-06. Open MCP Portal: **[v0.15.1](releases/v0.15.1.md) is the latest release, published and independently verified** (signed audit checkpoints and audit webhook sinks, #38 slice 2, off until enabled; migrations `00063`–`00064`; `golang.org/x/net` v0.62.0). Source `8fafa1e`, tag `bfa1e1a`, image index `sha256:40b8bf0ddbc763c3d61080de60df5addc71b8a0ab6c8db1dc99d452b93f744c2`, pinned in the example overlay. **v0.15.0 was tagged (`23acf3e`) but never published**: its image scan failed on CVE-2026-78661; it is listed in `scripts/previous-release.sh` as unpublished. Previous published release: [v0.14.0](releases/v0.14.0.md) (`sha256:11f89d86…`). v1.0.0 remains the owner's decision. A fresh agent should read [agent-handoff.md](agent-handoff.md).
 (release notes: [releases/v0.10.0.md](releases/v0.10.0.md), [v0.9.0](releases/v0.9.0.md), [v0.8.0](releases/v0.8.0.md); earlier: [v0.7.0](releases/v0.7.0.md), [v0.6.0](releases/v0.6.0.md), [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
-## Current batch (started 2026-11-06, after v0.14.0)
+## Current batch: complete (v0.15.1, 2026-11-06)
 
-The owner is running the real-world checks (#14/#15/#17/#20) against v0.14.0. In parallel:
+The batch started after v0.14.0 shipped in v0.15.1: the cleanup batch (#83/#85 closed, #72/#73 evidence) and #38 slice 2 (signed checkpoints, webhook sinks, Admin › Audit stream). Nothing is in progress.
 
-| Lane | Work | Allocation | State |
-| --- | --- | --- | --- |
-| Worker (done) | Cleanup: #83/#85 fixed and closed; #72 A1/A2/A5 measured (still open for the 8x bound and call-path equivalence); #73 real-browser axe pass with one fix (dialog incompletes need manual review) | none | merged in [#87](https://github.com/ncecere/open-mcp-portal/pull/87) |
-| Done | #38 slice 2: [design](audit-sinks.md) (three reviews); 2a signed checkpoints ([#88](https://github.com/ncecere/open-mcp-portal/pull/88)); 2b webhook sinks: database ([#89](https://github.com/ncecere/open-mcp-portal/pull/89)), sender ([#90](https://github.com/ncecere/open-mcp-portal/pull/90)), API/notifications/gating ([#91](https://github.com/ncecere/open-mcp-portal/pull/91)), Admin › Audit stream page ([#92](https://github.com/ncecere/open-mcp-portal/pull/92)) | decision 94; migrations `00063`, `00064` | on `main`, unreleased; everything off until enabled from a release newer than 0.14.0 (`enable-checkpoints`, `enable-sinks`). Follow-ups #93, #94 |
+Follow-ups, none blocking:
+- #96: the flaky quota-window test.
+- #93: a durable sent marker for held oversized rows.
+- #94: manual accessibility and screen-reader review of dialogs.
+- #72: the 8× allocation bound, call-path equivalence, and a hosted corpus run.
+- #38 slices 3 (syslog TLS and OTLP) and 4 (bulk exports).
+- #42 Helm when a pilot needs it.
+- Real-world evidence #13–#20 (owner).
 
-Decisions 95+ and migrations 65+ are unallocated. Unreleased on `main` since v0.14.0: the cleanup batch (#87) and #38 slice 2 (migrations 63–64).
+Decisions 95+ and migrations 65+ are unallocated; the main thread allocates them.
 
 v0.14.0 (2026-11-06) completed the previous batch: #70 and #73 closed, the #72 backend and #38 slice 1 released.
 
