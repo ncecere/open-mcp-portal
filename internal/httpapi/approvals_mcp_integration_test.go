@@ -113,12 +113,29 @@ func (e *approvalWire) call(t *testing.T, modern bool, key string, p, caps map[s
 	}
 	return out
 }
+
+// approvalRead retries only the read-side fail-closed contention response. The
+// authority fence uses NOWAIT, so unrelated maintenance can briefly deny a read.
+// Mutations and every other error retain their original one-attempt behavior.
+func approvalRead(t *testing.T, s *session, path string, out any) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		code, ec := s.call("GET", path, nil, out, nil)
+		if code == http.StatusOK {
+			return
+		}
+		if code != http.StatusConflict || ec != "approval_unavailable" || time.Until(deadline) <= 0 {
+			t.Fatalf("approval read %s: %d %s", path, code, ec)
+		}
+		time.Sleep(min(20*time.Millisecond, time.Until(deadline)))
+	}
+}
+
 func approvalDetail(t *testing.T, s *session, id uuid.UUID) approvals.Receipt {
 	t.Helper()
 	var out approvals.Receipt
-	if c := s.get("/v1/approvals/"+id.String(), &out); c != 200 {
-		t.Fatalf("approval detail: %d", c)
-	}
+	approvalRead(t, s, "/v1/approvals/"+id.String(), &out)
 	return out
 }
 func approvalList(t *testing.T, s *session, view string) []approvals.Receipt {
@@ -126,9 +143,7 @@ func approvalList(t *testing.T, s *session, view string) []approvals.Receipt {
 	var out struct {
 		Items []approvals.Receipt `json:"items"`
 	}
-	if c := s.get("/v1/me/approvals?view="+view, &out); c != 200 {
-		t.Fatalf("approval list: %d", c)
-	}
+	approvalRead(t, s, "/v1/me/approvals?view="+view, &out)
 	for _, r := range out.Items {
 		if r.Preview != nil {
 			t.Fatal("queue exposed preview")
@@ -482,5 +497,28 @@ func TestApprovalsHTTPMCPSpentFailuresNeverReplay(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestApprovalReadRetriesUnavailable(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %s", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if calls == 1 {
+			w.WriteHeader(http.StatusConflict)
+			_, _ = io.WriteString(w, `{"error":{"code":"approval_unavailable"}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"data":{"status":"pending"}}`)
+	}))
+	defer srv.Close()
+	var out approvals.Receipt
+	approvalRead(t, &session{t: t, client: srv.Client(), app: &testApp{URL: srv.URL}}, "/v1/approvals/test", &out)
+	if calls != 2 || out.Status != approvals.Pending {
+		t.Fatalf("calls=%d status=%s", calls, out.Status)
 	}
 }
