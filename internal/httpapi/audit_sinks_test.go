@@ -92,6 +92,10 @@ func TestAuditSinkAPI(t *testing.T) {
 			t.Fatalf("read %s: %d %s", p, code, b)
 		}
 		check(b)
+		// The page shows the replica's sealer setting and each sink's last success.
+		if p == "/v1/admin/audit/stream/status" && (!strings.Contains(string(b), `"sealer_enabled"`) || !strings.Contains(string(b), `"last_ok_at"`)) {
+			t.Fatalf("status lacks sealer_enabled/last_ok_at: %s", b)
+		}
 	}
 	rev := map[string]string{"If-Match": `"1"`}
 	code, body = admin.raw("PUT", path, map[string]any{"enabled": false}, rev)

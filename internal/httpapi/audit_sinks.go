@@ -27,7 +27,7 @@ import (
 
 // This explicit projection is shared by responses and audit metadata. Never
 // serialize a database sink model: it carries sealed destination credentials.
-const sinkView = `jsonb_build_object('id',id,'name',name,'kind',kind,'profile',profile,'required',required,'enabled',enabled,'batch_max_records',batch_max_records,'revision',revision,'url_hint',url_hint,'cursor_seq',cursor_seq,'state',state,'last_error_class',last_error_class,'consecutive_failures',consecutive_failures,'gap_first',gap_first,'gap_last',gap_last,'lag',greatest(0,(SELECT last_seq FROM omp_audit.state)-cursor_seq),'retention_effect',CASE WHEN NOT required THEN 'not holding' WHEN NOT enabled THEN 'holding-while-disabled' ELSE 'holding' END,'held_oversized_seq',CASE WHEN required AND profile='full' AND EXISTS(SELECT 1 FROM omp_audit.chain WHERE seq=cursor_seq+1 AND flags&2<>0) THEN cursor_seq+1 END)`
+const sinkView = `jsonb_build_object('id',id,'name',name,'kind',kind,'profile',profile,'required',required,'enabled',enabled,'batch_max_records',batch_max_records,'revision',revision,'url_hint',url_hint,'cursor_seq',cursor_seq,'state',state,'last_error_class',last_error_class,'consecutive_failures',consecutive_failures,'last_ok_at',last_ok_at,'gap_first',gap_first,'gap_last',gap_last,'lag',greatest(0,(SELECT last_seq FROM omp_audit.state)-cursor_seq),'retention_effect',CASE WHEN NOT required THEN 'not holding' WHEN NOT enabled THEN 'holding-while-disabled' ELSE 'holding' END,'held_oversized_seq',CASE WHEN required AND profile='full' AND EXISTS(SELECT 1 FROM omp_audit.chain WHERE seq=cursor_seq+1 AND flags&2<>0) THEN cursor_seq+1 END)`
 
 func (a *api) sinkRoutes() []route {
 	return []route{
@@ -79,7 +79,7 @@ func (a *api) auditSinks(w http.ResponseWriter, r *http.Request) {
 }
 func (a *api) auditStreamStatus(w http.ResponseWriter, r *http.Request) {
 	var raw []byte
-	e := a.Pool.QueryRow(r.Context(), `SELECT jsonb_build_object('tip',to_jsonb(s),'sink_settings',(SELECT to_jsonb(g) FROM omp_audit_ext.sink_settings g),'sinks',(SELECT coalesce(jsonb_agg(v),'[]') FROM (SELECT `+sinkView+` v FROM omp_audit_ext.sinks) x),'consumers',(SELECT coalesce(jsonb_agg(to_jsonb(c)||jsonb_build_object('lag',greatest(0,s.last_seq-c.acked_seq))),'[]') FROM omp_audit.consumers c),'checkpoint_keys',(SELECT coalesce(jsonb_agg(jsonb_build_object('kid',encode(kid,'hex'),'state',state,'active_from_seq',active_from_seq,'retired_at_seq',retired_at_seq)),'[]') FROM omp_audit_ext.checkpoint_keys)) FROM omp_audit.state s`).Scan(&raw)
+	e := a.Pool.QueryRow(r.Context(), `SELECT jsonb_build_object('sealer_enabled',$1::boolean,'tip',to_jsonb(s),'sink_settings',(SELECT to_jsonb(g) FROM omp_audit_ext.sink_settings g),'sinks',(SELECT coalesce(jsonb_agg(v),'[]') FROM (SELECT `+sinkView+` v FROM omp_audit_ext.sinks) x),'consumers',(SELECT coalesce(jsonb_agg(to_jsonb(c)||jsonb_build_object('lag',greatest(0,s.last_seq-c.acked_seq))),'[]') FROM omp_audit.consumers c),'checkpoint_keys',(SELECT coalesce(jsonb_agg(jsonb_build_object('kid',encode(kid,'hex'),'state',state,'active_from_seq',active_from_seq,'retired_at_seq',retired_at_seq)),'[]') FROM omp_audit_ext.checkpoint_keys)) FROM omp_audit.state s`, a.Config.AuditStreamEnabled).Scan(&raw)
 	if !failed(w, r, e) {
 		httpx.JSON(w, 200, json.RawMessage(raw))
 	}

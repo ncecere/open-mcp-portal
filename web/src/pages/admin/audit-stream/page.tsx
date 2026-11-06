@@ -9,6 +9,7 @@ import { Inline, Stack } from "@/components/ui/layout/layout";
 import { PageHeader } from "@/components/ui/page-header/page-header";
 import { Table, Td, Tr } from "@/components/ui/table/table";
 import { useIsPlatformAdmin } from "../hooks";
+import { Time } from "@/components/ui/time/time";
 import { getStatus, sinkAction, statusKey, verificationDocs, type Action, type Sink } from "./api";
 import { SinkForm } from "./form";
 import { StreamStatus } from "./status";
@@ -49,12 +50,12 @@ export function AdminAuditStreamPage() {
       <StreamStatus data={status.data} />
       <Card title="Sinks" actions={canEdit ? <Button onClick={() => setForm("new")}>Create sink</Button> : undefined}>
         <Stack gap={4}>
-          <p>Required sinks hold retention at their cursor even while disabled. Optional sinks do not hold retention and can expire. Last success time is not exposed by the API.</p>
+          <p>Required sinks hold retention at their cursor even while disabled. Optional sinks do not hold retention and can expire.</p>
           {result && <p role="status">{result}</p>}
           <Table stack caption="Audit sinks" columns={["Name", "Kind", "Profile", "Required", "Host hint", "State", "Lag (records)", "Last success", "Last error class", "Consecutive failures", "Retention effect", "Held oversized sequence", ...(canEdit ? ["Actions"] : [])]} empty={!status.data.sinks.length ? "No sinks registered." : undefined}>
             {status.data.sinks.map(sink => <Tr key={sink.id}>
               <Td>{sink.name}</Td><Td>{sink.kind}</Td><Td>{sink.profile}</Td><Td>{sink.required ? "Yes" : "No"}</Td><Td>{sink.url_hint}</Td>
-              <Td>{sink.state} · {sink.enabled ? "enabled" : "disabled"}</Td><Td>{sink.lag}</Td><Td>Unavailable</Td><Td>{sink.last_error_class || "None"}</Td><Td>{sink.consecutive_failures}</Td>
+              <Td>{sink.state} · {sink.enabled ? "enabled" : "disabled"}</Td><Td>{sink.lag}</Td><Td>{sink.last_ok_at ? <Time value={sink.last_ok_at} /> : "Never"}</Td><Td>{sink.last_error_class || "None"}</Td><Td>{sink.consecutive_failures}</Td>
               <Td>{!sink.required ? "Not holding — optional sinks do not cap retention." : sink.enabled ? "Holding — retention waits for this cursor." : "Holding while disabled — disabling delivery does not release retention."}</Td>
               <Td>{sink.held_oversized_seq ?? "None"}</Td>
               {canEdit && <Td><Inline gap={2}>

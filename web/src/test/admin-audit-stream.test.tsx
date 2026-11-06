@@ -5,8 +5,8 @@ import type { Status, Sink } from "../pages/admin/audit-stream/api";
 import { activeAdminGroup, adminNav } from "../components/layout/nav";
 import { mockApi, renderApp, shellRoutes, Reply, type Handler } from "./harness";
 
-const sink: Sink = { id: "s1", name: "Evidence", kind: "webhook", profile: "full", required: true, enabled: true, batch_max_records: 100, revision: 3, url_hint: "receiver.example", cursor_seq: 10, state: "range_expired", lag: 15, last_error_class: "timeout", consecutive_failures: 2, held_oversized_seq: 11 };
-const status = (): Status => ({ tip: { stream_id: "stream-id", epoch: 1, last_seq: 25, status: "running", checkpoints_enabled: true, last_checkpoint_seq: 20, last_checkpoint_at: new Date().toISOString() }, sink_settings: { enabled: true, min_reader_version: "0.15.0" }, sinks: [sink], consumers: [{ name: "Archive", profile: "full", required: false, acked_seq: 5, lag: 20 }], checkpoint_keys: [{ kid: "key-id", state: "active" }] });
+const sink: Sink = { id: "s1", name: "Evidence", kind: "webhook", profile: "full", required: true, enabled: true, batch_max_records: 100, revision: 3, url_hint: "receiver.example", cursor_seq: 10, state: "range_expired", lag: 15, last_error_class: "timeout", consecutive_failures: 2, held_oversized_seq: 11, last_ok_at: null };
+const status = (): Status => ({ sealer_enabled: true, tip: { stream_id: "stream-id", epoch: 1, last_seq: 25, status: "running", checkpoints_enabled: true, last_checkpoint_seq: 20, last_checkpoint_at: new Date().toISOString() }, sink_settings: { enabled: true, min_reader_version: "0.15.0" }, sinks: [sink], consumers: [{ name: "Archive", profile: "full", required: false, acked_seq: 5, lag: 20 }], checkpoint_keys: [{ kid: "key-id", state: "active" }] });
 function setup(data = status(), extra: Record<string, Handler> = {}, auditor = false) {
   const calls = mockApi({ ...shellRoutes(auditor ? "platform_auditor" : "platform_admin", null),
     "GET /v1/admin/audit/stream/status": () => data,
@@ -19,12 +19,13 @@ async function loaded() { await screen.findByRole("heading", { name: "Sinks" });
 async function dialogAxe() { expect(await axe(screen.queryByRole("dialog") ?? screen.getByRole("alertdialog"))).toHaveNoViolations(); }
 
 describe("Admin audit stream", () => {
-  it.each(["sealer-unknown", "checkpoints-off", "sinks-off", "all-on"])("renders status and accessible notices: %s", async state => {
+  it.each(["sealer-off", "checkpoints-off", "sinks-off", "all-on"])("renders status and accessible notices: %s", async state => {
     const data = status();
     if (state === "checkpoints-off") data.tip.checkpoints_enabled = false;
     if (state === "sinks-off") data.sink_settings.enabled = false;
+    if (state === "sealer-off") data.sealer_enabled = false;
     const { container } = setup(data); await loaded();
-    expect(await screen.findByText("Sealer configuration is not exposed by the API")).toBeInTheDocument();
+    expect(screen.queryByText("The audit sealer is off") !== null).toBe(state === "sealer-off");
     expect(screen.queryByText("Checkpoints are disabled") !== null).toBe(state === "checkpoints-off");
     expect(screen.queryByText("Sinks are disabled") !== null).toBe(state === "sinks-off");
     expect(await screen.findByText("stream-id")).toBeInTheDocument();
@@ -117,5 +118,13 @@ describe("Admin audit stream", () => {
   it("places Audit stream under Operations", () => {
     expect(activeAdminGroup("/admin/audit-stream")).toBe("Operations");
     expect(adminNav.find(n => n.to === "/admin/audit-stream")?.label).toBe("Audit stream");
+  });
+  it("shows each sink's last success time, or Never", async () => {
+    const data = status(); data.sinks = [{ ...sink, last_ok_at: "2026-11-06T10:00:00Z" }, { ...sink, id: "s2", name: "Fresh", last_ok_at: null }];
+    setup(data); await loaded();
+    const table = screen.getAllByRole("table")[0];
+    expect(within(table).getByText("Never")).toBeInTheDocument();
+    expect(within(table).queryByText("Unavailable")).not.toBeInTheDocument();
+    expect(within(table).getAllByRole("row")).toHaveLength(3);
   });
 });

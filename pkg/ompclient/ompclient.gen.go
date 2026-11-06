@@ -5314,7 +5314,9 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/admin/audit/stream/ack (the `AdminAuditAck` operationId).
 	AdminAuditAck(ctx context.Context, body AdminAuditAckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// AdminAuditStreamStatus Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+	// AdminAuditStreamStatus Audit stream status (platform admins, auditors or platform:read)
+	//
+	// The stream tip and checkpoint state, `sealer_enabled` (AUDIT_STREAM_ENABLED on the replica that answered), the sink gate, every sink's secret-free view (including `last_ok_at`, lag and retention effect), every pull consumer and checkpoint key metadata. Never contains a sink URL or secret.
 	//
 	// Corresponds with GET /v1/admin/audit/stream/status (the `AdminAuditStreamStatus` operationId).
 	AdminAuditStreamStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5925,7 +5927,9 @@ func (c *Client) AdminAuditAck(ctx context.Context, body AdminAuditAckJSONReques
 	return c.Client.Do(req)
 }
 
-// AdminAuditStreamStatus Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+// AdminAuditStreamStatus Audit stream status (platform admins, auditors or platform:read)
+//
+// The stream tip and checkpoint state, `sealer_enabled` (AUDIT_STREAM_ENABLED on the replica that answered), the sink gate, every sink's secret-free view (including `last_ok_at`, lag and retention effect), every pull consumer and checkpoint key metadata. Never contains a sink URL or secret.
 //
 // Corresponds with GET /v1/admin/audit/stream/status (the `AdminAuditStreamStatus` operationId).
 func (c *Client) AdminAuditStreamStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -10866,7 +10870,9 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/admin/audit/stream/ack (the `AdminAuditAck` operationId).
 	AdminAuditAckWithResponse(ctx context.Context, body AdminAuditAckJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminAuditAckResponse, error)
 
-	// AdminAuditStreamStatusWithResponse Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+	// AdminAuditStreamStatusWithResponse Audit stream status (platform admins, auditors or platform:read)
+	//
+	// The stream tip and checkpoint state, `sealer_enabled` (AUDIT_STREAM_ENABLED on the replica that answered), the sink gate, every sink's secret-free view (including `last_ok_at`, lag and retention effect), every pull consumer and checkpoint key metadata. Never contains a sink URL or secret.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -16031,7 +16037,9 @@ func (c *ClientWithResponses) AdminAuditAckWithResponse(ctx context.Context, bod
 	return ParseAdminAuditAckResponse(rsp)
 }
 
-// AdminAuditStreamStatusWithResponse Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+// AdminAuditStreamStatusWithResponse Audit stream status (platform admins, auditors or platform:read)
+//
+// The stream tip and checkpoint state, `sealer_enabled` (AUDIT_STREAM_ENABLED on the replica that answered), the sink gate, every sink's secret-free view (including `last_ok_at`, lag and retention effect), every pull consumer and checkpoint key metadata. Never contains a sink URL or secret.
 //
 // Returns a wrapper object for the known response body format(s).
 //

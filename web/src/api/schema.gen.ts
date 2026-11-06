@@ -720,7 +720,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once */
+        /**
+         * Audit stream status (platform admins, auditors or platform:read)
+         * @description The stream tip and checkpoint state, `sealer_enabled` (AUDIT_STREAM_ENABLED on the replica that answered), the sink gate, every sink's secret-free view (including `last_ok_at`, lag and retention effect), every pull consumer and checkpoint key metadata. Never contains a sink URL or secret.
+         */
         get: operations["adminAuditStreamStatus"];
         put?: never;
         post?: never;
@@ -9848,7 +9851,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Secret-free sink settings (secret only on create or rotate); revision conflicts and recovery requirements return 409 */
+            /** @description Audit stream status */
             200: {
                 headers: {
                     [name: string]: unknown;

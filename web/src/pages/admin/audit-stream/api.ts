@@ -10,9 +10,12 @@ export type Sink = {
   required: boolean; enabled: boolean; batch_max_records: number; revision: number;
   url_hint: string; cursor_seq: number; state: string; lag: number;
   last_error_class: string; consecutive_failures: number; held_oversized_seq: number | null;
+  last_ok_at: string | null;
 };
 export type Consumer = { name: string; profile: "summary" | "full"; required: boolean; acked_seq: number; lag: number };
 export type Status = {
+  /** AUDIT_STREAM_ENABLED on the replica that answered (each replica has its own configuration). */
+  sealer_enabled: boolean;
   tip: { stream_id: string; epoch: number; last_seq: number; status: string; checkpoints_enabled: boolean; last_checkpoint_seq: number | null; last_checkpoint_at: string | null };
   sink_settings: { enabled: boolean; min_reader_version: string | null };
   sinks: Sink[]; consumers: Consumer[];
