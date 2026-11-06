@@ -10,9 +10,9 @@ The owner is running the real-world checks (#14/#15/#17/#20) against v0.14.0. In
 | Lane | Work | Allocation | State |
 | --- | --- | --- | --- |
 | Worker (done) | Cleanup: #83/#85 fixed and closed; #72 A1/A2/A5 measured (still open for the 8x bound and call-path equivalence); #73 real-browser axe pass with one fix (dialog incompletes need manual review) | none | merged in [#87](https://github.com/ncecere/open-mcp-portal/pull/87) |
-| Main thread → workers | #38 slice 2: [design](audit-sinks.md); 2a database part (migration 63, manifest boundary, checkpoint keys/sealing/rotation, real-v0.14.0 compatibility) in review/CI; 2a wiring part (sealer cadence, CLI, keys publication, pull/verify/tip, metrics, docs) next; then 2b (webhook sinks, Admin › Audit stream; migration 64) | decision 94; migrations `00063`, `00064` | design settled after two reviews |
+| Done | #38 slice 2: [design](audit-sinks.md) (three reviews); 2a signed checkpoints ([#88](https://github.com/ncecere/open-mcp-portal/pull/88)); 2b webhook sinks: database ([#89](https://github.com/ncecere/open-mcp-portal/pull/89)), sender ([#90](https://github.com/ncecere/open-mcp-portal/pull/90)), API/notifications/gating ([#91](https://github.com/ncecere/open-mcp-portal/pull/91)), Admin › Audit stream page ([#92](https://github.com/ncecere/open-mcp-portal/pull/92)) | decision 94; migrations `00063`, `00064` | on `main`, unreleased; everything off until enabled from a release newer than 0.14.0 (`enable-checkpoints`, `enable-sinks`). Follow-ups #93, #94 |
 
-Decisions 95+ and migrations 65+ are unallocated.
+Decisions 95+ and migrations 65+ are unallocated. Unreleased on `main` since v0.14.0: the cleanup batch (#87) and #38 slice 2 (migrations 63–64).
 
 v0.14.0 (2026-11-06) completed the previous batch: #70 and #73 closed, the #72 backend and #38 slice 1 released.
 
