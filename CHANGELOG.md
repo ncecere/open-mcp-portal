@@ -8,6 +8,9 @@ breaking changes; the entry says how to adapt.
 
 ## Unreleased
 
+- Add browser-session audit sink management, secret rotation, test/recovery actions, secret-free status, sink notification links and explicit sink rollout/rollback gates.
+
+
 - Wire opt-in signed audit checkpoints: leader cadence, acknowledged minimum reader version enablement, atomic key rotation, public Ed25519 keys, checkpoint pull envelopes and signature/range verification, metrics and a stale-checkpoint alert (#38 slice 2a).
 
 

@@ -32,8 +32,9 @@ const server: Resolver = {
   },
 };
 
-/** One entry per LinkType: the compiler fails here when the contract gains a type. */
-export const linkTargets: Record<LinkType, Resolver> = {
+/** Sink notifications already carry audit_stream; its page/resolver ships in slice 2b part 4.
+ * Every other contract type requires a resolver here. Unknown targets render without a link. */
+export const linkTargets: Record<Exclude<LinkType, "audit_stream">, Resolver> = {
   server,
   servers: {
     route: "/teams/$team/servers",

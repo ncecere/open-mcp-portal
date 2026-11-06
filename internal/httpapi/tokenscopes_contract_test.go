@@ -46,8 +46,8 @@ func TestTokenScopesMatchSpecAndRoutes(t *testing.T) {
 			ids[key] = op.OperationID
 		}
 	}
-	if len(annotated) != 68 {
-		t.Errorf("the spec annotates %d operations, the design lists 68", len(annotated))
+	if len(annotated) != 69 {
+		t.Errorf("the spec annotates %d operations, the design lists 69", len(annotated))
 	}
 	served := map[string]bool{}
 	for _, r := range apiRoutes(Deps{Config: config.Defaults(), Health: NewHealth(nil), Log: testutil.Logger(), Auth: &auth.Service{}}) {
@@ -102,7 +102,7 @@ func TestTokenScopesMatchSpecAndRoutes(t *testing.T) {
 		t.Fatal("public keys must not require token scopes")
 	}
 	// Existing audit reads retain platform:read.
-	for _, key := range []string{"GET /v1/admin/audit/stream", "GET /v1/admin/audit/stream/tip", "GET /v1/admin/audit/verify"} {
+	for _, key := range []string{"GET /v1/admin/audit/stream", "GET /v1/admin/audit/stream/tip", "GET /v1/admin/audit/stream/status", "GET /v1/admin/audit/verify"} {
 		if !slices.Equal(annotated[key], []string{"platform:read"}) {
 			t.Fatalf("audit read scope changed: %s", key)
 		}
@@ -121,7 +121,7 @@ func TestTokenScopesMatchSpecAndRoutes(t *testing.T) {
 		}
 		count[scopes[0]]++
 	}
-	want := map[string]int{"platform:read": 44, "platform:write": 11, "servers:read": 5, "servers:write": 7}
+	want := map[string]int{"platform:read": 45, "platform:write": 11, "servers:read": 5, "servers:write": 7}
 	if len(count) != len(want) {
 		t.Errorf("scopes in use: %v", count)
 	}

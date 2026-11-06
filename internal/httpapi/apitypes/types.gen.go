@@ -365,6 +365,24 @@ func (e AuditEntryActorKind) Valid() bool {
 	}
 }
 
+// Defines values for AuditSinkRequestProfile.
+const (
+	AuditSinkRequestProfileFull    AuditSinkRequestProfile = "full"
+	AuditSinkRequestProfileSummary AuditSinkRequestProfile = "summary"
+)
+
+// Valid indicates whether the value is a known member of the AuditSinkRequestProfile enum.
+func (e AuditSinkRequestProfile) Valid() bool {
+	switch e {
+	case AuditSinkRequestProfileFull:
+		return true
+	case AuditSinkRequestProfileSummary:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AuditViaKind.
 const (
 	AuditViaKindApiKey  AuditViaKind = "api_key"
@@ -1221,6 +1239,7 @@ const (
 	LinkTargetTypeAccountApiKeys           LinkTargetType = "account_api_keys"
 	LinkTargetTypeAccountConnections       LinkTargetType = "account_connections"
 	LinkTargetTypeApproval                 LinkTargetType = "approval"
+	LinkTargetTypeAuditStream              LinkTargetType = "audit_stream"
 	LinkTargetTypeAuthProviders            LinkTargetType = "auth_providers"
 	LinkTargetTypeAutomationTokens         LinkTargetType = "automation_tokens"
 	LinkTargetTypeGateways                 LinkTargetType = "gateways"
@@ -1248,6 +1267,8 @@ func (e LinkTargetType) Valid() bool {
 	case LinkTargetTypeAccountConnections:
 		return true
 	case LinkTargetTypeApproval:
+		return true
+	case LinkTargetTypeAuditStream:
 		return true
 	case LinkTargetTypeAuthProviders:
 		return true
@@ -3566,6 +3587,20 @@ type AuditPage struct {
 	Items      []AuditEntry `json:"items"`
 	NextCursor *string      `json:"nextCursor,omitempty"`
 }
+
+// AuditSinkRequest defines model for AuditSinkRequest.
+type AuditSinkRequest struct {
+	BatchMaxRecords *int                     `json:"batch_max_records,omitempty"`
+	CursorSeq       *int64                   `json:"cursor_seq,omitempty"`
+	Enabled         *bool                    `json:"enabled,omitempty"`
+	Name            *string                  `json:"name,omitempty"`
+	Profile         *AuditSinkRequestProfile `json:"profile,omitempty"`
+	Required        *bool                    `json:"required,omitempty"`
+	Url             *string                  `json:"url,omitempty"`
+}
+
+// AuditSinkRequestProfile defines model for AuditSinkRequest.Profile.
+type AuditSinkRequestProfile string
 
 // AuditVia defines model for AuditVia.
 type AuditVia struct {
@@ -8165,6 +8200,42 @@ type AdminAuditSetRequiredParams struct {
 	IfMatch IfMatchHeader `json:"If-Match"`
 }
 
+// AdminAuditDeleteSinkParams defines parameters for AdminAuditDeleteSink.
+type AdminAuditDeleteSinkParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
+// AdminAuditUpdateSinkParams defines parameters for AdminAuditUpdateSink.
+type AdminAuditUpdateSinkParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
+// AdminAuditAcknowledgeSinkOversizedParams defines parameters for AdminAuditAcknowledgeSinkOversized.
+type AdminAuditAcknowledgeSinkOversizedParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
+// AdminAuditResumeSinkParams defines parameters for AdminAuditResumeSink.
+type AdminAuditResumeSinkParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
+// AdminAuditRotateSinkSecretParams defines parameters for AdminAuditRotateSinkSecret.
+type AdminAuditRotateSinkSecretParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
+// AdminAuditTestSinkParams defines parameters for AdminAuditTestSink.
+type AdminAuditTestSinkParams struct {
+	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
+	IfMatch IfMatchHeader `json:"If-Match"`
+}
+
 // AdminUpdateCaptureSettingsParams defines parameters for AdminUpdateCaptureSettings.
 type AdminUpdateCaptureSettingsParams struct {
 	// IfMatch The resource's revision, as returned in ETag (for example "3"). Missing returns 428; stale returns 412.
@@ -8687,6 +8758,15 @@ type AdminAuditRegisterConsumerJSONRequestBody = AuditConsumerRequest
 
 // AdminAuditSetRequiredJSONRequestBody defines body for AdminAuditSetRequired for application/json ContentType.
 type AdminAuditSetRequiredJSONRequestBody = AuditConsumerRequest
+
+// AdminAuditCreateSinkJSONRequestBody defines body for AdminAuditCreateSink for application/json ContentType.
+type AdminAuditCreateSinkJSONRequestBody = AuditSinkRequest
+
+// AdminAuditUpdateSinkJSONRequestBody defines body for AdminAuditUpdateSink for application/json ContentType.
+type AdminAuditUpdateSinkJSONRequestBody = AuditSinkRequest
+
+// AdminAuditResumeSinkJSONRequestBody defines body for AdminAuditResumeSink for application/json ContentType.
+type AdminAuditResumeSinkJSONRequestBody = AuditSinkRequest
 
 // AdminUpdateCaptureSettingsJSONRequestBody defines body for AdminUpdateCaptureSettings for application/json ContentType.
 type AdminUpdateCaptureSettingsJSONRequestBody = CaptureSettingsUpdate

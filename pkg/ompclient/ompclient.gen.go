@@ -799,6 +799,7 @@ const (
 	LinkTargetTypeAccountApiKeys           LinkTargetType = "account_api_keys"
 	LinkTargetTypeAccountConnections       LinkTargetType = "account_connections"
 	LinkTargetTypeApproval                 LinkTargetType = "approval"
+	LinkTargetTypeAuditStream              LinkTargetType = "audit_stream"
 	LinkTargetTypeAuthProviders            LinkTargetType = "auth_providers"
 	LinkTargetTypeAutomationTokens         LinkTargetType = "automation_tokens"
 	LinkTargetTypeGateways                 LinkTargetType = "gateways"
@@ -826,6 +827,8 @@ func (e LinkTargetType) Valid() bool {
 	case LinkTargetTypeAccountConnections:
 		return true
 	case LinkTargetTypeApproval:
+		return true
+	case LinkTargetTypeAuditStream:
 		return true
 	case LinkTargetTypeAuthProviders:
 		return true
@@ -5311,6 +5314,11 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/admin/audit/stream/ack (the `AdminAuditAck` operationId).
 	AdminAuditAck(ctx context.Context, body AdminAuditAckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// AdminAuditStreamStatus Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+	//
+	// Corresponds with GET /v1/admin/audit/stream/status (the `AdminAuditStreamStatus` operationId).
+	AdminAuditStreamStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AdminAuditStreamTip Advisory unsigned stream tip with checkpoint enablement, minimum reader version, last sequence and time; never replaces a pinned receiver anchor
 	//
 	// Corresponds with GET /v1/admin/audit/stream/tip (the `AdminAuditStreamTip` operationId).
@@ -5907,6 +5915,21 @@ func (c *Client) AdminAuditAckWithBody(ctx context.Context, contentType string, 
 // Corresponds with POST /v1/admin/audit/stream/ack (the `AdminAuditAck` operationId).
 func (c *Client) AdminAuditAck(ctx context.Context, body AdminAuditAckJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAdminAuditAckRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AdminAuditStreamStatus Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+//
+// Corresponds with GET /v1/admin/audit/stream/status (the `AdminAuditStreamStatus` operationId).
+func (c *Client) AdminAuditStreamStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminAuditStreamStatusRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -7528,6 +7551,33 @@ func NewAdminAuditAckRequestWithBody(server string, contentType string, body io.
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewAdminAuditStreamStatusRequest constructs an http.Request for the AdminAuditStreamStatus method
+func NewAdminAuditStreamStatusRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/admin/audit/stream/status")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -10816,6 +10866,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/admin/audit/stream/ack (the `AdminAuditAck` operationId).
 	AdminAuditAckWithResponse(ctx context.Context, body AdminAuditAckJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminAuditAckResponse, error)
 
+	// AdminAuditStreamStatusWithResponse Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/admin/audit/stream/status (the `AdminAuditStreamStatus` operationId).
+	AdminAuditStreamStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminAuditStreamStatusResponse, error)
+
 	// AdminAuditStreamTipWithResponse Advisory unsigned stream tip with checkpoint enablement, minimum reader version, last sequence and time; never replaces a pinned receiver anchor
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -11738,6 +11795,89 @@ func (r AdminAuditAckResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r AdminAuditAckResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AdminAuditStreamStatusResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *map[string]interface{}
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *ErrorReply
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *ErrorReply
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *ErrorReply
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *ErrorReply
+	// JSON428 the response for an HTTP 428 `application/json` response
+	JSON428 *ErrorReply
+	// JSON500 the response for an HTTP 500 `application/json` response
+	JSON500 *ErrorReply
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AdminAuditStreamStatusResponse) GetJSON200() *map[string]interface{} {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r AdminAuditStreamStatusResponse) GetJSON400() *ErrorReply {
+	return r.JSON400
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r AdminAuditStreamStatusResponse) GetJSON403() *ErrorReply {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r AdminAuditStreamStatusResponse) GetJSON404() *ErrorReply {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r AdminAuditStreamStatusResponse) GetJSON409() *ErrorReply {
+	return r.JSON409
+}
+
+// GetJSON428 returns the response for an HTTP 428 `application/json` response
+func (r AdminAuditStreamStatusResponse) GetJSON428() *ErrorReply {
+	return r.JSON428
+}
+
+// GetJSON500 returns the response for an HTTP 500 `application/json` response
+func (r AdminAuditStreamStatusResponse) GetJSON500() *ErrorReply {
+	return r.JSON500
+}
+
+// GetBody returns the raw response body bytes
+func (r AdminAuditStreamStatusResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminAuditStreamStatusResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminAuditStreamStatusResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AdminAuditStreamStatusResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -15891,6 +16031,19 @@ func (c *ClientWithResponses) AdminAuditAckWithResponse(ctx context.Context, bod
 	return ParseAdminAuditAckResponse(rsp)
 }
 
+// AdminAuditStreamStatusWithResponse Audit sink management; browser sessions only, auditors read-only; URL write-only and secrets shown once
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/admin/audit/stream/status (the `AdminAuditStreamStatus` operationId).
+func (c *ClientWithResponses) AdminAuditStreamStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminAuditStreamStatusResponse, error) {
+	rsp, err := c.AdminAuditStreamStatus(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminAuditStreamStatusResponse(rsp)
+}
+
 // AdminAuditStreamTipWithResponse Advisory unsigned stream tip with checkpoint enablement, minimum reader version, last sequence and time; never replaces a pinned receiver anchor
 //
 // Returns a wrapper object for the known response body format(s).
@@ -17194,6 +17347,74 @@ func ParseAdminAuditAckResponse(rsp *http.Response) (*AdminAuditAckResponse, err
 			return nil, err
 		}
 		response.JSON410 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 428:
+		var dest ErrorReply
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON428 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorReply
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminAuditStreamStatusResponse parses an HTTP response from a AdminAuditStreamStatusWithResponse call
+func ParseAdminAuditStreamStatusResponse(rsp *http.Response) (*AdminAuditStreamStatusResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminAuditStreamStatusResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorReply
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorReply
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorReply
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorReply
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 428:
 		var dest ErrorReply

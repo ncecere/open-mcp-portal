@@ -11,6 +11,8 @@ Slice 2 ships as two consecutive parts, each a reviewable unit:
 
 Slice 3 adds syslog over TLS and OTLP to the sink model of 2b; slice 4 adds bulk exports.
 
+Part 3 adds the management API and sink rollout CLI; the Admin Audit stream UI remains part 4. Operator procedures are in [audit-sinks-operations.md](audit-sinks-operations.md).
+
 ## 1. Goal and non-goals
 
 The portal pushes the audit stream to a receiver itself, and periodically signs where the chain stands, so a receiver
