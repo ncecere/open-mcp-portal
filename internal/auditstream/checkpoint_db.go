@@ -48,14 +48,11 @@ type checkpointSnapshot struct {
 	private   ed25519.PrivateKey
 }
 
-func readCheckpointSnapshot(ctx context.Context, tx pgx.Tx, box *secrets.Box, lock bool) (checkpointSnapshot, error) {
+func readCheckpointSnapshot(ctx context.Context, tx pgx.Tx, box *secrets.Box) (checkpointSnapshot, error) {
 	var s checkpointSnapshot
 	var hash, kid, pub, cipher []byte
 	q := `SELECT s.stream_id,s.epoch,s.last_seq,s.last_chain_hash,s.system_identifier,s.timeline,s.status,coalesce(s.checkpoints_enabled,false),s.epoch_pending IS NOT NULL,k.kid,k.public_key,k.private_key_cipher
  FROM omp_audit.state s JOIN omp_audit_ext.checkpoint_keys k ON k.state='active' WHERE s.singleton`
-	if lock {
-		q += ` FOR UPDATE OF s`
-	}
 	err := tx.QueryRow(ctx, q).Scan(&s.statement.Stream, &s.statement.Epoch, &s.statement.CoveredSeq, &hash, &s.system, &s.timeline, &s.status, &s.enabled, &s.pending, &kid, &pub, &cipher)
 	if err != nil {
 		return s, err
@@ -87,7 +84,7 @@ func SubmitCheckpoint(ctx context.Context, pool *pgxpool.Pool, box *secrets.Box)
 	var err error
 	for range 8 {
 		err = pgx.BeginTxFunc(ctx, pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead}, func(tx pgx.Tx) error {
-			s, e := readCheckpointSnapshot(ctx, tx, box, false)
+			s, e := readCheckpointSnapshot(ctx, tx, box)
 			if e != nil {
 				return e
 			}
@@ -123,7 +120,7 @@ func RotateCheckpointKeyTx(ctx context.Context, tx pgx.Tx, box *secrets.Box) (in
 	if err := lockCheckpointState(ctx, tx, box); err != nil {
 		return 0, err
 	}
-	s, err := readCheckpointSnapshot(ctx, tx, box, false)
+	s, err := readCheckpointSnapshot(ctx, tx, box)
 	if err != nil {
 		return 0, err
 	}
