@@ -534,7 +534,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Advisory unsigned stream tip; never replaces a pinned receiver anchor */
+        /** Advisory unsigned stream tip with checkpoint enablement, minimum reader version, last sequence and time; never replaces a pinned receiver anchor */
         get: operations["adminAuditStreamTip"];
         put?: never;
         post?: never;
@@ -551,7 +551,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Recompute retained summary, entry and chain hashes; report first bad sequence */
+        /** Verify retained hashes and checkpoint bindings, Ed25519 signatures and authority ranges; report first bad sequence */
         get: operations["adminAuditVerify"];
         put?: never;
         post?: never;
@@ -570,7 +570,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Bounded full-row JSON chunks; consumer query records an oversized fetch */
+        /** Bounded full-row JSON chunks, or normative checkpoint envelope for checkpoint sequences; consumer query records an oversized entry fetch */
         get: operations["adminAuditFull"];
         put?: never;
         post?: never;

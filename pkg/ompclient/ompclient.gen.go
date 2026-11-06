@@ -5287,7 +5287,7 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/admin/audit (the `AdminListAudit` operationId).
 	AdminListAudit(ctx context.Context, params *AdminListAuditParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// AdminAuditFull Bounded full-row JSON chunks; consumer query records an oversized fetch
+	// AdminAuditFull Bounded full-row JSON chunks, or normative checkpoint envelope for checkpoint sequences; consumer query records an oversized entry fetch
 	//
 	// Corresponds with GET /v1/admin/audit/entries/{seq}/full (the `AdminAuditFull` operationId).
 	AdminAuditFull(ctx context.Context, seq int64, params *AdminAuditFullParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5853,7 +5853,7 @@ func (c *Client) AdminListAudit(ctx context.Context, params *AdminListAuditParam
 	return c.Client.Do(req)
 }
 
-// AdminAuditFull Bounded full-row JSON chunks; consumer query records an oversized fetch
+// AdminAuditFull Bounded full-row JSON chunks, or normative checkpoint envelope for checkpoint sequences; consumer query records an oversized entry fetch
 //
 // Corresponds with GET /v1/admin/audit/entries/{seq}/full (the `AdminAuditFull` operationId).
 func (c *Client) AdminAuditFull(ctx context.Context, seq int64, params *AdminAuditFullParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -10788,7 +10788,7 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/admin/audit (the `AdminListAudit` operationId).
 	AdminListAuditWithResponse(ctx context.Context, params *AdminListAuditParams, reqEditors ...RequestEditorFn) (*AdminListAuditResponse, error)
 
-	// AdminAuditFullWithResponse Bounded full-row JSON chunks; consumer query records an oversized fetch
+	// AdminAuditFullWithResponse Bounded full-row JSON chunks, or normative checkpoint envelope for checkpoint sequences; consumer query records an oversized entry fetch
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -15839,7 +15839,7 @@ func (c *ClientWithResponses) AdminListAuditWithResponse(ctx context.Context, pa
 	return ParseAdminListAuditResponse(rsp)
 }
 
-// AdminAuditFullWithResponse Bounded full-row JSON chunks; consumer query records an oversized fetch
+// AdminAuditFullWithResponse Bounded full-row JSON chunks, or normative checkpoint envelope for checkpoint sequences; consumer query records an oversized entry fetch
 //
 // Returns a wrapper object for the known response body format(s).
 //

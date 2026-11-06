@@ -1092,7 +1092,7 @@ paths:
     get:
       tags: [admin]
       operationId: adminAuditFull
-      summary: Bounded full-row JSON chunks; consumer query records an oversized fetch
+      summary: Bounded full-row JSON chunks, or normative checkpoint envelope for checkpoint sequences; consumer query records an oversized entry fetch
       x-omp-token-scopes: [platform:read]
       parameters:
       - name: consumer
