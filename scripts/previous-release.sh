@@ -8,7 +8,8 @@
 #   scripts/previous-release.sh --tag v0.7.0  # that release's digest (older start for a real schema change)
 #
 # "Previous release" is the newest final release tag (vX.Y.Z, no pre-release
-# suffix) that is reachable from HEAD and does not point at HEAD itself: on a
+# suffix) that is reachable from HEAD, was published (not in UNPUBLISHED_TAGS)
+# and does not point at HEAD itself: on a
 # release tag it is the release before that one, on main the latest release.
 # The digest is read from the registry (the image index's Docker-Content-Digest,
 # anonymous pull token). When the example overlay at HEAD pins that same tag
@@ -29,12 +30,20 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 die() { echo "previous-release: $*" >&2; exit 1; }
 
+# Release tags that exist but were never published (no image, no release), so
+# nobody can be running them and there is nothing to upgrade from. Tags are
+# immutable, so a failed publication stays a tag; list it here. Override with
+# OMP_UNPUBLISHED_TAGS (space separated) in tests.
+#   v0.15.0: image scan failed on CVE-2026-78661; superseded by v0.15.1.
+UNPUBLISHED_TAGS="${OMP_UNPUBLISHED_TAGS-v0.15.0}"
+
 # previous_tag: reads tags on stdin, one per line, and the tags on HEAD in the
 # environment variable HEAD_TAGS (space separated); prints the newest final
 # release tag that is not one of those.
 previous_tag() {
   grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V -r | while read -r t; do
     case " ${HEAD_TAGS:-} " in *" $t "*) continue ;; esac
+    case " ${UNPUBLISHED_TAGS:-} " in *" $t "*) continue ;; esac
     echo "$t"
     break
   done

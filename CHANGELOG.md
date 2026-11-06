@@ -6,7 +6,11 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
-## [0.15.0] - 2026-11-06
+## [0.15.1] - 2026-11-06
+
+- **Security:** `golang.org/x/net` v0.62.0 (CVE-2026-78661, HIGH). The v0.15.0 tag's release image scan failed on this CVE, so v0.15.0 was never published. v0.15.1 is v0.15.0 plus this fix.
+
+## [0.15.0] - (tag only, never published) 2026-11-06
 
 - **Signed audit checkpoints (#38 slice 2a; off until enabled).** The sealer leader signs the chain position with a dedicated, install-local Ed25519 key every 10,000 entries, or every 15 minutes when there was activity. Keys are sealed with `ENCRYPTION_KEY`, published at `/.well-known/omp-audit-keys.json`, rotated through an atomic handover (`audit-stream rotate-checkpoint-key`), and limited to the sequence range they may sign. `audit-stream verify` and the pull API check signatures and authority. Turn it on with `audit-stream enable-checkpoints --min-reader-version-ack`, a one-way minimum-reader-version step, after every replica runs 0.15.0. Migration 63 (`omp_audit_ext`, a manifest-driven protected schema).
 - **Audit webhook sinks (#38 slice 2b; off until enabled).** The portal pushes the sealed audit stream to a receiver (a SIEM): in order, at least once, HMAC-signed, outside transactions, with no redirects. Destinations are restricted by `AUDIT_STREAM_ALLOWED_NETWORKS` and resolved when saved. Admins get failure and recovery notices. Required sinks hold audit retention until delivery. Manage sinks under **Admin › Audit stream** (browser session, platform admins; auditors read-only). Turn delivery on with `audit-stream enable-sinks --min-reader-version-ack` after every replica runs 0.15.0. Older releases' notification dispatchers drop unknown events, so run `disable-sinks` before any rollback. Migration 64.
