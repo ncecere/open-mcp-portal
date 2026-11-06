@@ -1,4 +1,4 @@
-# Informational primitive evidence, not scanner/enforcement/release acceptance.
+# Informational primitive and definition-v1 evidence, not scanner/enforcement/release acceptance.
 name: scanning-corpus
 on:
   schedule:
@@ -39,10 +39,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/corpus-report"
           go run ./internal/scancorpus/cmd/corpus > "$RUNNER_TEMP/corpus-report/synthetic.json"
           go run ./internal/scancorpus/cmd/corpus -public > "$RUNNER_TEMP/corpus-report/public.json"
-          go test -timeout=20m -run '^$' -bench BenchmarkPrimitive -benchmem -benchtime=200ms -count=3 ./internal/scancorpus > "$RUNNER_TEMP/corpus-report/primitive-bench.txt"
+          go test -timeout=20m -run '^$' -bench 'BenchmarkPrimitive|BenchmarkDefinition' -benchmem -benchtime=200ms -count=3 ./internal/scancorpus ./internal/definitionscan > "$RUNNER_TEMP/corpus-report/scanning-bench.txt"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: scanning-primitive-evidence
+          name: scanning-corpus-evidence
           path: ${{ runner.temp }}/corpus-report/
           retention-days: 14
           if-no-files-found: error

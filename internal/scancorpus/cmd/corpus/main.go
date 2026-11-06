@@ -21,7 +21,10 @@ func main() {
 func run() error {
 	public := flag.Bool("public", false, "fetch the pinned reviewed public sample")
 	flag.Parse()
-	report := scancorpus.SyntheticReport()
+	report := struct {
+		Primitives  scancorpus.Report `json:"primitives"`
+		Definitions scancorpus.Report `json:"definitions"`
+	}{scancorpus.SyntheticReport(), scancorpus.DefinitionReport()}
 	if *public {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
@@ -38,7 +41,8 @@ func run() error {
 		if err = os.WriteFile(dir+"/sample", data, 0600); err != nil {
 			return fmt.Errorf("scratch_refused")
 		}
-		report = scancorpus.PublicReport(string(data))
+		report.Primitives = scancorpus.PublicReport(string(data))
+		report.Definitions = scancorpus.PublicDefinitionReport(string(data))
 	}
 	return json.NewEncoder(os.Stdout).Encode(report)
 }

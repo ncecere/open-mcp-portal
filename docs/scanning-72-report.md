@@ -44,11 +44,11 @@ alter definitions, fingerprints, approval state or digest inputs.
 
 | Item | Tests / remaining evidence |
 | --- | --- |
-| A1 | `TestDefinitionCorpus`, `TestDefinitionRemainingGroups`, `TestDefinitionSecretCorpus`, `TestDefinitionBenignRate`, `TestDefinitionKnownMissLedger`, `TestConfusableNames`. Primitive/capture fixtures and assertions unchanged. Authored benign samples are synthetic and narrow. New stage fixtures are test-only; the aggregate corpus CLI still reports primitive findings. The stage ledger separately pins semantic paraphrases, spread selectors and split-field length misses. Existing public workflow/manifest unchanged; no new hosted run or public download claimed. |
-| A2 | `TestDefinitionTailAndRefreshBudget`, `BenchmarkDefinition`, `BenchmarkDefinitionPathological`; direct gateway import check and empty `git diff v0.13.1 -- internal/mcpgw`. Not complete: strict 8x allocation gate, added-CPU/2x-headroom evidence, call-path benchmark and actual 2,000-definition upstream refresh integration (the test exercises scanner workload only). |
+| A1 | **Pass locally; scheduled archive pending.** Definition-v1 aggregate CLI now covers all 32 rules/four groups; 245 scored cases, 35 targeted TP, 0 FN and 0 benign FP; four ledger misses excluded. Public pinned-source exploratory report has five findings, no labelled precision/recall. See cleanup evidence below. Previous evidence:  `TestDefinitionCorpus`, `TestDefinitionRemainingGroups`, `TestDefinitionSecretCorpus`, `TestDefinitionBenignRate`, `TestDefinitionKnownMissLedger`, `TestConfusableNames`. Primitive/capture fixtures and assertions unchanged. Authored benign samples are synthetic and narrow. New stage fixtures are test-only; the aggregate corpus CLI still reports primitive findings. The stage ledger separately pins semantic paraphrases, spread selectors and split-field length misses. Existing public workflow/manifest unchanged; no new hosted run or public download claimed. |
+| A2 | **Partial.** Added process-CPU and allocation gates, plus a real paginated refresh with 2,000 canonical 64 KiB definitions. Measured/gate deviations and retained gaps below. Previous evidence:  `TestDefinitionTailAndRefreshBudget`, `BenchmarkDefinition`, `BenchmarkDefinitionPathological`; direct gateway import check and empty `git diff v0.13.1 -- internal/mcpgw`. Not complete: strict 8x allocation gate, added-CPU/2x-headroom evidence, call-path benchmark and actual 2,000-definition upstream refresh integration (the test exercises scanner workload only). |
 | A3 | `TestDefinitionPersistencePrivacyAndFailure`: public-table dumps excluding only definition, debug logs, service API output, registered metrics, arbitrary key/parameter-name and unmatched-text canaries. `TestDefinitionSchemaConstraints`: pinned columns and invalid ids. `TestScanningPrivacySentinel` adds a matched-secret canary and checks all new read/rescan HTTP responses, settings errors, exported spans, debug logs, metrics and both public/private-schema database dumps in both role modes. |
 | A4 | Fixed catalog, KnownRule bounding and unknown-to-other metric label behavior; registered in appCollectors for `TestOpsArtifactsUseRealMetrics`. `TestScanMetricCardinality` enumerates catalog labels, rejects unknown catalog lookup, verifies unknown-to-other collapse and gathered dimensions. The catalog is static; no dynamic registration API exists. |
-| A5 | `TestScanRefreshShadowIsNonInterfering`: capability rows equal except pre-existing refresh timestamp; ruleset changes and findings-write constraint failure preserve capability state in persistence test. Existing review-digest tests unchanged. Persistence test directly asserts ruleset-version changes preserve ReviewDigest. A complete refresh-response byte comparison remains outstanding. |
+| A5 | **Pass for unchanged refreshes locally.** `TestScanRefreshBytesIdentical` compares serialized complete refresh results, stored capability rows and review digests across off/shadow, normalizing only the pre-existing `last_seen_at` refresh clock. Definitions, fingerprints, approvals and publish fields remain byte-identical. Previous evidence:  `TestScanRefreshShadowIsNonInterfering`: capability rows equal except pre-existing refresh timestamp; ruleset changes and findings-write constraint failure preserve capability state in persistence test. Existing review-digest tests unchanged. Persistence test directly asserts ruleset-version changes preserve ReviewDigest. A complete refresh-response byte comparison remains outstanding. |
 | A6 | `TestLimitsAndPrivacy`, `TestRulePanicIsIncomplete`: cancellation, depth, size and panic return incomplete. |
 | A8 | `TestScanningSettingsAPI`, `TestScanningSettingsRevisionAndSession`, authorization matrix and unchanged token matrix: visibility, sessions, audit and 409 conflicts. |
 | A10 | Expand-only migration; constraint/cascade tests and standard grant reconciliation. Role-suite results below. Previous-image compatibility not run: existing tooling is kind upgrade smoke; kind is absent. No existing containers/dev databases changed. |
@@ -255,3 +255,52 @@ The complete current tree has not passed fresh full quiet-run suites after these
 last detector/backfill refinements. The earlier full passes and latest timeout
 are retained separately; this report does not substitute targeted checks for
 that remaining full-suite gate.
+
+## Post-v0.14.0 cleanup evidence (2026-11-06)
+
+No product scanner, admission behavior, migration or 25 ms deadline changed.
+Found nothing ≠ safe. Public source stays scratch-only; the pinned downloader and
+licence rules are unchanged. The aggregate CLI now emits separate primitive and
+definition reports, with all four definition groups. Positive fixture scores are
+for their targeted rule (incidental findings contribute counts only); benign
+fixtures score every rule. Public source is scanned as bounded description chunks,
+with no labelled precision claim or cross-chunk/inventory-name coverage.
+`TestDefinitionAggregateReport` pins catalog coverage and ledger count; existing
+must-catch severity, benign rate and exact ledger-set assertions remain unchanged.
+The workflow archives both reports and definition/pathological benchmarks; this
+local branch has not triggered a hosted scheduled archive.
+
+Resource measurements (`~/.cache/cleanup-72-resources.log`): 500 × 2,043-byte
+scans used 74.939 ms process CPU (user + system via getrusage). Race-instrumented
+runs used 799.891–822.668 ms. The explicit 2 s CPU threshold has >2x headroom even
+under race instrumentation; it replaces the proposed 250 ms threshold for this
+instrumented test, and does not assert a 250 ms race budget. Near-matches allocated
+447,488 bytes / 56,018 bytes (7.99x); Unicode 108,416 / 30,018 (3.61x); encoded
+133,536 / 60,018 (2.22x). The 20x allocation threshold has >2x headroom. **The
+proposed 8x bound lacks 2x headroom and is not claimed.** Measurements are Linux
+process-local tests, not a whole-portal CPU profile. Scanner allocation/GC costs
+are included; scanning off does no scanner work.
+
+The real fake-upstream refresh uses 500 tools, resources, templates and prompts
+each (the existing per-kind cap), paginated ten at a time. Every stored definition
+is checked after JSONB canonicalization to be exactly 65,536 bytes. The fixture
+uses the supported 120 s upstream timeout to accommodate 128 MiB over 200 wire
+pages under race instrumentation; scanner budgets remain unchanged. A normal
+run completed in 16.57 s, with all 2,000 scans stored and 1,830 incomplete.
+Initial fixture attempts (2,000 tools, stripped `_meta` padding, raw JSONB size,
+and a 30 s upstream timeout under race) failed and were corrected without changing
+production limits or existing assertions. Logs stay in `~/.cache/cleanup-*`.
+
+`TestScanRefreshAddedCPU` additionally measures an actual 500 × 2,048-byte
+paginated refresh in off and shadow modes, after warming discovery. Normal
+process CPU was 1.312307 s off versus 1.493098 s shadow: **180.791 ms added**,
+with a 4 s explicit threshold (>2x the measured race delta). Race role 0
+was 3.241061 s off / 4.746493 s shadow / 1.505432 s added; role 1 was
+3.220478 s off / 4.480739 s shadow / 1.260261 s added. This includes the in-process fake upstream and
+registry/storage work, unlike the scanner-loop measurement above. Every returned
+definition is asserted to be exactly 2,048 canonical bytes.
+
+A2 remains partial: no before/after call-path performance benchmark is claimed;
+the unchanged import check proves only absence of the scanner dependency.
+A10's previous-image compatibility evidence remains as documented above.
+Consequently **not every A-item is met**; do not close #72 on this evidence alone.

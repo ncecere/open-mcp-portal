@@ -6,6 +6,10 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
+## Unreleased
+
+- Definition scanning evidence: aggregate v1 corpus results, CPU/allocation gates, a 2,000-definition real refresh and off/shadow refresh byte comparison (#72).
+
 ## [0.14.0] - 2026-11-05
 
 - **Definition scanning, shadow only (#72, #73).** Every capability definition is scanned at refresh with local heuristics: 32 rules in the secret, unicode, poison and length groups. Findings appear in the Capabilities tab and the publish and review dialogs, and Admin › Settings switches scanning between `off` and `shadow` (the default on upgrade). Nothing is blocked, redacted or approved, and zero findings never means safe. Migration 61.
