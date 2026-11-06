@@ -44,6 +44,7 @@ func (a *api) sinkRoutes() []route {
 	}
 }
 func (a *api) auditSinks(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	if a.actor(r).IsToken() {
 		httpx.Error(w, 403, "token_not_allowed", "Browser session required")
 		return
@@ -63,8 +64,14 @@ func (a *api) auditSinks(w http.ResponseWriter, r *http.Request) {
 		if failed(w, r, e) {
 			return
 		}
+		var view struct {
+			Revision int64 `json:"revision"`
+		}
+		if json.Unmarshal(raw, &view) == nil {
+			setETag(w, view.Revision)
+		}
 	} else {
-		if failed(w, r, a.Pool.QueryRow(r.Context(), `SELECT coalesce(jsonb_agg(v ORDER BY v->>'name'),'[]') FROM (SELECT `+sinkView+` v FROM omp_audit_ext.sinks) s`).Scan(&raw)) {
+		if failed(w, r, a.Pool.QueryRow(r.Context(), `SELECT jsonb_build_object('items',coalesce(jsonb_agg(v ORDER BY v->>'name'),'[]')) FROM (SELECT `+sinkView+` v FROM omp_audit_ext.sinks) s`).Scan(&raw)) {
 			return
 		}
 	}
@@ -96,6 +103,10 @@ func sinkError(w http.ResponseWriter, r *http.Request, e error) bool {
 	if e == nil {
 		return false
 	}
+	if errors.Is(e, pgx.ErrNoRows) {
+		httpx.Error(w, 404, "sink_not_found", "Sink not found")
+		return true
+	}
 	var pe *pgconn.PgError
 	if errors.As(e, &pe) {
 		if pe.Code == "22023" {
@@ -120,6 +131,7 @@ func sinkError(w http.ResponseWriter, r *http.Request, e error) bool {
 	return true
 }
 func (a *api) auditSinkChange(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	if !a.consumerAdmin(w, r) {
 		return
 	}
@@ -247,7 +259,7 @@ func (a *api) auditSinkChange(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case test:
 			// No row lock is held during network I/O. The revision is checked again
-			// before recording the action; a test never touches the delivery cursor.
+			// before sending; a test never touches the delivery cursor.
 		case resume:
 			if in.CursorSeq == nil {
 				return apperr.Invalid("cursor_required", "cursor_seq required")

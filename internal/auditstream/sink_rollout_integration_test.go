@@ -17,6 +17,9 @@ import (
 // Use an unchanged executable, not a reimplementation of fanOutNext. Older
 // dispatchers consume unknown events without creating any recipient deliveries.
 func TestOldDispatcherDropsSinkEvents(t *testing.T) {
+	if os.Getenv("OMP_TEST_PREVIOUS_BINARY") == "" && os.Getenv("OMP_TEST_2A_BINARY") == "" {
+		t.Skip("set OMP_TEST_PREVIOUS_BINARY and OMP_TEST_2A_BINARY to real old executables")
+	}
 	for _, binary := range []string{os.Getenv("OMP_TEST_PREVIOUS_BINARY"), os.Getenv("OMP_TEST_2A_BINARY")} {
 		if binary == "" {
 			continue

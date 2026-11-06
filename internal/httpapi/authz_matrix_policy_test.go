@@ -111,7 +111,7 @@ var matrixPolicies = map[string]policy{
 	"adminAuditRotateSinkSecret":         {own: padmin, build: func(c *mctx) request { return sinkMatrixRequest(c, "POST", "/rotate-secret", nil) }},
 	"adminAuditTestSink":                 {own: padmin, build: func(c *mctx) request { return sinkMatrixRequest(c, "POST", "/test", nil) }},
 	"adminAuditResumeSink":               {own: padmin, build: func(c *mctx) request { return sinkMatrixRequest(c, "POST", "/resume", map[string]any{"cursor_seq": 0}) }},
-	"adminAuditAcknowledgeSinkOversized": {own: padmin, anyStatus: true, build: func(c *mctx) request { return sinkMatrixRequest(c, "POST", "/oversized/1/acknowledge", nil) }},
+	"adminAuditAcknowledgeSinkOversized": {own: padmin, build: func(c *mctx) request { return c.oversizedSinkRequest() }},
 
 	"adminAuditStream":    {own: platform, build: func(*mctx) request { return get("/v1/admin/audit/stream") }},
 	"adminAuditStreamTip": {own: platform, build: func(*mctx) request { return get("/v1/admin/audit/stream/tip") }},
