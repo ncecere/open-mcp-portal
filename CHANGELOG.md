@@ -8,6 +8,8 @@ breaking changes; the entry says how to adapt.
 
 ## Unreleased
 
+- Add Admin › Audit stream with read-only auditor visibility, retention effects, sink and consumer management, one-time signing secrets, recovery confirmations and notification routing (#38 slice 2b).
+
 - Add browser-session audit sink management, secret rotation, test/recovery actions, secret-free status, sink notification links and explicit sink rollout/rollback gates.
 
 
