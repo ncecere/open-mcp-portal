@@ -1,12 +1,17 @@
 package auditstream
 
 import (
+	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/ncecere/open-mcp-portal/internal/secrets"
 	"os"
 	"sync"
 	"testing"
@@ -58,8 +63,18 @@ func TestCheckpointDatabaseValidation(t *testing.T) {
 	if err := submitCheckpoint(p, checkpointSubmission(t, s, key)); err == nil {
 		t.Fatal("disabled checkpoint accepted")
 	}
-	if _, err := p.Exec(ctx, `SELECT omp_audit_ext.rotate_checkpoint_key($1,$2,$3,$4,$5)`, kid[:], []byte(pub), []byte{1}, []byte{}, []byte{}); err == nil {
-		t.Fatal("disabled rotation accepted")
+	pub2, key2, _ := ed25519.GenerateKey(rand.Reader)
+	kid2 := CheckpointKeyID(pub2)
+	handover := s
+	handover.Kids = []CheckpointKID{kid, kid2}
+	raw, sigs, err := SignCheckpoint(handover, key, key2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = p.Exec(ctx, `SELECT omp_audit_ext.rotate_checkpoint_key($1,$2,$3,$4,$5)`, kid2[:], []byte(pub2), []byte{2}, raw, sigs)
+	var pg *pgconn.PgError
+	if !errors.As(err, &pg) || pg.Code != "40001" {
+		t.Fatalf("disabled rotation must hit enable fence: %v", err)
 	}
 	drain(t, p)
 	exec(t, owner, `SELECT omp_audit_ext.enable_checkpoints('0.15.0')`)
@@ -133,6 +148,11 @@ func TestCheckpointDatabaseValidation(t *testing.T) {
 	drain(t, p)
 	if n := count(t, p, `SELECT entries_since_checkpoint FROM omp_audit.state`); n != 1 {
 		t.Fatalf("entry counter %d", n)
+	}
+	exec(t, owner, `SELECT omp_audit.prepare_epoch('rebase',(SELECT last_seq+5 FROM omp_audit.state))`)
+	exec(t, owner, `SELECT omp_audit.append_epoch(NULL)`)
+	if n := count(t, p, `SELECT entries_since_checkpoint FROM omp_audit.state`); n != 1 {
+		t.Fatalf("epoch/gap incremented entry counter: %d", n)
 	}
 	s, _ = checkpointDBFixture(t, p, kid)
 	if err := submitCheckpoint(p, checkpointSubmission(t, s, key)); err != nil {
@@ -237,5 +257,78 @@ func TestCheckpointSQLSharedVectors(t *testing.T) {
 				t.Fatalf("SQL differs from shared vectors: %s %s", summary, chain)
 			}
 		})
+	}
+}
+
+func TestCheckpointHelpersRotationProgress(t *testing.T) {
+	p, _ := testutil.NewDB(t)
+	owner := testutil.OwnerPool(t, p)
+	box, err := secrets.New(bytes.Repeat([]byte{9}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	errs := make(chan error, 8)
+	for range 8 {
+		wg.Go(func() { _, err := EnsureCheckpointKey(ctx, p, box); errs <- err })
+	}
+	wg.Wait()
+	for range 8 {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	exec(t, owner, `SELECT omp_audit_ext.enable_checkpoints('0.15.0')`)
+	if _, err := SubmitCheckpoint(ctx, p, box); err != nil {
+		t.Fatal(err)
+	}
+	var old []byte
+	if err := p.QueryRow(ctx, `SELECT kid FROM omp_audit_ext.checkpoint_keys WHERE state='active'`).Scan(&old); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := p.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RotateCheckpointKeyTx(ctx, tx, box); err != nil {
+		tx.Rollback(ctx)
+		t.Fatal(err)
+	}
+	if err := tx.Rollback(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, p, `SELECT count(*) FROM omp_audit_ext.checkpoint_keys WHERE kid=$1 AND state='active'`, old); n != 1 {
+		t.Fatal("aborted rotation lost active key")
+	}
+	c, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		for c.Err() == nil {
+			if _, err := (Sealer{p}).Batch(c); err != nil && c.Err() == nil {
+				var pg *pgconn.PgError
+				if errors.As(err, &pg) && pg.Code == "P0001" && pg.Message == "invalid record" {
+					continue
+				}
+				done <- err
+				return
+			}
+		}
+		done <- nil
+	}()
+	for range 3 {
+		exec(t, p, insert)
+		if _, err := RotateCheckpointKey(c, p, box); err != nil {
+			cancel()
+			<-done
+			t.Fatal(err)
+		}
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, p, `SELECT count(*) FROM omp_audit_ext.checkpoint_keys WHERE state='retired' AND private_key_cipher IS NULL`); n != 3 {
+		t.Fatalf("retired keys %d", n)
 	}
 }
