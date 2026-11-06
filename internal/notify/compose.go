@@ -107,6 +107,13 @@ func compose(ev dbgen.NotificationEvent, team *teamInfo) Message {
 	}
 	m := Message{Title: ev.Event, Body: ""}
 	switch ev.Event {
+	case AuditSinkFailing:
+		m.Title = "Audit sink delivery is failing"
+		m.Body = "Three consecutive delivery attempts failed. Review the audit sink status and receiver availability."
+	case AuditSinkRecovered:
+		m.Title = "Audit sink delivery recovered"
+		m.Body = "Audit delivery succeeded after a notified failure streak."
+
 	case AccessRequested, AccessDecided:
 		var d accessNotificationData
 		if json.Unmarshal(ev.Payload, &d) != nil || d.RequestID == uuid.Nil {
