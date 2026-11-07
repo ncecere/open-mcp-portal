@@ -767,6 +767,9 @@ func TestTokenRateLimits(t *testing.T) {
 		byName[c.name] = c
 	}
 	a, b := byName["platform-read"], byName["platform-write"]
+	// Both limits count fixed minute windows: start with time left in the window
+	// and empty counters, so neither burst can straddle a reset (#96).
+	freshWindow(t, e.app.Pool)
 	var last int
 	var hdr http.Header
 	for i := 0; i < 6; i++ {
