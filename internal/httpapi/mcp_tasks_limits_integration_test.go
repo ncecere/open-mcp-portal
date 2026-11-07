@@ -359,6 +359,9 @@ func (e *tasksEnv) getRaw(gateway, key, handle string) (int, map[string]any) {
 func TestTaskOperationsCountAgainstTheServerQuota(t *testing.T) {
 	e := newTasksEnv(t, tasksOptions{})
 	e.patchServer(e.owner, e.srv, map[string]any{"rateLimitPerMinute": 3})
+	// The quota counts fixed minute windows: start the burst with at least 10 s
+	// left in the window and no earlier hits (#96), as every other quota test does.
+	freshWindow(t, e.app.Pool)
 	handle := e.create("support", e.key.Secret)                                                  // 1
 	if code, out := e.get("support", e.key.Secret, handle); code != 200 || out["error"] != nil { // 2
 		t.Fatalf("get = %d %v", code, out)
