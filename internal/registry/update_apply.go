@@ -31,45 +31,7 @@ func (s *Service) applyOAuth(ctx context.Context, q *dbgen.Queries, a authz.Acto
 		return true, authUpdateAudit(ctx, q, a, &cur, nil, row, &np, map[string]any{"registered": pre.plan.registered,
 			"clientIdChanged": true, "clientSecretChanged": pre.plan.secret != nil, "connectionsReset": 0})
 	case afterMode == AuthOAuth && prov != nil:
-		// Tokens are for one resource: another origin always starts over, even
-		// when discovery at the new host happens to give an identical plan (F-1).
-		originMoved := !sameOrigin(cur.URL, row.URL)
-		if originMoved && pre.plan == nil {
-			return false, errors.New("registry: another origin without a sign-in plan")
-		}
-		if !originMoved && (pre.plan == nil || planUnchanged(*prov, pre.plan)) {
-			if row.Name != cur.Name {
-				if err := q.RenameServerProvider(ctx, dbgen.RenameServerProviderParams{Name: row.Name, ServerID: uuid.NullUUID{UUID: row.ID, Valid: true}}); err != nil {
-					return false, err
-				}
-			}
-			if row.SendIdentity != cur.SendIdentity {
-				return false, authUpdateAudit(ctx, q, a, &cur, prov, row, prov, nil)
-			}
-			return false, nil
-		}
-		np, err := s.updateProvider(ctx, q, a, row.Name, *prov, pre.plan)
-		if err != nil {
-			return false, err
-		}
-		otherServer := deref(prov.Issuer) != deref(np.Issuer) || deref(prov.AuthorizationServer) != deref(np.AuthorizationServer)
-		clientChanged := prov.ClientID != np.ClientID || prov.LinkProviderID != np.LinkProviderID
-		var reset int64
-		if otherServer || clientChanged || row.URL != cur.URL {
-			if reset, err = q.ResetProviderConnections(ctx, dbgen.ResetProviderConnectionsParams{ProviderID: prov.ID,
-				ErrorClass: ptr("server_auth_changed")}); err != nil {
-				return false, err
-			}
-		}
-		meta := map[string]any{"registered": pre.plan.registered, "clientIdChanged": clientChanged,
-			"clientSecretChanged": pre.plan.secret != nil || (pre.plan.clearSecret && prov.ClientSecretCipher != nil), "connectionsReset": reset}
-		for k, v := range originChange(cur.URL, row.URL) {
-			meta[k] = v
-		}
-		if err := authUpdateAudit(ctx, q, a, &cur, prov, row, &np, meta); err != nil {
-			return false, err
-		}
-		return otherServer || originMoved || widensScopes(nonNil(prov.DefaultScopes), nonNil(np.DefaultScopes)), nil
+		return s.applyProviderChange(ctx, q, a, cur, row, prov, pre.plan)
 	case afterMode != AuthOAuth && prov != nil:
 		if s.oauth.Hooks != nil {
 			if err := s.oauth.Hooks.DeleteConnections(ctx, q, a, *prov, pre.revoked, "server_auth_changed"); err != nil {
@@ -87,6 +49,51 @@ func (s *Service) applyOAuth(ctx context.Context, q *dbgen.Queries, a authz.Acto
 		return false, authUpdateAudit(ctx, q, a, &cur, nil, row, nil, nil)
 	}
 	return false, nil
+}
+
+// applyProviderChange stores the sign-in changes of a server that stays in
+// oauth mode with its provider prov (plan nil: the sign-in itself is
+// unchanged) and reports whether they need review again.
+func (s *Service) applyProviderChange(ctx context.Context, q *dbgen.Queries, a authz.Actor, cur, row dbgen.McpServer, prov *dbgen.AuthProvider, plan *oauthPlan) (bool, error) {
+	// Tokens are for one resource: another origin always starts over, even
+	// when discovery at the new host happens to give an identical plan (F-1).
+	originMoved := !sameOrigin(cur.URL, row.URL)
+	if originMoved && plan == nil {
+		return false, errors.New("registry: another origin without a sign-in plan")
+	}
+	if !originMoved && (plan == nil || planUnchanged(*prov, plan)) {
+		if row.Name != cur.Name {
+			if err := q.RenameServerProvider(ctx, dbgen.RenameServerProviderParams{Name: row.Name, ServerID: uuid.NullUUID{UUID: row.ID, Valid: true}}); err != nil {
+				return false, err
+			}
+		}
+		if row.SendIdentity != cur.SendIdentity {
+			return false, authUpdateAudit(ctx, q, a, &cur, prov, row, prov, nil)
+		}
+		return false, nil
+	}
+	np, err := s.updateProvider(ctx, q, a, row.Name, *prov, plan)
+	if err != nil {
+		return false, err
+	}
+	otherServer := deref(prov.Issuer) != deref(np.Issuer) || deref(prov.AuthorizationServer) != deref(np.AuthorizationServer)
+	clientChanged := prov.ClientID != np.ClientID || prov.LinkProviderID != np.LinkProviderID
+	var reset int64
+	if otherServer || clientChanged || row.URL != cur.URL {
+		if reset, err = q.ResetProviderConnections(ctx, dbgen.ResetProviderConnectionsParams{ProviderID: prov.ID,
+			ErrorClass: ptr("server_auth_changed")}); err != nil {
+			return false, err
+		}
+	}
+	meta := map[string]any{"registered": plan.registered, "clientIdChanged": clientChanged,
+		"clientSecretChanged": plan.secret != nil || (plan.clearSecret && prov.ClientSecretCipher != nil), "connectionsReset": reset}
+	for k, v := range originChange(cur.URL, row.URL) {
+		meta[k] = v
+	}
+	if err := authUpdateAudit(ctx, q, a, &cur, prov, row, &np, meta); err != nil {
+		return false, err
+	}
+	return otherServer || originMoved || widensScopes(nonNil(prov.DefaultScopes), nonNil(np.DefaultScopes)), nil
 }
 
 func ptr[T any](v T) *T { return &v }
