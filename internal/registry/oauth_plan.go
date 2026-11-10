@@ -74,6 +74,60 @@ func (s *Service) prepareOAuth(ctx context.Context, q *dbgen.Queries, serverURL,
 	if in == nil {
 		in = &OAuthInput{}
 	}
+	disc := s.discoverSignIn(ctx, serverURL, in, cur)
+	if !disc.Usable() {
+		return nil, unprocessable("oauth_discovery_failed", "The server's sign-in can't be used: "+discoveryProblem(disc), problemDetails(disc))
+	}
+	md := disc.Server
+	opts, err := s.registrationOptions(ctx, q, md)
+	if err != nil {
+		return nil, err
+	}
+	sameIssuer := cur != nil && cur.Issuer != nil && *cur.Issuer == md.Issuer
+	choice, err := chooseRegistration(in, cur, sameIssuer, opts)
+	if err != nil {
+		return nil, err
+	}
+	plan, err := newOAuthPlan(disc, choice, in, cur)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkRegistrationFields(choice, in); err != nil {
+		return nil, err
+	}
+	switch choice {
+	case RegistrationCIMD:
+		plan.clientID, plan.method, plan.clearSecret = s.ClientMetadataURL(), "none", true
+	case RegistrationDCR:
+		if registeredAs(cur, RegistrationDCR) && sameIssuer {
+			// Keep the client registered before.
+			plan.clientID, plan.method, plan.secretExpiry = cur.ClientID, cur.TokenAuthMethod, cur.ClientSecretExpiresAt
+			break
+		}
+		if err := s.register(ctx, plan, serverName, md); err != nil {
+			return nil, err
+		}
+	case RegistrationManual:
+		if err := planManualClient(plan, in, cur, sameIssuer, md); err != nil {
+			return nil, err
+		}
+	case RegistrationPlatformProvider:
+		if err := planPlatformProvider(ctx, q, plan, in, cur, opts); err != nil {
+			return nil, err
+		}
+	}
+	return plan, nil
+}
+
+// registeredAs reports whether the current provider (nil: none) has
+// registration r.
+func registeredAs(cur *dbgen.AuthProvider, r string) bool {
+	return cur != nil && cur.Registration != nil && *cur.Registration == r
+}
+
+// discoverSignIn runs discovery at serverURL with the authorization server
+// the request names, or else the stored one while the server still lists it.
+func (s *Service) discoverSignIn(ctx context.Context, serverURL string, in *OAuthInput, cur *dbgen.AuthProvider) oauthmeta.Result {
 	opt := oauthmeta.Options{}
 	switch {
 	case in.AuthorizationServer != nil:
@@ -86,15 +140,13 @@ func (s *Service) prepareOAuth(ctx context.Context, q *dbgen.Queries, serverURL,
 		// The stored authorization server is no longer listed: the first is.
 		disc = s.fetcher().Discover(ctx, serverURL, oauthmeta.Options{})
 	}
-	if !disc.Usable() {
-		return nil, unprocessable("oauth_discovery_failed", "The server's sign-in can't be used: "+discoveryProblem(disc), problemDetails(disc))
-	}
-	md := disc.Server
-	opts, err := s.registrationOptions(ctx, q, md)
-	if err != nil {
-		return nil, err
-	}
-	sameIssuer := cur != nil && cur.Issuer != nil && *cur.Issuer == md.Issuer
+	return disc
+}
+
+// chooseRegistration resolves the registration to use: the one asked for,
+// else the stored one, else the best the authorization server offers. It
+// must be one the authorization server offers (opts).
+func chooseRegistration(in *OAuthInput, cur *dbgen.AuthProvider, sameIssuer bool, opts RegistrationOptions) (string, error) {
 	choice := RegistrationAuto
 	switch {
 	case in.Registration != nil:
@@ -115,23 +167,30 @@ func (s *Service) prepareOAuth(ctx context.Context, q *dbgen.Queries, serverURL,
 		case slices.Contains(opts.Options, RegistrationDCR):
 			choice = RegistrationDCR
 		default:
-			return nil, unprocessable("registration_unavailable", "The authorization server offers no automatic registration: enter a client",
+			return "", unprocessable("registration_unavailable", "The authorization server offers no automatic registration: enter a client",
 				map[string]any{"options": opts.Options})
 		}
 	}
 	switch choice {
 	case RegistrationDCR, RegistrationCIMD, RegistrationManual, RegistrationPlatformProvider:
 	default:
-		return nil, apperr.Invalid("invalid_registration", "registration must be auto, dcr, cimd, manual or platform_provider")
+		return "", apperr.Invalid("invalid_registration", "registration must be auto, dcr, cimd, manual or platform_provider")
 	}
 	if !slices.Contains(opts.Options, choice) {
 		if choice == RegistrationPlatformProvider {
-			return nil, unprocessable("provider_mismatch", "No enabled platform provider has the discovered authorization and token endpoints",
+			return "", unprocessable("provider_mismatch", "No enabled platform provider has the discovered authorization and token endpoints",
 				map[string]any{"options": opts.Options})
 		}
-		return nil, unprocessable("registration_unavailable", "This registration isn't offered by the authorization server",
+		return "", unprocessable("registration_unavailable", "This registration isn't offered by the authorization server",
 			map[string]any{"options": opts.Options})
 	}
+	return choice, nil
+}
+
+// newOAuthPlan starts a plan with what every registration has: the
+// discovery, whether the resource is sent and the scopes (the request's,
+// else the stored ones, else the suggested ones).
+func newOAuthPlan(disc oauthmeta.Result, choice string, in *OAuthInput, cur *dbgen.AuthProvider) (*oauthPlan, error) {
 	plan := &oauthPlan{disc: disc, registration: choice, sendResource: true}
 	if cur != nil {
 		plan.sendResource = cur.SendResource
@@ -146,92 +205,102 @@ func (s *Service) prepareOAuth(ctx context.Context, q *dbgen.Queries, serverURL,
 	if in.Scopes != nil {
 		scopes = *in.Scopes
 	}
+	var err error
 	if plan.scopes, err = NormalizeScopes(scopes); err != nil {
 		return nil, err
 	}
-	curIs := func(r string) bool { return cur != nil && cur.Registration != nil && *cur.Registration == r }
+	return plan, nil
+}
+
+// checkRegistrationFields refuses client fields sent with a registration
+// they don't belong to.
+func checkRegistrationFields(choice string, in *OAuthInput) error {
 	if choice != RegistrationManual && (in.ClientID != nil || in.ClientSecret != nil || in.TokenAuthMethod != nil) {
-		return nil, apperr.Invalid("invalid_oauth", "clientId, clientSecret and tokenAuthMethod are for registration manual only")
+		return apperr.Invalid("invalid_oauth", "clientId, clientSecret and tokenAuthMethod are for registration manual only")
 	}
 	if choice != RegistrationPlatformProvider && in.PlatformProviderID != nil {
-		return nil, apperr.Invalid("invalid_oauth", "platformProviderId is for registration platform_provider only")
+		return apperr.Invalid("invalid_oauth", "platformProviderId is for registration platform_provider only")
 	}
-	switch choice {
-	case RegistrationCIMD:
-		plan.clientID, plan.method, plan.clearSecret = s.ClientMetadataURL(), "none", true
-	case RegistrationDCR:
-		if curIs(RegistrationDCR) && sameIssuer {
-			// Keep the client registered before.
-			plan.clientID, plan.method, plan.secretExpiry = cur.ClientID, cur.TokenAuthMethod, cur.ClientSecretExpiresAt
-			break
-		}
-		if err := s.register(ctx, plan, serverName, md); err != nil {
-			return nil, err
-		}
-	case RegistrationManual:
-		keep := curIs(RegistrationManual) && sameIssuer
-		plan.clientID = ""
-		if keep {
-			plan.clientID, plan.method = cur.ClientID, cur.TokenAuthMethod
-		}
-		if in.ClientID != nil {
-			plan.clientID = strings.TrimSpace(*in.ClientID)
-		}
-		if n := len(plan.clientID); n < 1 || n > 500 || strings.ContainsAny(plan.clientID, "\r\n") {
-			return nil, unprocessable("client_required", "Enter the client ID you created at the authorization server", nil)
-		}
-		if in.TokenAuthMethod != nil {
-			plan.method = *in.TokenAuthMethod
-		}
-		if plan.method == "" {
-			plan.method = defaultMethod(md.TokenEndpointAuthMethods)
-		}
-		if !slices.Contains(tokenMethods, plan.method) {
-			return nil, apperr.Invalid("invalid_token_auth_method", "tokenAuthMethod must be client_secret_post, client_secret_basic or none")
-		}
-		hasSecret := keep && cur.ClientSecretCipher != nil && cur.ClientID == plan.clientID
-		if in.ClientSecret != nil {
-			v := *in.ClientSecret
-			if len(v) > 2000 || strings.ContainsAny(v, "\r\n\x00") {
-				return nil, apperr.Invalid("invalid_client_secret", "The client secret must be at most 2000 characters on one line")
-			}
-			plan.secret, hasSecret = &v, v != ""
-		}
-		if plan.method == "none" {
-			plan.clearSecret, plan.secret = true, nil
-		} else if !hasSecret {
-			return nil, unprocessable("client_required", "Enter the client secret (or use tokenAuthMethod none)", nil)
-		} else if plan.secret == nil && !keep {
-			return nil, unprocessable("client_required", "Enter the client secret", nil)
-		} else if plan.secret == nil && cur.ClientID != plan.clientID {
-			return nil, unprocessable("client_required", "Enter the new client's secret", nil)
-		}
-	case RegistrationPlatformProvider:
-		var pid uuid.UUID
-		switch {
-		case in.PlatformProviderID != nil:
-			pid = *in.PlatformProviderID
-		case cur != nil && cur.LinkProviderID.Valid:
-			pid = cur.LinkProviderID.UUID
-		default:
-			return nil, unprocessable("provider_mismatch", "Choose the platform provider to use", map[string]any{"options": opts.Options})
-		}
-		var link *Provider
-		for i := range opts.Matching {
-			if opts.Matching[i].ID == pid {
-				link = &opts.Matching[i]
-			}
-		}
-		if link == nil {
-			return nil, unprocessable("provider_mismatch", "That platform provider is turned off or its endpoints differ from the discovered ones", nil)
-		}
-		row, err := q.GetAuthProvider(ctx, pid)
-		if err != nil {
-			return nil, err
-		}
-		plan.link, plan.clientID, plan.method, plan.clearSecret = &row, row.ClientID, row.TokenAuthMethod, true
+	return nil
+}
+
+// planManualClient fills the plan with a client entered by hand: the stored
+// one is kept at the same issuer unless the request replaces it.
+func planManualClient(plan *oauthPlan, in *OAuthInput, cur *dbgen.AuthProvider, sameIssuer bool, md *oauthmeta.ServerMetadata) error {
+	keep := registeredAs(cur, RegistrationManual) && sameIssuer
+	plan.clientID = ""
+	if keep {
+		plan.clientID, plan.method = cur.ClientID, cur.TokenAuthMethod
 	}
-	return plan, nil
+	if in.ClientID != nil {
+		plan.clientID = strings.TrimSpace(*in.ClientID)
+	}
+	if n := len(plan.clientID); n < 1 || n > 500 || strings.ContainsAny(plan.clientID, "\r\n") {
+		return unprocessable("client_required", "Enter the client ID you created at the authorization server", nil)
+	}
+	if in.TokenAuthMethod != nil {
+		plan.method = *in.TokenAuthMethod
+	}
+	if plan.method == "" {
+		plan.method = defaultMethod(md.TokenEndpointAuthMethods)
+	}
+	if !slices.Contains(tokenMethods, plan.method) {
+		return apperr.Invalid("invalid_token_auth_method", "tokenAuthMethod must be client_secret_post, client_secret_basic or none")
+	}
+	return planManualSecret(plan, in, cur, keep)
+}
+
+// planManualSecret decides a manual client's secret: a new one, the stored
+// one (only for the same client, kept), or none for tokenAuthMethod none.
+func planManualSecret(plan *oauthPlan, in *OAuthInput, cur *dbgen.AuthProvider, keep bool) error {
+	hasSecret := keep && cur.ClientSecretCipher != nil && cur.ClientID == plan.clientID
+	if in.ClientSecret != nil {
+		v := *in.ClientSecret
+		if len(v) > 2000 || strings.ContainsAny(v, "\r\n\x00") {
+			return apperr.Invalid("invalid_client_secret", "The client secret must be at most 2000 characters on one line")
+		}
+		plan.secret, hasSecret = &v, v != ""
+	}
+	if plan.method == "none" {
+		plan.clearSecret, plan.secret = true, nil
+	} else if !hasSecret {
+		return unprocessable("client_required", "Enter the client secret (or use tokenAuthMethod none)", nil)
+	} else if plan.secret == nil && !keep {
+		return unprocessable("client_required", "Enter the client secret", nil)
+	} else if plan.secret == nil && cur.ClientID != plan.clientID {
+		return unprocessable("client_required", "Enter the new client's secret", nil)
+	}
+	return nil
+}
+
+// planPlatformProvider links the plan to the platform provider the request
+// names (else the stored one): it must be one whose endpoints match the
+// discovered ones (opts.Matching).
+func planPlatformProvider(ctx context.Context, q *dbgen.Queries, plan *oauthPlan, in *OAuthInput, cur *dbgen.AuthProvider, opts RegistrationOptions) error {
+	var pid uuid.UUID
+	switch {
+	case in.PlatformProviderID != nil:
+		pid = *in.PlatformProviderID
+	case cur != nil && cur.LinkProviderID.Valid:
+		pid = cur.LinkProviderID.UUID
+	default:
+		return unprocessable("provider_mismatch", "Choose the platform provider to use", map[string]any{"options": opts.Options})
+	}
+	var link *Provider
+	for i := range opts.Matching {
+		if opts.Matching[i].ID == pid {
+			link = &opts.Matching[i]
+		}
+	}
+	if link == nil {
+		return unprocessable("provider_mismatch", "That platform provider is turned off or its endpoints differ from the discovered ones", nil)
+	}
+	row, err := q.GetAuthProvider(ctx, pid)
+	if err != nil {
+		return err
+	}
+	plan.link, plan.clientID, plan.method, plan.clearSecret = &row, row.ClientID, row.TokenAuthMethod, true
+	return nil
 }
 
 func discoveryProblem(r oauthmeta.Result) string {
