@@ -8,7 +8,7 @@ import { Link } from "@tanstack/react-router";
 import { ArrowRight, FileClock } from "lucide-react";
 import { api, unwrap } from "../../../api/client";
 import { actionLabel, actorName, auditKey, targetTypeLabel } from "../../../components/audit/labels";
-import { RelativeTime } from "../../../components/templates/list-page";
+import { RelativeTime } from "../../../components/templates/relative-time";
 import { ErrorAlert } from "@/components/ui/alert/alert";
 import { Button } from "@/components/ui/button/button";
 import { Card } from "@/components/ui/card/card";

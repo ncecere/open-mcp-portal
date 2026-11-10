@@ -5,7 +5,7 @@ import { ArrowRight, Crown, MailPlus, UsersRound } from "lucide-react";
 import { api, unwrap, type Schemas } from "@/api/client";
 import { changeSummary } from "@/components/audit/changes";
 import { actionLabel, actorName, entryTitle } from "@/components/audit/labels";
-import { RelativeTime } from "@/components/templates/list-page";
+import { RelativeTime } from "@/components/templates/relative-time";
 import { Button } from "@/components/ui/button/button";
 import { Card } from "@/components/ui/card/card";
 import { DescriptionList } from "@/components/ui/description-list/description-list";

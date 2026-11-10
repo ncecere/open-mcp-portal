@@ -15,7 +15,7 @@ import { leaveBlockedReason } from "./members";
 import { RoleBadge } from "./role-badge";
 import { canManage, roleLabels, teamRoles, type TeamRole } from "./roles";
 import { ActionMenu } from "./templates/action-menu";
-import { RelativeTime } from "./templates/list-page";
+import { RelativeTime } from "./templates/relative-time";
 import { ErrorAlert } from "@/components/ui/alert/alert";
 import { Avatar } from "@/components/ui/avatar/avatar";
 import { Badge } from "@/components/ui/badge/badge";

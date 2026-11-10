@@ -6,7 +6,7 @@ import { emailProblem } from "../lib/validation";
 import s from "../pages/shared.module.css";
 import { ConfirmMutationDialog } from "./confirm-dialog";
 import { Alert, ErrorAlert } from "@/components/ui/alert/alert";
-import { RelativeTime } from "@/components/templates/list-page";
+import { RelativeTime } from "@/components/templates/relative-time";
 import { Badge } from "@/components/ui/badge/badge";
 import { Button } from "@/components/ui/button/button";
 import { Card } from "@/components/ui/card/card";

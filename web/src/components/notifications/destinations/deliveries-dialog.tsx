@@ -7,7 +7,7 @@ import { Dialog } from "@/components/ui/dialog/dialog";
 import { Loading } from "@/components/ui/spinner/spinner";
 import { Table, Td, Tr } from "@/components/ui/table/table";
 import s from "../../../pages/shared.module.css";
-import { RelativeTime } from "../../templates/list-page";
+import { RelativeTime } from "../../templates/relative-time";
 import { eventLabel } from "../events";
 import { type Destination, type DestinationScope, deliveriesQuery } from "./api";
 import { deliveryStateLabels, deliveryStateTone, errorClassText } from "./labels";

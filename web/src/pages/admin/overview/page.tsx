@@ -11,7 +11,7 @@ import { adminOverviewQuery } from "@/api/attention";
 import type { Schemas } from "@/api/client";
 import { AttentionList } from "@/components/attention/attention-list";
 import { PageSkeleton } from "@/components/page-skeleton";
-import { RelativeTime } from "@/components/templates/list-page";
+import { RelativeTime } from "@/components/templates/relative-time";
 import { ErrorAlert } from "@/components/ui/alert/alert";
 import { Badge } from "@/components/ui/badge/badge";
 import { Card } from "@/components/ui/card/card";

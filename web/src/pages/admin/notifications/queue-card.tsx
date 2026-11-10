@@ -5,7 +5,7 @@
  */
 import { Link } from "@tanstack/react-router";
 import type { Schemas } from "@/api/client";
-import { RelativeTime } from "@/components/templates/list-page";
+import { RelativeTime } from "@/components/templates/relative-time";
 import { Alert } from "@/components/ui/alert/alert";
 import { Card } from "@/components/ui/card/card";
 import { DescriptionList } from "@/components/ui/description-list/description-list";
