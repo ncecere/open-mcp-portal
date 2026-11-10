@@ -252,72 +252,112 @@ func (p *planner) planServerCreate(d Server) {
 	p.addRefresh(d)
 }
 
+// serverUpdate is one existing server compared with the file: the step the
+// plan shows and the patch it sends.
+type serverUpdate struct {
+	p     *planner
+	d     Server
+	cur   *ompclient.McpServer
+	st    *step
+	patch ompclient.McpServerUpdate
+}
+
+func (u *serverUpdate) diff(field string, from, to any) {
+	u.st.Fields = append(u.st.Fields, FieldChange{Field: field, From: from, To: to})
+}
+
 func (p *planner) planServerUpdate(d Server, cur *ompclient.McpServer) {
-	st := &step{Change: Change{Kind: "server", Key: d.Team + "/" + d.Slug, Action: "update"}}
-	patch := ompclient.McpServerUpdate{}
-	diff := func(field string, from, to any) {
-		st.Fields = append(st.Fields, FieldChange{Field: field, From: from, To: to})
+	u := &serverUpdate{p: p, d: d, cur: cur}
+	u.st = &step{Change: Change{Kind: "server", Key: d.Team + "/" + d.Slug, Action: "update"}}
+	u.diffSettings()
+	u.diffAuth()
+	u.diffPublish()
+	if len(u.st.Fields) > 0 {
+		revision, id := cur.Revision, cur.Id
+		u.st.run = func(ctx context.Context, r *runResult) error { return u.apply(ctx, id, revision, r) }
+		p.steps = append(p.steps, u.st)
 	}
+	p.addRefresh(d)
+}
+
+func (u *serverUpdate) diffSettings() {
+	d, cur := &u.d, u.cur
 	if d.Name != cur.Name {
-		diff("name", cur.Name, d.Name)
-		patch.Name = &d.Name
+		u.diff("name", cur.Name, d.Name)
+		u.patch.Name = &d.Name
 	}
 	if d.Description != nil && *d.Description != cur.Description {
-		diff("description", cur.Description, *d.Description)
-		patch.Description = d.Description
+		u.diff("description", cur.Description, *d.Description)
+		u.patch.Description = d.Description
 	}
 	if d.URL != cur.Url {
-		diff("url", cur.Url, d.URL)
-		patch.Url = &d.URL
+		u.diff("url", cur.Url, d.URL)
+		u.patch.Url = &d.URL
 	}
 	if d.Enabled != nil && *d.Enabled != cur.Enabled {
-		diff("enabled", cur.Enabled, *d.Enabled)
-		patch.Enabled = d.Enabled
+		u.diff("enabled", cur.Enabled, *d.Enabled)
+		u.patch.Enabled = d.Enabled
 	}
 	if d.TimeoutSeconds != nil && *d.TimeoutSeconds != cur.TimeoutSeconds {
-		diff("timeoutSeconds", cur.TimeoutSeconds, *d.TimeoutSeconds)
-		patch.TimeoutSeconds = d.TimeoutSeconds
+		u.diff("timeoutSeconds", cur.TimeoutSeconds, *d.TimeoutSeconds)
+		u.patch.TimeoutSeconds = d.TimeoutSeconds
 	}
-	sendValue := false
-	curMode := serverMode(cur)
-	switch d.AuthMode {
+}
+
+// diffAuth compares the declared authMode; an absent one leaves the mode alone.
+func (u *serverUpdate) diffAuth() {
+	curMode := serverMode(u.cur)
+	switch u.d.AuthMode {
 	case "none":
 		if curMode != "none" {
-			diff("authMode", curMode, "none")
+			u.diff("authMode", curMode, "none")
 			m := ompclient.McpServerAuthModeNone
-			patch.AuthMode = &m
+			u.patch.AuthMode = &m
 		}
 	case "static_header":
-		if curMode != "static_header" {
-			diff("authMode", curMode, "static_header")
-			m := ompclient.McpServerAuthModeStaticHeader
-			patch.AuthMode = &m
-			sendValue = true
-		}
-		if curHeader := deref(cur.AuthHeaderName); curMode != "static_header" || curHeader != d.AuthHeaderName {
-			if curMode == "static_header" {
-				diff("authHeaderName", curHeader, d.AuthHeaderName)
-				sendValue = sendValue || d.AuthValueEnv != ""
-			} else {
-				diff("authHeaderName", nil, d.AuthHeaderName)
-			}
-			patch.AuthHeaderName = &d.AuthHeaderName
-		}
-		if p.opts.replaceSecrets && d.AuthValueEnv != "" {
-			sendValue = true
-		}
-		if sendValue {
-			st.Fields = append(st.Fields, FieldChange{Field: "authValue", From: "(not shown)", To: "(secret)", Note: "read from $" + d.AuthValueEnv})
-			if d.AuthValueEnv == "" {
-				p.warn("server %s: switching to static_header needs authValueEnv", d.Slug)
-			} else {
-				st.needsEnv = []string{d.AuthValueEnv}
-				if p.a.Getenv(d.AuthValueEnv) == "" {
-					p.warn("server %s: $%s is not set; apply would fail", d.Slug, d.AuthValueEnv)
-				}
-			}
-		}
+		u.diffStaticHeader(curMode)
 	}
+}
+
+// diffStaticHeader compares a declared static_header: the mode, the header's
+// name, and whether the header's value has to be sent (never compared).
+func (u *serverUpdate) diffStaticHeader(curMode string) {
+	d := &u.d
+	sendValue := false
+	if curMode != "static_header" {
+		u.diff("authMode", curMode, "static_header")
+		m := ompclient.McpServerAuthModeStaticHeader
+		u.patch.AuthMode = &m
+		sendValue = true
+	}
+	if curHeader := deref(u.cur.AuthHeaderName); curMode != "static_header" || curHeader != d.AuthHeaderName {
+		if curMode == "static_header" {
+			u.diff("authHeaderName", curHeader, d.AuthHeaderName)
+			sendValue = sendValue || d.AuthValueEnv != ""
+		} else {
+			u.diff("authHeaderName", nil, d.AuthHeaderName)
+		}
+		u.patch.AuthHeaderName = &d.AuthHeaderName
+	}
+	if u.p.opts.replaceSecrets && d.AuthValueEnv != "" {
+		sendValue = true
+	}
+	if !sendValue {
+		return
+	}
+	u.st.Fields = append(u.st.Fields, FieldChange{Field: "authValue", From: "(not shown)", To: "(secret)", Note: "read from $" + d.AuthValueEnv})
+	if d.AuthValueEnv == "" {
+		u.p.warn("server %s: switching to static_header needs authValueEnv", d.Slug)
+		return
+	}
+	u.st.needsEnv = []string{d.AuthValueEnv}
+	if u.p.a.Getenv(d.AuthValueEnv) == "" {
+		u.p.warn("server %s: $%s is not set; apply would fail", d.Slug, d.AuthValueEnv)
+	}
+}
+
+func (u *serverUpdate) diffPublish() {
+	d, cur := u.d, u.cur
 	wantPublish := ""
 	switch {
 	case d.Publish == "request" && (cur.PublishState == ompclient.PublishStatePrivate || cur.PublishState == ompclient.PublishStateRejected):
@@ -326,36 +366,35 @@ func (p *planner) planServerUpdate(d Server, cur *ompclient.McpServer) {
 		wantPublish = "none"
 	}
 	if wantPublish != "" {
-		diff("publish", string(cur.PublishState), map[string]string{"request": "request", "none": "private"}[wantPublish])
+		u.diff("publish", string(cur.PublishState), map[string]string{"request": "request", "none": "private"}[wantPublish])
 	}
-	if len(st.Fields) > 0 {
-		revision, id := cur.Revision, cur.Id
-		st.run = func(ctx context.Context, r *runResult) error {
-			state := cur.PublishState
-			if hasPatch(st) {
-				if st.needsEnv != nil {
-					v, err := p.a.secretFromEnv(st.needsEnv[0])
-					if err != nil {
-						return err
-					}
-					patch.AuthValue = &v
-				}
-				res, err := check(p.c.UpdateTeamMcpServerWithResponse(ctx, d.Team, id,
-					&ompclient.UpdateTeamMcpServerParams{IfMatch: fmt.Sprintf(`"%d"`, revision)}, patch))
-				if err != nil {
-					return withHint(err, "the server changed since the plan was read; run the command again")
-				}
-				sv, err := dataOf(res.JSON200)
-				if err != nil {
-					return err
-				}
-				state = sv.PublishState
+}
+
+// apply is the server's step: the patch when anything but the publication
+// changed, then the publication from the state the patch returned.
+func (u *serverUpdate) apply(ctx context.Context, id uuid.UUID, revision int64, r *runResult) error {
+	p, d := u.p, u.d
+	state := u.cur.PublishState
+	if hasPatch(u.st) {
+		if u.st.needsEnv != nil {
+			v, err := p.a.secretFromEnv(u.st.needsEnv[0])
+			if err != nil {
+				return err
 			}
-			return p.reconcilePublish(ctx, d, id, state, r)
+			u.patch.AuthValue = &v
 		}
-		p.steps = append(p.steps, st)
+		res, err := check(p.c.UpdateTeamMcpServerWithResponse(ctx, d.Team, id,
+			&ompclient.UpdateTeamMcpServerParams{IfMatch: fmt.Sprintf(`"%d"`, revision)}, u.patch))
+		if err != nil {
+			return withHint(err, "the server changed since the plan was read; run the command again")
+		}
+		sv, err := dataOf(res.JSON200)
+		if err != nil {
+			return err
+		}
+		state = sv.PublishState
 	}
-	p.addRefresh(d)
+	return p.reconcilePublish(ctx, d, id, state, r)
 }
 
 // hasPatch is whether the step changes more than the publication.
