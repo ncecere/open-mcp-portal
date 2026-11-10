@@ -129,6 +129,80 @@ func (q *Queries) ListDefinitionFindings(ctx context.Context, capabilityID uuid.
 	return items, nil
 }
 
+const listServerDefinitionFindings = `-- name: ListServerDefinitionFindings :many
+SELECT f.id, f.occurred_at, f.capability_id, f.fingerprint, f.stage, f.rule_id, f.ruleset_version, f.severity, f.count, f.action, f.location FROM scan_findings f
+JOIN mcp_capabilities c ON c.id = f.capability_id
+WHERE c.server_id = $1
+ORDER BY f.capability_id, f.id
+`
+
+func (q *Queries) ListServerDefinitionFindings(ctx context.Context, serverID uuid.UUID) ([]ScanFinding, error) {
+	rows, err := q.db.Query(ctx, listServerDefinitionFindings, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ScanFinding{}
+	for rows.Next() {
+		var i ScanFinding
+		if err := rows.Scan(
+			&i.ID,
+			&i.OccurredAt,
+			&i.CapabilityID,
+			&i.Fingerprint,
+			&i.Stage,
+			&i.RuleID,
+			&i.RulesetVersion,
+			&i.Severity,
+			&i.Count,
+			&i.Action,
+			&i.Location,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listServerDefinitionScans = `-- name: ListServerDefinitionScans :many
+SELECT s.capability_id, s.fingerprint, s.ruleset_version, s.status, s.reason, s.scanned_at FROM definition_scans s
+JOIN mcp_capabilities c ON c.id = s.capability_id
+WHERE c.server_id = $1
+`
+
+// Every scan of a server's capabilities, in one read (the findings page and
+// the rescan used to ask once per capability).
+func (q *Queries) ListServerDefinitionScans(ctx context.Context, serverID uuid.UUID) ([]DefinitionScan, error) {
+	rows, err := q.db.Query(ctx, listServerDefinitionScans, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DefinitionScan{}
+	for rows.Next() {
+		var i DefinitionScan
+		if err := rows.Scan(
+			&i.CapabilityID,
+			&i.Fingerprint,
+			&i.RulesetVersion,
+			&i.Status,
+			&i.Reason,
+			&i.ScannedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const storeDefinitionScan = `-- name: StoreDefinitionScan :exec
 INSERT INTO definition_scans(capability_id,fingerprint,ruleset_version,status,reason)
 VALUES ($1,$2,$3,$4,$5)
