@@ -90,9 +90,13 @@ test-ci: ## test-integration without deps-up (CI's Postgres service; OMP_TEST_DA
 	# The expanded HTTP integration package can exceed Go's default 10m under -race.
 	OMP_TEST_REQUIRE_DB=1 $(GO) test -race -count=1 -timeout=20m ./...
 
-lint: ## go vet and gofmt check
+STATICCHECK_VERSION ?= 2026.2.2
+
+lint: ## go vet, gofmt check, staticcheck, and the Go file-size and complexity guard
 	$(GO) vet ./...
 	@test -z "$$(gofmt -l cmd internal pkg examples migrations web/embed.go)" || (gofmt -l cmd internal pkg examples migrations web/embed.go && echo "run 'make fmt'" && exit 1)
+	$(GO) run honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION) ./...
+	GO=$(GO) scripts/check-go-quality.py
 
 ACTIONLINT_VERSION ?= v1.7.12
 

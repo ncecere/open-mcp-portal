@@ -402,23 +402,6 @@ func (s *Service) portalURL(l *Link) string {
 	return strings.TrimRight(s.cfg.AppURL, "/") + p
 }
 
-// linkTarget converts a link to the API's LinkTarget.
-func (l *Link) target() *apitypes.LinkTarget {
-	if l == nil {
-		return nil
-	}
-	out := &apitypes.LinkTarget{Type: apitypes.LinkTargetType(l.Type)}
-	if l.ID != "" {
-		id := l.ID
-		out.Id = &id
-	}
-	if l.TeamSlug != "" {
-		ts := l.TeamSlug
-		out.TeamSlug = &ts
-	}
-	return out
-}
-
 // envelope is the body of a json webhook (apitypes.NotificationPayload).
 type envelope struct {
 	ID         uuid.UUID `json:"id"`

@@ -11,7 +11,7 @@ import (
 func endpointStored(p endpointPlan) []dbgen.McpServerEndpoint {
 	out := make([]dbgen.McpServerEndpoint, len(p.rows))
 	for i, r := range p.rows {
-		out[i] = dbgen.McpServerEndpoint{ID: r.ID, ServerID: r.ServerID, Position: r.Position, URL: r.URL, Enabled: r.Enabled, AuthMode: r.AuthMode, CredentialOrigin: r.CredentialOrigin, CredentialsCipher: r.CredentialsCipher, CredentialShapes: r.CredentialShapes, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
+		out[i] = dbgen.McpServerEndpoint(r)
 	}
 	return out
 }

@@ -31,9 +31,6 @@ import (
 // catalog, or of the gateway's own team) and that gateway, and nothing of the
 // server's team beyond what the catalog shows.
 
-// sunsetSoonDays is the window of server.sunset_soon.
-const sunsetSoonDays = 14
-
 func isGovernanceEvent(event string) bool {
 	return event == ServerReviewDue || event == ServerSunsetSoon || event == ServerDeprecated
 }
