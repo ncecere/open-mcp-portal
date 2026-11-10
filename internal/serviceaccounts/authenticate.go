@@ -63,11 +63,7 @@ func (s *Service) Authenticate(ctx context.Context, secret string) (Principal, e
 			return Principal{}, err
 		}
 	}
-	scope, err := s.q.ListServiceAccountKeyGatewayIDs(ctx, row.ServiceAccountKey.ID)
-	if err != nil {
-		return Principal{}, err
-	}
-	return Principal{Key: row.ServiceAccountKey, Account: row.ServiceAccount, Team: row.Team, Gateways: scope}, nil
+	return Principal{Key: row.ServiceAccountKey, Account: row.ServiceAccount, Team: row.Team, Gateways: row.GatewayIds}, nil
 }
 
 // rehash moves a key found with the previous pepper to the current one.
@@ -89,8 +85,13 @@ func (s *Service) rehash(ctx context.Context, row dbgen.GetServiceAccountKeyByDi
 // Touch records that a key and its account were used (at most once a
 // minute each).
 func (s *Service) Touch(ctx context.Context, p Principal) error {
-	if err := s.q.TouchServiceAccountKey(ctx, p.Key.ID); err != nil {
-		return err
+	if store.TouchDue(p.Key.LastUsedAt) {
+		if err := s.q.TouchServiceAccountKey(ctx, p.Key.ID); err != nil {
+			return err
+		}
+	}
+	if !store.TouchDue(p.Account.LastUsedAt) {
+		return nil
 	}
 	return s.q.TouchServiceAccount(ctx, p.Account.ID)
 }

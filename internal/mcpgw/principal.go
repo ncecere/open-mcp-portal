@@ -90,7 +90,7 @@ func (h *Handler) credential(w http.ResponseWriter, r *http.Request, slug string
 		} else if err != nil {
 			return failed(err)
 		}
-		if err := h.OAuth.Touch(ctx, p.Grant.ID); err != nil {
+		if err := h.OAuth.Touch(ctx, p.Grant); err != nil {
 			h.log().WarnContext(ctx, "could not record a connected app's use", "err", err)
 		}
 		g := p.Grant
@@ -116,7 +116,7 @@ func (h *Handler) credential(w http.ResponseWriter, r *http.Request, slug string
 	} else if err != nil {
 		return failed(err)
 	}
-	if err := h.Keys.Touch(ctx, p.Key.ID); err != nil {
+	if err := h.Keys.Touch(ctx, p.Key); err != nil {
 		h.log().WarnContext(ctx, "could not record API key use", "err", err)
 	}
 	return principal{kind: calls.PrincipalAPIKey, user: p.User, keyID: p.Key.ID, keyName: p.Key.Name, scope: p.Gateways, expiresAt: &p.Key.ExpiresAt, toolPolicy: toolscope.Union(toolscope.Stored(p.Key.ToolScope))}, true

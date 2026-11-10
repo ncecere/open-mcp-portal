@@ -26,7 +26,11 @@ WHERE id = @id AND user_id = @user_id AND revoked_at IS NULL
 RETURNING *;
 
 -- name: GetAPIKeyByDigest :one
-SELECT sqlc.embed(k), sqlc.embed(u)
+-- A key by its digest with its owner and the gateways it is limited to
+-- (none: every gateway its owner may use), in one statement: this runs on
+-- every request a key makes.
+SELECT sqlc.embed(k), sqlc.embed(u),
+    ARRAY(SELECT kg.gateway_id FROM api_key_gateways kg WHERE kg.api_key_id = k.id)::uuid[] AS gateway_ids
 FROM api_keys k
 JOIN users u ON u.id = k.user_id
 WHERE k.digest = $1;

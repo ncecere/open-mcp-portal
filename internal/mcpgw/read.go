@@ -82,7 +82,7 @@ func (rc *request) read() {
 	if !ok {
 		return
 	}
-	all, err := rc.h.Gateways.Offers(rc.r.Context(), rc.gateway, rc.caller)
+	all, err := rc.h.Gateways.ServingOffers(rc.r.Context(), rc.serving, rc.caller)
 	if err != nil {
 		rc.internal(err)
 		return

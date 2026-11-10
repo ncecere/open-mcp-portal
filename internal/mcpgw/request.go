@@ -36,7 +36,9 @@ type request struct {
 	principal     principal
 	requestBytes  int64
 	gateway       dbgen.Gateway
-	caller        gateways.Caller
+	// serving is gateway with its team, read once by resolveGatewayAttempt.
+	serving gateways.Serving
+	caller  gateways.Caller
 	// outcome is the recorded outcome (metrics; "" for requests that are
 	// not recorded).
 	outcome string
@@ -100,14 +102,7 @@ func (rc *request) rateLimit() bool {
 	default:
 		sub.UserID, sub.CredentialID = p.user.ID, p.keyID
 	}
-	if rc.gateway.TeamID.Valid {
-		t, err := dbgen.New(h.Pool).GetTeamByID(ctx, rc.gateway.TeamID.UUID)
-		if err != nil {
-			rc.internal(err)
-			return false
-		}
-		sub.GatewayTeam = &t
-	}
+	sub.GatewayTeam = rc.serving.Team
 	sp := rc.span("mcp.rate_limit", trace.SpanKindInternal)
 	d, err := h.Limits.Check(ctx, h.RateStore, sub)
 	if err != nil {
@@ -186,9 +181,11 @@ func (rc *request) resolveGatewayAttempt(slug string, prior *calls.Call) bool {
 	denied := ""
 	if !rc.principal.inScope(g.ID) {
 		denied = DeniedKeyScope
-	} else if denied, err = rc.h.Gateways.Unserved(ctx, g); err != nil {
+	} else if rc.serving, err = rc.h.Gateways.Serving(ctx, g); err != nil {
 		rc.liveInternal(err, prior)
 		return false
+	} else {
+		denied = rc.serving.Unserved()
 	}
 	if denied == "" {
 		var c gateways.Caller

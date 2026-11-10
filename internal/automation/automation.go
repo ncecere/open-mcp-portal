@@ -564,8 +564,11 @@ func (s *Service) rehash(ctx context.Context, t Token, old, digest string) error
 }
 
 // Touch records that a token was used (at most once a minute).
-func (s *Service) Touch(ctx context.Context, id uuid.UUID) error {
-	return s.q.TouchAutomationToken(ctx, id)
+func (s *Service) Touch(ctx context.Context, t dbgen.AutomationToken) error {
+	if !store.TouchDue(t.LastUsedAt) {
+		return nil
+	}
+	return s.q.TouchAutomationToken(ctx, t.ID)
 }
 
 // Get returns one token by ID (for introspection of the acting token).

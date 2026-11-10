@@ -15,10 +15,10 @@ import (
 // The fixture is the plain case: a personal API key, a modern-era client
 // and server, a static (no-auth) upstream, no approval rule, no capture.
 var mcpQueryBudgets = map[string]int{
-	"team/tools/list":     13,
-	"team/tools/call":     47,
-	"platform/tools/list": 10,
-	"platform/tools/call": 40,
+	"team/tools/list":     8,
+	"team/tools/call":     33,
+	"platform/tools/list": 7,
+	"platform/tools/call": 31,
 }
 
 func TestMCPQueryBudget(t *testing.T) {

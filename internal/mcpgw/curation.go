@@ -6,7 +6,6 @@ import (
 
 	"github.com/ncecere/open-mcp-portal/internal/calls"
 	"github.com/ncecere/open-mcp-portal/internal/gateways"
-	"github.com/ncecere/open-mcp-portal/internal/upstream"
 )
 
 // liveTool closes the time spent obtaining credentials/consent against live
@@ -22,15 +21,14 @@ func (rc *request) liveTool(old gateways.Offer, prior *calls.Call) bool {
 	if !rc.resolveGatewayAttempt(rc.gateway.Slug, &rec) {
 		return false
 	}
-	offers, err := rc.offers(upstream.KindTool)
+	// Only this tool's row is read: every rule applied to it depends on the
+	// row alone, so it is the offer a full selection read would hold.
+	o, ok, err := rc.offer(old.Capability.ID)
 	if err != nil {
 		rc.liveInternal(err, &rec)
 		return false
 	}
-	for _, o := range offers {
-		if o.Capability.ID != old.Capability.ID || o.ExposedName != old.ExposedName || !o.Allowed {
-			continue
-		}
+	if ok && o.ExposedName == old.ExposedName && o.Allowed {
 		before, _ := json.Marshal(old.Curation)
 		after, _ := json.Marshal(o.Curation)
 		if o.Server.Revision == old.Server.Revision && o.Capability.Fingerprint == old.Capability.Fingerprint && bytes.Equal(before, after) {

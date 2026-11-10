@@ -97,6 +97,17 @@ WHERE gc.gateway_id = @gateway_id
 ORDER BY s.name, s.id,
          CASE c.kind WHEN 'tool' THEN 0 WHEN 'prompt' THEN 1 WHEN 'resource' THEN 2 ELSE 3 END, c.name;
 
+-- name: GetGatewaySelectionItem :many
+-- One selected capability of a gateway, exactly as ListGatewaySelection
+-- returns it (no row: not selected). A call re-checks its one tool with this
+-- instead of reading the whole selection again.
+SELECT sqlc.embed(c), sqlc.embed(s), sqlc.embed(gc), t.slug AS team_slug, t.name AS team_name, t.status AS team_status
+FROM gateway_capabilities gc
+JOIN mcp_capabilities c ON c.id = gc.capability_id
+JOIN mcp_servers s ON s.id = c.server_id
+JOIN teams t ON t.id = s.team_id
+WHERE gc.gateway_id = @gateway_id AND gc.capability_id = @capability_id;
+
 -- name: RemoveGatewayCapabilitiesExcept :exec
 DELETE FROM gateway_capabilities
 WHERE gateway_id = @gateway_id AND NOT (capability_id = ANY(@keep::uuid[]));

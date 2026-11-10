@@ -18,6 +18,9 @@ import (
 func (s *Service) readContext(ctx context.Context, epoch int64, expires time.Time, check func(context.Context, *dbgen.Queries) error) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	if check == nil {
+		return s.readEpoch(ctx, epoch, expires)
+	}
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return ErrUnavailable
@@ -34,13 +37,28 @@ func (s *Service) readContext(ctx context.Context, epoch int64, expires time.Tim
 	if !credentialLive(s.clock(), expires) {
 		return ErrUnavailable
 	}
-	if check != nil {
-		if err = check(ctx, q); err != nil {
-			return safeError(err)
-		}
+	if err = check(ctx, q); err != nil {
+		return safeError(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return safeError(err)
+	}
+	if !credentialLive(s.clock(), expires) {
+		return ErrUnavailable
+	}
+	return nil
+}
+
+// readEpoch is readContext with nothing further to read: the epoch function
+// is one STABLE statement, so it already sees a single committed snapshot and
+// needs no transaction around it. This runs before every upstream exchange.
+func (s *Service) readEpoch(ctx context.Context, epoch int64, expires time.Time) error {
+	current, err := dbgen.New(s.pool).GetApprovalContext(ctx)
+	if err != nil {
+		return safeError(err)
+	}
+	if current != epoch {
+		return ErrContextChanged
 	}
 	if !credentialLive(s.clock(), expires) {
 		return ErrUnavailable

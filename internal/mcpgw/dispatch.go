@@ -9,6 +9,7 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/google/uuid"
 	"github.com/ncecere/open-mcp-portal/internal/buildinfo"
 	"github.com/ncecere/open-mcp-portal/internal/calls"
 	"github.com/ncecere/open-mcp-portal/internal/gateways"
@@ -83,7 +84,7 @@ func (rc *request) methodNotFound() {
 // resource template (whether or not served now): only then does it
 // advertise and serve the resources methods.
 func (rc *request) hasResources() (bool, error) {
-	all, err := rc.h.Gateways.Offers(rc.r.Context(), rc.gateway, rc.caller)
+	all, err := rc.h.Gateways.ServingOffers(rc.r.Context(), rc.serving, rc.caller)
 	if err != nil {
 		return false, err
 	}
@@ -151,7 +152,7 @@ func (rc *request) capabilities() (map[string]any, error) {
 // offers reads what the caller may use of kind now, by exposed name.
 func (rc *request) offers(kind string) ([]gateways.Offer, error) {
 	sp := rc.span("mcp.authorize", trace.SpanKindInternal)
-	all, err := rc.h.Gateways.Offers(rc.r.Context(), rc.gateway, rc.caller)
+	all, err := rc.h.Gateways.ServingOffers(rc.r.Context(), rc.serving, rc.caller)
 	sp.End()
 	if err != nil {
 		return nil, err
@@ -159,15 +160,33 @@ func (rc *request) offers(kind string) ([]gateways.Offer, error) {
 	out := make([]gateways.Offer, 0, len(all))
 	for _, o := range all {
 		if o.Capability.Kind == kind {
-			if o.Allowed && kind == upstream.KindTool && !rc.principal.toolPolicy.Allows(toolscope.Class(o.Capability.ToolClass), o.ExposedName) {
-				o.Allowed = false
-				o.Denied = gateways.DeniedToolScope
-			}
-			out = append(out, o)
+			out = append(out, rc.scoped(o))
 		}
 	}
 	slices.SortFunc(out, func(a, b gateways.Offer) int { return strings.Compare(a.ExposedName, b.ExposedName) })
 	return out, nil
+}
+
+// scoped applies the credential's own tool policy to an offer the gateway
+// allows.
+func (rc *request) scoped(o gateways.Offer) gateways.Offer {
+	if o.Allowed && o.Capability.Kind == upstream.KindTool && !rc.principal.toolPolicy.Allows(toolscope.Class(o.Capability.ToolClass), o.ExposedName) {
+		o.Allowed = false
+		o.Denied = gateways.DeniedToolScope
+	}
+	return o
+}
+
+// offer is the one tool offer of offers(upstream.KindTool) for a capability,
+// read alone (false: not selected, or not a tool any more).
+func (rc *request) offer(capabilityID uuid.UUID) (gateways.Offer, bool, error) {
+	sp := rc.span("mcp.authorize", trace.SpanKindInternal)
+	o, ok, err := rc.h.Gateways.ServingOffer(rc.r.Context(), rc.serving, rc.caller, capabilityID)
+	sp.End()
+	if err != nil || !ok || o.Capability.Kind != upstream.KindTool {
+		return gateways.Offer{}, false, err
+	}
+	return rc.scoped(o), true, nil
 }
 
 // listed is a stored definition with the exposed name (tools, prompts) or

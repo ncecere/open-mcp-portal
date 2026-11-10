@@ -358,6 +358,145 @@ func (q *Queries) GetGatewayBySlug(ctx context.Context, slug string) (Gateway, e
 	return i, err
 }
 
+const getGatewaySelectionItem = `-- name: GetGatewaySelectionItem :many
+SELECT c.id, c.server_id, c.kind, c.name, c.title, c.description, c.definition, c.fingerprint, c.approved_fingerprint, c.approved_by, c.approved_at, c.first_seen_at, c.last_seen_at, c.gone_at, c.requirement_mode, c.requirement_scopes, c.requires_present_person, c.tool_class, c.class_set_by, c.class_set_at, s.id, s.team_id, s.slug, s.name, s.description, s.url, s.transport, s.auth_header_name, s.auth_value_cipher, s.auth_value_hint, s.timeout_seconds, s.enabled, s.publish_state, s.publish_requested_at, s.publish_requested_by, s.publish_request_note, s.publish_reviewed_at, s.publish_reviewed_by, s.publish_review_note, s.published_at, s.refreshed_at, s.last_refresh_error, s.revision, s.created_by, s.created_at, s.updated_by, s.updated_at, s.auth_provider_id, s.auth_scopes, s.capture_payloads, s.auth_mode, s.oauth_setup_user_id, s.oauth_setup_at, s.send_identity, s.protocol_era, s.protocol_version, s.protocol_negotiated_at, s.requires_present_person, s.secret_placement, s.secret_name, s.secret_prefix, s.secret_label, s.secret_help, s.secret_setup_user_id, s.secret_setup_at, s.rate_limit_per_minute, s.max_concurrent, s.supports_tasks, s.owner_user_id, s.oncall_contact, s.sensitivity, s.last_reviewed_at, s.review_due_at, s.lifecycle, s.deprecated_at, s.sunset_at, s.replacement_server_id, s.sensitivity_confirmed_at, gc.gateway_id, gc.capability_id, gc.min_team_role, gc.added_by, gc.added_at, gc.name_override, gc.description_override, gc.constraints, gc.base_fingerprint, gc.curated_by, gc.curated_at, t.slug AS team_slug, t.name AS team_name, t.status AS team_status
+FROM gateway_capabilities gc
+JOIN mcp_capabilities c ON c.id = gc.capability_id
+JOIN mcp_servers s ON s.id = c.server_id
+JOIN teams t ON t.id = s.team_id
+WHERE gc.gateway_id = $1 AND gc.capability_id = $2
+`
+
+type GetGatewaySelectionItemParams struct {
+	GatewayID    uuid.UUID
+	CapabilityID uuid.UUID
+}
+
+type GetGatewaySelectionItemRow struct {
+	McpCapability     McpCapability
+	McpServer         McpServer
+	GatewayCapability GatewayCapability
+	TeamSlug          string
+	TeamName          string
+	TeamStatus        string
+}
+
+// One selected capability of a gateway, exactly as ListGatewaySelection
+// returns it (no row: not selected). A call re-checks its one tool with this
+// instead of reading the whole selection again.
+func (q *Queries) GetGatewaySelectionItem(ctx context.Context, arg GetGatewaySelectionItemParams) ([]GetGatewaySelectionItemRow, error) {
+	rows, err := q.db.Query(ctx, getGatewaySelectionItem, arg.GatewayID, arg.CapabilityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetGatewaySelectionItemRow{}
+	for rows.Next() {
+		var i GetGatewaySelectionItemRow
+		if err := rows.Scan(
+			&i.McpCapability.ID,
+			&i.McpCapability.ServerID,
+			&i.McpCapability.Kind,
+			&i.McpCapability.Name,
+			&i.McpCapability.Title,
+			&i.McpCapability.Description,
+			&i.McpCapability.Definition,
+			&i.McpCapability.Fingerprint,
+			&i.McpCapability.ApprovedFingerprint,
+			&i.McpCapability.ApprovedBy,
+			&i.McpCapability.ApprovedAt,
+			&i.McpCapability.FirstSeenAt,
+			&i.McpCapability.LastSeenAt,
+			&i.McpCapability.GoneAt,
+			&i.McpCapability.RequirementMode,
+			&i.McpCapability.RequirementScopes,
+			&i.McpCapability.RequiresPresentPerson,
+			&i.McpCapability.ToolClass,
+			&i.McpCapability.ClassSetBy,
+			&i.McpCapability.ClassSetAt,
+			&i.McpServer.ID,
+			&i.McpServer.TeamID,
+			&i.McpServer.Slug,
+			&i.McpServer.Name,
+			&i.McpServer.Description,
+			&i.McpServer.URL,
+			&i.McpServer.Transport,
+			&i.McpServer.AuthHeaderName,
+			&i.McpServer.AuthValueCipher,
+			&i.McpServer.AuthValueHint,
+			&i.McpServer.TimeoutSeconds,
+			&i.McpServer.Enabled,
+			&i.McpServer.PublishState,
+			&i.McpServer.PublishRequestedAt,
+			&i.McpServer.PublishRequestedBy,
+			&i.McpServer.PublishRequestNote,
+			&i.McpServer.PublishReviewedAt,
+			&i.McpServer.PublishReviewedBy,
+			&i.McpServer.PublishReviewNote,
+			&i.McpServer.PublishedAt,
+			&i.McpServer.RefreshedAt,
+			&i.McpServer.LastRefreshError,
+			&i.McpServer.Revision,
+			&i.McpServer.CreatedBy,
+			&i.McpServer.CreatedAt,
+			&i.McpServer.UpdatedBy,
+			&i.McpServer.UpdatedAt,
+			&i.McpServer.AuthProviderID,
+			&i.McpServer.AuthScopes,
+			&i.McpServer.CapturePayloads,
+			&i.McpServer.AuthMode,
+			&i.McpServer.OauthSetupUserID,
+			&i.McpServer.OauthSetupAt,
+			&i.McpServer.SendIdentity,
+			&i.McpServer.ProtocolEra,
+			&i.McpServer.ProtocolVersion,
+			&i.McpServer.ProtocolNegotiatedAt,
+			&i.McpServer.RequiresPresentPerson,
+			&i.McpServer.SecretPlacement,
+			&i.McpServer.SecretName,
+			&i.McpServer.SecretPrefix,
+			&i.McpServer.SecretLabel,
+			&i.McpServer.SecretHelp,
+			&i.McpServer.SecretSetupUserID,
+			&i.McpServer.SecretSetupAt,
+			&i.McpServer.RateLimitPerMinute,
+			&i.McpServer.MaxConcurrent,
+			&i.McpServer.SupportsTasks,
+			&i.McpServer.OwnerUserID,
+			&i.McpServer.OncallContact,
+			&i.McpServer.Sensitivity,
+			&i.McpServer.LastReviewedAt,
+			&i.McpServer.ReviewDueAt,
+			&i.McpServer.Lifecycle,
+			&i.McpServer.DeprecatedAt,
+			&i.McpServer.SunsetAt,
+			&i.McpServer.ReplacementServerID,
+			&i.McpServer.SensitivityConfirmedAt,
+			&i.GatewayCapability.GatewayID,
+			&i.GatewayCapability.CapabilityID,
+			&i.GatewayCapability.MinTeamRole,
+			&i.GatewayCapability.AddedBy,
+			&i.GatewayCapability.AddedAt,
+			&i.GatewayCapability.NameOverride,
+			&i.GatewayCapability.DescriptionOverride,
+			&i.GatewayCapability.Constraints,
+			&i.GatewayCapability.BaseFingerprint,
+			&i.GatewayCapability.CuratedBy,
+			&i.GatewayCapability.CuratedAt,
+			&i.TeamSlug,
+			&i.TeamName,
+			&i.TeamStatus,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getGatewayView = `-- name: GetGatewayView :one
 SELECT g.id, g.slug, g.name, g.description, g.owner_kind, g.team_id, g.enabled, g.capture_payloads, g.revision, g.created_by, g.created_at, g.updated_by, g.updated_at, g.rate_limit_per_minute, g.access_requests_enabled, g.max_sensitivity, COALESCE(t.slug, '')::text AS team_slug, COALESCE(t.name, '')::text AS team_name
 FROM gateways g

@@ -207,7 +207,8 @@ func (q *Queries) GetServiceAccountKey(ctx context.Context, arg GetServiceAccoun
 }
 
 const getServiceAccountKeyByDigest = `-- name: GetServiceAccountKeyByDigest :one
-SELECT k.id, k.service_account_id, k.name, k.prefix, k.digest, k.created_by, k.created_at, k.expires_at, k.revoked_at, k.last_used_at, k.pepper_id, k.tool_scope, sa.id, sa.team_id, sa.name, sa.description, sa.role, sa.enabled, sa.revision, sa.created_by, sa.created_at, sa.updated_by, sa.updated_at, sa.last_used_at, sa.relay_platform_id, sa.relay_marked_by, sa.relay_marked_at, sa.tool_scope, t.id, t.slug, t.name, t.description, t.status, t.created_by, t.revision, t.created_at, t.updated_at, t.archived_at, t.publish_policy_override, t.limit_overrides, t.retention_overrides
+SELECT k.id, k.service_account_id, k.name, k.prefix, k.digest, k.created_by, k.created_at, k.expires_at, k.revoked_at, k.last_used_at, k.pepper_id, k.tool_scope, sa.id, sa.team_id, sa.name, sa.description, sa.role, sa.enabled, sa.revision, sa.created_by, sa.created_at, sa.updated_by, sa.updated_at, sa.last_used_at, sa.relay_platform_id, sa.relay_marked_by, sa.relay_marked_at, sa.tool_scope, t.id, t.slug, t.name, t.description, t.status, t.created_by, t.revision, t.created_at, t.updated_at, t.archived_at, t.publish_policy_override, t.limit_overrides, t.retention_overrides,
+    ARRAY(SELECT kg.gateway_id FROM service_account_key_gateways kg WHERE kg.key_id = k.id)::uuid[] AS gateway_ids
 FROM service_account_keys k
 JOIN service_accounts sa ON sa.id = k.service_account_id
 JOIN teams t ON t.id = sa.team_id
@@ -218,9 +219,11 @@ type GetServiceAccountKeyByDigestRow struct {
 	ServiceAccountKey ServiceAccountKey
 	ServiceAccount    ServiceAccount
 	Team              Team
+	GatewayIds        []uuid.UUID
 }
 
-// A key by its digest, with its account and the account's team.
+// A key by its digest, with its account, the account's team and the gateways
+// the key is limited to (none: every gateway the account may use).
 func (q *Queries) GetServiceAccountKeyByDigest(ctx context.Context, digest string) (GetServiceAccountKeyByDigestRow, error) {
 	row := q.db.QueryRow(ctx, getServiceAccountKeyByDigest, digest)
 	var i GetServiceAccountKeyByDigestRow
@@ -266,6 +269,7 @@ func (q *Queries) GetServiceAccountKeyByDigest(ctx context.Context, digest strin
 		&i.Team.PublishPolicyOverride,
 		&i.Team.LimitOverrides,
 		&i.Team.RetentionOverrides,
+		&i.GatewayIds,
 	)
 	return i, err
 }

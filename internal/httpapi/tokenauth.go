@@ -157,7 +157,7 @@ func (a *api) serveToken(w http.ResponseWriter, r *http.Request, h http.HandlerF
 		return
 	}
 	// last_used_at: written at most once a minute (the statement says so).
-	if err := a.Automation.Touch(r.Context(), p.Row.ID); err != nil {
+	if err := a.Automation.Touch(r.Context(), p.Row); err != nil {
 		a.Log.WarnContext(r.Context(), "could not record an automation token's use", "err", err)
 	}
 	ctx := authz.WithActor(r.Context(), actor)
