@@ -1,7 +1,8 @@
 /* One entry of the platform audit log in a RecordPage: who, what, when, the target and what changed, field by field in plain words. */
 import { useQuery } from "@tanstack/react-query";
 import { api, unwrap, type Schemas } from "@/api/client";
-import { actedHow, actionLabel, actorName } from "@/components/audit/labels";
+import { actionLabel } from "@/components/audit/labels";
+import { actedHow, actorName } from "@/components/audit/actors";
 import { AuditTeam, auditSections } from "@/components/audit/record";
 import { AuditTarget } from "@/components/audit/target";
 import { RecordPage } from "@/components/templates/record-page";
