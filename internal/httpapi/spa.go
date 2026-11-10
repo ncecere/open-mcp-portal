@@ -86,12 +86,13 @@ func loadIndex(assets fs.FS, built bool, opts spaOptions) []byte {
 }
 
 // spaHandler serves the embedded single-page app. Existing files are served
-// directly (hashed assets are cached for a year); a missing file (a path
+// directly, gzipped when the client accepts it: hashed assets are cached for
+// a year, the other files are revalidated by ETag. A missing file (a path
 // whose last segment has an extension, such as /favicon.ico) is a plain
 // 404; any other GET path returns index.html, personalised by opts, so
 // client-side routes work on reload. App routes never end in an extension.
 func spaHandler(assets fs.FS, built bool, opts spaOptions) http.Handler {
-	files := http.FileServer(http.FS(assets))
+	files := newStaticFiles(assets)
 	csp := cspFor(opts)
 	index := loadIndex(assets, built, opts)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -116,10 +117,13 @@ func spaHandler(assets fs.FS, built bool, opts spaOptions) http.Handler {
 		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 		if name != "" && name != "index.html" {
 			if st, err := fs.Stat(assets, name); err == nil && !st.IsDir() {
+				// Only assets/ names carry a content hash; the rest (the
+				// color-mode script the page blocks on, icons) revalidate.
+				h.Set("Cache-Control", "no-cache")
 				if strings.HasPrefix(name, "assets/") {
 					h.Set("Cache-Control", "public, max-age=31536000, immutable")
 				}
-				files.ServeHTTP(w, r)
+				files.serve(w, r, name)
 				return
 			}
 		}
