@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/ncecere/open-mcp-portal/internal/apperr"
-	"github.com/ncecere/open-mcp-portal/internal/audit"
 	"github.com/ncecere/open-mcp-portal/internal/authz"
 	"github.com/ncecere/open-mcp-portal/internal/store"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
@@ -144,22 +143,8 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 	if in.TimeoutSeconds == 0 {
 		in.TimeoutSeconds = defaultTimeoutSec
 	}
-	if in.RateLimitPerMinute != nil || in.MaxConcurrent != nil || in.Endpoints != nil {
-		ta, err := access(ctx, s.q, a, ref)
-		if err != nil {
-			return Created{}, err
-		}
-		if err := ta.writable(authz.CheckServerEdit); err != nil {
-			return Created{}, err
-		}
-		if err := s.checkProtection(ctx, s.q, ta.role, in.RateLimitPerMinute, in.MaxConcurrent, in.RateLimitPerMinute != nil || in.MaxConcurrent != nil); err != nil {
-			return Created{}, err
-		}
-		if in.Endpoints != nil {
-			if err := checkEndpointRole(ta.role); err != nil {
-				return Created{}, err
-			}
-		}
+	if err := s.authorizeCreateExtras(ctx, a, ref, in); err != nil {
+		return Created{}, err
 	}
 	if err := checkCreateCredentials(in); err != nil {
 		return Created{}, err
@@ -169,69 +154,138 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 		return Created{}, err
 	}
 	id := uuid.New()
-	var endpointInputs *[]EndpointInput
+	pre := createPrep{mode: mode}
+	if pre.endpoints, err = s.prepareCreateEndpoints(ctx, a, ref, id, &in, mode); err != nil {
+		return Created{}, err
+	}
+	if pre.secret, err = createSecretConfig(in, mode); err != nil {
+		return Created{}, err
+	}
+	if pre.plan, err = s.prepareCreateOAuth(ctx, a, ref, in, mode); err != nil {
+		return Created{}, err
+	}
+	pre.sendIdentity = s.createSendIdentity(ctx, in, mode)
+	err = store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
+		return s.createTx(ctx, q, a, ref, id, in, pre)
+	})
+	if err != nil {
+		return Created{}, err
+	}
+	return s.created(ctx, a, id, mode)
+}
+
+// createPrep is what a creation decided before its transaction.
+type createPrep struct {
+	// mode is the server's auth mode.
+	mode string
+	// endpoints are the additional endpoints, normalized (nil: none sent).
+	endpoints *[]EndpointInput
+	// secret is the person secret configuration (nil: another mode).
+	secret *PersonSecretInput
+	// plan is the sign-in of a server in oauth mode (nil: another mode).
+	plan *oauthPlan
+	// sendIdentity is whether the identity token is sent.
+	sendIdentity bool
+}
+
+// authorizeCreateExtras checks, before anything else, the roles that
+// protection limits and additional endpoints need beyond an editor's.
+func (s *Service) authorizeCreateExtras(ctx context.Context, a authz.Actor, ref string, in CreateInput) error {
+	if in.RateLimitPerMinute == nil && in.MaxConcurrent == nil && in.Endpoints == nil {
+		return nil
+	}
+	ta, err := access(ctx, s.q, a, ref)
+	if err != nil {
+		return err
+	}
+	if err := ta.writable(authz.CheckServerEdit); err != nil {
+		return err
+	}
+	if err := s.checkProtection(ctx, s.q, ta.role, in.RateLimitPerMinute, in.MaxConcurrent, in.RateLimitPerMinute != nil || in.MaxConcurrent != nil); err != nil {
+		return err
+	}
 	if in.Endpoints != nil {
-		ta, err := access(ctx, s.q, a, ref)
-		if err != nil {
-			return Created{}, err
-		}
-		tp, err := s.planTLS(id, nil, in.TLS, false, time.Now())
-		if err != nil {
-			return Created{}, err
-		}
-		if len(*in.Endpoints) > 0 {
-			if err := checkEndpointMode(mode, in.Requirement != nil, !tp.next.empty()); err != nil {
-				return Created{}, err
-			}
-		}
-		if in.URL, err = s.client.NormalizeURL(ctx, in.URL); err != nil {
-			return Created{}, err
-		}
-		endpointInputs, err = s.prepareEndpointChange(ctx, s.q, dbgen.McpServer{ID: id}, in.URL, mode, in.Requirement != nil, !tp.next.empty(), ta.role, in.Endpoints, true)
-		if err != nil {
-			return Created{}, err
+		return checkEndpointRole(ta.role)
+	}
+	return nil
+}
+
+// prepareCreateEndpoints normalizes a new server's additional endpoints
+// outside the transaction (nil: none sent). It also replaces in.URL with its
+// normalized form, which the endpoints are compared with.
+func (s *Service) prepareCreateEndpoints(ctx context.Context, a authz.Actor, ref string, id uuid.UUID, in *CreateInput, mode string) (*[]EndpointInput, error) {
+	if in.Endpoints == nil {
+		return nil, nil
+	}
+	ta, err := access(ctx, s.q, a, ref)
+	if err != nil {
+		return nil, err
+	}
+	tp, err := s.planTLS(id, nil, in.TLS, false, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	if len(*in.Endpoints) > 0 {
+		if err := checkEndpointMode(mode, in.Requirement != nil, !tp.next.empty()); err != nil {
+			return nil, err
 		}
 	}
-	var secretCfg *PersonSecretInput
-	if mode == AuthPersonSecret {
-		cfg, err := normalizePersonSecret(*in.PersonSecret)
-		if err != nil {
-			return Created{}, err
-		}
-		if err := personSecretConflicts(cfg, createViews(in), in.Requirement != nil); err != nil {
-			return Created{}, err
-		}
-		secretCfg = &cfg
+	if in.URL, err = s.client.NormalizeURL(ctx, in.URL); err != nil {
+		return nil, err
 	}
-	var plan *oauthPlan
-	if mode == AuthOAuth {
-		// Discovery and registration happen before the transaction: check
-		// what can be checked first.
-		ta, err := access(ctx, s.q, a, ref)
-		if err != nil {
-			return Created{}, err
-		}
-		if err := ta.writable(authz.CheckServerEdit); err != nil {
-			return Created{}, err
-		}
-		if err := oauthConflicts(createAuthorization(in), in.Requirement != nil); err != nil {
-			return Created{}, err
-		}
-		if !slugRE.MatchString(in.Slug) {
-			return Created{}, apperr.Invalid("invalid_slug",
-				"Slug must be 1-48 lowercase letters, digits or hyphens, and cannot start or end with a hyphen")
-		}
-		if err := checkFields(in.Name, in.Description, in.TimeoutSeconds); err != nil {
-			return Created{}, err
-		}
-		u, err := s.client.NormalizeURL(ctx, in.URL)
-		if err != nil {
-			return Created{}, err
-		}
-		if plan, err = s.prepareOAuth(ctx, s.q, u, in.Name, in.OAuth, nil); err != nil {
-			return Created{}, err
-		}
+	return s.prepareEndpointChange(ctx, s.q, dbgen.McpServer{ID: id}, in.URL, mode, in.Requirement != nil, !tp.next.empty(), ta.role, in.Endpoints, true)
+}
+
+// createSecretConfig is a new server's person secret configuration (nil: the
+// mode is not person_secret).
+func createSecretConfig(in CreateInput, mode string) (*PersonSecretInput, error) {
+	if mode != AuthPersonSecret {
+		return nil, nil
 	}
+	cfg, err := normalizePersonSecret(*in.PersonSecret)
+	if err != nil {
+		return nil, err
+	}
+	if err := personSecretConflicts(cfg, createViews(in), in.Requirement != nil); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+// prepareCreateOAuth plans the sign-in of a new server in oauth mode (nil:
+// another mode).
+func (s *Service) prepareCreateOAuth(ctx context.Context, a authz.Actor, ref string, in CreateInput, mode string) (*oauthPlan, error) {
+	if mode != AuthOAuth {
+		return nil, nil
+	}
+	// Discovery and registration happen before the transaction: check
+	// what can be checked first.
+	ta, err := access(ctx, s.q, a, ref)
+	if err != nil {
+		return nil, err
+	}
+	if err := ta.writable(authz.CheckServerEdit); err != nil {
+		return nil, err
+	}
+	if err := oauthConflicts(createAuthorization(in), in.Requirement != nil); err != nil {
+		return nil, err
+	}
+	if !slugRE.MatchString(in.Slug) {
+		return nil, apperr.Invalid("invalid_slug",
+			"Slug must be 1-48 lowercase letters, digits or hyphens, and cannot start or end with a hyphen")
+	}
+	if err := checkFields(in.Name, in.Description, in.TimeoutSeconds); err != nil {
+		return nil, err
+	}
+	u, err := s.client.NormalizeURL(ctx, in.URL)
+	if err != nil {
+		return nil, err
+	}
+	return s.prepareOAuth(ctx, s.q, u, in.Name, in.OAuth, nil)
+}
+
+// createSendIdentity decides whether a new server is sent the identity token.
+func (s *Service) createSendIdentity(ctx context.Context, in CreateInput, mode string) bool {
 	// Send identity token: an explicit value is kept; else on, except for a
 	// server with no authentication on a public (or unresolvable) host
 	// (decision 64). The host lookup happens here, outside the transaction.
@@ -241,108 +295,12 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 			sendIdentity = s.defaultSendIdentity(ctx, mode, u).SendIdentity
 		}
 	}
-	err = store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
-		ta, err := access(ctx, q, a, ref)
-		if err != nil {
-			return err
-		}
-		if err := ta.writable(authz.CheckServerEdit); err != nil {
-			return err
-		}
-		if err := s.checkProtection(ctx, q, ta.role, in.RateLimitPerMinute, in.MaxConcurrent, in.RateLimitPerMinute != nil || in.MaxConcurrent != nil); err != nil {
-			return err
-		}
-		p, err := s.insertParams(ctx, id, ta.team.ID, a, in)
-		if err != nil {
-			return err
-		}
-		if p.AuthProviderID, p.AuthScopes, err = checkRequirement(ctx, q, in.Requirement, uuid.NullUUID{}, ta.team.ID, uuid.Nil); err != nil {
-			return err
-		}
-		p.AuthMode, p.SendIdentity = mode, sendIdentity
-		if mode == AuthMachineOAuth {
-			if err := machineConflicts(createAuthorization(in), p.AuthProviderID.Valid); err != nil {
-				return err
-			}
-		}
-		row, err := q.InsertMCPServer(ctx, p)
-		if apperr.IsUniqueViolation(err, "mcp_servers_slug_key") {
-			return errSlugTaken
-		} else if err != nil {
-			return err
-		}
-		if secretCfg != nil {
-			if row, err = q.SetMCPServerSecretConfig(ctx, secretConfigParams(id, secretCfg, true)); err != nil {
-				return err
-			}
-		}
-		var parts []CredentialView
-		if len(in.Credentials) > 0 {
-			cp, err := s.planCredentials(row, storedCredentials{}, in.Credentials)
-			if err != nil {
-				return err
-			}
-			if err := storeCredentials(ctx, q, id, cp); err != nil {
-				return err
-			}
-			parts = cp.views
-		}
-		if err := setCapture(ctx, q, ta.role, &row, in.CapturePayloads); err != nil {
-			return err
-		}
-		var machine *machinePlan
-		if mode == AuthMachineOAuth {
-			if machine, err = s.planMachine(ctx, q, row, row.URL, in.MachineOAuth); err != nil {
-				return err
-			}
-			mp := machine.row
-			mp.By = by(a)
-			if _, err := q.UpsertMachineOAuth(ctx, mp); err != nil {
-				return err
-			}
-		}
-		var tlsRow *dbgen.McpServerTl
-		if !in.TLS.empty() && !in.TLS.Clear {
-			tp, err := s.planTLS(id, nil, in.TLS, false, time.Now())
-			if err != nil {
-				return err
-			}
-			if tlsRow, err = storeTLS(ctx, q, id, tp); err != nil {
-				return err
-			}
-		}
-		ep, err := s.planEndpointRows(row, nil, tlsRow != nil, ta.role, endpointInputs, true)
-		if err != nil {
-			return err
-		}
-		if err := storeEndpoints(ctx, q, id, ep); err != nil {
-			return err
-		}
-		e := a.Audit("mcp_server.create", "mcp_server", id.String())
-		e.TeamID, e.After = ta.team.ID, withEndpointAudit(withTLS(snapshot(row, parts...), tlsRow), ep.after)
-		if err := audit.Record(ctx, q, e); err != nil {
-			return err
-		}
-		if machine != nil {
-			ae := a.Audit("mcp_server.auth_update", "mcp_server", id.String())
-			ae.TeamID, ae.After, ae.Metadata = ta.team.ID, machineSnapshot(row, machine.view), machineAuditMeta(row, machine)
-			if err := audit.Record(ctx, q, ae); err != nil {
-				return err
-			}
-		}
-		if plan == nil {
-			return nil
-		}
-		prov, err := s.insertProvider(ctx, q, a, row, plan)
-		if err != nil {
-			return err
-		}
-		return authUpdateAudit(ctx, q, a, nil, nil, row, &prov, map[string]any{"registered": plan.registered,
-			"clientIdChanged": true, "clientSecretChanged": plan.secret != nil, "connectionsReset": 0})
-	})
-	if err != nil {
-		return Created{}, err
-	}
+	return sendIdentity
+}
+
+// created is Create's outcome once the server is stored: its view, and its
+// first discovery unless somebody has to sign in first.
+func (s *Service) created(ctx context.Context, a authz.Actor, id uuid.UUID, mode string) (Created, error) {
 	sv, err := s.q.GetMCPServer(ctx, id)
 	if err != nil {
 		return Created{}, err
@@ -363,32 +321,4 @@ func (s *Service) Create(ctx context.Context, a authz.Actor, ref string, in Crea
 	out.Refresh, out.Failure = res, fail
 	out.View, err = s.view(ctx, s.q, id)
 	return out, err
-}
-
-func (s *Service) insertParams(ctx context.Context, id, teamID uuid.UUID, a authz.Actor, in CreateInput) (dbgen.InsertMCPServerParams, error) {
-	if !slugRE.MatchString(in.Slug) {
-		return dbgen.InsertMCPServerParams{}, apperr.Invalid("invalid_slug",
-			"Slug must be 1-48 lowercase letters, digits or hyphens, and cannot start or end with a hyphen")
-	}
-	if err := checkFields(in.Name, in.Description, in.TimeoutSeconds); err != nil {
-		return dbgen.InsertMCPServerParams{}, err
-	}
-	u, err := s.client.NormalizeURL(ctx, in.URL)
-	if err != nil {
-		return dbgen.InsertMCPServerParams{}, err
-	}
-	p := dbgen.InsertMCPServerParams{ID: id, TeamID: teamID, Slug: in.Slug, Name: in.Name, Description: in.Description, URL: u,
-		TimeoutSeconds: in.TimeoutSeconds, Enabled: in.Enabled, CreatedBy: by(a), AuthScopes: []string{}, OwnerUserID: creatorOwner(a),
-		RateLimitPerMinute: in.RateLimitPerMinute, MaxConcurrent: in.MaxConcurrent}
-	if len(in.Credentials) == 0 && (in.AuthHeaderName != "" || in.AuthValue != "") {
-		if err := checkHeader(in.AuthHeaderName, in.AuthValue); err != nil {
-			return p, err
-		}
-		if p.AuthValueCipher, err = s.box.Seal([]byte(in.AuthValue), ServerAAD(id)); err != nil {
-			return p, err
-		}
-		name := in.AuthHeaderName
-		p.AuthHeaderName, p.AuthValueHint = &name, valueHint(in.AuthValue)
-	}
-	return p, nil
 }
