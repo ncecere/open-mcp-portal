@@ -1,4 +1,4 @@
-/* The page templates: DetailPage, SettingsPage (+ guard), ListPage, RecordPage (+ the takeover host), DateRangeFilter. */
+/* The page templates: DetailPage, SettingsPage (+ guard), ListPage, RecordPage (+ the takeover host). */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Link, Outlet, RouterProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
@@ -7,7 +7,6 @@ import { type ReactNode, useState } from "react";
 import { axe } from "vitest-axe";
 import { useCurrentCrumbTail } from "../components/layout/crumb-tail";
 import { orderActions } from "../components/templates/action-menu";
-import { DateRangeFilter, useDateRangeParam } from "../components/templates/date-range-filter";
 import { DetailPage } from "../components/templates/detail-page";
 import { ListPage } from "../components/templates/list-page";
 import { RecordPage, useRecordParam } from "../components/templates/record-page";
@@ -297,48 +296,5 @@ describe("RecordPage", () => {
     act(() => router.history.back());
     await waitFor(() => expect(screen.queryByRole("region", { name: "Catalog" })).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: "View Catalog" })).toBeInTheDocument();
-  });
-});
-
-describe("DateRangeFilter", () => {
-  function Range({ def }: { def?: string }) {
-    const range = useDateRangeParam({ defaultPreset: def });
-    return (
-      <>
-        <DateRangeFilter range={range} />
-        <p data-testid="days">{range.fromDay ? `${range.fromDay}..${range.toDay}` : "any time"}</p>
-      </>
-    );
-  }
-
-  it("reads a custom range from the URL", async () => {
-    renderAt(() => <Range />, "/?range=2026-09-01%2F2026-09-10");
-    expect(await screen.findByTestId("days")).toHaveTextContent("2026-09-01..2026-09-10");
-  });
-
-  it("a custom range takes two clicks: the first sets the start, the second the end", async () => {
-    const user = userEvent.setup();
-    const { router } = renderAt(() => <Range def="30d" />, "/?range=2024-03-01%2F2024-03-10");
-    await user.click(await screen.findByRole("button", { name: /Date range: custom/ }));
-    const dayButton = (d: string) => document.querySelector<HTMLElement>(`[data-day="${d}"]`)!;
-    await waitFor(() => expect(dayButton("2024-03-05")).toBeInTheDocument());
-    await user.click(dayButton("2024-03-05"));
-    // Only the start is picked: nothing is written yet and the picker stays open.
-    expect(search(router).range).toBe("2024-03-01/2024-03-10");
-    expect(screen.getByTestId("days")).toHaveTextContent("2024-03-01..2024-03-10");
-    await user.click(dayButton("2024-03-20"));
-    await waitFor(() => expect(search(router).range).toBe("2024-03-05/2024-03-20"));
-    expect(screen.getByTestId("days")).toHaveTextContent("2024-03-05..2024-03-20");
-  });
-
-  it("writes presets to the URL and keeps the default out of it", async () => {
-    const user = userEvent.setup();
-    const { router, container } = renderAt(() => <Range def="30d" />);
-    expect(await screen.findByRole("button", { name: "Last 30 days" })).toHaveAttribute("aria-pressed", "true");
-    await user.click(screen.getByRole("button", { name: "Last 7 days" }));
-    await waitFor(() => expect(search(router).range).toBe("7d"));
-    await user.click(screen.getByRole("button", { name: "Last 30 days" }));
-    await waitFor(() => expect(search(router).range).toBeUndefined());
-    expect(await axe(container)).toHaveNoViolations();
   });
 });

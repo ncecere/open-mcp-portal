@@ -12,8 +12,6 @@ export type RateLimitValue = number | null;
 /** The most any limit can be (PlatformRateLimit.max). */
 export const maxRate = 1_000_000;
 
-export const rateKeys: RateLimitKey[] = ["person_per_minute", "credential_per_minute", "service_account_per_minute", "gateway_per_minute", "server_per_minute"];
-
 /** Short names, used where the server's label isn't loaded (audit entries, call errors). */
 export const rateKeyLabels: Record<RateLimitKey, string> = {
   person_per_minute: "Per person",

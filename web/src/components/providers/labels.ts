@@ -17,7 +17,6 @@ export type TokenResponseFormat = Schemas["AuthProviderTokenResponseFormat"];
 export type ProviderConnection = Schemas["ProviderConnection"];
 export type ConnectionStatus = Schemas["ProviderConnectionStatus"];
 export type CapabilityRequirement = Schemas["CapabilityRequirement"];
-export type ServerRequirement = Schemas["McpServerRequirement"];
 export type RequirementOverride = Schemas["CapabilityRequirementOverride"];
 export type ConnectRequest = Schemas["ConnectRequest"];
 export type ProviderRef = Schemas["ProviderRef"];
