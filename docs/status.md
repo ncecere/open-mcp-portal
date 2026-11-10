@@ -1,14 +1,17 @@
 # Status and handoff
 
-Last updated: 2026-11-06. Open MCP Portal: **[v0.15.1](releases/v0.15.1.md) is the latest release, published and independently verified** (signed audit checkpoints and audit webhook sinks, #38 slice 2, off until enabled; migrations `00063`–`00064`; `golang.org/x/net` v0.62.0). Source `8fafa1e`, tag `bfa1e1a`, image index `sha256:40b8bf0ddbc763c3d61080de60df5addc71b8a0ab6c8db1dc99d452b93f744c2`, pinned in the example overlay. **v0.15.0 was tagged (`23acf3e`) but never published**: its image scan failed on CVE-2026-78661; it is listed in `scripts/previous-release.sh` as unpublished. Previous published release: [v0.14.0](releases/v0.14.0.md) (`sha256:11f89d86…`). v1.0.0 remains the owner's decision. A fresh agent should read [agent-handoff.md](agent-handoff.md).
+Last updated: 2026-11-10. Open MCP Portal: **[v0.15.2](releases/v0.15.2.md) is the latest release, published and verified** (a hardening pass with no behaviour change: fewer database round trips per gateway request, a gzipped and smaller web app, indexed admin queries, size and complexity guards; migration `00065`, indexes only). Source `5eda51f`, tag `a4f54ff`, image index `sha256:e30bef6f56de186a39431ecde67a35dc155d5c33e597918a47a3a0644a8c2c28`, pinned in the example overlay. Previous published release: [v0.15.1](releases/v0.15.1.md) (`sha256:40b8bf0d…`; signed audit checkpoints and audit webhook sinks, #38 slice 2, off until enabled; migrations `00063`–`00064`). **v0.15.0 was tagged (`23acf3e`) but never published**: its image scan failed on CVE-2026-78661; it is listed in `scripts/previous-release.sh` as unpublished. v1.0.0 remains the owner's decision. A fresh agent should read [agent-handoff.md](agent-handoff.md).
 (release notes: [releases/v0.10.0.md](releases/v0.10.0.md), [v0.9.0](releases/v0.9.0.md), [v0.8.0](releases/v0.8.0.md); earlier: [v0.7.0](releases/v0.7.0.md), [v0.6.0](releases/v0.6.0.md), [v0.5.1](releases/v0.5.1.md), [v0.5.0](releases/v0.5.0.md), [v0.4.0](releases/v0.4.0.md), [v0.3.3](releases/v0.3.3.md), [v0.3.2](releases/v0.3.2.md), [v0.3.1](releases/v0.3.1.md), [v0.3.0](releases/v0.3.0.md), [v0.2.2](releases/v0.2.2.md), [v0.2.1](releases/v0.2.1.md), [v0.2.0](releases/v0.2.0.md), the first release [v0.1.0](releases/v0.1.0.md)).
 
-## Current batch: complete (v0.15.1, 2026-11-06)
+## Current batch: complete (v0.15.2, 2026-11-10)
 
-The batch started after v0.14.0 shipped in v0.15.1: the cleanup batch (#83/#85 closed, #72/#73 evidence) and #38 slice 2 (signed checkpoints, webhook sinks, Admin › Audit stream). Nothing is in progress.
+v0.15.2 is the hardening pass ("no hell files"): hot-path database round trips, web bundle and static serving, slow admin queries, file and function splits, and the guards that keep them (`TestMCPQueryBudget`, `scripts/check-go-quality.py`, staticcheck in `make lint`, `npm run report:bundle`). Nothing is in progress.
 
 Follow-ups, none blocking:
-- #96: the flaky quota-window test.
+- #105: decide whether to reuse upstream connections between MCP calls (the largest remaining latency win; a security design decision).
+- #106: the call-log purge scans the call log on a partial batch.
+- #107: provider token refresh holds a pooled connection during the outbound call.
+- The 23 functions in `scripts/go-complexity-allow.txt` (JSON Schema validation, the definition scanner, approvals); the list only shrinks.
 - #93: a durable sent marker for held oversized rows.
 - #94: manual accessibility and screen-reader review of dialogs.
 - #72: the 8× allocation bound, call-path equivalence, and a hosted corpus run.
@@ -16,7 +19,9 @@ Follow-ups, none blocking:
 - #42 Helm when a pilot needs it.
 - Real-world evidence #13–#20 (owner).
 
-Decisions 95+ and migrations 65+ are unallocated; the main thread allocates them.
+Decisions 95+ and migrations 66+ are unallocated; the main thread allocates them.
+
+v0.15.1 (2026-11-06) completed the batch before it: the cleanup batch (#83/#85 closed, #72/#73 evidence) and #38 slice 2 (signed checkpoints, webhook sinks, Admin › Audit stream). #96 (the flaky quota-window test) was fixed afterwards.
 
 v0.14.0 (2026-11-06) completed the previous batch: #70 and #73 closed, the #72 backend and #38 slice 1 released.
 
