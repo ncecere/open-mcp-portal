@@ -23,6 +23,7 @@ import (
 	"github.com/ncecere/open-mcp-portal/internal/notify"
 	"github.com/ncecere/open-mcp-portal/internal/secrets"
 	"github.com/ncecere/open-mcp-portal/internal/store/dbgen"
+	"github.com/ncecere/open-mcp-portal/internal/upstream"
 )
 
 // This explicit projection is shared by responses and audit metadata. Never
@@ -130,46 +131,40 @@ func sinkError(w http.ResponseWriter, r *http.Request, e error) bool {
 	httpx.Error(w, 500, "sink_failed", "Sink operation failed")
 	return true
 }
+
+// sinkChange is one sink mutation, as the route, If-Match and the body ask for it.
+type sinkChange struct {
+	id  uuid.UUID
+	rev int64 // zero for a create, which has no If-Match
+	in  apitypes.AuditSinkRequest
+
+	create, resume, test, rotate bool
+}
+
+// sinkRow is a sink's stored settings: what a change starts from and writes back.
+type sinkRow struct {
+	name, profile, hint, secretHint string
+	required, enabled               bool
+	batch                           int32
+	uc, sc, pc                      []byte // sealed URL, secret and previous secret
+	until                           *time.Time
+}
+
 func (a *api) auditSinkChange(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if !a.consumerAdmin(w, r) {
 		return
 	}
-	create := r.Method == "POST" && r.PathValue("id") == ""
-	var rev int64
-	if !create {
-		var ok bool
-		rev, ok = ifMatch(w, r)
-		if !ok {
-			return
-		}
-	}
-	var in apitypes.AuditSinkRequest
-	resume := strings.HasSuffix(r.URL.Path, "/resume")
-	if create || r.Method == "PUT" || resume {
-		if !httpx.Decode(w, r, &in) {
-			return
-		}
-	}
-	id := uuid.New()
-	if !create {
-		var e error
-		id, e = uuid.Parse(r.PathValue("id"))
-		if e != nil {
-			httpx.Error(w, 400, "invalid_sink", "Invalid sink id")
-			return
-		}
-	}
-	if in.BatchMaxRecords != nil && (*in.BatchMaxRecords < 1 || *in.BatchMaxRecords > 1000) {
-		httpx.Error(w, 400, "invalid_sink", "batch_max_records must be 1-1000")
+	c, ok := readSinkChange(w, r)
+	if !ok {
 		return
 	}
 	client := a.AuditSinkClient
 	if client == nil {
 		client = notify.NewWebhookClient(a.Config.AuditStreamAllowedNetworks, a.Log)
 	}
-	if in.Url != nil {
-		if e := notify.CheckWebhookURL(r.Context(), client, *in.Url, 2048, true); e != nil {
+	if c.in.Url != nil {
+		if e := notify.CheckWebhookURL(r.Context(), client, *c.in.Url, 2048, true); e != nil {
 			httpx.Error(w, 422, "invalid_sink_url", "Destination violates audit sink URL policy")
 			return
 		}
@@ -178,117 +173,12 @@ func (a *api) auditSinkChange(w http.ResponseWriter, r *http.Request) {
 	if sinkError(w, r, e) {
 		return
 	}
-	var out, before json.RawMessage
+	var out json.RawMessage
 	var shown string
-	test := strings.HasSuffix(r.URL.Path, "/test")
 	e = pgx.BeginFunc(r.Context(), a.Pool, func(tx pgx.Tx) error {
-		var name, profile, hint, secretHint string
-		var required, enabled bool
-		var batch int32
-		var current, cursor int64
-		var uc, sc, pc []byte
-		var until *time.Time
-		if create {
-			profile = "summary"
-			enabled = true
-			batch = 100
-		} else {
-			e := tx.QueryRow(r.Context(), `SELECT name,profile,required,enabled,batch_max_records,revision,cursor_seq,url_cipher,url_hint,secret_cipher,secret_previous_cipher,secret_previous_until,secret_hint,`+sinkView+` FROM omp_audit_ext.sinks WHERE id=$1`, id).Scan(&name, &profile, &required, &enabled, &batch, &current, &cursor, &uc, &hint, &sc, &pc, &until, &secretHint, &before)
-			if e != nil {
-				return e
-			}
-			if current != rev {
-				return apperr.Conflict("sink_conflict", "Stale sink revision")
-			}
-		}
-		if in.Name != nil {
-			name = *in.Name
-		}
-		if in.Profile != nil {
-			profile = string(*in.Profile)
-		}
-		if in.Required != nil {
-			required = *in.Required
-		}
-		if in.Enabled != nil {
-			enabled = *in.Enabled
-		}
-		if in.BatchMaxRecords != nil {
-			batch = int32(*in.BatchMaxRecords)
-		}
-		if create && (in.Name == nil || in.Url == nil) {
-			return apperr.Invalid("invalid_sink", "name and url required")
-		}
-		if in.Url != nil {
-			u, _ := url.Parse(*in.Url)
-			hint = u.Hostname()
-			var e error
-			uc, e = box.Seal([]byte(*in.Url), auditstream.SinkAAD(id, "url"))
-			if e != nil {
-				return e
-			}
-		}
-		rotate := strings.HasSuffix(r.URL.Path, "/rotate-secret")
-		if create || rotate {
-			if rotate {
-				old, e := box.Open(sc, auditstream.SinkAAD(id, "secret"))
-				if e != nil {
-					return e
-				}
-				defer clear(old)
-				pc, e = box.Seal(old, auditstream.SinkAAD(id, "secret_previous"))
-				if e != nil {
-					return e
-				}
-				t := time.Now().Add(24 * time.Hour)
-				until = &t
-			}
-			raw := make([]byte, 32)
-			if _, e := rand.Read(raw); e != nil {
-				return e
-			}
-			shown = base64.RawURLEncoding.EncodeToString(raw)
-			clear(raw)
-			var e error
-			sc, e = box.Seal([]byte(shown), auditstream.SinkAAD(id, "secret"))
-			if e != nil {
-				return e
-			}
-			secretHint = shown[len(shown)-4:]
-		}
-		switch {
-		case test:
-			// No row lock is held during network I/O. The revision is checked again
-			// before sending; a test never touches the delivery cursor.
-		case resume:
-			if in.CursorSeq == nil {
-				return apperr.Invalid("cursor_required", "cursor_seq required")
-			}
-			_, e = tx.Exec(r.Context(), `SELECT omp_audit_ext.resume_sink($1,$2,$3)`, id, rev, *in.CursorSeq)
-		case r.PathValue("seq") != "":
-			seq, err := strconv.ParseInt(r.PathValue("seq"), 10, 64)
-			if err != nil {
-				return apperr.Invalid("invalid_seq", "Invalid sequence")
-			}
-			_, e = tx.Exec(r.Context(), `SELECT omp_audit_ext.acknowledge_oversized($1,$2,$3)`, id, rev, seq)
-		case r.Method == "DELETE":
-			_, e = tx.Exec(r.Context(), `SELECT omp_audit_ext.delete_sink($1,$2)`, id, rev)
-		case create:
-			_, e = tx.Exec(r.Context(), `SELECT omp_audit_ext.create_sink($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, id, name, profile, required, enabled, batch, uc, hint, sc, pc, until, secretHint)
-		default:
-			_, e = tx.Exec(r.Context(), `SELECT omp_audit_ext.update_sink($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, id, rev, name, profile, required, enabled, batch, uc, hint, sc, pc, until, secretHint)
-		}
-		if e != nil {
-			return e
-		}
-		if r.Method != "DELETE" {
-			if e = tx.QueryRow(r.Context(), `SELECT `+sinkView+` FROM omp_audit_ext.sinks WHERE id=$1`, id).Scan(&out); e != nil {
-				return e
-			}
-		}
-		entry := a.actor(r).Audit("settings.audit_sink_change", "audit_sink", id.String())
-		entry.Metadata = map[string]any{"action": r.Method + " " + r.Pattern, "before": before, "after": out}
-		return audit.Record(r.Context(), dbgen.New(tx), entry)
+		var e error
+		out, shown, e = a.applySinkChange(r, tx, box, c)
+		return e
 	})
 	// Preserve intentional validation failures, never raw database/transport errors.
 	var ae *apperr.Error
@@ -299,36 +189,227 @@ func (a *api) auditSinkChange(w http.ResponseWriter, r *http.Request) {
 	if sinkError(w, r, e) {
 		return
 	}
-	if test {
-		var uc, sc []byte
-		if sinkError(w, r, a.Pool.QueryRow(r.Context(), `SELECT url_cipher,secret_cipher FROM omp_audit_ext.sinks WHERE id=$1 AND revision=$2`, id, rev).Scan(&uc, &sc)) {
-			return
-		}
-		raw, e := box.Open(uc, auditstream.SinkAAD(id, "url"))
-		if sinkError(w, r, e) {
-			return
-		}
-		defer clear(raw)
-		secret, e := box.Open(sc, auditstream.SinkAAD(id, "secret"))
-		if sinkError(w, r, e) {
-			return
-		}
-		defer clear(secret)
-		body := []byte("{\"event\":\"audit.test\"}\n")
-		req, e := http.NewRequestWithContext(r.Context(), "POST", string(raw), bytes.NewReader(body))
-		if sinkError(w, r, e) {
-			return
-		}
-		ts := time.Now().Unix()
-		req.Header.Set("Content-Type", "application/x-ndjson")
-		req.Header.Set(notify.HeaderEvent, "audit.test")
-		req.Header.Set(notify.HeaderTimestamp, strconv.FormatInt(ts, 10))
-		req.Header.Set(notify.HeaderSignature, notify.SignatureHeader(ts, body, string(secret)))
-		httpx.JSON(w, 200, map[string]any{"error_class": auditstream.Send(auditstream.SinkHTTPClient(client), req)})
+	if c.test {
+		a.sendSinkTest(w, r, box, client, c)
 		return
 	}
 	httpx.JSON(w, 200, map[string]any{"sink": out, "secret": optionalSecret(shown)})
 }
+
+// readSinkChange reads the request: the revision (every route but create), the
+// body (create, update and resume), the sink id and the batch size's range. It
+// has answered the request when it returns false.
+func readSinkChange(w http.ResponseWriter, r *http.Request) (sinkChange, bool) {
+	c := sinkChange{create: r.Method == "POST" && r.PathValue("id") == ""}
+	if !c.create {
+		var ok bool
+		c.rev, ok = ifMatch(w, r)
+		if !ok {
+			return c, false
+		}
+	}
+	c.resume = strings.HasSuffix(r.URL.Path, "/resume")
+	if c.create || r.Method == "PUT" || c.resume {
+		if !httpx.Decode(w, r, &c.in) {
+			return c, false
+		}
+	}
+	c.id = uuid.New()
+	if !c.create {
+		var e error
+		c.id, e = uuid.Parse(r.PathValue("id"))
+		if e != nil {
+			httpx.Error(w, 400, "invalid_sink", "Invalid sink id")
+			return c, false
+		}
+	}
+	if c.in.BatchMaxRecords != nil && (*c.in.BatchMaxRecords < 1 || *c.in.BatchMaxRecords > 1000) {
+		httpx.Error(w, 400, "invalid_sink", "batch_max_records must be 1-1000")
+		return c, false
+	}
+	c.test = strings.HasSuffix(r.URL.Path, "/test")
+	c.rotate = strings.HasSuffix(r.URL.Path, "/rotate-secret")
+	return c, true
+}
+
+// applySinkChange makes the change in tx and audits it there. It returns the
+// sink's view afterwards (none for a delete) and the new signing secret, when
+// one was issued, to show once.
+func (a *api) applySinkChange(r *http.Request, tx pgx.Tx, box *secrets.Box, c sinkChange) (out json.RawMessage, shown string, err error) {
+	row, before, err := loadSinkRow(r, tx, c)
+	if err != nil {
+		return nil, "", err
+	}
+	row.merge(c.in)
+	if c.create && (c.in.Name == nil || c.in.Url == nil) {
+		return nil, "", apperr.Invalid("invalid_sink", "name and url required")
+	}
+	if c.in.Url != nil {
+		if err := row.sealURL(box, c.id, *c.in.Url); err != nil {
+			return nil, "", err
+		}
+	}
+	if c.rotate {
+		if err := row.keepPreviousSecret(box, c.id); err != nil {
+			return nil, "", err
+		}
+	}
+	if c.create || c.rotate {
+		if shown, err = row.issueSecret(box, c.id); err != nil {
+			return nil, "", err
+		}
+	}
+	if err := writeSinkChange(r, tx, c, row); err != nil {
+		return nil, "", err
+	}
+	if r.Method != "DELETE" {
+		if err := tx.QueryRow(r.Context(), `SELECT `+sinkView+` FROM omp_audit_ext.sinks WHERE id=$1`, c.id).Scan(&out); err != nil {
+			return nil, "", err
+		}
+	}
+	entry := a.actor(r).Audit("settings.audit_sink_change", "audit_sink", c.id.String())
+	entry.Metadata = map[string]any{"action": r.Method + " " + r.Pattern, "before": before, "after": out}
+	return out, shown, audit.Record(r.Context(), dbgen.New(tx), entry)
+}
+
+// loadSinkRow reads the sink a change applies to and its view before the
+// change, refusing a stale revision. A create starts from the defaults.
+func loadSinkRow(r *http.Request, tx pgx.Tx, c sinkChange) (sinkRow, json.RawMessage, error) {
+	if c.create {
+		return sinkRow{profile: "summary", enabled: true, batch: 100}, nil, nil
+	}
+	var row sinkRow
+	var before json.RawMessage
+	var current, cursor int64
+	e := tx.QueryRow(r.Context(), `SELECT name,profile,required,enabled,batch_max_records,revision,cursor_seq,url_cipher,url_hint,secret_cipher,secret_previous_cipher,secret_previous_until,secret_hint,`+sinkView+` FROM omp_audit_ext.sinks WHERE id=$1`, c.id).Scan(&row.name, &row.profile, &row.required, &row.enabled, &row.batch, &current, &cursor, &row.uc, &row.hint, &row.sc, &row.pc, &row.until, &row.secretHint, &before)
+	if e != nil {
+		return row, nil, e
+	}
+	if current != c.rev {
+		return row, nil, apperr.Conflict("sink_conflict", "Stale sink revision")
+	}
+	return row, before, nil
+}
+
+// merge overlays the settings the request gives.
+func (s *sinkRow) merge(in apitypes.AuditSinkRequest) {
+	if in.Name != nil {
+		s.name = *in.Name
+	}
+	if in.Profile != nil {
+		s.profile = string(*in.Profile)
+	}
+	if in.Required != nil {
+		s.required = *in.Required
+	}
+	if in.Enabled != nil {
+		s.enabled = *in.Enabled
+	}
+	if in.BatchMaxRecords != nil {
+		s.batch = int32(*in.BatchMaxRecords)
+	}
+}
+
+func (s *sinkRow) sealURL(box *secrets.Box, id uuid.UUID, raw string) error {
+	u, _ := url.Parse(raw)
+	s.hint = u.Hostname()
+	var e error
+	s.uc, e = box.Seal([]byte(raw), auditstream.SinkAAD(id, "url"))
+	return e
+}
+
+// keepPreviousSecret keeps the current signing secret as the previous one for
+// a day, so a receiver can verify with either while it rotates.
+func (s *sinkRow) keepPreviousSecret(box *secrets.Box, id uuid.UUID) error {
+	old, e := box.Open(s.sc, auditstream.SinkAAD(id, "secret"))
+	if e != nil {
+		return e
+	}
+	defer clear(old)
+	s.pc, e = box.Seal(old, auditstream.SinkAAD(id, "secret_previous"))
+	if e != nil {
+		return e
+	}
+	t := time.Now().Add(24 * time.Hour)
+	s.until = &t
+	return nil
+}
+
+// issueSecret makes a new signing secret, seals it into the row and returns it.
+func (s *sinkRow) issueSecret(box *secrets.Box, id uuid.UUID) (string, error) {
+	raw := make([]byte, 32)
+	if _, e := rand.Read(raw); e != nil {
+		return "", e
+	}
+	shown := base64.RawURLEncoding.EncodeToString(raw)
+	clear(raw)
+	var e error
+	s.sc, e = box.Seal([]byte(shown), auditstream.SinkAAD(id, "secret"))
+	if e != nil {
+		return "", e
+	}
+	s.secretHint = shown[len(shown)-4:]
+	return shown, nil
+}
+
+// writeSinkChange runs the one statement the route stands for.
+func writeSinkChange(r *http.Request, tx pgx.Tx, c sinkChange, s sinkRow) error {
+	var e error
+	switch {
+	case c.test:
+		// No row lock is held during network I/O. The revision is checked again
+		// before sending; a test never touches the delivery cursor.
+	case c.resume:
+		if c.in.CursorSeq == nil {
+			return apperr.Invalid("cursor_required", "cursor_seq required")
+		}
+		_, e = tx.Exec(r.Context(), `SELECT omp_audit_ext.resume_sink($1,$2,$3)`, c.id, c.rev, *c.in.CursorSeq)
+	case r.PathValue("seq") != "":
+		seq, err := strconv.ParseInt(r.PathValue("seq"), 10, 64)
+		if err != nil {
+			return apperr.Invalid("invalid_seq", "Invalid sequence")
+		}
+		_, e = tx.Exec(r.Context(), `SELECT omp_audit_ext.acknowledge_oversized($1,$2,$3)`, c.id, c.rev, seq)
+	case r.Method == "DELETE":
+		_, e = tx.Exec(r.Context(), `SELECT omp_audit_ext.delete_sink($1,$2)`, c.id, c.rev)
+	case c.create:
+		_, e = tx.Exec(r.Context(), `SELECT omp_audit_ext.create_sink($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, c.id, s.name, s.profile, s.required, s.enabled, s.batch, s.uc, s.hint, s.sc, s.pc, s.until, s.secretHint)
+	default:
+		_, e = tx.Exec(r.Context(), `SELECT omp_audit_ext.update_sink($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, c.id, c.rev, s.name, s.profile, s.required, s.enabled, s.batch, s.uc, s.hint, s.sc, s.pc, s.until, s.secretHint)
+	}
+	return e
+}
+
+// sendSinkTest posts a signed test event to the sink's destination and answers
+// with the class of error the delivery met, if any.
+func (a *api) sendSinkTest(w http.ResponseWriter, r *http.Request, box *secrets.Box, client *upstream.Client, c sinkChange) {
+	var uc, sc []byte
+	if sinkError(w, r, a.Pool.QueryRow(r.Context(), `SELECT url_cipher,secret_cipher FROM omp_audit_ext.sinks WHERE id=$1 AND revision=$2`, c.id, c.rev).Scan(&uc, &sc)) {
+		return
+	}
+	raw, e := box.Open(uc, auditstream.SinkAAD(c.id, "url"))
+	if sinkError(w, r, e) {
+		return
+	}
+	defer clear(raw)
+	secret, e := box.Open(sc, auditstream.SinkAAD(c.id, "secret"))
+	if sinkError(w, r, e) {
+		return
+	}
+	defer clear(secret)
+	body := []byte("{\"event\":\"audit.test\"}\n")
+	req, e := http.NewRequestWithContext(r.Context(), "POST", string(raw), bytes.NewReader(body))
+	if sinkError(w, r, e) {
+		return
+	}
+	ts := time.Now().Unix()
+	req.Header.Set("Content-Type", "application/x-ndjson")
+	req.Header.Set(notify.HeaderEvent, "audit.test")
+	req.Header.Set(notify.HeaderTimestamp, strconv.FormatInt(ts, 10))
+	req.Header.Set(notify.HeaderSignature, notify.SignatureHeader(ts, body, string(secret)))
+	httpx.JSON(w, 200, map[string]any{"error_class": auditstream.Send(auditstream.SinkHTTPClient(client), req)})
+}
+
 func optionalSecret(s string) *string {
 	if s == "" {
 		return nil
