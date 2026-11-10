@@ -100,15 +100,3 @@ func (c *Client) pauseRetry(ctx context.Context, after time.Duration) error {
 		return nil
 	}
 }
-
-func mayRetry(ctx context.Context, t Target, req ForwardRequest, err error, progress bool, attempt int) (*Error, bool) {
-	if ctx.Err() != nil || !req.Retryable || t.NoReplay || progress || attempt >= MaxReadRetries ||
-		len(strings.TrimSpace(string(req.InputResponses))) != 0 || req.RequestState != "" {
-		return nil, false
-	}
-	var e *Error
-	if !errors.As(err, &e) || !e.retryable {
-		return nil, false
-	}
-	return e, true
-}

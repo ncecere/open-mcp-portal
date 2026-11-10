@@ -13,7 +13,8 @@ import { redirectTo } from "../components/providers/labels";
 import { catalogServer, gateway, gatewayCapabilities, gatewayCapability, gatewayId, myGateway, myTeam, page, serverId, team, user } from "./fixtures";
 import { serverConnection, serverProviderId, serverRequires } from "./fixtures-oauth";
 import { connection, connectRequest, providerRef, providerSummaries, requestId } from "./fixtures-providers";
-import { mockApi, renderApp, shellRoutes } from "./harness";
+import { mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const serverRef = providerRef({ id: serverProviderId, slug: "mcp-0a1b2c3d4e5f", name: "GitHub MCP", preset: null, kind: "mcp_server", server: { id: serverId, slug: "github", name: "GitHub MCP", teamSlug: team.slug } });
 
@@ -57,7 +58,14 @@ describe("Connect pages for a server sign-in", () => {
     const u = userEvent.setup();
     const go = vi.spyOn(redirectTo, "go").mockImplementation(() => {});
     const authorizeUrl = "https://github.com/login/oauth/authorize?client_id=Iv1.c0ffee&state=s3";
-    const request = connectRequest({ provider: serverRef, reason: "not_connected", grantedScopes: [], accountLabel: null, requestScopes: ["repo", "read:org", "read:user"], capability: { kind: "tool", exposedName: "github__get_me", title: "Get me" } });
+    const request = connectRequest({
+      provider: serverRef,
+      reason: "not_connected",
+      grantedScopes: [],
+      accountLabel: null,
+      requestScopes: ["repo", "read:org", "read:user"],
+      capability: { kind: "tool", exposedName: "github__get_me", title: "Get me" },
+    });
     const calls = mockApi({
       ...shellRoutes(),
       [`GET /v1/connect/requests/${requestId}`]: () => request,

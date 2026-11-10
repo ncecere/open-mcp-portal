@@ -7,7 +7,8 @@ import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { entryWarnings, parseCidr, valueProblem } from "../pages/admin/networks/entries";
 import { page, team } from "./fixtures";
-import { type Call, type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Call, type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 type Settings = Schemas["NetworkSettings"];
 

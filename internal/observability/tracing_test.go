@@ -94,11 +94,11 @@ func TestSpanAttributesAreAllowListed(t *testing.T) {
 	}
 	for _, s := range ended {
 		for _, a := range s.Attributes() {
-			if !allowed[string(a.Key)] || strings.Contains(a.Value.Emit(), "sentinel") || strings.Contains(a.Value.Emit(), "@") {
-				t.Errorf("%s carries %s=%s", s.Name(), a.Key, a.Value.Emit())
+			if !allowed[string(a.Key)] || strings.Contains(a.Value.String(), "sentinel") || strings.Contains(a.Value.String(), "@") {
+				t.Errorf("%s carries %s=%s", s.Name(), a.Key, a.Value.String())
 			}
-			if len(a.Value.Emit()) > maxAttrValue {
-				t.Errorf("%s: %s is %d long", s.Name(), a.Key, len(a.Value.Emit()))
+			if len(a.Value.String()) > maxAttrValue {
+				t.Errorf("%s: %s is %d long", s.Name(), a.Key, len(a.Value.String()))
 			}
 		}
 		if len(s.Events()) != 0 {
@@ -147,8 +147,8 @@ func TestServerSpan(t *testing.T) {
 		t.Error("a 5xx is not an error")
 	}
 	for _, a := range got[0].Attributes() {
-		if strings.Contains(a.Value.Emit(), "sentinel") {
-			t.Errorf("%s=%s", a.Key, a.Value.Emit())
+		if strings.Contains(a.Value.String(), "sentinel") {
+			t.Errorf("%s=%s", a.Key, a.Value.String())
 		}
 	}
 	// Probes and /mcp/ requests get no span here; an unsampled parent stays unsampled.

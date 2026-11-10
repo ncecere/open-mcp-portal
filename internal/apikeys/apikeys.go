@@ -388,11 +388,7 @@ func (s *Service) Authenticate(ctx context.Context, secret string) (Principal, e
 			return Principal{}, err
 		}
 	}
-	scope, err := s.q.ListAPIKeyGatewayIDs(ctx, row.ApiKey.ID)
-	if err != nil {
-		return Principal{}, err
-	}
-	return Principal{Key: row.ApiKey, User: row.User, Gateways: scope}, nil
+	return Principal{Key: row.ApiKey, User: row.User, Gateways: row.GatewayIds}, nil
 }
 
 // rehash moves a key found with the previous pepper to the current one.
@@ -409,4 +405,9 @@ func (s *Service) rehash(ctx context.Context, k dbgen.ApiKey, old, digest string
 }
 
 // Touch records that a key was used (at most once a minute).
-func (s *Service) Touch(ctx context.Context, id uuid.UUID) error { return s.q.TouchAPIKey(ctx, id) }
+func (s *Service) Touch(ctx context.Context, k dbgen.ApiKey) error {
+	if !store.TouchDue(k.LastUsedAt) {
+		return nil
+	}
+	return s.q.TouchAPIKey(ctx, k.ID)
+}

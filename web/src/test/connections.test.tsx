@@ -7,7 +7,8 @@ import { redirectTo } from "../components/providers/labels";
 import { NARROW_QUERY } from "@/lib/bitop-utils";
 import { myTeam, page, user } from "./fixtures";
 import { connection, connectionId, connectServer, googleId, providerId, providerRef, providerSummaries } from "./fixtures-providers";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const authorizeUrl = "https://github.com/login/oauth/authorize?client_id=Iv1.abc123&state=s1";
 const started: Schemas["ConnectStarted"] = { authorizeUrl, scopes: ["repo", "read:org"], expiresAt: "2026-10-16T08:10:00Z" };

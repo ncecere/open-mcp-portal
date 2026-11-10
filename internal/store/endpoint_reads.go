@@ -53,7 +53,9 @@ func EndpointReads(ctx context.Context) (EndpointReader, bool) {
 func (s *EndpointReadScope) Close() {
 	s.closed.Store(true)
 	s.cancel()
+	// Taking the lock is the drain: it is held for the length of each read.
 	s.mu.Lock()
+	//lint:ignore SA2001 nothing to do under the lock; acquiring it is the wait
 	s.mu.Unlock()
 }
 

@@ -84,7 +84,7 @@ make demo         # optional, instead of all of the above: everything in Docker 
 |---|---|
 | `make test` | All Go tests; integration tests skip when Postgres is unreachable |
 | `make test-integration` | `make deps-up`, then all Go tests with `-race`, failing instead of skipping without Postgres |
-| `make lint` | `go vet` and the gofmt check |
+| `make lint` | `go vet`, the gofmt check, `staticcheck` (pinned; `staticcheck.conf`) and `scripts/check-go-quality.py`: Go source files ≤ 600 lines, tests ≤ 1,000, and functions at a cyclomatic complexity of 30 or less, apart from a list that only shrinks |
 | `make web-test` | UI type-check and Vitest tests, with axe accessibility checks |
 | `make k8s-validate` | Renders the Kustomize base and overlays and validates them with kubeconform |
 | `make actionlint` | Checks the GitHub Actions workflows |
@@ -95,6 +95,7 @@ make demo         # optional, instead of all of the above: everything in Docker 
 - Integration tests create one database per test on the server in `OMP_TEST_DATABASE_URL`. `testutil.NewDB` copies a template migrated once per test process (`CREATE DATABASE … TEMPLATE`), reassigns its objects to the test's own owner role and then runs the real role preflight and runtime-grant reconciliation; `TestTemplateMatchesFreshMigration` checks that a copy's catalog (objects, owners, ACLs, security-definer settings, triggers, recorded migrations) equals a database migrated from empty. Historical-schema fixtures (`NewDBWithMigration`) still migrate from empty. The default server is the compose Postgres (`postgres://omp:omp-dev-only@127.0.0.1:55442/postgres`); `OMP_TEST_REQUIRE_DB=1` makes them fail instead of skip, and `OMP_TEST_LOG=1` shows the server's logs.
 - In `web/`: `npm run typecheck`, `npm test`, `npm run build`, and the policies `npm run check:styling` (Base UI components, CSS Modules and design tokens only) and `npm run check:size` (source files ≤ 400 lines, tests ≤ 700).
 - Add or update tests with every behaviour change. Bug fixes come with a test that fails without the fix.
+- The gateway's hot path is budgeted. `TestMCPQueryBudget` (`internal/httpapi`) pins the number of database statements one `tools/list` and one `tools/call` make; a change that adds one must raise the budget in the same commit and say why, and one that removes one must lower it. `go test -run xxx -bench . ./internal/gateways ./internal/mcpgw ./internal/upstream` runs the benchmarks of selection evaluation, list rendering and an upstream call; compare before and after with `benchstat` when you touch those paths.
 
 `make test` and `make test-ci` both keep every test with an explicit 20-minute per-package budget. The growing
 HTTP integration package can exceed Go's default cumulative 10 minutes even in normal mode; a package

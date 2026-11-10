@@ -127,7 +127,6 @@ func TestSensitivityConfirmationAPI(t *testing.T) {
 
 	// What does not confirm: ordinary edits, other governance fields, an empty
 	// governance object, a refused role and a stale revision.
-	rev := e.revisionOf(sv)
 	patch := func(s *session, body map[string]any, rev int64) (int, string) {
 		return s.call("PATCH", path, body, nil, ifMatch(rev))
 	}
@@ -167,7 +166,7 @@ func TestSensitivityConfirmationAPI(t *testing.T) {
 	}
 
 	// The explicit confirmation, with the label the server already has.
-	rev = e.revisionOf(sv)
+	rev := e.revisionOf(sv)
 	audits := func() string {
 		return e.scalar(`SELECT count(*)::text FROM audit_log WHERE action = 'mcp_server.governance_update' AND target_id = $1
 			AND before_state->>'sensitivity' = 'internal' AND after_state->>'sensitivity' = 'internal'

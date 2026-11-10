@@ -5,11 +5,20 @@ import type { Schemas } from "../api/client";
 import { gatewayCapabilitiesQuery } from "../components/gateways/scope";
 import { policyOf, previewOf } from "../components/gateways/curation-fields";
 import { gateway, gatewayCapabilities, gatewayCapability, gatewayId, gatewayOptions, optionsPage, team } from "./fixtures";
-import { type Handler, mockApi, renderApp, Reply, shellRoutes } from "./harness";
+import { type Handler, mockApi, Reply, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/gateways/${gatewayId}`;
 const tab = `/teams/${team.slug}/gateways/${gatewayId}?tab=capabilities`;
-const definition = { name: "get_status", description: "Original server words", inputSchema: { type: "object", properties: { owner: { type: "string" }, limit: { type: "integer" }, active: { type: "boolean" }, config: { type: "object", properties: { enabled: { type: "boolean" } } } }, required: ["owner"] } };
+const definition = {
+  name: "get_status",
+  description: "Original server words",
+  inputSchema: {
+    type: "object",
+    properties: { owner: { type: "string" }, limit: { type: "integer" }, active: { type: "boolean" }, config: { type: "object", properties: { enabled: { type: "boolean" } } } },
+    required: ["owner"],
+  },
+};
 const capability = (extra: Partial<Schemas["GatewayCapability"]> = {}) => gatewayCapability({ fingerprint: "fingerprint-reviewed", originalDefinition: definition, effectiveDefinition: definition, ...extra });
 const routes = (cap = capability(), extra: Record<string, Handler> = {}, role: Schemas["TeamRole"] = "owner"): Record<string, Handler> => ({
   ...shellRoutes("none", role),
@@ -47,7 +56,15 @@ describe("Gateway tool curation", () => {
     await waitFor(() => expect(calls.find((c) => c.method === "PUT")).toBeDefined());
     const put = calls.find((c) => c.method === "PUT")!;
     expect(put.headers.get("If-Match")).toBe('"7"');
-    expect(put.body).toEqual({ items: [{ capabilityId: capability().capabilityId, expectedFingerprint: "fingerprint-reviewed", curation: { nameOverride: "our_status", descriptionOverride: "For our team", constraints: { owner: { fixed: "our-org" }, limit: { allowed: [2, 3] } } } }] });
+    expect(put.body).toEqual({
+      items: [
+        {
+          capabilityId: capability().capabilityId,
+          expectedFingerprint: "fingerprint-reviewed",
+          curation: { nameOverride: "our_status", descriptionOverride: "For our team", constraints: { owner: { fixed: "our-org" }, limit: { allowed: [2, 3] } } },
+        },
+      ],
+    });
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -73,7 +90,11 @@ describe("Gateway tool curation", () => {
     await u.clear(within(dialog).getByRole("textbox", { name: "Exposed name" }));
     await u.click(within(dialog).getByRole("checkbox", { name: "Override description for this gateway" }));
     await u.click(within(dialog).getByRole("button", { name: "Save policy" }));
-    await waitFor(() => expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ items: [{ capabilityId: cap.capabilityId, expectedFingerprint: cap.fingerprint, curation: { nameOverride: null, descriptionOverride: null, constraints: { owner: { fixed: "org" } } } }] }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === "PUT")?.body).toEqual({
+        items: [{ capabilityId: cap.capabilityId, expectedFingerprint: cap.fingerprint, curation: { nameOverride: null, descriptionOverride: null, constraints: { owner: { fixed: "org" } } } }],
+      }),
+    );
   });
 
   it("does not turn a long original description into an invalid override during rename-only edits", async () => {
@@ -85,7 +106,11 @@ describe("Gateway tool curation", () => {
     await u.type(within(dialog).getByRole("textbox", { name: "Exposed name" }), "our_status");
     expect(within(dialog).getByRole("textbox", { name: "Model-facing description" })).toBeDisabled();
     await u.click(within(dialog).getByRole("button", { name: "Save policy" }));
-    await waitFor(() => expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ items: [{ capabilityId: cap.capabilityId, expectedFingerprint: cap.fingerprint, curation: { nameOverride: "our_status", descriptionOverride: null, constraints: {} } }] }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === "PUT")?.body).toEqual({
+        items: [{ capabilityId: cap.capabilityId, expectedFingerprint: cap.fingerprint, curation: { nameOverride: "our_status", descriptionOverride: null, constraints: {} } }],
+      }),
+    );
   });
 
   it("clears explicitly with null and the current fingerprint", async () => {

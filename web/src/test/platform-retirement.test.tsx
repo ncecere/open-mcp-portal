@@ -4,7 +4,8 @@ import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { agentLine } from "../components/gateways/calls-table";
 import { mcpCall, page, serviceAccount, serviceAccountId, team } from "./fixtures";
-import { type Handler, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/service-accounts`;
 const record = `/teams/${team.slug}/service-accounts/${serviceAccountId}`;

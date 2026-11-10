@@ -3,7 +3,8 @@ import { screen, waitFor, within } from "@testing-library/react";
 import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { catalogServer, page, serverId, team } from "./fixtures";
-import { type Handler, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const detail: Schemas["CatalogServerDetail"] = {
   server: catalogServer(),

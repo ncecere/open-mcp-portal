@@ -281,12 +281,6 @@ func (r ForwardRequest) toolArguments() json.RawMessage {
 	return json.RawMessage("{}")
 }
 
-func (r ForwardRequest) progressMeta(meta map[string]any) {
-	if len(r.ProgressToken) > 0 {
-		meta["progressToken"] = r.ProgressToken
-	}
-}
-
 // forwardLegacy calls a legacy server over an SDK session (initialize). It
 // declares no capability. stale: the session could not be opened because the
 // server is not legacy any more.

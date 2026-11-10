@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge/badge";
 import { Button } from "@/components/ui/button/button";
 import { VisuallyHidden } from "@/components/ui/visually-hidden/visually-hidden";
 import { linkElement } from "../link-target";
-import { RelativeTime } from "../templates/list-page";
+import { RelativeTime } from "../templates/relative-time";
 import a from "./attention.module.css";
 import { type AttentionItem, moreNouns, severityLabels, severityOrder, severityTone, wordsFor } from "./wording";
 

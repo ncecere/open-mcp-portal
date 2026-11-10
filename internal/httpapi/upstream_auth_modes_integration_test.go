@@ -874,7 +874,7 @@ func TestEverySecretKindNeverLeaksAnywhere(t *testing.T) {
 			if !allowed[string(a.Key)] {
 				t.Errorf("span %s carries the attribute %s", sp.Name(), a.Key)
 			}
-			spans = append(spans, a.Value.Emit())
+			spans = append(spans, a.Value.String())
 		}
 	}
 	where["spans"] = strings.Join(spans, "\n")

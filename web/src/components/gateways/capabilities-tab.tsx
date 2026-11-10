@@ -13,13 +13,16 @@ import { Card } from "@/components/ui/card/card";
 import { EmptyState } from "@/components/ui/empty-state/empty-state";
 import { SkeletonText } from "@/components/ui/skeleton/skeleton";
 import { serviceAccountsCant } from "../providers/labels";
+import { lazyTab, TabLoading } from "../tab-loading";
 import { untrustedText } from "../servers/labels";
 import { CapabilityList } from "./capability-list";
-import { CapabilityPicker } from "./capability-picker";
 import { CurationDialog, ToolDefinitionDialog } from "./curation-dialog";
 import { capabilityCount, type Gateway, type GatewayCapability } from "./labels";
 import { type GatewayAbilities, gatewayCapabilitiesQuery, type GatewayScope } from "./scope";
 import { UnavailableCallout } from "./unavailable";
+
+// The picker loads when someone first edits the selection (tab-loading.tsx).
+const CapabilityPicker = lazyTab(() => import("./capability-picker"), "CapabilityPicker");
 
 type Props = { gateway: Gateway; scope: GatewayScope; abilities: GatewayAbilities };
 
@@ -37,7 +40,13 @@ export function GatewayCapabilitiesTab({ gateway, scope, abilities }: Props) {
     );
   }
   if (!caps.data) return <ErrorAlert error={caps.error} title="Couldn't load the capabilities" onRetry={() => void caps.refetch()} />;
-  if (editing && abilities.canEdit) return <CapabilityPicker gateway={gateway} scope={scope} current={caps.data} onDone={() => setEditing(false)} />;
+  if (editing && abilities.canEdit) {
+    return (
+      <TabLoading>
+        <CapabilityPicker gateway={gateway} scope={scope} current={caps.data} onDone={() => setEditing(false)} />
+      </TabLoading>
+    );
+  }
   const items = caps.data.items;
   const edit = abilities.canEdit && (
     <Button size="sm" variant={items.length ? "secondary" : "primary"} onClick={() => setEditing(true)}>

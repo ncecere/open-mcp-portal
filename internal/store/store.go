@@ -29,10 +29,17 @@ var ErrNotFound = errors.New("not found")
 
 // Open creates a connection pool and verifies connectivity.
 func Open(ctx context.Context, url string) (*pgxpool.Pool, error) {
+	return OpenTraced(ctx, url, nil)
+}
+
+// OpenTraced is Open with a query tracer on every connection (nil: none).
+// Tests use it to count the statements a request makes.
+func OpenTraced(ctx context.Context, url string, tracer pgx.QueryTracer) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(url)
 	if err != nil {
 		return nil, errors.New("DATABASE_URL: invalid PostgreSQL connection configuration")
 	}
+	cfg.ConnConfig.Tracer = tracer
 	if cfg.ConnConfig.RuntimeParams == nil {
 		cfg.ConnConfig.RuntimeParams = map[string]string{}
 	}

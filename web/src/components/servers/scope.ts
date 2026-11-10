@@ -39,9 +39,6 @@ export function teamAbilities(t: { canEdit: boolean; isManager: boolean; archive
 /** Platform admins review and approve changes in Admin; auditors read. Settings are the team's. */
 export const adminAbilities = (platformAdmin: boolean): ServerAbilities => ({ ...readOnly, canApproveChanges: platformAdmin, canReview: platformAdmin });
 
-/** The server record's query. */
-export const serverQuery = (scope: ServerScope, id: string) => (scope.kind === "team" ? teamServerQuery(scope.team, id) : adminServerQuery(id));
-
 const baseKey = (scope: ServerScope) => (scope.kind === "team" ? teamServersKey(scope.team) : adminServersKey);
 
 export const capabilitiesQuery = (scope: ServerScope, id: string) =>

@@ -5,7 +5,8 @@ import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { team } from "./fixtures";
 import { notification, notificationPage, preferences } from "./fixtures-v02";
-import { type Handler, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const unread = notification({ id: 501 });
 const read = notification({ id: 502, title: "Service status recovered", event: "server.recovered", readAt: "2026-10-17T11:45:00Z", link: null });

@@ -6,7 +6,8 @@ import type { Schemas } from "../api/client";
 import { rulesKey } from "../api/approvals";
 import { approvalRule, capabilityId, deferred, requesterId, ruleId } from "./fixtures-approvals";
 import { gateway, gatewayId, mcpServer, serverId, team } from "./fixtures";
-import { mockApi, renderApp, Reply, shellRoutes, type Handler } from "./harness";
+import { mockApi, Reply, shellRoutes, type Handler } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/approval-rules`;
 const path = `/teams/${team.slug}/approval-rules`;
@@ -119,7 +120,18 @@ describe("Approval rule editor", () => {
     expect(screen.getByRole("checkbox", { name: "Enabled" })).toHaveAttribute("aria-disabled", "true");
     const put = calls.find((c) => c.method === "PUT")!;
     expect(put.headers.get("If-Match")).toBe('"5"');
-    expect(put.body).toEqual({ name: "Review destructive calls", targetKind: "server", targetId: serverId, capabilityId, classes: [], enabled: true, pendingMinutes: 1440, validMinutes: 15, allowServiceAccountAdmins: true, approvers: [] });
+    expect(put.body).toEqual({
+      name: "Review destructive calls",
+      targetKind: "server",
+      targetId: serverId,
+      capabilityId,
+      classes: [],
+      enabled: true,
+      pendingMinutes: 1440,
+      validMinutes: 15,
+      allowServiceAccountAdmins: true,
+      approvers: [],
+    });
     await act(async () => response.resolve(approvalRule({ revision: 6 })));
     await waitFor(() => expect(screen.queryByRole("textbox", { name: "Rule name" })).toBeNull());
   });

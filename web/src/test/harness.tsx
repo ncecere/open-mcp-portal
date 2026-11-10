@@ -1,10 +1,13 @@
-/* Test helpers: a fetch mock keyed by "METHOD /path" with status codes, the routes every signed-in page needs, and renderers. */
+/*
+ * Test helpers: a fetch mock keyed by "METHOD /path" with status codes, the routes every signed-in page needs, and
+ * renderBare. renderApp (the whole app at a path) is in render-app.tsx, so a test that only needs these doesn't
+ * evaluate the router and every page's route.
+ */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, createMemoryHistory, createRootRoute, createRouter } from "@tanstack/react-router";
 import { render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { Schemas } from "../api/client";
-import { routeTree } from "../router";
 import { authConfig, invite, meFor, members, page, team } from "./fixtures";
 import { overview, teamAttention } from "./fixtures-v02";
 
@@ -66,17 +69,6 @@ export const shellRoutes = (platformRole: Schemas["PlatformRole"] = "none", team
   "GET /v1/admin/overview": () => overview(),
   "GET /v1/me/notifications/unread-count": () => ({ count: 0 }),
 });
-
-export function renderApp(path: string) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [path] }) });
-  const utils = render(
-    <QueryClientProvider client={qc}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-  return { ...utils, router, qc };
-}
 
 /** Renders a component inside a bare router and query client (me preloaded). */
 export function renderBare(ui: ReactNode, me: unknown = meFor()) {

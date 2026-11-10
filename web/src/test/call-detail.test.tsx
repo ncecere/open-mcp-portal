@@ -8,7 +8,8 @@ import { AuditTarget } from "../components/audit/target";
 import { partText } from "../components/gateways/call-payload";
 import { auditEntry, gateway, gatewayCapabilities, gatewayId, mcpCall, myGateway, page, team } from "./fixtures";
 import { callPayload } from "./fixtures-operations";
-import { type Call, type Handler, Reply, mockApi, renderApp, renderBare, shellRoutes } from "./harness";
+import { type Call, type Handler, Reply, mockApi, renderBare, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const teamApi = `/v1/teams/${team.slug}`;
 const payloadUrl = `${teamApi}/calls/501/payload`;

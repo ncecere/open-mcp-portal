@@ -97,5 +97,8 @@ export const hintText = (s: Pick<ServerSecret, "hasSecret" | "hint">) => (!s.has
 /** What saving does to the keys people entered, in words. */
 export function deletesText(server: McpServer): string {
   const n = server.personSecret?.people ?? 0;
-  return `${n === 1 ? "One person has" : `${n} people have`} entered a key for ${server.name}. A new address, another way of sending it or leaving this mode makes their keys useless, so they're deleted when you save, and each person enters theirs again.`;
+  return (
+    `${n === 1 ? "One person has" : `${n} people have`} entered a key for ${server.name}. ` +
+    "A new address, another way of sending it or leaving this mode makes their keys useless, so they're deleted when you save, and each person enters theirs again."
+  );
 }

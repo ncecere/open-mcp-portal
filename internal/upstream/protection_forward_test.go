@@ -20,7 +20,7 @@ func TestForwardCircuitNoContactAndSingleRecoveryProbe(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		n := posts.Add(1)
 		if n <= CircuitFailureThreshold {
-			http.Error(w, "busy", 503)
+			http.Error(w, "busy", http.StatusServiceUnavailable)
 			return
 		}
 		if n == CircuitFailureThreshold+1 {

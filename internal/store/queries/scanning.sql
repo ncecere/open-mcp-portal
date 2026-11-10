@@ -21,6 +21,19 @@ SELECT * FROM definition_scans WHERE capability_id = @capability_id;
 -- name: ListDefinitionFindings :many
 SELECT * FROM scan_findings WHERE capability_id = @capability_id ORDER BY id;
 
+-- name: ListServerDefinitionScans :many
+-- Every scan of a server's capabilities, in one read (the findings page and
+-- the rescan used to ask once per capability).
+SELECT s.* FROM definition_scans s
+JOIN mcp_capabilities c ON c.id = s.capability_id
+WHERE c.server_id = @server_id;
+
+-- name: ListServerDefinitionFindings :many
+SELECT f.* FROM scan_findings f
+JOIN mcp_capabilities c ON c.id = f.capability_id
+WHERE c.server_id = @server_id
+ORDER BY f.capability_id, f.id;
+
 -- name: DefinitionScanBackfill :many
 SELECT c.server_id FROM mcp_capabilities c
 LEFT JOIN definition_scans s ON s.capability_id=c.id

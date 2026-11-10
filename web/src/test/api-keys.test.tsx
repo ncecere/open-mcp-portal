@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { apiKey, myGateway } from "./fixtures";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const secret = "omp_ab12cd34_0123456789abcdefghijklmnopqrstuv";
 const created: Schemas["ApiKeyCreated"] = { key: apiKey({ id: "new-key", name: "CI runner", lastUsedAt: null }), secret };

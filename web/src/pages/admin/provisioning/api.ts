@@ -69,8 +69,6 @@ export const createMapping = async (body: Schemas["ProvisioningMappingCreate"]) 
 export const deleteMapping = async (m: Mapping) =>
   unwrap(await api.DELETE("/v1/admin/provisioning/mappings/{mappingId}", { params: { path: { mappingId: m.id } } }));
 
-export const enrollmentLabels: Record<Enrollment, string> = { optional: "Optional", required: "Required" };
-
 export const standingLabels: Record<Schemas["DirectoryStanding"], string> = {
   none: "Not managed",
   active: "Active in directory",

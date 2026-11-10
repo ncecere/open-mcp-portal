@@ -9,7 +9,8 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { capabilities, healthCheck, mcpServer, page, serverId, team, teamPublishing } from "./fixtures";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/mcp-servers`;
 const ownKeys = (extra: Partial<Schemas["McpServer"]> = {}, settings: Partial<NonNullable<Schemas["McpServer"]["personSecret"]>> = {}): Schemas["McpServer"] => ({

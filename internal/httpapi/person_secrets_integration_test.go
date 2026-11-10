@@ -795,7 +795,7 @@ func TestPersonSecretSpansCarryNoKey(t *testing.T) {
 			if !allowed[string(a.Key)] {
 				t.Errorf("%s carries the attribute %s", sp.Name(), a.Key)
 			}
-			texts = append(texts, a.Value.Emit())
+			texts = append(texts, a.Value.String())
 		}
 		if len(sp.Events()) != 0 || len(sp.Links()) != 0 {
 			t.Errorf("%s has events or links", sp.Name())

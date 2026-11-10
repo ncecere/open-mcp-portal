@@ -74,9 +74,14 @@ export function AccessRequestDetail({ id }: { id: string }) {
     {r.status === "pending" && <Card title="Actions"><Stack gap={4}>
       {r.canDecide && <>
         <Alert tone="warning">You are deciding gateway access, not an exact tool call. A team grant includes the team's current/future people and service accounts. You cannot decide your own request.</Alert>
-        <Field label="Grant lifetime (days)" description="Optional, 1–365 days. Leave empty for permanent access." error={!validDays ? "Enter a whole number from 1 to 365, or leave empty." : undefined}><Input type="number" min={1} max={365} step={1} value={days} disabled={blocked} onValueChange={setDays} /></Field>
+        <Field label="Grant lifetime (days)" description="Optional, 1–365 days. Leave empty for permanent access." error={!validDays ? "Enter a whole number from 1 to 365, or leave empty." : undefined}>
+          <Input type="number" min={1} max={365} step={1} value={days} disabled={blocked} onValueChange={setDays} />
+        </Field>
         <Field label="Decision note" description="Optional private note, up to 1000 characters. Never enter secrets."><Textarea value={note} maxLength={1000} disabled={blocked} onChange={(e) => setNote(e.target.value)} /></Field>
-        <div className={s.toolbar}><Button disabled={blocked || !validDays} onClick={() => act("approve")}>Approve gateway access</Button><Button variant="danger" disabled={blocked} onClick={() => act("deny")}>Deny access</Button></div>
+        <div className={s.toolbar}>
+          <Button disabled={blocked || !validDays} onClick={() => act("approve")}>Approve gateway access</Button>
+          <Button variant="danger" disabled={blocked} onClick={() => act("deny")}>Deny access</Button>
+        </div>
       </>}
       {r.requesterId === me.user.id && <Button variant="secondary" disabled={blocked} onClick={() => act("withdraw")}>Withdraw request</Button>}
       {!r.canDecide && r.requesterId !== me.user.id && <p>This request is not currently actionable. Reviewer and requester authority are checked live.</p>}

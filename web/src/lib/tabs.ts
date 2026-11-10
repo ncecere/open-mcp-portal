@@ -5,26 +5,21 @@
 
 /** Admin → Teams › one team (Limits & retention: the team's overrides). */
 export const adminTeamTabs = ["overview", "members", "limits", "settings"] as const;
-export type AdminTeamTab = (typeof adminTeamTabs)[number];
 
 /** An MCP server's record (the team's and the admin's): Overview · Capabilities · Health · Settings. */
 export const serverTabs = ["overview", "capabilities", "health", "settings"] as const;
-export type ServerTab = (typeof serverTabs)[number];
 
 /**
  * A gateway's record (the team's and the admin's): Overview · Capabilities · Access · Activity · Settings. Access
  * (grants) shows only for platform gateways in Admin.
  */
 export const gatewayTabs = ["overview", "capabilities", "access", "requests", "activity", "settings"] as const;
-export type GatewayTab = (typeof gatewayTabs)[number];
 
 /** A team's service account: Overview (role and access) · Keys · Settings. */
 export const serviceAccountTabs = ["overview", "keys", "connections", "settings"] as const;
-export type ServiceAccountTab = (typeof serviceAccountTabs)[number];
 
 /** Admin → Auth providers › one provider: Overview (redirect URI, endpoints, use) · Access (who may use it) · Settings. */
 export const authProviderTabs = ["overview", "access", "settings"] as const;
-export type AuthProviderTab = (typeof authProviderTabs)[number];
 
 /**
  * Team settings: Members (with open invites) · Audit log · Limits & retention (read-only) · Notifications

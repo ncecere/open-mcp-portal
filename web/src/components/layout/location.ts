@@ -1,5 +1,5 @@
 import { useRouterState } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { type Me } from "../../session";
 
 /* Route awareness for the shell: which route matched, and what the user may see. */
@@ -22,16 +22,4 @@ export function useCapabilities(me: Me) {
   const canAdmin = me.capabilities.platformAdmin || me.capabilities.platformAuditor;
   const readOnlyAdmin = me.capabilities.platformAuditor && !me.capabilities.platformAdmin;
   return { canAdmin, readOnlyAdmin };
-}
-
-/** The path of the page before this one in this visit (undefined after a reload): where the person came from. */
-export function useCameFrom(): string | undefined {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const [seen, setSeen] = useState<{ current: string; previous?: string }>({ current: pathname });
-  // A state update during render: the previous page is known in the same render as the new one.
-  if (seen.current !== pathname) {
-    setSeen({ current: pathname, previous: seen.current });
-    return seen.current;
-  }
-  return seen.previous;
 }

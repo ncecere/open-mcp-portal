@@ -279,7 +279,7 @@ func classifyNetError(err error) result {
 
 // deliverWebhook is one attempt of an outbox row: the destination must still
 // exist, be enabled and take the event (else the row is skipped).
-func (s *Service) deliverWebhook(ctx context.Context, row dbgen.NotificationOutbox, ev dbgen.NotificationEvent, team *teamInfo, msg Message) result {
+func (s *Service) deliverWebhook(ctx context.Context, row dbgen.NotificationOutbox, ev dbgen.NotificationEvent, team *teamInfo, _ Message) result {
 	if isApprovalEvent(ev.Event) || isAccessEvent(ev.Event) {
 		return skipped // private even if a malformed/legacy outbox row exists
 	}
@@ -295,7 +295,7 @@ func (s *Service) deliverWebhook(ctx context.Context, row dbgen.NotificationOutb
 	// A platform destination gets counts, not the names of a team's
 	// capabilities (data minimisation).
 	ev = forDestination(ev, d)
-	msg = compose(ev, team)
+	msg := compose(ev, team)
 	var body []byte
 	if d.Format == "slack" {
 		body = slackBody(s.slackText(msg))

@@ -2,9 +2,11 @@
 import { screen, within } from "@testing-library/react";
 import { axe } from "vitest-axe";
 import { auditChange, changedRows, changeSummary } from "../components/audit/changes";
-import { actedHow, actionLabel, actorName, areaOf, areaOptions, personFilter, targetTypeLabel, tokenKindLabel } from "../components/audit/labels";
+import { actionLabel, areaOf, areaOptions, targetTypeLabel } from "../components/audit/labels";
+import { actedHow, actorName, personFilter, tokenKindLabel } from "../components/audit/actors";
 import { auditEntry, page, team } from "./fixtures";
-import { mockApi, renderApp, shellRoutes } from "./harness";
+import { mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const tokenActor = { kind: "automation_token", automationTokenId: "99999999-0000-4000-8000-000000000001", automationTokenName: "CI publisher", automationTokenKind: "team_publisher" } as const;
 const byToken = auditEntry({

@@ -63,6 +63,7 @@ func TestCreateRejectsPreCycleRequestAfterReactivation(t *testing.T) {
 	var once sync.Once
 	unblock := func() { once.Do(func() { close(release) }) }
 	defer unblock()
+	//lint:ignore SA1019 this hook only has to block or refuse an acquire; PrepareConn's error return adds nothing here
 	cfg.BeforeAcquire = func(c context.Context, _ *pgx.Conn) bool {
 		if armed.CompareAndSwap(true, false) {
 			close(entered)

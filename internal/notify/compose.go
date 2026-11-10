@@ -98,194 +98,246 @@ func plural(n int, one, many string) string {
 // compose builds an event's message from its payload. An unknown shape
 // yields a generic message rather than failing the delivery.
 func compose(ev dbgen.NotificationEvent, team *teamInfo) Message {
-	slug := ""
+	slug, teamName := "", ""
 	if team != nil {
-		slug = team.Slug
-	}
-	teamName := ""
-	if team != nil {
-		teamName = team.Name
+		slug, teamName = team.Slug, team.Name
 	}
 	m := Message{Title: ev.Event, Body: ""}
 	switch ev.Event {
-	case AuditSinkFailing:
-		m.Link = &Link{Type: LinkAuditStream}
-		m.Title = "Audit sink delivery is failing"
-		m.Body = "Three consecutive delivery attempts failed. Review the audit sink status and receiver availability."
-	case AuditSinkRecovered:
-		m.Link = &Link{Type: LinkAuditStream}
-		m.Title = "Audit sink delivery recovered"
-		m.Body = "Audit delivery succeeded after a notified failure streak."
-
+	case AuditSinkFailing, AuditSinkRecovered:
+		composeAuditSink(&m, ev.Event)
 	case AccessRequested, AccessDecided:
-		var d accessNotificationData
-		if json.Unmarshal(ev.Payload, &d) != nil || d.RequestID == uuid.Nil {
-			break
-		}
-		m.Link = &Link{Type: LinkAccessRequest, ID: d.RequestID.String()}
-		if ev.Event == AccessRequested {
-			m.Title, m.Body = "Gateway access requested", "A gateway access request is waiting for your review. Open the private request to decide."
-		} else if d.Status == "approved" || d.Status == "denied" {
-			m.Title, m.Body = "Gateway access request "+d.Status, "Open your private request for its current status. Gateway access does not bypass tool policies or call approvals."
-		}
+		composeAccess(&m, ev)
 	case ApprovalRequested, ApprovalDecided:
-		var d approvalNotificationData
-		if json.Unmarshal(ev.Payload, &d) != nil || d.ApprovalID == uuid.Nil {
-			break
-		}
-		m.Link = &Link{Type: LinkApproval, ID: d.ApprovalID.String()}
-		if ev.Event == ApprovalRequested {
-			m.Title = fmt.Sprintf("Approval requested for %s", nm(d.ExposedName))
-			m.Body = "A sensitive tool call is waiting for review. Open the receipt to review it."
-		} else {
-			if d.Status != "approved" && d.Status != "denied" {
-				break
-			}
-			m.Title = fmt.Sprintf("Approval for %s was %s", nm(d.ExposedName), d.Status)
-			m.Body = "Open the receipt for its current status. Approval authorizes one attempt; it does not confirm execution."
-		}
+		composeApproval(&m, ev)
 	case ServerReviewDue, ServerSunsetSoon, ServerDeprecated:
 		if g, ok := composeGovernance(ev, slug); ok {
 			m = g
 		}
 	case ServerUnhealthy:
-		var d apitypes.ServerUnhealthyData
-		if json.Unmarshal(ev.Payload, &d) != nil {
-			break
-		}
-		m.Link = &Link{Type: LinkServer, ID: d.Server.Id.String(), TeamSlug: slug}
-		if d.Reminder {
-			m.Title = fmt.Sprintf("Server %s is still unhealthy", nm(d.Server.Name))
-			hours := int32(0)
-			if d.FailingHours != nil {
-				hours = *d.FailingHours
-			}
-			m.Body = fmt.Sprintf("It has been failing for %s.", plural(int(hours), "hour", "hours"))
-		} else {
-			m.Title = fmt.Sprintf("Server %s is unhealthy", nm(d.Server.Name))
-			m.Body = fmt.Sprintf("The last %s failed", plural(int(d.ConsecutiveFailures), "check", "checks"))
-			if d.ErrorClass != nil && *d.ErrorClass != "" {
-				m.Body += " (" + *d.ErrorClass + ")"
-			}
-			m.Body += ". Failing since " + d.Since.UTC().Format("2006-01-02 15:04 MST") + "."
-		}
+		composeServerUnhealthy(&m, ev, slug)
 	case ServerRecovered:
-		var d apitypes.ServerRecoveredData
-		if json.Unmarshal(ev.Payload, &d) != nil {
-			break
-		}
-		m.Link = &Link{Type: LinkServer, ID: d.Server.Id.String(), TeamSlug: slug}
-		m.Title = fmt.Sprintf("Server %s recovered", nm(d.Server.Name))
-		m.Body = "It was down for " + duration(time.Duration(d.DowntimeSeconds)*time.Second) + "."
+		composeServerRecovered(&m, ev, slug)
 	case CapabilityChanged:
-		var d apitypes.CapabilityChangedData
-		if json.Unmarshal(ev.Payload, &d) != nil {
-			break
-		}
-		m.Link = &Link{Type: LinkServer, ID: d.Server.Id.String(), TeamSlug: slug}
-		m.Title = fmt.Sprintf("Capabilities changed on %s", nm(d.Server.Name))
-		var parts []string
-		if d.ChangedCount > 0 {
-			parts = append(parts, plural(int(d.ChangedCount), "changed capability", "changed capabilities"))
-		}
-		if d.NewCount > 0 {
-			parts = append(parts, plural(int(d.NewCount), "new capability", "new capabilities"))
-		}
-		m.Body = strings.Join(parts, " and ") + " held back from the catalog until approved."
-		if len(d.Capabilities) > 0 {
-			names := make([]string, 0, 3)
-			for _, c := range d.Capabilities[:min(3, len(d.Capabilities))] {
-				names = append(names, c.Name)
-			}
-			m.Body += " " + strings.Join(quoteAll(names), ", ")
-			if rest := int(d.ChangedCount+d.NewCount) - len(names); rest > 0 {
-				m.Body += fmt.Sprintf(" and %d more", rest)
-			}
-			m.Body += "."
-		}
+		composeCapabilityChanged(&m, ev, slug)
 	case PublishRequested:
-		var d apitypes.PublishRequestedData
-		if json.Unmarshal(ev.Payload, &d) != nil {
-			break
-		}
-		m.Link = &Link{Type: LinkReviewQueue}
-		m.Title = fmt.Sprintf("Review requested for %s", nm(d.Server.Name))
-		m.Body = fmt.Sprintf("Team %s asked to publish it (%s).", nm(teamName), strings.ReplaceAll(string(d.Reason), "_", " "))
-		if d.Note != nil && *d.Note != "" {
-			m.Body += " Note: " + *d.Note
-		}
+		composePublishRequested(&m, ev, teamName)
 	case PublishDecided:
-		var d apitypes.PublishDecidedData
-		if json.Unmarshal(ev.Payload, &d) != nil {
-			break
-		}
-		m.Link = &Link{Type: LinkServer, ID: d.Server.Id.String(), TeamSlug: slug}
-		m.Title = fmt.Sprintf("%s was %s", nm(d.Server.Name), d.Decision)
-		m.Body = fmt.Sprintf("%s %s it.", nm(d.DecidedBy.Name), map[string]string{"approved": "approved", "rejected": "rejected"}[string(d.Decision)])
-		if d.Note != nil && *d.Note != "" {
-			m.Body += " Note: " + *d.Note
-		}
+		composePublishDecided(&m, ev, slug)
 	case ConnectionNeedsReconsent:
-		var d apitypes.ConnectionNeedsReconsentData
-		if json.Unmarshal(ev.Payload, &d) != nil {
-			break
-		}
-		if ev.SubjectType == "service_connection" {
-			m.Link = &Link{Type: LinkServiceConnections, TeamSlug: slug}
-			m.Title = fmt.Sprintf("Reconnect the shared %s account", nm(d.Provider.Name))
-			m.Body = "A shared connection owned by " + nm(teamName) + " needs re-consent. A team owner or admin must reconnect it under Service accounts > Connections so its assigned service accounts can use it again."
-			break
-		}
-		m.Link = &Link{Type: LinkAccountConnections}
-		m.Title = fmt.Sprintf("Reconnect %s", nm(d.Provider.Name))
-		m.Body = "Your connection to " + nm(d.Provider.Name) + " lapsed. Connect again so tools that use it keep working."
-		if d.Server != nil {
-			m.Body = "Your sign-in to " + nm(d.Server.Name) + " lapsed. Connect again so its tools keep working for you."
-		}
+		composeConnectionNeedsReconsent(&m, ev, slug, teamName)
 	case UpstreamSigninLapsed:
-		var d apitypes.UpstreamSigninLapsedData
-		if json.Unmarshal(ev.Payload, &d) != nil {
-			break
-		}
-		m.Link = &Link{Type: LinkServer, ID: d.Server.Id.String(), TeamSlug: slug}
-		m.Title = fmt.Sprintf("The sign-in that reads %s has lapsed", nm(d.Server.Name))
-		m.Body = "An editor needs to sign in again so its capabilities can be read."
+		composeUpstreamSigninLapsed(&m, ev, slug)
 	case KeyExpiring:
-		var d apitypes.KeyExpiringData
-		if json.Unmarshal(ev.Payload, &d) != nil {
-			break
-		}
-		kind := map[apitypes.KeyExpiringDataKeyKind]string{
-			apitypes.KeyExpiringDataKeyKindPersonal: "API key", apitypes.KeyExpiringDataKeyKindServiceAccount: "Service account key",
-			apitypes.KeyExpiringDataKeyKindPublisherToken: "Publisher token", apitypes.KeyExpiringDataKeyKindPlatformToken: "Platform token",
-			apitypes.KeyExpiringDataKeyKindServerCertificate: "Client certificate of",
-		}[d.KeyKind]
-		m.Title = fmt.Sprintf("%s %s expires in %s", kind, nm(d.Name), plural(int(d.DaysLeft), "day", "days"))
-		m.Body = "It stops working on " + d.ExpiresAt.UTC().Format("2006-01-02 15:04 MST") + ". Make a new one and replace it where it is used."
-		if d.KeyKind == apitypes.KeyExpiringDataKeyKindServerCertificate {
-			m.Body = "The server will refuse the portal's TLS client certificate after " + d.ExpiresAt.UTC().Format("2006-01-02 15:04 MST") +
-				". Upload a renewed certificate and key in the server's TLS settings before then."
-		}
-		switch d.KeyKind {
-		case apitypes.KeyExpiringDataKeyKindPersonal:
-			m.Link = &Link{Type: LinkAccountAPIKeys}
-		case apitypes.KeyExpiringDataKeyKindServiceAccount:
-			m.Link = &Link{Type: LinkServiceAccount, TeamSlug: slug}
-			if d.ServiceAccount != nil {
-				m.Link.ID = d.ServiceAccount.Id.String()
-			}
-		case apitypes.KeyExpiringDataKeyKindPublisherToken:
-			m.Link = &Link{Type: LinkTeamAutomationTokens, TeamSlug: slug}
-		case apitypes.KeyExpiringDataKeyKindPlatformToken:
-			m.Link = &Link{Type: LinkAutomationTokens}
-		case apitypes.KeyExpiringDataKeyKindServerCertificate:
-			if d.Server != nil {
-				m.Link = &Link{Type: LinkServer, ID: d.Server.Id.String(), TeamSlug: slug}
-			}
-		}
+		composeKeyExpiring(&m, ev, slug)
 	}
 	m.Title, m.Body = clip(m.Title, 200), clip(m.Body, 500)
 	return m
+}
+
+// The compose helpers below each fill in the message of one kind of event.
+// They leave m as it is (the generic message) when the payload cannot be read.
+
+func composeAuditSink(m *Message, event string) {
+	m.Link = &Link{Type: LinkAuditStream}
+	if event == AuditSinkFailing {
+		m.Title = "Audit sink delivery is failing"
+		m.Body = "Three consecutive delivery attempts failed. Review the audit sink status and receiver availability."
+		return
+	}
+	m.Title = "Audit sink delivery recovered"
+	m.Body = "Audit delivery succeeded after a notified failure streak."
+}
+
+func composeAccess(m *Message, ev dbgen.NotificationEvent) {
+	var d accessNotificationData
+	if json.Unmarshal(ev.Payload, &d) != nil || d.RequestID == uuid.Nil {
+		return
+	}
+	m.Link = &Link{Type: LinkAccessRequest, ID: d.RequestID.String()}
+	if ev.Event == AccessRequested {
+		m.Title, m.Body = "Gateway access requested", "A gateway access request is waiting for your review. Open the private request to decide."
+	} else if d.Status == "approved" || d.Status == "denied" {
+		m.Title, m.Body = "Gateway access request "+d.Status, "Open your private request for its current status. Gateway access does not bypass tool policies or call approvals."
+	}
+}
+
+func composeApproval(m *Message, ev dbgen.NotificationEvent) {
+	var d approvalNotificationData
+	if json.Unmarshal(ev.Payload, &d) != nil || d.ApprovalID == uuid.Nil {
+		return
+	}
+	m.Link = &Link{Type: LinkApproval, ID: d.ApprovalID.String()}
+	if ev.Event == ApprovalRequested {
+		m.Title = fmt.Sprintf("Approval requested for %s", nm(d.ExposedName))
+		m.Body = "A sensitive tool call is waiting for review. Open the receipt to review it."
+		return
+	}
+	if d.Status != "approved" && d.Status != "denied" {
+		return
+	}
+	m.Title = fmt.Sprintf("Approval for %s was %s", nm(d.ExposedName), d.Status)
+	m.Body = "Open the receipt for its current status. Approval authorizes one attempt; it does not confirm execution."
+}
+
+func composeServerUnhealthy(m *Message, ev dbgen.NotificationEvent, slug string) {
+	var d apitypes.ServerUnhealthyData
+	if json.Unmarshal(ev.Payload, &d) != nil {
+		return
+	}
+	m.Link = &Link{Type: LinkServer, ID: d.Server.Id.String(), TeamSlug: slug}
+	if d.Reminder {
+		m.Title = fmt.Sprintf("Server %s is still unhealthy", nm(d.Server.Name))
+		hours := int32(0)
+		if d.FailingHours != nil {
+			hours = *d.FailingHours
+		}
+		m.Body = fmt.Sprintf("It has been failing for %s.", plural(int(hours), "hour", "hours"))
+		return
+	}
+	m.Title = fmt.Sprintf("Server %s is unhealthy", nm(d.Server.Name))
+	m.Body = fmt.Sprintf("The last %s failed", plural(int(d.ConsecutiveFailures), "check", "checks"))
+	if d.ErrorClass != nil && *d.ErrorClass != "" {
+		m.Body += " (" + *d.ErrorClass + ")"
+	}
+	m.Body += ". Failing since " + d.Since.UTC().Format("2006-01-02 15:04 MST") + "."
+}
+
+func composeServerRecovered(m *Message, ev dbgen.NotificationEvent, slug string) {
+	var d apitypes.ServerRecoveredData
+	if json.Unmarshal(ev.Payload, &d) != nil {
+		return
+	}
+	m.Link = &Link{Type: LinkServer, ID: d.Server.Id.String(), TeamSlug: slug}
+	m.Title = fmt.Sprintf("Server %s recovered", nm(d.Server.Name))
+	m.Body = "It was down for " + duration(time.Duration(d.DowntimeSeconds)*time.Second) + "."
+}
+
+func composeCapabilityChanged(m *Message, ev dbgen.NotificationEvent, slug string) {
+	var d apitypes.CapabilityChangedData
+	if json.Unmarshal(ev.Payload, &d) != nil {
+		return
+	}
+	m.Link = &Link{Type: LinkServer, ID: d.Server.Id.String(), TeamSlug: slug}
+	m.Title = fmt.Sprintf("Capabilities changed on %s", nm(d.Server.Name))
+	var parts []string
+	if d.ChangedCount > 0 {
+		parts = append(parts, plural(int(d.ChangedCount), "changed capability", "changed capabilities"))
+	}
+	if d.NewCount > 0 {
+		parts = append(parts, plural(int(d.NewCount), "new capability", "new capabilities"))
+	}
+	m.Body = strings.Join(parts, " and ") + " held back from the catalog until approved."
+	if len(d.Capabilities) == 0 {
+		return
+	}
+	names := make([]string, 0, 3)
+	for _, c := range d.Capabilities[:min(3, len(d.Capabilities))] {
+		names = append(names, c.Name)
+	}
+	m.Body += " " + strings.Join(quoteAll(names), ", ")
+	if rest := int(d.ChangedCount+d.NewCount) - len(names); rest > 0 {
+		m.Body += fmt.Sprintf(" and %d more", rest)
+	}
+	m.Body += "."
+}
+
+func composePublishRequested(m *Message, ev dbgen.NotificationEvent, teamName string) {
+	var d apitypes.PublishRequestedData
+	if json.Unmarshal(ev.Payload, &d) != nil {
+		return
+	}
+	m.Link = &Link{Type: LinkReviewQueue}
+	m.Title = fmt.Sprintf("Review requested for %s", nm(d.Server.Name))
+	m.Body = fmt.Sprintf("Team %s asked to publish it (%s).", nm(teamName), strings.ReplaceAll(string(d.Reason), "_", " "))
+	if d.Note != nil && *d.Note != "" {
+		m.Body += " Note: " + *d.Note
+	}
+}
+
+func composePublishDecided(m *Message, ev dbgen.NotificationEvent, slug string) {
+	var d apitypes.PublishDecidedData
+	if json.Unmarshal(ev.Payload, &d) != nil {
+		return
+	}
+	m.Link = &Link{Type: LinkServer, ID: d.Server.Id.String(), TeamSlug: slug}
+	m.Title = fmt.Sprintf("%s was %s", nm(d.Server.Name), d.Decision)
+	m.Body = fmt.Sprintf("%s %s it.", nm(d.DecidedBy.Name), map[string]string{"approved": "approved", "rejected": "rejected"}[string(d.Decision)])
+	if d.Note != nil && *d.Note != "" {
+		m.Body += " Note: " + *d.Note
+	}
+}
+
+func composeConnectionNeedsReconsent(m *Message, ev dbgen.NotificationEvent, slug, teamName string) {
+	var d apitypes.ConnectionNeedsReconsentData
+	if json.Unmarshal(ev.Payload, &d) != nil {
+		return
+	}
+	if ev.SubjectType == "service_connection" {
+		m.Link = &Link{Type: LinkServiceConnections, TeamSlug: slug}
+		m.Title = fmt.Sprintf("Reconnect the shared %s account", nm(d.Provider.Name))
+		m.Body = "A shared connection owned by " + nm(teamName) + " needs re-consent. A team owner or admin must reconnect it under Service accounts > Connections so its assigned service accounts can use it again."
+		return
+	}
+	m.Link = &Link{Type: LinkAccountConnections}
+	m.Title = fmt.Sprintf("Reconnect %s", nm(d.Provider.Name))
+	m.Body = "Your connection to " + nm(d.Provider.Name) + " lapsed. Connect again so tools that use it keep working."
+	if d.Server != nil {
+		m.Body = "Your sign-in to " + nm(d.Server.Name) + " lapsed. Connect again so its tools keep working for you."
+	}
+}
+
+func composeUpstreamSigninLapsed(m *Message, ev dbgen.NotificationEvent, slug string) {
+	var d apitypes.UpstreamSigninLapsedData
+	if json.Unmarshal(ev.Payload, &d) != nil {
+		return
+	}
+	m.Link = &Link{Type: LinkServer, ID: d.Server.Id.String(), TeamSlug: slug}
+	m.Title = fmt.Sprintf("The sign-in that reads %s has lapsed", nm(d.Server.Name))
+	m.Body = "An editor needs to sign in again so its capabilities can be read."
+}
+
+func composeKeyExpiring(m *Message, ev dbgen.NotificationEvent, slug string) {
+	var d apitypes.KeyExpiringData
+	if json.Unmarshal(ev.Payload, &d) != nil {
+		return
+	}
+	kind := map[apitypes.KeyExpiringDataKeyKind]string{
+		apitypes.KeyExpiringDataKeyKindPersonal: "API key", apitypes.KeyExpiringDataKeyKindServiceAccount: "Service account key",
+		apitypes.KeyExpiringDataKeyKindPublisherToken: "Publisher token", apitypes.KeyExpiringDataKeyKindPlatformToken: "Platform token",
+		apitypes.KeyExpiringDataKeyKindServerCertificate: "Client certificate of",
+	}[d.KeyKind]
+	m.Title = fmt.Sprintf("%s %s expires in %s", kind, nm(d.Name), plural(int(d.DaysLeft), "day", "days"))
+	m.Body = "It stops working on " + d.ExpiresAt.UTC().Format("2006-01-02 15:04 MST") + ". Make a new one and replace it where it is used."
+	if d.KeyKind == apitypes.KeyExpiringDataKeyKindServerCertificate {
+		m.Body = "The server will refuse the portal's TLS client certificate after " + d.ExpiresAt.UTC().Format("2006-01-02 15:04 MST") +
+			". Upload a renewed certificate and key in the server's TLS settings before then."
+	}
+	m.Link = keyExpiringLink(d, slug)
+}
+
+// keyExpiringLink is where the expiring key is replaced, or nil when the
+// payload does not say.
+func keyExpiringLink(d apitypes.KeyExpiringData, slug string) *Link {
+	switch d.KeyKind {
+	case apitypes.KeyExpiringDataKeyKindPersonal:
+		return &Link{Type: LinkAccountAPIKeys}
+	case apitypes.KeyExpiringDataKeyKindServiceAccount:
+		l := &Link{Type: LinkServiceAccount, TeamSlug: slug}
+		if d.ServiceAccount != nil {
+			l.ID = d.ServiceAccount.Id.String()
+		}
+		return l
+	case apitypes.KeyExpiringDataKeyKindPublisherToken:
+		return &Link{Type: LinkTeamAutomationTokens, TeamSlug: slug}
+	case apitypes.KeyExpiringDataKeyKindPlatformToken:
+		return &Link{Type: LinkAutomationTokens}
+	case apitypes.KeyExpiringDataKeyKindServerCertificate:
+		if d.Server != nil {
+			return &Link{Type: LinkServer, ID: d.Server.Id.String(), TeamSlug: slug}
+		}
+	}
+	return nil
 }
 
 // path is the web app path of a link (docs/admin-overview.md, "Link targets").
@@ -348,23 +400,6 @@ func (s *Service) portalURL(l *Link) string {
 		p = "/"
 	}
 	return strings.TrimRight(s.cfg.AppURL, "/") + p
-}
-
-// linkTarget converts a link to the API's LinkTarget.
-func (l *Link) target() *apitypes.LinkTarget {
-	if l == nil {
-		return nil
-	}
-	out := &apitypes.LinkTarget{Type: apitypes.LinkTargetType(l.Type)}
-	if l.ID != "" {
-		id := l.ID
-		out.Id = &id
-	}
-	if l.TeamSlug != "" {
-		ts := l.TeamSlug
-		out.TeamSlug = &ts
-	}
-	return out
 }
 
 // envelope is the body of a json webhook (apitypes.NotificationPayload).

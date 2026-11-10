@@ -60,6 +60,7 @@ func TestTaskOperationsAreExclusivePacedAndFenced(t *testing.T) {
 	if fmt.Sprintf("%v %+v %#v", op, op, op) != "private task operation private task operation private task operation" {
 		t.Fatal("operation formatter exposed state")
 	}
+	//lint:ignore SA9005 the assertion is exactly that nothing serializes
 	if raw, _ := json.Marshal(op); string(raw) != "{}" {
 		t.Fatal("operation serialized private state")
 	}

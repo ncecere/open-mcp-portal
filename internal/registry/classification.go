@@ -69,69 +69,23 @@ func classRank(c *string) int {
 // team owners and admins classify; platform roles grant no additional rights.
 // Definition and fingerprint are deliberately untouched.
 func (s *Service) SetCapabilityClasses(ctx context.Context, a authz.Actor, ref string, serverID uuid.UUID, items []ClassInput, expectedRevision int64) ([]CapabilityView, int64, error) {
-	if len(items) == 0 || len(items) > 500 {
-		return nil, 0, apperr.Invalid("invalid_items", "Supply between 1 and 500 unique capabilities")
-	}
-	seen := make(map[uuid.UUID]bool, len(items))
-	for _, in := range items {
-		if seen[in.CapabilityID] {
-			return nil, 0, apperr.Invalid("duplicate_capability", "Capability IDs must be unique")
-		}
-		seen[in.CapabilityID] = true
-		if in.ToolClass != nil && *in.ToolClass != ClassRead && *in.ToolClass != ClassWrite && *in.ToolClass != ClassDestructive {
-			return nil, 0, apperr.Invalid("invalid_tool_class", "toolClass must be read, write, destructive or null")
-		}
+	if err := checkClassItems(items); err != nil {
+		return nil, 0, err
 	}
 	var out []CapabilityView
 	var revision int64
 	err := store.InTx(ctx, s.pool, func(q *dbgen.Queries, _ pgx.Tx) error {
-		ta, err := access(ctx, q, a, ref)
+		ta, sv, err := lockServer(ctx, q, a, ref, serverID, authz.CheckServerManage, expectedRevision)
 		if err != nil {
 			return err
-		}
-		if err := ta.writable(authz.CheckServerManage); err != nil {
-			return err
-		}
-		sv, err := teamServer(ctx, q, ta.team.ID, serverID, true)
-		if err != nil {
-			return err
-		}
-		if sv.Revision != expectedRevision {
-			return apperr.Stale()
 		}
 		lowered := false
 		for _, in := range items {
-			cur, err := q.LockMCPCapability(ctx, dbgen.LockMCPCapabilityParams{ID: in.CapabilityID, ServerID: sv.ID})
-			if store.NotFound(err) == store.ErrNotFound {
-				return errNoCapability
-			}
+			l, err := setCapabilityClass(ctx, q, a, ta.team.ID, sv, in)
 			if err != nil {
 				return err
 			}
-			if cur.Kind != "tool" {
-				return apperr.Invalid("not_a_tool", "Only tools can be classified")
-			}
-			if cur.GoneAt != nil {
-				return apperr.Conflict("capability_gone", "A gone tool cannot be classified")
-			}
-			if in.ViaSuggestion && (in.ToolClass == nil || *in.ToolClass != SuggestedClass(cur.Definition)) {
-				return apperr.Conflict("suggestion_changed", "The class must match the current suggestion")
-			}
-			if classRank(in.ToolClass) < classRank(cur.ToolClass) {
-				lowered = true
-			}
-			_, err = q.SetMCPCapabilityClass(ctx, dbgen.SetMCPCapabilityClassParams{ID: cur.ID, ServerID: sv.ID, ToolClass: in.ToolClass, ClassSetBy: a.UserID})
-			if err != nil {
-				return err
-			}
-			e := a.Audit("mcp_capability.class_set", "mcp_capability", cur.ID.String())
-			e.TeamID = ta.team.ID
-			e.Before = map[string]any{"toolClass": cur.ToolClass}
-			e.After = map[string]any{"toolClass": in.ToolClass}
-			e.Metadata = map[string]any{"serverId": sv.ID, "server": sv.Name, "name": sv.Name + " · " + cur.Name, "capability": cur.Name, "viaSuggestion": in.ViaSuggestion}
-			if err := audit.Record(ctx, q, e); err != nil {
-				return err
-			}
+			lowered = lowered || l
 		}
 		bumped, err := q.BumpMCPServerRevision(ctx, dbgen.BumpMCPServerRevisionParams{ID: sv.ID, UpdatedBy: by(a)})
 		if err != nil {
@@ -162,6 +116,58 @@ func (s *Service) SetCapabilityClasses(ctx context.Context, a authz.Actor, ref s
 		return nil
 	})
 	return out, revision, err
+}
+
+// checkClassItems validates a classification request before its transaction:
+// 1 to 500 unique capabilities, each with a known class or none.
+func checkClassItems(items []ClassInput) error {
+	if len(items) == 0 || len(items) > 500 {
+		return apperr.Invalid("invalid_items", "Supply between 1 and 500 unique capabilities")
+	}
+	seen := make(map[uuid.UUID]bool, len(items))
+	for _, in := range items {
+		if seen[in.CapabilityID] {
+			return apperr.Invalid("duplicate_capability", "Capability IDs must be unique")
+		}
+		seen[in.CapabilityID] = true
+		if in.ToolClass != nil && *in.ToolClass != ClassRead && *in.ToolClass != ClassWrite && *in.ToolClass != ClassDestructive {
+			return apperr.Invalid("invalid_tool_class", "toolClass must be read, write, destructive or null")
+		}
+	}
+	return nil
+}
+
+// setCapabilityClass locks one of the server's tools, stores its class and
+// audits it (mcp_capability.class_set). It reports whether the class was
+// lowered.
+func setCapabilityClass(ctx context.Context, q *dbgen.Queries, a authz.Actor, teamID uuid.UUID, sv dbgen.McpServer, in ClassInput) (bool, error) {
+	cur, err := q.LockMCPCapability(ctx, dbgen.LockMCPCapabilityParams{ID: in.CapabilityID, ServerID: sv.ID})
+	if store.NotFound(err) == store.ErrNotFound {
+		return false, errNoCapability
+	}
+	if err != nil {
+		return false, err
+	}
+	if cur.Kind != "tool" {
+		return false, apperr.Invalid("not_a_tool", "Only tools can be classified")
+	}
+	if cur.GoneAt != nil {
+		return false, apperr.Conflict("capability_gone", "A gone tool cannot be classified")
+	}
+	if in.ViaSuggestion && (in.ToolClass == nil || *in.ToolClass != SuggestedClass(cur.Definition)) {
+		return false, apperr.Conflict("suggestion_changed", "The class must match the current suggestion")
+	}
+	lowered := classRank(in.ToolClass) < classRank(cur.ToolClass)
+	_, err = q.SetMCPCapabilityClass(ctx, dbgen.SetMCPCapabilityClassParams{ID: cur.ID, ServerID: sv.ID, ToolClass: in.ToolClass, ClassSetBy: a.UserID})
+	if err != nil {
+		return false, err
+	}
+	e := a.Audit("mcp_capability.class_set", "mcp_capability", cur.ID.String())
+	e.TeamID = teamID
+	e.Before = map[string]any{"toolClass": cur.ToolClass}
+	e.After = map[string]any{"toolClass": in.ToolClass}
+	e.Metadata = map[string]any{"serverId": sv.ID, "server": sv.Name, "name": sv.Name + " · " + cur.Name, "capability": cur.Name, "viaSuggestion": in.ViaSuggestion}
+	return lowered, audit.Record(ctx, q, e)
 }
 
 func (s *Service) SetCapabilityClass(ctx context.Context, a authz.Actor, ref string, serverID uuid.UUID, in ClassInput, expectedRevision int64) (CapabilityView, int64, error) {

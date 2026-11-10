@@ -9,21 +9,24 @@ import { Activity, ExternalLink, LayoutDashboard, ListTree, Settings2, Shield } 
 import type { ReactNode } from "react";
 import { serverTabs } from "../../lib/tabs";
 import { needsText } from "../providers/labels";
+import { lazyTab, TabLoading } from "../tab-loading";
 import { DetailPage } from "../templates/detail-page";
 import type { ActionItem } from "../templates/action-menu";
 import { TextLink } from "@/components/ui/text-link/text-link";
 import s from "../../pages/shared.module.css";
 import { CaptureBadge } from "../capture";
 import { EnabledBadge, PendingChangesBadge, PublishStateBadge, SignInBadge } from "./badges";
-import { CapabilitiesTab } from "./capabilities-tab";
 import { ServerNotices } from "./catalog-card";
 import { HealthTab } from "./health-tab";
 import { countsText, type McpServer, totalCount, urlHost } from "./labels";
 import { OverviewTab } from "./overview-tab";
 import { type ServerAbilities, type ServerScope } from "./scope";
-import { ServerSettingsTab } from "./settings-tab";
 import { readAsText } from "./upstream-auth";
 import m from "./servers.module.css";
+
+// The two heavy tabs load when first opened (tab-loading.tsx).
+const CapabilitiesTab = lazyTab(() => import("./capabilities-tab"), "CapabilitiesTab");
+const ServerSettingsTab = lazyTab(() => import("./settings-tab"), "ServerSettingsTab");
 
 type Props = {
   server: McpServer;
@@ -73,9 +76,9 @@ export function ServerRecord({ server, scope, abilities, notices, links = [] }: 
       tabsLabel="Server sections"
       tabs={[
         { value: "overview", label: "Overview", icon: <LayoutDashboard aria-hidden />, content: <OverviewTab {...props} /> },
-        { value: "capabilities", label: "Capabilities", icon: <ListTree aria-hidden />, count: totalCount(server.counts), content: <CapabilitiesTab {...props} /> },
+        { value: "capabilities", label: "Capabilities", icon: <ListTree aria-hidden />, count: totalCount(server.counts), content: <TabLoading><CapabilitiesTab {...props} /></TabLoading> },
         { value: "health", label: "Health", icon: <Activity aria-hidden />, content: <HealthTab server={server} scope={scope} /> },
-        { value: "settings", label: "Settings", icon: <Settings2 aria-hidden />, content: <ServerSettingsTab {...props} /> },
+        { value: "settings", label: "Settings", icon: <Settings2 aria-hidden />, content: <TabLoading><ServerSettingsTab {...props} /></TabLoading> },
       ]}
     />
   );

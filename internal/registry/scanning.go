@@ -2,7 +2,6 @@ package registry
 
 import (
 	"context"
-	"errors"
 	"sort"
 	"time"
 
@@ -239,32 +238,50 @@ func (s *Service) DefinitionFindings(ctx context.Context, a authz.Actor, ref str
 	if err != nil {
 		return nil, err
 	}
+	off := st.DefinitionScanMode == "off"
+	scans, findings := map[uuid.UUID]dbgen.DefinitionScan{}, map[uuid.UUID][]dbgen.ScanFinding{}
+	if !off {
+		// Two reads for the whole server, not two per capability.
+		if scans, err = s.serverScans(ctx, id); err != nil {
+			return nil, err
+		}
+		rows, err := s.q.ListServerDefinitionFindings(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range rows {
+			findings[f.CapabilityID] = append(findings[f.CapabilityID], f)
+		}
+	}
 	out := make([]CapabilityScan, 0, len(caps))
 	for _, row := range caps {
 		c := row.McpCapability
 		r := definitionscan.Result{Status: "stale", RulesetVersion: definitionscan.Version, Findings: []definitionscan.Finding{}}
-		if st.DefinitionScanMode == "off" {
+		if off {
 			r.Status = "off"
-		} else {
-			scan, e := s.q.GetDefinitionScan(ctx, c.ID)
-			if e != nil && !errors.Is(e, pgx.ErrNoRows) {
-				return nil, e
-			}
-			if e == nil && scan.Fingerprint == c.Fingerprint && scan.RulesetVersion == definitionscan.Version {
-				r.Status = scan.Status
-				r.Reason = scan.Reason
-				at := scan.ScannedAt
-				r.ScannedAt = &at
-				fs, e := s.q.ListDefinitionFindings(ctx, c.ID)
-				if e != nil {
-					return nil, e
-				}
-				for _, f := range fs {
-					r.Findings = append(r.Findings, definitionscan.Finding{RuleID: f.RuleID, Group: definitionscan.RuleGroup(f.RuleID), Severity: f.Severity, Count: int(f.Count), Location: f.Location})
-				}
+		} else if scan, ok := scans[c.ID]; ok && scan.Fingerprint == c.Fingerprint && scan.RulesetVersion == definitionscan.Version {
+			r.Status = scan.Status
+			r.Reason = scan.Reason
+			at := scan.ScannedAt
+			r.ScannedAt = &at
+			for _, f := range findings[c.ID] {
+				r.Findings = append(r.Findings, definitionscan.Finding{RuleID: f.RuleID, Group: definitionscan.RuleGroup(f.RuleID), Severity: f.Severity, Count: int(f.Count), Location: f.Location})
 			}
 		}
 		out = append(out, CapabilityScan{c.ID, r})
+	}
+	return out, nil
+}
+
+// serverScans are the stored scans of a server's capabilities by capability.
+func (s *Service) serverScans(ctx context.Context, serverID uuid.UUID) (map[uuid.UUID]dbgen.DefinitionScan, error) {
+	rows, err := s.q.ListServerDefinitionScans(ctx, serverID)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[uuid.UUID]dbgen.DefinitionScan, len(rows))
+	for _, r := range rows {
+		out[r.CapabilityID] = r
 	}
 	return out, nil
 }
@@ -276,6 +293,12 @@ func (s *Service) rescanDefinitions(ctx context.Context, sv dbgen.McpServer, sta
 	var caps []upstream.Capability
 	ages := map[string]time.Time{}
 	pending := len(staleOnly) > 0 && staleOnly[0]
+	var scans map[uuid.UUID]dbgen.DefinitionScan
+	if pending {
+		if scans, err = s.serverScans(ctx, sv.ID); err != nil {
+			return err
+		}
+	}
 	var names []string
 	for _, row := range rows {
 		names = append(names, row.McpCapability.Name)
@@ -286,14 +309,11 @@ func (s *Service) rescanDefinitions(ctx context.Context, sv dbgen.McpServer, sta
 			if c.GoneAt != nil {
 				continue
 			}
-			scan, e := s.q.GetDefinitionScan(ctx, c.ID)
-			if e != nil && !errors.Is(e, pgx.ErrNoRows) {
-				return e
-			}
-			if e == nil {
+			scan, ok := scans[c.ID]
+			if ok {
 				ages[c.Kind+" "+c.Name] = scan.ScannedAt
 			}
-			if e == nil && scan.Status == "scanned" && scan.Fingerprint == c.Fingerprint && scan.RulesetVersion == definitionscan.Version {
+			if ok && scan.Status == "scanned" && scan.Fingerprint == c.Fingerprint && scan.RulesetVersion == definitionscan.Version {
 				continue
 			}
 		}

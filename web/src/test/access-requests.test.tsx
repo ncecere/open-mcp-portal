@@ -6,7 +6,8 @@ import { GatewayRequestSettings } from "../components/gateways/request-settings"
 import { accessRequestKey } from "../api/access-requests";
 import { deferred } from "./fixtures-approvals";
 import { meFor, team, user } from "./fixtures";
-import { mockApi, renderApp, renderBare, Reply, shellRoutes } from "./harness";
+import { mockApi, renderBare, Reply, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const gatewayId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -91,7 +92,11 @@ describe("Gateway access requests", () => {
   it("hides cached private text on failed refresh and requires reload after a refused action", async () => {
     const u = userEvent.setup();
     let forbidden = false;
-    mockApi({ ...defaults(), [`GET ${base}`]: () => forbidden ? Reply.error(404, "access_request_not_found", "Private request unavailable") : receipt(), [`POST ${base}/decision`]: () => Reply.error(409, "request_decided", "Already decided") });
+    mockApi({
+      ...defaults(),
+      [`GET ${base}`]: () => forbidden ? Reply.error(404, "access_request_not_found", "Private request unavailable") : receipt(),
+      [`POST ${base}/decision`]: () => Reply.error(409, "request_decided", "Already decided"),
+    });
     const { qc } = renderApp(`/access-requests/${id}`);
     await u.click(await screen.findByRole("button", { name: "Approve gateway access" }));
     await screen.findByText(/Reload and review the request again/);

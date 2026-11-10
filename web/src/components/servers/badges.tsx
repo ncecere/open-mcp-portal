@@ -1,7 +1,7 @@
 /* Health, publish state, enabled and capability state badges of MCP servers. */
 import type { Schemas } from "../../api/client";
 import { Badge, StatusBadge } from "@/components/ui/badge/badge";
-import { RelativeTime } from "../templates/list-page";
+import { RelativeTime } from "../templates/relative-time";
 import s from "../../pages/shared.module.css";
 import { healthText, type McpCapability, type PublishState, publishStateLabels, type ServerHealth } from "./labels";
 import m from "./servers.module.css";

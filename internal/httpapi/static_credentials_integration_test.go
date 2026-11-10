@@ -240,7 +240,7 @@ func TestStaticCredentialPartsAreSentEverywhere(t *testing.T) {
 		t.Fatalf("refresh with a wrong key = %d %s", code, raw)
 	}
 	e.seen = append(e.seen, string(raw))
-	code, raw = e.owner.raw("POST", e.path()+"/test", nil, nil)
+	_, raw = e.owner.raw("POST", e.path()+"/test", nil, nil)
 	e.seen = append(e.seen, string(raw))
 	stored := e.scalar(`SELECT coalesce(last_refresh_error, '') FROM mcp_servers WHERE id = $1`, e.server.Id)
 	if stored == "" {

@@ -172,8 +172,7 @@ func (c *mctx) oversizedSinkRequest() request {
 	var seq int64
 	for deadline := time.Now().Add(time.Minute); seq == 0; {
 		c.sealAudit()
-		var err error
-		err = c.e.app.Pool.QueryRow(context.Background(), `SELECT coalesce(max(seq),0) FROM omp_audit.chain WHERE audit_id=$1`, row).Scan(&seq)
+		err := c.e.app.Pool.QueryRow(context.Background(), `SELECT coalesce(max(seq),0) FROM omp_audit.chain WHERE audit_id=$1`, row).Scan(&seq)
 		if err != nil {
 			c.e.t.Fatal(err)
 		}

@@ -8,12 +8,12 @@ Grounded's page shapes from the UI plan (`docs/ui-review/README.md`, D3–D5, Q1
 | `SettingsPage`, `SettingsSection`, `DangerZone`, `DangerAction` | `settings-page.tsx` | A Settings tab or settings page (D3, F-17) |
 | `useRevisionForm`, `RevisionSaveBar` | `revision-form.ts`, `conflict-notice.tsx` | A settings form over a revisioned object (If-Match): keeps the edits through a save conflict |
 | `useUnsavedChangesGuard` | `unsaved-guard.tsx` | Any other page with a `SaveBar` |
-| `ListPage`, `useListFilters`, `timeColumn`, `RelativeTime` | `list-page.tsx` | Every list and log (D5) |
+| `ListPage`, `useListFilters`, `timeColumn` | `list-page.tsx` | Every list and log (D5) |
+| `RelativeTime` | `relative-time.tsx` | A relative date with the full date as a tooltip (its own module: the shell uses it) |
 | `RecordPage`, `useRecordParam` | `record-page.tsx` | Leaf records: documents, keys, requests, audit entries, crawl runs, models… as a page over their list (D4) |
 | `FormPage`, `FormSection`, `useFormParam` | `form-page.tsx` | Long create and edit forms (a source, a connection, a model, a classification level) as a page (D4) |
 | `TakeoverPage`, `TakeoverHost` | `takeover.tsx` | What RecordPage and FormPage build on; the shell holds the host |
 | `GuardedDialog`, `useCloseGuard`, `useEditTracker` | `close-guard.tsx` | Any other dialog with input: "Leave without saving?" on close (m7) |
-| `DateRangeFilter`, `useDateRangeParam` | `date-range-filter.tsx` | Any date range (Q13) |
 | `ActionMenu`, `orderActions` | `action-menu.tsx` | The "…" menu (used by the above) |
 | `PageActions` | `page-actions.tsx` | A header's secondary buttons, primary and "…" menu for a page on `PageHeader` (DetailPage uses it) |
 
@@ -97,7 +97,7 @@ const [form, setForm, revision] = useRevisionForm(formOf(team), team.revision, {
 - A single-choice toggle filter (Status: All · Active · Released) gets no "Status: Active ×" chip: its pressed item shows the choice. Other filters get a chip while active.
 - Filtering is in memory by default. For server-side lists, read the values with `useListFilters(facets)`, pass them to the query, and set `manual` (plus `tableProps={{ loadMore }}` or `cursor`).
 - Dates use `timeColumn(id, header, get)` or `<RelativeTime value=…/>`, which show relative text with the full date as the title.
-- Rows that open a RecordPage get `onRowClick={(r) => record.open(r.id)}`: a click anywhere on the row (except its links and buttons) or Enter on the focused row opens it. Keep "View details" in the row menu too. Where people will want to open records in a new tab or copy their links, render the row header's name as `<RecordLink id={r.id}>` instead (a real link that opens in place on a plain click, like the knowledge base list's names) and leave `onRowClick` out: a link can't sit inside the row's open button.
+- Rows that open a RecordPage get `onRowClick={(r) => record.open(r.id)}`: a click anywhere on the row (except its links and buttons) or Enter on the focused row opens it. Keep "View details" in the row menu too.
 - Fit at 1280 px: the list sits in a 976 px column there. Give long text a one-line `max-width` with an ellipsis (the full text as `title`), keep short cells `nowrap`, and start low-priority columns hidden (`defaultHidden`, still in the Columns menu). On a phone (below 600px) `defaultHiddenNarrow` columns start hidden too. A table never widens the page; it scrolls inside its own wrapper only as a last resort.
 - Without `title`, only the table renders (for a list inside a tab or card).
 - A small list leaves out the Columns menu with `tableProps={{ columnsMenuMin: 5 }}`: it shows once that many columns can be hidden, or once one is hidden (a `defaultHiddenNarrow` column on a phone), so a hidden column can always come back.
@@ -133,17 +133,6 @@ const form = useFormParam();             // ?form=new or ?form=<id>
 - A record's actions go in the header (`actions`: destructive first, the main action last). A form's buttons go under the form: Cancel, then the submit button; `startActions` holds "Change type" or a destructive action.
 - `FormPage` asks "Leave without saving?" on Cancel, the back link and the breadcrumb once anything was typed or picked; pass `dirty` when the form tracks its own changes. A `RecordPage` with edits passes `dirty` too.
 - After a create that goes to the new object's page, navigate with `replace: true`, so Back from it returns to the list, not to the form.
-
-## DateRangeFilter
-
-```tsx
-const range = useDateRangeParam({ defaultPreset: "30d" });   // ?range=7d or ?range=2026-09-01/2026-09-26
-<DateRangeFilter range={range} />
-query: { from: range.fromDay, to: range.toDay }                  // date-only APIs (inclusive)
-query: { from: range.from?.toISOString(), to: range.toExclusive?.toISOString() }   // RFC 3339 APIs
-```
-
-With a `defaultPreset` the default stays out of the URL and the range can't be cleared. Without one, clearing means "any time".
 
 ## Shell pieces for pages
 

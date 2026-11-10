@@ -28,17 +28,22 @@ func (q *Queries) CountActiveAPIKeys(ctx context.Context, userID uuid.UUID) (int
 }
 
 const getAPIKeyByDigest = `-- name: GetAPIKeyByDigest :one
-SELECT k.id, k.user_id, k.name, k.prefix, k.digest, k.created_at, k.expires_at, k.revoked_at, k.last_used_at, k.pepper_id, k.tool_scope, u.id, u.oidc_issuer, u.oidc_subject, u.email, u.display_name, u.platform_role, u.status, u.claims, u.revision, u.created_at, u.updated_at, u.last_login_at, u.groups, u.email_verified, u.request_epoch, u.session_generation, u.manual_status, u.directory_standing
+SELECT k.id, k.user_id, k.name, k.prefix, k.digest, k.created_at, k.expires_at, k.revoked_at, k.last_used_at, k.pepper_id, k.tool_scope, u.id, u.oidc_issuer, u.oidc_subject, u.email, u.display_name, u.platform_role, u.status, u.claims, u.revision, u.created_at, u.updated_at, u.last_login_at, u.groups, u.email_verified, u.request_epoch, u.session_generation, u.manual_status, u.directory_standing,
+    ARRAY(SELECT kg.gateway_id FROM api_key_gateways kg WHERE kg.api_key_id = k.id)::uuid[] AS gateway_ids
 FROM api_keys k
 JOIN users u ON u.id = k.user_id
 WHERE k.digest = $1
 `
 
 type GetAPIKeyByDigestRow struct {
-	ApiKey ApiKey
-	User   User
+	ApiKey     ApiKey
+	User       User
+	GatewayIds []uuid.UUID
 }
 
+// A key by its digest with its owner and the gateways it is limited to
+// (none: every gateway its owner may use), in one statement: this runs on
+// every request a key makes.
 func (q *Queries) GetAPIKeyByDigest(ctx context.Context, digest string) (GetAPIKeyByDigestRow, error) {
 	row := q.db.QueryRow(ctx, getAPIKeyByDigest, digest)
 	var i GetAPIKeyByDigestRow
@@ -72,6 +77,7 @@ func (q *Queries) GetAPIKeyByDigest(ctx context.Context, digest string) (GetAPIK
 		&i.User.SessionGeneration,
 		&i.User.ManualStatus,
 		&i.User.DirectoryStanding,
+		&i.GatewayIds,
 	)
 	return i, err
 }

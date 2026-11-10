@@ -224,7 +224,7 @@ func newDB(t testing.TB, fromTemplate bool, migrate func(context.Context, *pgxpo
 	if split {
 		u.User = url.UserPassword(ownerName, password)
 	}
-	owner, err = store.Open(ctx, u.String())
+	owner, err = store.OpenTraced(ctx, u.String(), &QueryLog{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +237,7 @@ func newDB(t testing.TB, fromTemplate bool, migrate func(context.Context, *pgxpo
 	}
 	if split {
 		u.User = url.UserPassword(runtimeName, password)
-		pool, err = store.Open(ctx, u.String())
+		pool, err = store.OpenTraced(ctx, u.String(), &QueryLog{})
 		if err != nil {
 			t.Fatal(err)
 		}

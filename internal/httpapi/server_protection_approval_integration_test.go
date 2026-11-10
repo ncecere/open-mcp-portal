@@ -63,7 +63,7 @@ func TestServerProtectionReadRetryRechecksAuthority(t *testing.T) {
 				if _, err := e.app.Pool.Exec(context.Background(), `UPDATE users SET status='suspended' WHERE email='blair@localhost'`); err != nil {
 					t.Error(err)
 				}
-				http.Error(w, "temporary outage", 503)
+				http.Error(w, "temporary outage", http.StatusServiceUnavailable)
 				return true
 			})
 			capID := e.capID(e.owner, e.server, "tool", "lookup")

@@ -1,0 +1,26 @@
+# Functions over the complexity limit when scripts/check-go-quality.py was
+# added, with their score then. The list only shrinks: simplify a function,
+# then run scripts/check-go-quality.py --update. Never add a line by hand.
+67 curation (*compiledSchema).valid internal/gateways/curation/schema.go
+67 definitionscan unicodeFind internal/definitionscan/scan.go
+55 curation compileSchema internal/gateways/curation/schema.go
+45 upstream (*headerTransport).RoundTrip internal/upstream/guard.go
+44 definitionscan scan internal/definitionscan/scan.go
+42 upstream parseTaskState internal/upstream/task_protocol.go
+40 mcpgw (*request).exchange internal/mcpgw/upstreamoauth.go
+39 auditstream (*Sender).deliver internal/auditstream/sender.go
+37 approvals NormalizeRule internal/approvals/policy.go
+37 curation Project internal/gateways/curation/curation.go
+37 personsecrets (*Service).Set internal/personsecrets/set.go
+36 approvals (*Service).Begin internal/approvals/dispatch.go
+35 auditstream (Sealer).rebase internal/auditstream/recovery.go
+34 approvals (*Service).permissions internal/approvals/requests.go
+34 upstream (*Client).modernResult internal/upstream/forward.go
+33 approvals (*Service).Consume internal/approvals/dispatch.go
+33 httpapi (*api).auditVerify internal/httpapi/audit_stream.go
+33 scim (*patchRequest).group internal/scim/patch.go
+33 testutil (*FakeOAuth).token internal/testutil/fakeoauth_token.go
+32 store inspectAuditExtension internal/store/audit_extension.go
+31 gateways setSelection internal/gateways/selection.go
+31 mcpgw (*Handler).ServeHTTP internal/mcpgw/mcpgw.go
+31 registry planLifecycle internal/registry/governance.go

@@ -8,7 +8,8 @@ import type { Schemas } from "../api/client";
 import { applyInstance, defaultInstance, instanceOf, tagline, type Instance } from "../lib/instance";
 import { SignInPage } from "../session";
 import { authConfig, meFor } from "./fixtures";
-import { mockApi, renderApp } from "./harness";
+import { mockApi } from "./harness";
+import { renderApp } from "./render-app";
 
 const acme: Instance = {
   name: "Acme Tools Hub",

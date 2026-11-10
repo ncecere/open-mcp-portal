@@ -56,7 +56,25 @@ export function CapabilityList({ items, availability = true, roles = false, conn
             </h3>
             <ul className={g.list}>
               {caps.map((c) => (
-                <CapabilityRow key={c.capabilityId} cap={c} side={<><RowBadges cap={c} availability={availability} roles={roles} connections={connections} />{onCurate && c.kind === "tool" && <Button size="sm" variant="secondary" onClick={() => onCurate(c)}>Curate {c.exposedName}</Button>}{!onCurate && onInspect && c.kind === "tool" && <Button size="sm" variant="secondary" onClick={() => onInspect(c)}>View definitions for {c.exposedName}</Button>}</>} />
+                <CapabilityRow
+                  key={c.capabilityId}
+                  cap={c}
+                  side={
+                    <>
+                      <RowBadges cap={c} availability={availability} roles={roles} connections={connections} />
+                      {onCurate && c.kind === "tool" && (
+                        <Button size="sm" variant="secondary" onClick={() => onCurate(c)}>
+                          Curate {c.exposedName}
+                        </Button>
+                      )}
+                      {!onCurate && onInspect && c.kind === "tool" && (
+                        <Button size="sm" variant="secondary" onClick={() => onInspect(c)}>
+                          View definitions for {c.exposedName}
+                        </Button>
+                      )}
+                    </>
+                  }
+                />
               ))}
             </ul>
           </section>

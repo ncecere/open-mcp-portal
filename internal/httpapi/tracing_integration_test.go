@@ -224,8 +224,7 @@ func TestTracingCallTrace(t *testing.T) {
 		t.Errorf("trace_id in the access log: %v, in the call log: %v", access, call)
 	}
 	var c apitypes.McpCall
-	var id string
-	id = e.scalar(`SELECT id::text FROM mcp_calls WHERE trace_id = $1 ORDER BY id DESC LIMIT 1`, traceID)
+	id := e.scalar(`SELECT id::text FROM mcp_calls WHERE trace_id = $1 ORDER BY id DESC LIMIT 1`, traceID)
 	if code := e.admin.get("/v1/admin/calls/"+id, &c); code != 200 {
 		t.Fatalf("call detail = %d", code)
 	}
@@ -271,13 +270,13 @@ func assertNothingSensitive(t *testing.T, sr *tracetest.SpanRecorder, e *relayEn
 			if !allowed[string(a.Key)] {
 				t.Errorf("%s carries the attribute %s", s.Name(), a.Key)
 			}
-			texts = append(texts, a.Value.Emit())
+			texts = append(texts, a.Value.String())
 		}
 		if len(s.Events()) != 0 || len(s.Links()) != 0 {
 			t.Errorf("%s has events or links", s.Name())
 		}
 		for _, a := range s.Resource().Attributes() {
-			texts = append(texts, a.Value.Emit())
+			texts = append(texts, a.Value.String())
 		}
 		for _, text := range texts {
 			for _, bad := range forbidden {
@@ -294,7 +293,7 @@ func assertNothingSensitive(t *testing.T, sr *tracetest.SpanRecorder, e *relayEn
 
 func hasAttr(s sdktrace.ReadOnlySpan, key, value string) bool {
 	for _, a := range s.Attributes() {
-		if string(a.Key) == key && a.Value.Emit() == value {
+		if string(a.Key) == key && a.Value.String() == value {
 			return true
 		}
 	}

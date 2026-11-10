@@ -14,7 +14,8 @@ import { secretLinkProblem } from "../pages/connect/secret";
 import { keyProblem } from "../components/secrets/key-form";
 import { secretFormOf, secretInput, secretProblems, keysDeleted } from "../components/servers/person-secret";
 import type { McpServer } from "../components/servers/labels";
-import { Reply, mockApi, renderApp, renderBare, shellRoutes } from "./harness";
+import { Reply, mockApi, renderBare, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 import { ServerSecrets } from "../components/secrets/server-secrets";
 import { ApiError } from "../api/client";
 
@@ -111,7 +112,8 @@ describe("The page a call's link opens", () => {
   it("warns that a query value is part of the address, and offers editors to read the server with their key", async () => {
     mockApi({
       ...shellRoutes(),
-      [`GET /v1/connect/secret-requests/${requestId}`]: () => secretRequest({ config: { placement: "query", name: "api_key", label: "Acme key", help: "" }, secret: entry({ canSetup: true, config: { placement: "query", name: "api_key" } }) }),
+      [`GET /v1/connect/secret-requests/${requestId}`]: () =>
+        secretRequest({ config: { placement: "query", name: "api_key", label: "Acme key", help: "" }, secret: entry({ canSetup: true, config: { placement: "query", name: "api_key" } }) }),
     });
     renderApp(path);
     expect(await screen.findByText("This server takes the key in the address")).toBeInTheDocument();
@@ -200,7 +202,12 @@ describe("Admin › Users: a person's keys", () => {
 
 describe("The server's settings for each person's key", () => {
   const sv = (extra: Record<string, unknown> = {}) =>
-    ({ id: serverId, name: "Acme", personSecret: { placement: "header", name: "X-API-Key", prefix: "Token ", label: "Acme API key", help: "", people: 3, rejected: 1, setup: { status: "missing" } }, ...extra }) as unknown as McpServer;
+    ({
+      id: serverId,
+      name: "Acme",
+      personSecret: { placement: "header", name: "X-API-Key", prefix: "Token ", label: "Acme API key", help: "", people: 3, rejected: 1, setup: { status: "missing" } },
+      ...extra,
+    }) as unknown as McpServer;
 
   it("builds the request and checks names", () => {
     expect(secretInput(secretFormOf(sv()))).toEqual({ placement: "header", name: "X-API-Key", prefix: "Token ", label: "Acme API key", help: "" });

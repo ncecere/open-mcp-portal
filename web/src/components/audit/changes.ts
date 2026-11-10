@@ -2,117 +2,48 @@
  * An audit entry's before and after, in words people use: roles and statuses
  * by their labels, internal ids left out, and no value as a missing key (the
  * diff says "Not set" for it, the one word for no value). Entries without a
- * known shape are shown as recorded.
+ * known shape are shown as recorded. This file is the field table (which
+ * recorded field gets which label and formatter) and what reads it; the
+ * formatters themselves are in change-formats.ts.
  */
 import type { Schemas } from "@/api/client";
-import { eventLabel } from "@/components/notifications/events";
 import { roleLabels } from "@/components/roles";
+import {
+  type Format,
+  accessModeWords,
+  authModeWords,
+  capturedByLabels,
+  clientKindLabels,
+  credentialParts,
+  eventNames,
+  label,
+  limitItems,
+  listed,
+  networkEntries,
+  onOff,
+  overrideModeLabels,
+  ownKeySettings,
+  params,
+  patternItems,
+  payloadViewWords,
+  periodItems,
+  personName,
+  platformRoleLabels,
+  presenceWords,
+  registrationWords,
+  revoked,
+  serviceAccountRoleLabels,
+  teamStatusLabels,
+  tokenKindWords,
+  trustedClients,
+  userStatusLabels,
+  yesNo,
+} from "./change-formats";
 
 type AuditEntry = Schemas["AuditEntry"];
-type Format = (value: unknown) => unknown;
+
 /** A field's label and formatting; null leaves the field out. */
 type Fields = Record<string, [label: string, format?: Format] | null>;
-
-/** A switch's value in words: "On", "Off". */
-export const onOff = (v: unknown) => (typeof v === "boolean" ? (v ? "On" : "Off") : v);
-const label =
-  (labels: Record<string, string>): Format =>
-  (v) =>
-    typeof v === "string" ? (labels[v] ?? v) : v;
-const userStatusLabels: Record<string, string> = { active: "Active", suspended: "Suspended" };
-const teamStatusLabels: Record<string, string> = { active: "Active", archived: "Archived" };
-const platformRoleLabels: Record<string, string> = { none: "None", platform_admin: "Platform admin", platform_auditor: "Platform auditor" };
-
-/** Internal network entries as words: "10.20.0.0/16", "*.corp.example.com (http) · Build farm". */
-const networkEntries: Format = (v) =>
-  Array.isArray(v)
-    ? v.map((e: { value?: string; allowHttp?: boolean; note?: string }) => `${e.value ?? ""}${e.allowHttp ? " (http)" : ""}${e.note ? ` · ${e.note}` : ""}`)
-    : v;
-
-/** Trusted clients as words: "Claude Code (https://claude.ai/oauth/claude-code-client-metadata)". */
-const trustedClients: Format = (v) =>
-  Array.isArray(v) ? v.map((c: { clientId?: string; label?: string }) => (c.label ? `${c.label} (${c.clientId ?? ""})` : (c.clientId ?? ""))) : v;
-
-const clientKindLabels: Record<string, string> = { metadata: "Yes (metadata document)", registered: "No (registered itself)" };
-
-/** Extra authorization parameters as words: "access_type=offline". */
-const params: Format = (v) => (v && typeof v === "object" && !Array.isArray(v) ? Object.entries(v as Record<string, unknown>).map(([k, x]) => `${k}=${String(x)}`) : v);
-
-const accessModeWords: Record<string, string> = { open: "Open to every team", restricted: "Restricted to the listed teams and servers" };
-/** A provider's listed teams or servers as words: "Platform tools (platform)", "Wiki (docs)". */
-const listed: Format = (v) => (Array.isArray(v) ? v.map((e: { name?: string; slug?: string; teamSlug?: string }) => `${e.name ?? e.slug ?? ""} (${e.teamSlug ?? e.slug ?? ""})`) : v);
-
-/** Whether a disconnected account was revoked at the provider too. */
-const revoked: Format = (v) => (v === true ? "Yes" : v === false ? "No (failed)" : v === "not_supported" ? "Not supported by the provider" : v);
-
-const presenceWords: Record<string, string> = { inherit: "Same as the server", required: "Needs a present person", not_required: "Doesn't need a present person" };
-/** A server's credential parts as words (never a value): "Header X-Tenant", "Query parameter sig", "Basic". */
-const credentialParts: Format = (v) =>
-  Array.isArray(v)
-    ? v.map((c: { kind?: string; name?: string }) => (c.kind === "bearer" ? "Bearer token" : c.kind === "basic" ? "Basic (user and password)" : `${c.kind === "query" ? "Query parameter" : "Header"} ${c.name ?? ""}`.trim()))
-    : v;
-const authModeWords: Record<string, string> = {
-  none: "None",
-  static_header: "Static header",
-  oauth: "OAuth sign-in per person",
-  person_secret: "Each person's own key",
-  machine_oauth: "The portal's own OAuth client",
-};
-/** How people's own keys are sent (never a key): "Header X-Api-Key", "Bearer token", "Query parameter k". */
-const ownKeySettings: Format = (v) => {
-  if (!v || typeof v !== "object") return v;
-  const c = v as { placement?: string; name?: string };
-  return c.placement === "bearer" ? "Bearer token" : `${c.placement === "query" ? "Query parameter" : "Header"} ${c.name ?? ""}`.trim();
-};
-const registrationWords: Record<string, string> = {
-  dcr: "Automatic (dynamic registration)",
-  cimd: "Automatic (client metadata document)",
-  manual: "Client entered by the team",
-  platform_provider: "Platform provider's client",
-};
-const yesNo: Format = (v) => (typeof v === "boolean" ? (v ? "Yes" : "No") : v);
-/** A person recorded as an object ({ id, name }) or a name. */
-const personName: Format = (v) => (v && typeof v === "object" && "name" in v && typeof v.name === "string" ? v.name : v);
-
-const overrideModeLabels: Record<string, string> = { inherit: "Same as the server", none: "No account", scopes: "Other scopes" };
-
-const limitKeyLabels: Record<string, string> = {
-  person_per_minute: "Per person",
-  credential_per_minute: "Per API key or connected app",
-  service_account_per_minute: "Per service account",
-  gateway_per_minute: "Per gateway",
-};
-const perMinute = (v: unknown) => (typeof v === "number" ? `${v.toLocaleString()}/min` : "unlimited");
-
-/** Platform limits as words: "Per person: 600/min (ceiling none)". */
-const limitItems: Format = (v) =>
-  Array.isArray(v)
-    ? v.map((i: { key?: string; default?: unknown; ceiling?: unknown; value?: unknown }) =>
-        "value" in i
-          ? `${limitKeyLabels[i.key ?? ""] ?? i.key}: ${i.value === null ? "inherit" : perMinute(i.value)}`
-          : `${limitKeyLabels[i.key ?? ""] ?? i.key}: ${perMinute(i.default)}${i.ceiling === null || i.ceiling === undefined ? "" : `, ceiling ${perMinute(i.ceiling)}`}`,
-      )
-    : v;
-
-const retentionKindLabels: Record<string, string> = { call_metadata: "Call records", captured_payloads: "Recorded call contents", audit_log: "Audit log", usage_rollups: "Usage totals" };
-
-/** Retention periods as words: "Call records: 90 days". */
-const periodItems: Format = (v) =>
-  Array.isArray(v)
-    ? v.map((p: { kind?: string; days?: unknown }) => `${retentionKindLabels[p.kind ?? ""] ?? p.kind}: ${typeof p.days === "number" ? `${p.days} days` : "inherit"}`)
-    : v;
-
-/** Redaction patterns as words: "EMP-[0-9]{6} · Employee numbers". */
-const patternItems: Format = (v) => (Array.isArray(v) ? v.map((p: { pattern?: string; note?: string }) => `${p.pattern ?? ""}${p.note ? ` · ${p.note}` : ""}`) : v);
-
-const payloadViewWords: Record<string, string> = { team: "On the team's page", admin: "In Admin (platform staff)" };
-const capturedByLabels: Record<string, string> = { gateway: "The gateway", server: "The server" };
-
-const tokenKindWords: Record<string, string> = { platform_admin: "Platform admin token", team_publisher: "Team publisher token" };
-/** A list of event names (server.unhealthy…) as the words the app uses for them. */
-const eventNames: Format = (v) => (Array.isArray(v) ? v.map((e) => eventLabel(String(e))) : v);
-
-const serviceAccountRoleLabels: Record<string, string> = { member: roleLabels.member, editor: roleLabels.editor };
 
 function fieldsFor(action: string): Fields | undefined {
   switch (action) {

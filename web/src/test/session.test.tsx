@@ -7,7 +7,8 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import { nextPath } from "../session";
 import { authConfig, meFor } from "./fixtures";
-import { mockApi, renderApp, Reply, shellRoutes } from "./harness";
+import { mockApi, Reply, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 import { scaled } from "../../test-scale";
 
 describe("signing in", () => {

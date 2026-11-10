@@ -108,7 +108,12 @@ export function ClassificationDialog({ caps, server, scope, onClose }: Props) {
             </NativeSelect>
           </Field>
         ))}
-        {leaves && <Alert tone="warning" title="The server will leave the catalog">Lowering a class needs a new review under your team's publishing policy. Once saved, {server.name} leaves the catalog until a platform admin approves it. Raising or clearing a class does not need a review.</Alert>}
+        {leaves && (
+          <Alert tone="warning" title="The server will leave the catalog">
+            Lowering a class needs a new review under your team's publishing policy. Once saved, {server.name} leaves the catalog until a platform admin approves it.
+            Raising or clearing a class does not need a review.
+          </Alert>
+        )}
         {items.length > 500 && <Alert tone="warning">Save at most 500 changed tools at once. Reduce the number of changes before saving.</Alert>}
         {stale && <Alert tone="warning">The server changed. Close this dialog and review the refreshed tools before trying again.</Alert>}
         <ErrorAlert error={save.error} title="Couldn't save tool classes" />

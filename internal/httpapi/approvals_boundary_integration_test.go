@@ -44,7 +44,7 @@ func TestApprovalsHTTPMCPServiceAccountOwnerExcludedAndDefaultFallback(t *testin
 	if v := approvalDetail(t, e.owner, r.ID); v.Status != approvals.Cancelled {
 		t.Fatalf("verified machine decline: %+v", v)
 	}
-	out = e.call(t, true, key.Secret, approvalParams("service account dispatch"), urlCaps)
+	e.call(t, true, key.Secret, approvalParams("service account dispatch"), urlCaps)
 	rows = approvalList(t, e.admin, "actionable")
 	if len(rows) != 1 {
 		t.Fatalf("fallback actionable queue: %+v", rows)

@@ -97,8 +97,10 @@ WHERE kg.key_id = ANY(@key_ids::uuid[])
 ORDER BY kg.key_id, 4, kg.gateway_id;
 
 -- name: GetServiceAccountKeyByDigest :one
--- A key by its digest, with its account and the account's team.
-SELECT sqlc.embed(k), sqlc.embed(sa), sqlc.embed(t)
+-- A key by its digest, with its account, the account's team and the gateways
+-- the key is limited to (none: every gateway the account may use).
+SELECT sqlc.embed(k), sqlc.embed(sa), sqlc.embed(t),
+    ARRAY(SELECT kg.gateway_id FROM service_account_key_gateways kg WHERE kg.key_id = k.id)::uuid[] AS gateway_ids
 FROM service_account_keys k
 JOIN service_accounts sa ON sa.id = k.service_account_id
 JOIN teams t ON t.id = sa.team_id

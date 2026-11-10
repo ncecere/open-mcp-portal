@@ -332,21 +332,3 @@ func clipList(l []string, n int) []string {
 	}
 	return out
 }
-
-// staleEra reports whether a failure of a call made with a remembered era
-// suggests the server has changed era: the answer wasn't one its era gives.
-func staleEra(err error) bool {
-	var e *Error
-	if !errors.As(err, &e) {
-		return false
-	}
-	switch e.HTTPStatus {
-	case http.StatusBadRequest, http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotAcceptable, http.StatusUnsupportedMediaType:
-		return true
-	}
-	switch e.RPCCode {
-	case codeMethodNotFound, codeHeaderMismatch, codeMissingCapabilities, codeUnsupportedVersion:
-		return true
-	}
-	return false
-}

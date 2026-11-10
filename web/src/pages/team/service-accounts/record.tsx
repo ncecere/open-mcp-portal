@@ -13,7 +13,7 @@ import { serviceAccountQuery } from "../../../api/queries";
 import { EnabledBadge } from "../../../components/servers/badges";
 import { isNotFound, NotFoundState } from "../../../components/not-found";
 import { PageSkeleton } from "../../../components/page-skeleton";
-import { RelativeTime } from "../../../components/templates/list-page";
+import { RelativeTime } from "../../../components/templates/relative-time";
 import { DetailPage } from "../../../components/templates/detail-page";
 import { serviceAccountTabs } from "../../../lib/tabs";
 import { useCurrentUser } from "../../../session";

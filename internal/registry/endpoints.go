@@ -123,20 +123,7 @@ func (s *Service) planEndpointRows(sv dbgen.McpServer, stored []dbgen.McpServerE
 		}
 	}
 	if input != nil && len(*input) == 0 {
-		// An owner may remove corrupt/incompatible endpoint state without
-		// opening its ciphertext. Never require a broken secret to delete it.
-		for _, row := range stored {
-			if row.ServerID != sv.ID {
-				return p, endpointCredentialFailure()
-			}
-			v, err := endpointRowView(row)
-			if err != nil {
-				v = EndpointView{ID: row.ID, Position: int32(row.Position), URL: row.URL, Enabled: row.Enabled, AuthMode: row.AuthMode, Credentials: []CredentialView{}}
-			}
-			p.before = append(p.before, v)
-		}
-		p.changed, p.review = len(stored) > 0, len(stored) > 0
-		return p, nil
+		return clearEndpoints(p, sv, stored)
 	}
 	byID := map[uuid.UUID]dbgen.McpServerEndpoint{}
 	for _, row := range stored {
@@ -163,65 +150,12 @@ func (s *Service) planEndpointRows(sv dbgen.McpServer, stored []dbgen.McpServerE
 		}
 	}
 	if input == nil {
-		for _, row := range stored {
-			if row.AuthMode != AuthModeOf(sv) || endpointURLKey(row.URL) == endpointURLKey(sv.URL) {
-				return p, unsupportedFailover()
-			}
-		}
-		p.after = p.before
-		return p, nil
+		return keepEndpoints(p, sv, stored)
 	}
-	seenID := map[uuid.UUID]bool{}
-	seenURL := map[string]bool{endpointURLKey(sv.URL): true}
+	seen := endpointsSeen{id: map[uuid.UUID]bool{}, url: map[string]bool{endpointURLKey(sv.URL): true}}
 	for i, item := range *input {
-		if item.URL == "" || len(item.URL) > 500 {
-			return p, apperr.Invalid("invalid_endpoint", "The endpoint URL must be 1-500 characters")
-		}
-		key := endpointURLKey(item.URL)
-		if seenURL[key] {
-			return p, apperr.Invalid("duplicate_endpoint", "The primary and additional endpoint URLs must be distinct")
-		}
-		seenURL[key] = true
-		old, exists := byID[item.ID]
-		if item.ID != uuid.Nil && (!exists || create || seenID[item.ID]) {
-			return p, apperr.Invalid("invalid_endpoint", "The endpoint ID is not a unique entry of this server")
-		}
-		id := item.ID
-		if id == uuid.Nil {
-			id = uuid.New()
-		}
-		seenID[id] = true
-		enabled := true
-		if exists {
-			enabled = old.Enabled
-		}
-		if item.Enabled != nil {
-			enabled = *item.Enabled
-		}
-		origin := originOf(item.URL)
-		mode := AuthModeOf(sv)
-		cipher, views, valueChanged, err := s.planEndpointCredential(sv.ID, id, mode, origin, old, exists, item.Credentials)
-		if err != nil {
+		if err := s.planEndpointRow(&p, sv, i, item, byID, seen, create); err != nil {
 			return p, err
-		}
-		shape, err := json.Marshal(views)
-		if err != nil {
-			return p, err
-		}
-		now := time.Now()
-		created := now
-		if exists {
-			created = old.CreatedAt
-		}
-		row := dbgen.InsertMCPServerEndpointParams{ID: id, ServerID: sv.ID, Position: int16(i + 1), URL: item.URL, Enabled: enabled, AuthMode: mode, CredentialOrigin: origin, CredentialsCipher: cipher, CredentialShapes: shape, CreatedAt: created, UpdatedAt: now}
-		p.rows = append(p.rows, row)
-		v := EndpointView{ID: id, Position: int32(i + 1), URL: item.URL, Enabled: enabled, AuthMode: mode, Credentials: views}
-		p.after = append(p.after, v)
-		if !exists || valueChanged || old.Position != row.Position || old.URL != row.URL || old.Enabled != row.Enabled || old.AuthMode != row.AuthMode {
-			p.changed = true
-		}
-		if !exists || old.Position != row.Position || old.URL != row.URL || old.Enabled != row.Enabled || old.AuthMode != row.AuthMode || !sameEndpointShape(p.beforeFor(id), v) {
-			p.review = true
 		}
 	}
 	if len(stored) != len(*input) {
@@ -231,6 +165,99 @@ func (s *Service) planEndpointRows(sv dbgen.McpServer, stored []dbgen.McpServerE
 		p.changed, p.review = true, true
 	}
 	return p, nil
+}
+
+// clearEndpoints plans the removal of every additional endpoint.
+func clearEndpoints(p endpointPlan, sv dbgen.McpServer, stored []dbgen.McpServerEndpoint) (endpointPlan, error) {
+	// An owner may remove corrupt/incompatible endpoint state without
+	// opening its ciphertext. Never require a broken secret to delete it.
+	for _, row := range stored {
+		if row.ServerID != sv.ID {
+			return p, endpointCredentialFailure()
+		}
+		v, err := endpointRowView(row)
+		if err != nil {
+			v = EndpointView{ID: row.ID, Position: int32(row.Position), URL: row.URL, Enabled: row.Enabled, AuthMode: row.AuthMode, Credentials: []CredentialView{}}
+		}
+		p.before = append(p.before, v)
+	}
+	p.changed, p.review = len(stored) > 0, len(stored) > 0
+	return p, nil
+}
+
+// keepEndpoints plans a request that doesn't mention the endpoints: the
+// stored ones stay, when they still fit the server as it will be.
+func keepEndpoints(p endpointPlan, sv dbgen.McpServer, stored []dbgen.McpServerEndpoint) (endpointPlan, error) {
+	for _, row := range stored {
+		if row.AuthMode != AuthModeOf(sv) || endpointURLKey(row.URL) == endpointURLKey(sv.URL) {
+			return p, unsupportedFailover()
+		}
+	}
+	p.after = p.before
+	return p, nil
+}
+
+// endpointsSeen are the endpoint IDs and URLs a request has used so far.
+type endpointsSeen struct {
+	id  map[uuid.UUID]bool
+	url map[string]bool
+}
+
+// planEndpointRow validates the request's endpoint at index i and adds its
+// row and view to the plan. byID are the stored endpoints.
+func (s *Service) planEndpointRow(p *endpointPlan, sv dbgen.McpServer, i int, item EndpointInput, byID map[uuid.UUID]dbgen.McpServerEndpoint, seen endpointsSeen, create bool) error {
+	if item.URL == "" || len(item.URL) > 500 {
+		return apperr.Invalid("invalid_endpoint", "The endpoint URL must be 1-500 characters")
+	}
+	key := endpointURLKey(item.URL)
+	if seen.url[key] {
+		return apperr.Invalid("duplicate_endpoint", "The primary and additional endpoint URLs must be distinct")
+	}
+	seen.url[key] = true
+	old, exists := byID[item.ID]
+	if item.ID != uuid.Nil && (!exists || create || seen.id[item.ID]) {
+		return apperr.Invalid("invalid_endpoint", "The endpoint ID is not a unique entry of this server")
+	}
+	id := item.ID
+	if id == uuid.Nil {
+		id = uuid.New()
+	}
+	seen.id[id] = true
+	enabled := true
+	if exists {
+		enabled = old.Enabled
+	}
+	if item.Enabled != nil {
+		enabled = *item.Enabled
+	}
+	origin := originOf(item.URL)
+	mode := AuthModeOf(sv)
+	cipher, views, valueChanged, err := s.planEndpointCredential(sv.ID, id, mode, origin, old, exists, item.Credentials)
+	if err != nil {
+		return err
+	}
+	shape, err := json.Marshal(views)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	created := now
+	if exists {
+		created = old.CreatedAt
+	}
+	row := dbgen.InsertMCPServerEndpointParams{ID: id, ServerID: sv.ID, Position: int16(i + 1), URL: item.URL, Enabled: enabled, AuthMode: mode, CredentialOrigin: origin, CredentialsCipher: cipher, CredentialShapes: shape, CreatedAt: created, UpdatedAt: now}
+	p.rows = append(p.rows, row)
+	v := EndpointView{ID: id, Position: int32(i + 1), URL: item.URL, Enabled: enabled, AuthMode: mode, Credentials: views}
+	p.after = append(p.after, v)
+	// rowChanged: the endpoint is new, or its place, URL, switch or mode differs.
+	rowChanged := !exists || old.Position != row.Position || old.URL != row.URL || old.Enabled != row.Enabled || old.AuthMode != row.AuthMode
+	if rowChanged || valueChanged {
+		p.changed = true
+	}
+	if rowChanged || !sameEndpointShape(p.beforeFor(id), v) {
+		p.review = true
+	}
+	return nil
 }
 
 func endpointIDs(v []EndpointView) []uuid.UUID {

@@ -6,7 +6,8 @@ import type { Schemas } from "../api/client";
 import { credentialsBody, newPart, partProblems, type PartForm, partsOf, partSummary } from "../components/servers/credentials";
 import { sameOrigin } from "../components/servers/origin";
 import { capabilities, healthCheck, mcpServer, page, serverId, team, teamPublishing } from "./fixtures";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/mcp-servers`;
 const record = `/teams/${team.slug}/servers/${serverId}`;

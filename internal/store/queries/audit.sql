@@ -37,7 +37,24 @@ SELECT a.id, a.occurred_at, a.actor_kind, a.actor_user_id, a.team_id, a.action,
            ORDER BY h.id DESC
            LIMIT 1
        ) END, '')::text AS recorded_label
-FROM audit_log a
+FROM (
+    -- The page is chosen before anything is resolved for it: the joins and
+    -- label lookups below add no rows, and running them for every
+    -- candidate row made a page cost a pass over the whole log.
+    SELECT p.* FROM audit_log p
+    WHERE (sqlc.narg(team_id)::uuid IS NULL OR p.team_id = sqlc.narg(team_id)::uuid)
+      AND (sqlc.narg(before_id)::bigint IS NULL OR p.id < sqlc.narg(before_id)::bigint)
+      AND (sqlc.narg(action)::text IS NULL OR p.action = sqlc.narg(action)::text)
+      AND (sqlc.narg(action_prefix)::text IS NULL OR p.action LIKE sqlc.narg(action_prefix)::text || '%' ESCAPE '\')
+      AND NOT EXISTS (SELECT 1 FROM unnest(sqlc.arg(exclude_prefixes)::text[]) AS x(prefix) WHERE p.action LIKE x.prefix || '%' ESCAPE '\')
+      AND (sqlc.narg(actor_user_id)::uuid IS NULL OR p.actor_user_id = sqlc.narg(actor_user_id)::uuid)
+      AND (sqlc.narg(actor_kind)::text IS NULL OR p.actor_kind = sqlc.narg(actor_kind)::text)
+      AND (sqlc.narg(target_type)::text IS NULL OR p.target_type = sqlc.narg(target_type)::text)
+      AND (sqlc.narg(occurred_from)::timestamptz IS NULL OR p.occurred_at >= sqlc.narg(occurred_from)::timestamptz)
+      AND (sqlc.narg(occurred_to)::timestamptz IS NULL OR p.occurred_at < sqlc.narg(occurred_to)::timestamptz)
+    ORDER BY p.id DESC
+    LIMIT @page_size
+) a
 CROSS JOIN LATERAL (
     SELECT CASE WHEN a.target_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
                 THEN a.target_id::uuid END AS target_uuid
@@ -97,18 +114,7 @@ CROSS JOIN LATERAL (
                               WHERE mc.id = (CASE WHEN a.target_id ~ '^[0-9]{1,18}$' THEN a.target_id::bigint END))
     END)::text AS label
 ) live
-WHERE (sqlc.narg(team_id)::uuid IS NULL OR a.team_id = sqlc.narg(team_id)::uuid)
-  AND (sqlc.narg(before_id)::bigint IS NULL OR a.id < sqlc.narg(before_id)::bigint)
-  AND (sqlc.narg(action)::text IS NULL OR a.action = sqlc.narg(action)::text)
-  AND (sqlc.narg(action_prefix)::text IS NULL OR a.action LIKE sqlc.narg(action_prefix)::text || '%' ESCAPE '\')
-  AND NOT EXISTS (SELECT 1 FROM unnest(sqlc.arg(exclude_prefixes)::text[]) AS x(prefix) WHERE a.action LIKE x.prefix || '%' ESCAPE '\')
-  AND (sqlc.narg(actor_user_id)::uuid IS NULL OR a.actor_user_id = sqlc.narg(actor_user_id)::uuid)
-  AND (sqlc.narg(actor_kind)::text IS NULL OR a.actor_kind = sqlc.narg(actor_kind)::text)
-  AND (sqlc.narg(target_type)::text IS NULL OR a.target_type = sqlc.narg(target_type)::text)
-  AND (sqlc.narg(occurred_from)::timestamptz IS NULL OR a.occurred_at >= sqlc.narg(occurred_from)::timestamptz)
-  AND (sqlc.narg(occurred_to)::timestamptz IS NULL OR a.occurred_at < sqlc.narg(occurred_to)::timestamptz)
-ORDER BY a.id DESC
-LIMIT @page_size;
+ORDER BY a.id DESC;
 
 -- name: CountTokenAuditEntries :one
 -- Audit entries one automation token wrote for one request (the request ID

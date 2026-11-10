@@ -156,7 +156,7 @@ func (s *Sender) deliver(ctx context.Context, leader *pgx.Conn, id uuid.UUID) er
 		if err = s.Pool.QueryRow(ctx, `SELECT stream_id FROM omp_audit.state WHERE singleton`).Scan(&stream); err != nil {
 			return err
 		}
-		body, err = json.Marshal(struct {
+		body, _ = json.Marshal(struct {
 			Stream uuid.UUID `json:"stream_id"`
 			First  int64     `json:"gap_first"`
 			Last   int64     `json:"gap_last"`

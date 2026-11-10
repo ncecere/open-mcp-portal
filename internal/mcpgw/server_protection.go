@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/ncecere/open-mcp-portal/internal/calls"
 	"github.com/ncecere/open-mcp-portal/internal/gateways"
 	"github.com/ncecere/open-mcp-portal/internal/limits"
@@ -44,7 +45,7 @@ func (rc *request) guardServerAttempt(o gateways.Offer, target *upstream.Target)
 		if rc.h.Limits == nil || rc.h.RateStore == nil {
 			return nil
 		}
-		team, err := dbgen.New(rc.h.Pool).GetTeamByID(ctx, o.Server.TeamID)
+		team, err := rc.serverTeam(ctx, o.Server.TeamID, attempt)
 		if err != nil {
 			return fmt.Errorf("%w: %w", errServerAttemptAuthority, err)
 		}
@@ -59,6 +60,16 @@ func (rc *request) guardServerAttempt(o gateways.Offer, target *upstream.Target)
 		}
 		return nil
 	}
+}
+
+// serverTeam is the server's team, for its limit overrides. A team gateway
+// serving its own team's server has just read that row (serving), so the
+// first attempt reuses it; a retry, which may come much later, reads again.
+func (rc *request) serverTeam(ctx context.Context, teamID uuid.UUID, attempt int) (dbgen.Team, error) {
+	if t := rc.serving.Team; attempt == 0 && t != nil && t.ID == teamID {
+		return *t, nil
+	}
+	return dbgen.New(rc.h.Pool).GetTeamByID(ctx, teamID)
 }
 
 // Called after spent-approval handling, never instead of it. Local admission

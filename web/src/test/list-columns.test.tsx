@@ -3,7 +3,8 @@ import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NARROW_QUERY } from "@/lib/bitop-utils";
 import { catalogServer, page } from "./fixtures";
-import { mockApi, renderApp, shellRoutes } from "./harness";
+import { mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 /** A matchMedia whose NARROW_QUERY result can be changed, notifying listeners like a resized window. */
 function resizableWindow(narrow: boolean) {

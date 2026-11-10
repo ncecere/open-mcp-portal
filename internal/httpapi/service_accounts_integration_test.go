@@ -117,7 +117,7 @@ func TestServiceAccountsManagement(t *testing.T) {
 	// Keys: at most two active (rotation), always expiring, shown once.
 	k1 := createSAKey(t, e.owner, id, map[string]any{"name": "deploy"})
 	if !strings.HasPrefix(k1.Secret, "omp_sa_") || len(k1.Secret) != len("omp_sa_")+43 || k1.Key.Prefix != k1.Secret[:len("omp_sa_")+8] || k1.Key.Status != "active" ||
-		k1.Key.ExpiresAt.Sub(time.Now()) < 89*24*time.Hour || len(k1.Key.Gateways) != 0 || k1.Key.CreatedByName == nil {
+		time.Until(k1.Key.ExpiresAt) < 89*24*time.Hour || len(k1.Key.Gateways) != 0 || k1.Key.CreatedByName == nil {
 		t.Fatalf("key = %+v", k1)
 	}
 	for _, body := range []map[string]any{{"name": ""}, {"name": "x", "expiresInDays": 0}, {"name": "x", "expiresInDays": 366}} {

@@ -34,7 +34,9 @@ export function selectionProblem(err: unknown, selected: { capabilityId: string;
       rowText: "Can't be selected now. Remove it to save.",
       message:
         n > 0
-          ? `${n === 1 ? "1 selected capability can't" : `${n} selected capabilities can't`} be selected any more: the server may be another team's private one, or the capability unapproved or gone${template ? ", or a resource template using expressions other than {var} and {+var}" : ""}. Remove ${n === 1 ? "it" : "them"} and save again.`
+          ? `${n === 1 ? "1 selected capability can't" : `${n} selected capabilities can't`} be selected any more: ` +
+            "the server may be another team's private one, or the capability unapproved or gone" +
+            `${template ? ", or a resource template using expressions other than {var} and {+var}" : ""}. Remove ${n === 1 ? "it" : "them"} and save again.`
           : "Some selected capabilities can't be selected any more. Remove the ones marked here and save again.",
     };
   }

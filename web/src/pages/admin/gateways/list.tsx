@@ -7,7 +7,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Network, Plus } from "lucide-react";
 import { api, type Schemas, unwrap } from "@/api/client";
-import { adminGatewaysKey } from "@/api/queries";
+import { adminGatewaysKey, adminTeamOptionsQuery } from "@/api/queries";
 import { CreateGatewayForm } from "@/components/gateways/create-gateway-form";
 import { gatewayColumns } from "@/components/gateways/gateway-columns";
 import { type Gateway, whatIsAPlatformGateway } from "@/components/gateways/labels";
@@ -23,11 +23,7 @@ type OwnerKind = Schemas["GatewayOwnerKind"];
 
 /** The teams as filter options (the first 200). */
 export function useTeamOptions() {
-  return useQuery({
-    queryKey: ["admin", "teams", "server-filter"],
-    queryFn: async () => unwrap(await api.GET("/v1/admin/teams", { params: { query: { limit: 200 } } })),
-    select: (p) => p.items.map((t) => ({ value: t.team.slug, label: t.team.name })),
-  });
+  return useQuery({ ...adminTeamOptionsQuery(), select: (p) => p.items.map((t) => ({ value: t.team.slug, label: t.team.name })) });
 }
 
 export function AdminGatewaysPage() {

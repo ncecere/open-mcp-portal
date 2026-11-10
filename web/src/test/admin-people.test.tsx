@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { auditEntry, invite, member, myTeam, page, team, teamPublishing, teamSummary, user } from "./fixtures";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const other = user({ id: "77777777-7777-4777-8777-777777777777", email: "pat@example.com", displayName: "Pat Admin", platformRole: "platform_admin", teamCount: 2 });
 const detail: Schemas["UserDetail"] = { user: other, teams: [myTeam("editor")] };
@@ -168,7 +169,12 @@ describe("Admin → Teams", () => {
 
   it("invites a dev persona's name@localhost as owner", async () => {
     const u = userEvent.setup();
-    const calls = mockApi(routes("platform_admin", { "GET /v1/admin/users": () => page([]), [`POST /v1/admin/teams/${team.slug}/owners`]: (): Schemas["MemberAddResult"] => ({ status: "invited", invite: invite({ email: "alex@localhost", role: "owner" }) }) }));
+    const calls = mockApi(
+      routes("platform_admin", {
+        "GET /v1/admin/users": () => page([]),
+        [`POST /v1/admin/teams/${team.slug}/owners`]: (): Schemas["MemberAddResult"] => ({ status: "invited", invite: invite({ email: "alex@localhost", role: "owner" }) }),
+      }),
+    );
     renderApp(`/admin/teams/${team.slug}?tab=members`);
     await u.click(await screen.findByRole("button", { name: "Assign owner" }));
     const dialog = await screen.findByRole("dialog", { name: "Assign an owner" });

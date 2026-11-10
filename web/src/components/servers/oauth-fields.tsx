@@ -77,7 +77,9 @@ export function OAuthFields({ value, onChange, detected, server, secret, setSecr
   const servers = detected?.resourceMetadata?.authorizationServers ?? [];
   const github = gitHubScopes.every((x) => supported.includes(x)) && urlHost(detected?.authorizationServer?.issuer ?? stored?.issuer ?? "") === "github.com";
   const redirectUri = detected?.registration?.redirectUri ?? `${globalThis.location?.origin ?? ""}${callbackPath}`;
-  const scopeHelp = `What each person allows the server to do. Ask for as little as its tools need${github ? ` (for GitHub, usually ${gitHubScopes.join(", ")})` : ""}. Adding a scope later sends a published server back to review.`;
+  const scopeHelp =
+    `What each person allows the server to do. Ask for as little as its tools need${github ? ` (for GitHub, usually ${gitHubScopes.join(", ")})` : ""}.` +
+    " Adding a scope later sends a published server back to review.";
   return (
     <>
       <RadioGroup<RegistrationChoice>

@@ -11,7 +11,6 @@ import { FormPage } from "../components/templates/form-page";
 import { ListPage } from "../components/templates/list-page";
 import { RecordPage, useRecordParam } from "../components/templates/record-page";
 import { fromSearchParams } from "../lib/url-search";
-import { useFormState } from "../lib/use-form-state";
 import { Button } from "@/components/ui/button/button";
 import { Field, Form } from "@/components/ui/field/field";
 import { Input } from "@/components/ui/input/input";
@@ -82,11 +81,11 @@ describe("ListPage onRowClick", () => {
 
 describe("form pages and dialogs ask before discarding edits", () => {
   function KeyForm({ onClose }: { onClose: () => void }) {
-    const [form, set, , dirty] = useFormState({ name: "" });
+    const [name, setName] = useState("");
     return (
-      <FormPage label="Create a key" title="Create a key" description="A widget key." onClose={onClose} onSubmit={() => {}} submitLabel="Create key" dirty={dirty}>
+      <FormPage label="Create a key" title="Create a key" description="A widget key." onClose={onClose} onSubmit={() => {}} submitLabel="Create key" dirty={name !== ""}>
         <Field label="Name">
-          <Input value={form.name} onChange={(e) => set("name", e.target.value)} />
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
       </FormPage>
     );

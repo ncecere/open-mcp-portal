@@ -27,7 +27,9 @@ export function Consumers({ items, canEdit }: { items: Consumer[]; canEdit: bool
     const header = ifMatch(revision.data.revision);
     if (!v) return unwrapAudit(await api.POST("/v1/admin/settings/audit-consumers", { params: { header }, body: { consumer: name, profile, required } }));
     const params = { header, path: { consumer: v.item.name } };
-    return v.remove ? unwrapAudit(await api.DELETE("/v1/admin/settings/audit-consumers/{consumer}", { params })) : unwrapAudit(await api.PUT("/v1/admin/settings/audit-consumers/{consumer}", { params, body: { required: !v.item.required } }));
+    return v.remove
+      ? unwrapAudit(await api.DELETE("/v1/admin/settings/audit-consumers/{consumer}", { params }))
+      : unwrapAudit(await api.PUT("/v1/admin/settings/audit-consumers/{consumer}", { params, body: { required: !v.item.required } }));
   }, onSuccess: () => { setRegister(false); setTarget(null); setName(""); change.reset(); }, onSettled: () => {
     void qc.invalidateQueries({ queryKey: statusKey }); void qc.invalidateQueries({ queryKey: consumerKey });
   } });
@@ -39,12 +41,16 @@ export function Consumers({ items, canEdit }: { items: Consumer[]; canEdit: bool
         <Button size="sm" variant="danger" disabled={!revision.data} onClick={() => { change.reset(); setTarget({ item, remove: true }); }}>Remove</Button>
       </Inline></Td>}</Tr>)}
     </Table>
-    {register && <FormDialog title="Register pull consumer" description="Required consumers hold audit retention until they acknowledge records." submitLabel="Register consumer" onClose={() => setRegister(false)} onSubmit={() => change.mutate(null)} busy={change.isPending} closeDisabled={change.isPending}>
+    {register && <FormDialog title="Register pull consumer" description="Required consumers hold audit retention until they acknowledge records." submitLabel="Register consumer"
+      onClose={() => setRegister(false)} onSubmit={() => change.mutate(null)} busy={change.isPending} closeDisabled={change.isPending}>
       <ErrorAlert error={change.error} />
       <Field label="Consumer name"><Input required value={name} onChange={e => setName(e.target.value)} /></Field>
       <Field label="Consumer profile"><NativeSelect value={profile} onChange={e => setProfile(e.target.value as "summary" | "full")}><option value="summary">Summary</option><option value="full">Full</option></NativeSelect></Field>
       <Checkbox label="Required" checked={required} onCheckedChange={setRequired} />
     </FormDialog>}
-    <ConfirmMutationDialog target={target} onClose={() => setTarget(null)} mutation={change} onConfirm={v => change.mutate(v)} title={target?.remove ? "Remove consumer?" : "Change retention requirement?"} description="Required consumers hold retention at their acknowledged sequence. Removing a consumer or making it optional releases that hold." confirmLabel="Confirm consumer change" />
+    <ConfirmMutationDialog target={target} onClose={() => setTarget(null)} mutation={change} onConfirm={v => change.mutate(v)}
+      title={target?.remove ? "Remove consumer?" : "Change retention requirement?"}
+      description="Required consumers hold retention at their acknowledged sequence. Removing a consumer or making it optional releases that hold."
+      confirmLabel="Confirm consumer change" />
   </Card>;
 }

@@ -7,7 +7,8 @@ import { daysProblem } from "../lib/retention";
 import { checkPattern } from "../pages/admin/operations/pattern-dialog";
 import { ruleLabel } from "../pages/admin/operations/redaction-tester";
 import { captureSettings, retentionSettings } from "./fixtures-operations";
-import { type Call, type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Call, type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const routes = (role: "platform_admin" | "platform_auditor", extra: Record<string, Handler> = {}): Record<string, Handler> => ({
   ...shellRoutes(role, null),

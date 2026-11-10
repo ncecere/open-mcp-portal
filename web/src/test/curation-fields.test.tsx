@@ -17,7 +17,10 @@ describe("Constraint number lexemes", () => {
     }
   });
 
-  it.each(["0.1", "1e-1", "1.5", "15e-1", "1.50", "-0", "0e10000", "0e-9999", "1e-254", "1e-255", "1e-300", "5e-324", "0." + "0".repeat(323) + "5", "9007199254740991", "-9007199254740991"])("preserves safe decimal value %s across save/reload and rename", (text) => {
+  it.each([
+    "0.1", "1e-1", "1.5", "15e-1", "1.50", "-0", "0e10000", "0e-9999", "1e-254", "1e-255", "1e-300", "5e-324", "0." + "0".repeat(323) + "5",
+    "9007199254740991", "-9007199254740991",
+  ])("preserves safe decimal value %s across save/reload and rename", (text) => {
     const original = fixed(text);
     const reloaded = JSON.parse(JSON.stringify(original));
     expect(policyOf("renamed", "description", choicesOf(reloaded, properties), properties)).toEqual({ ...reloaded, nameOverride: "renamed", descriptionOverride: "description" });

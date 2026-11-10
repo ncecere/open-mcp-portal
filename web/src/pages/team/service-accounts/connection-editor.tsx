@@ -38,17 +38,29 @@ function AccessEditor({ team, connection, onClose }: EditorProps) {
     },
   });
   const staleGrants = grants.filter((g) => !destinations.data?.some((d) => d.server.id === g.serverId));
-  return <FormPage label="Manage shared connection access" title={`Access to ${connection.name}`} description={`Shared upstream account: ${connection.accountLabel || "Account label unavailable"}. One connection per service account and provider; conflicting assignments are refused.`} onClose={onClose} onSubmit={() => {
+  return <FormPage label="Manage shared connection access" title={`Access to ${connection.name}`}
+    description={`Shared upstream account: ${connection.accountLabel || "Account label unavailable"}. One connection per service account and provider; conflicting assignments are refused.`}
+    onClose={onClose} onSubmit={() => {
     if (!update.isPending) update.mutate({ team, id: connection.id, revision: connection.revision, accounts: [...accounts], grants: grants.map((g) => ({ ...g, scopes: [...g.scopes] })) });
   }} submitLabel="Save access" busy={update.isPending || destinations.isLoading || allAccounts.isLoading}>
     <FormSection title="Allowed service accounts">
-      {allAccounts.data?.map((a) => <Checkbox key={a.id} disabled={update.isPending} label={a.name} description={a.enabled ? undefined : "Disabled: cannot call until enabled"} checked={accounts.includes(a.id)} onCheckedChange={(checked) => setAccounts((old) => checked ? [...old, a.id] : old.filter((id) => id !== a.id))} />)}
+      {allAccounts.data?.map((a) => <Checkbox key={a.id} disabled={update.isPending} label={a.name} description={a.enabled ? undefined : "Disabled: cannot call until enabled"}
+        checked={accounts.includes(a.id)} onCheckedChange={(checked) => setAccounts((old) => checked ? [...old, a.id] : old.filter((id) => id !== a.id))} />)}
     </FormSection>
     <FormSection title="Allowed destination servers">
-      <Alert tone="warning">Only the exact origin and scopes shown are granted. Another team's published server also needs this explicit allowance. Saving access cancels any pending consent; reconnect afterwards if more scopes are needed.</Alert>
+      <Alert tone="warning">
+        Only the exact origin and scopes shown are granted. Another team's published server also needs this explicit allowance.
+        Saving access cancels any pending consent; reconnect afterwards if more scopes are needed.
+      </Alert>
       {destinations.data?.length === 0 && <p>No reachable servers require this provider. Add an appropriate capability to a gateway you can use first.</p>}
-      {destinations.data?.map((d) => <Checkbox key={d.server.id} disabled={update.isPending} label={`${d.server.name} (${d.server.teamName})`} description={`${d.origin} · ${d.scopes.join(", ") || "No scopes"}${d.covered ? "" : " · Reconnect required"}`} checked={grants.some((g) => g.serverId === d.server.id)} onCheckedChange={(checked) => setGrants((old) => checked ? [...old.filter((g) => g.serverId !== d.server.id), { serverId: d.server.id, origin: d.origin, scopes: d.scopes }] : old.filter((g) => g.serverId !== d.server.id))} />)}
-      {staleGrants.map((g) => <Checkbox key={g.serverId} disabled={update.isPending} label={`Remove unavailable server ${g.serverId}`} description={g.origin} checked={false} onCheckedChange={() => setGrants((old) => old.filter((x) => x.serverId !== g.serverId))} />)}
+      {destinations.data?.map((d) => <Checkbox key={d.server.id} disabled={update.isPending} label={`${d.server.name} (${d.server.teamName})`}
+        description={`${d.origin} · ${d.scopes.join(", ") || "No scopes"}${d.covered ? "" : " · Reconnect required"}`}
+        checked={grants.some((g) => g.serverId === d.server.id)}
+        onCheckedChange={(checked) => setGrants((old) => checked
+          ? [...old.filter((g) => g.serverId !== d.server.id), { serverId: d.server.id, origin: d.origin, scopes: d.scopes }]
+          : old.filter((g) => g.serverId !== d.server.id))} />)}
+      {staleGrants.map((g) => <Checkbox key={g.serverId} disabled={update.isPending} label={`Remove unavailable server ${g.serverId}`} description={g.origin} checked={false}
+        onCheckedChange={() => setGrants((old) => old.filter((x) => x.serverId !== g.serverId))} />)}
     </FormSection>
     <ErrorAlert error={update.error ?? destinations.error ?? allAccounts.error} title="Couldn't save access" />
   </FormPage>;

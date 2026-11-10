@@ -113,6 +113,25 @@ func getPlatformLimits(ctx context.Context, c *api) (ompclient.LimitSettings, er
 
 // ---- teams -------------------------------------------------------------------
 
+// teamPlan is one declared team compared with the portal: the change the plan
+// shows, and everything its step needs to apply it.
+type teamPlan struct {
+	p  *planner
+	d  Team
+	ch Change
+
+	create bool
+	rev    int64
+
+	patch        ompclient.TeamUpdate
+	hasPatch     bool
+	limitChanges []ompclient.TeamLimitChange
+}
+
+func (t *teamPlan) add(field string, from, to any) {
+	t.ch.Fields = append(t.ch.Fields, FieldChange{Field: field, From: from, To: to})
+}
+
 func (p *planner) planTeams(ctx context.Context, desired []Team) error {
 	if len(desired) == 0 {
 		return nil
@@ -128,96 +147,109 @@ func (p *planner) planTeams(ctx context.Context, desired []Team) error {
 	sorted := append([]Team(nil), desired...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Slug < sorted[j].Slug })
 	for _, d := range sorted {
-		d := d
 		cur, exists := by[d.Slug]
-		ch := Change{Kind: "team", Key: d.Slug, Action: "update"}
-		add := func(field string, from, to any) {
-			ch.Fields = append(ch.Fields, FieldChange{Field: field, From: from, To: to})
-		}
-		var patch ompclient.TeamUpdate
-		hasPatch := false
-		var limitChanges []ompclient.TeamLimitChange
-		if !exists {
-			ch.Action = "create"
-			if d.OwnerEmail == "" {
-				return usageErr("team %s does not exist: ownerEmail is required to create it", d.Slug)
-			}
-			add("name", nil, d.Name)
-			if d.Description != nil {
-				add("description", nil, *d.Description)
-			}
-			add("ownerEmail", nil, d.OwnerEmail)
-			if d.Status == "archived" {
-				add("status", nil, "archived")
-				s := ompclient.TeamStatusArchived
-				patch.Status, hasPatch = &s, true
-			}
-			for _, k := range sortedKeys(d.Limits) {
-				if v := d.Limits[k]; v != nil {
-					add("limits."+k, nil, *v)
-					limitChanges = append(limitChanges, ompclient.TeamLimitChange{Key: ompclient.RateLimitKey(k), Value: v})
-				}
-			}
+		t := &teamPlan{p: p, d: d, ch: Change{Kind: "team", Key: d.Slug, Action: "update"}, create: !exists, rev: cur.Revision}
+		if exists {
+			err = t.planUpdate(ctx, cur)
 		} else {
-			if d.Name != cur.Name {
-				add("name", cur.Name, d.Name)
-				patch.Name, hasPatch = &d.Name, true
-			}
-			if d.Description != nil && *d.Description != cur.Description {
-				add("description", cur.Description, *d.Description)
-				patch.Description, hasPatch = d.Description, true
-			}
-			if d.Status != "" && d.Status != string(cur.Status) {
-				add("status", string(cur.Status), d.Status)
-				s := ompclient.TeamStatus(d.Status)
-				patch.Status, hasPatch = &s, true
-			}
-			if len(d.Limits) > 0 {
-				have, err := getTeamLimits(ctx, p.c, d.Slug)
-				if err != nil {
-					return err
-				}
-				for _, k := range sortedKeys(d.Limits) {
-					if !equalInt(have[k], d.Limits[k]) {
-						add("limits."+k, intText(have[k]), intText(d.Limits[k]))
-						limitChanges = append(limitChanges, ompclient.TeamLimitChange{Key: ompclient.RateLimitKey(k), Value: d.Limits[k]})
-					}
-				}
-			}
+			err = t.planCreate()
 		}
-		if len(ch.Fields) == 0 {
+		if err != nil {
+			return err
+		}
+		if len(t.ch.Fields) == 0 {
 			continue
 		}
-		create, rev := !exists, cur.Revision
-		p.steps = append(p.steps, &step{Change: ch, run: func(ctx context.Context, r *runResult) error {
-			if create {
-				desc := d.Description
-				res, err := check(p.c.AdminCreateTeamWithResponse(ctx, ompclient.TeamCreate{Slug: d.Slug, Name: d.Name, Description: desc, OwnerEmail: openapi_types.Email(d.OwnerEmail)}))
-				if err != nil {
-					return err
-				}
-				if res.JSON201 == nil {
-					return badResponse()
-				}
-				rev = res.JSON201.Data.Team.Team.Revision
-			}
-			if hasPatch {
-				res, err := check(p.c.AdminUpdateTeamWithResponse(ctx, d.Slug, &ompclient.AdminUpdateTeamParams{IfMatch: ifMatch(rev)}, patch))
-				if err != nil {
-					return withHint(err, "the team changed since the plan was read; run the command again")
-				}
-				sum, err := dataOf(res.JSON200)
-				if err != nil {
-					return err
-				}
-				rev = sum.Team.Revision
-			}
-			if len(limitChanges) > 0 {
-				_, err := check(p.c.AdminUpdateTeamLimitsWithResponse(ctx, d.Slug, &ompclient.AdminUpdateTeamLimitsParams{IfMatch: ifMatch(rev)}, ompclient.TeamLimitsUpdate{Items: limitChanges}))
-				return withHint(err, "the team changed since the plan was read; run the command again")
-			}
-			return nil
-		}})
+		p.steps = append(p.steps, &step{Change: t.ch, run: t.apply})
+	}
+	return nil
+}
+
+func (t *teamPlan) planCreate() error {
+	d := &t.d
+	t.ch.Action = "create"
+	if d.OwnerEmail == "" {
+		return usageErr("team %s does not exist: ownerEmail is required to create it", d.Slug)
+	}
+	t.add("name", nil, d.Name)
+	if d.Description != nil {
+		t.add("description", nil, *d.Description)
+	}
+	t.add("ownerEmail", nil, d.OwnerEmail)
+	if d.Status == "archived" {
+		t.add("status", nil, "archived")
+		s := ompclient.TeamStatusArchived
+		t.patch.Status, t.hasPatch = &s, true
+	}
+	for _, k := range sortedKeys(d.Limits) {
+		if v := d.Limits[k]; v != nil {
+			t.add("limits."+k, nil, *v)
+			t.limitChanges = append(t.limitChanges, ompclient.TeamLimitChange{Key: ompclient.RateLimitKey(k), Value: v})
+		}
+	}
+	return nil
+}
+
+func (t *teamPlan) planUpdate(ctx context.Context, cur ompclient.Team) error {
+	d := &t.d
+	if d.Name != cur.Name {
+		t.add("name", cur.Name, d.Name)
+		t.patch.Name, t.hasPatch = &d.Name, true
+	}
+	if d.Description != nil && *d.Description != cur.Description {
+		t.add("description", cur.Description, *d.Description)
+		t.patch.Description, t.hasPatch = d.Description, true
+	}
+	if d.Status != "" && d.Status != string(cur.Status) {
+		t.add("status", string(cur.Status), d.Status)
+		s := ompclient.TeamStatus(d.Status)
+		t.patch.Status, t.hasPatch = &s, true
+	}
+	if len(d.Limits) == 0 {
+		return nil
+	}
+	have, err := getTeamLimits(ctx, t.p.c, d.Slug)
+	if err != nil {
+		return err
+	}
+	for _, k := range sortedKeys(d.Limits) {
+		if !equalInt(have[k], d.Limits[k]) {
+			t.add("limits."+k, intText(have[k]), intText(d.Limits[k]))
+			t.limitChanges = append(t.limitChanges, ompclient.TeamLimitChange{Key: ompclient.RateLimitKey(k), Value: d.Limits[k]})
+		}
+	}
+	return nil
+}
+
+// apply is the team's step: the team itself, its settings, then its limits,
+// each write conditional on the revision the one before it returned.
+func (t *teamPlan) apply(ctx context.Context, r *runResult) error {
+	c, d := t.p.c, t.d
+	if t.create {
+		desc := d.Description
+		res, err := check(c.AdminCreateTeamWithResponse(ctx, ompclient.TeamCreate{Slug: d.Slug, Name: d.Name, Description: desc, OwnerEmail: openapi_types.Email(d.OwnerEmail)}))
+		if err != nil {
+			return err
+		}
+		if res.JSON201 == nil {
+			return badResponse()
+		}
+		t.rev = res.JSON201.Data.Team.Team.Revision
+	}
+	if t.hasPatch {
+		res, err := check(c.AdminUpdateTeamWithResponse(ctx, d.Slug, &ompclient.AdminUpdateTeamParams{IfMatch: ifMatch(t.rev)}, t.patch))
+		if err != nil {
+			return withHint(err, "the team changed since the plan was read; run the command again")
+		}
+		sum, err := dataOf(res.JSON200)
+		if err != nil {
+			return err
+		}
+		t.rev = sum.Team.Revision
+	}
+	if len(t.limitChanges) > 0 {
+		_, err := check(c.AdminUpdateTeamLimitsWithResponse(ctx, d.Slug, &ompclient.AdminUpdateTeamLimitsParams{IfMatch: ifMatch(t.rev)}, ompclient.TeamLimitsUpdate{Items: t.limitChanges}))
+		return withHint(err, "the team changed since the plan was read; run the command again")
 	}
 	return nil
 }

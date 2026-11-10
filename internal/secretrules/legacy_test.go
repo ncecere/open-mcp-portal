@@ -67,54 +67,6 @@ func legacynormaliseKey(k string) string {
 	return strings.NewReplacer("-", "", "_", "").Replace(strings.ToLower(k))
 }
 
-// legacyPattern is an admin pattern: an RE2 expression and a note.
-type legacyPattern struct {
-	Pattern string `json:"pattern"`
-	Note    string `json:"note,omitempty"`
-}
-
-// Limits of admin patterns.
-const (
-	legacyMaxPatterns      = 50
-	legacyMaxPatternLength = 500
-	legacyMaxNoteLength    = 200
-)
-
-// legacyPatternError says which admin pattern is invalid and why: syntax,
-// too_long, too_many or matches_empty.
-type legacyPatternError struct {
-	Index  int
-	Reason string
-	Detail string
-}
-
-func (e *legacyPatternError) Error() string {
-	return fmt.Sprintf("pattern %d: %s", e.Index, e.Detail)
-}
-
-// legacyCompile checks and compiles admin patterns.
-func legacyCompile(ps []legacyPattern) ([]*regexp.Regexp, *legacyPatternError) {
-	if len(ps) > legacyMaxPatterns {
-		return nil, &legacyPatternError{Index: legacyMaxPatterns, Reason: "too_many", Detail: fmt.Sprintf("at most %d patterns", legacyMaxPatterns)}
-	}
-	out := make([]*regexp.Regexp, len(ps))
-	for i, p := range ps {
-		if p.Pattern == "" || len(p.Pattern) > legacyMaxPatternLength || utf8.RuneCountInString(p.Note) > legacyMaxNoteLength {
-			return nil, &legacyPatternError{Index: i, Reason: "too_long",
-				Detail: fmt.Sprintf("a pattern is 1-%d characters and a note at most %d", legacyMaxPatternLength, legacyMaxNoteLength)}
-		}
-		re, err := regexp.Compile(p.Pattern)
-		if err != nil {
-			return nil, &legacyPatternError{Index: i, Reason: "syntax", Detail: "not a valid RE2 expression: " + err.Error()}
-		}
-		if re.MatchString("") {
-			return nil, &legacyPatternError{Index: i, Reason: "matches_empty", Detail: "the pattern matches the empty string"}
-		}
-		out[i] = re
-	}
-	return out, nil
-}
-
 // legacyRedactor applies the rules to one call's parts.
 type legacyRedactor struct {
 	patterns []*regexp.Regexp

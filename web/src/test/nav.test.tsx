@@ -5,7 +5,8 @@ import { documentTitle, fitCrumbs } from "../components/layout/breadcrumbs";
 import { activeAdminGroup, adminNav, adminSections, teamAccess, teamNavFor, workspaceNav } from "../components/layout/nav";
 import { router } from "../router";
 import { meFor, myTeam, team } from "./fixtures";
-import { mockApi, renderApp, shellRoutes } from "./harness";
+import { mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const routePaths = () => Object.keys(router.routesByPath).map((p) => (p.length > 1 ? p.replace(/\/$/, "") : p));
 

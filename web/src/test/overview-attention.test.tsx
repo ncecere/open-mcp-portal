@@ -5,7 +5,8 @@ import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { mcpServer, page, serverId, team } from "./fixtures";
 import { attentionItem, overview, teamAttention, teamRef } from "./fixtures-v02";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const ago = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
 const failing = attentionItem({ severity: "critical", at: ago(30) });

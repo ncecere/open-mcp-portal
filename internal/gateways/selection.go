@@ -166,9 +166,31 @@ func selection(ctx context.Context, q *dbgen.Queries, g dbgen.Gateway) ([]Select
 	if err != nil {
 		return nil, err
 	}
-	ps, err := registry.LoadProviders(ctx, q)
-	if err != nil {
-		return nil, err
+	return selected(ctx, q, g, ownArchived, rows)
+}
+
+// needsProviders reports whether any row's requirement depends on an auth
+// provider (registry.Effective): a server in oauth mode, or a server with a
+// provider and a capability that has not opted out.
+func needsProviders(rows []dbgen.ListGatewaySelectionRow) bool {
+	for _, r := range rows {
+		if r.McpServer.AuthMode == registry.AuthOAuth ||
+			(r.McpServer.AuthProviderID.Valid && r.McpCapability.RequirementMode != registry.ModeNone) {
+			return true
+		}
+	}
+	return false
+}
+
+// selected turns selection rows into Selected items. The providers are read
+// only when a row can require one, which most gateways' rows cannot.
+func selected(ctx context.Context, q *dbgen.Queries, g dbgen.Gateway, ownArchived bool, rows []dbgen.ListGatewaySelectionRow) ([]Selected, error) {
+	var ps registry.Providers
+	if needsProviders(rows) {
+		var err error
+		if ps, err = registry.LoadProviders(ctx, q); err != nil {
+			return nil, err
+		}
 	}
 	out := make([]Selected, len(rows))
 	for i, r := range rows {

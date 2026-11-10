@@ -3,7 +3,8 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { destination, automationToken } from "./fixtures-v02";
 import { apiKey, myGateway, team } from "./fixtures";
-import { mockApi, renderApp, shellRoutes } from "./harness";
+import { mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 async function palette(u: ReturnType<typeof userEvent.setup>, query: string) {
   await u.click(await screen.findByRole("button", { name: /Search or jump to/ }));

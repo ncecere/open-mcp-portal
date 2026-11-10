@@ -11,7 +11,8 @@ import { redirectTo } from "../components/providers/labels";
 import { capabilities, healthCheck, mcpServer, page, serverId, team, teamPublishing, teamSummary } from "./fixtures";
 import { detectResult, githubUrl, oauthServer, setupConnection } from "./fixtures-oauth";
 import { serverRequirement } from "./fixtures-providers";
-import { type Call, type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Call, type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 type Role = Schemas["TeamRole"];
 const base = `/v1/teams/${team.slug}/mcp-servers`;

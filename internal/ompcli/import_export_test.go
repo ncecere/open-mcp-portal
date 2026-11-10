@@ -56,7 +56,7 @@ func TestExportServersNeverIncludesASecret(t *testing.T) {
 			t.Errorf("%s export has the token", label)
 		}
 	}
-	code, out, _ = h.run("export")
+	_, out, _ = h.run("export")
 	for _, want := range []string{"schema: omp/v1", "slug: billing", "authMode: static_header", "authHeaderName: X-API-Key", "authValueEnv: OMP_BILLING_AUTH_VALUE", "publish: request", "timeoutSeconds: 45", "slug: status", "authMode: none", "publish: none"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("export lacks %q:\n%s", want, out)

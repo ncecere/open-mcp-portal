@@ -357,8 +357,11 @@ func (s *Service) Authenticate(ctx context.Context, token, slug string) (Princip
 }
 
 // Touch records that a grant was used (at most once a minute).
-func (s *Service) Touch(ctx context.Context, grantID uuid.UUID) error {
-	return s.q.TouchOAuthGrant(ctx, grantID)
+func (s *Service) Touch(ctx context.Context, g dbgen.OauthGrant) error {
+	if !store.TouchDue(g.LastUsedAt) {
+		return nil
+	}
+	return s.q.TouchOAuthGrant(ctx, g.ID)
 }
 
 // Revoke is the revocation endpoint (RFC 7009): a refresh token revokes

@@ -69,7 +69,7 @@ func TestTaskEchoedIDAndCredentialsNeverLeave(t *testing.T) {
 		}
 	}
 	// A failed task (terminal states are sticky, so it is a second task).
-	code, _, out = e.tool("support", e.key.Secret, "tasks__slow", declared(true))
+	_, _, out = e.tool("support", e.key.Secret, "tasks__slow", declared(true))
 	keep(out)
 	handle2, _ := resultOf(t, out)["taskId"].(string)
 	actual2 := e.up.Tasks()[1]

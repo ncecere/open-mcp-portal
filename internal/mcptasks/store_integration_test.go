@@ -111,6 +111,7 @@ func TestTaskStoreDurableSealedActivationAndLookup(t *testing.T) {
 	if err != nil || p.UpstreamID != "" {
 		t.Fatalf("prepared association: %v", err)
 	}
+	//lint:ignore SA9005 the assertion is exactly that nothing serializes
 	if raw, err := json.Marshal(r); err != nil || string(raw) != "{}" {
 		t.Fatal("reservation serialized private state")
 	}
@@ -152,6 +153,7 @@ func TestTaskStoreDurableSealedActivationAndLookup(t *testing.T) {
 	if !bytes.Equal(got.Payload().Arguments, f.payload.Arguments) || got.Payload().RedactionOnly[0] != f.payload.RedactionOnly[0] {
 		t.Fatal("snapshot payload accessor aliases private state")
 	}
+	//lint:ignore SA9005 the assertion is exactly that nothing serializes
 	if raw, err := json.Marshal(got); err != nil || string(raw) != "{}" {
 		t.Fatal("snapshot serialized private state")
 	}

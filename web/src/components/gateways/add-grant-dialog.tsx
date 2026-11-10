@@ -7,7 +7,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, ApiError, type Schemas, unwrap } from "../../api/client";
-import { adminGatewaysKey } from "../../api/queries";
+import { adminGatewaysKey, adminTeamOptionsQuery } from "../../api/queries";
 import { ScopeEditor, scopeProblem, type ToolScope } from "../tool-scope";
 import { FormDialog } from "../form-dialog";
 import { ErrorAlert } from "@/components/ui/alert/alert";
@@ -46,11 +46,7 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
   const [toolScope, setToolScope] = useState<ToolScope>(null);
   const [scopeDraftProblem, setScopeDraftProblem] = useState<string>();
   const [submitted, setSubmitted] = useState(false);
-  const teams = useQuery({
-    queryKey: ["admin", "teams", "grant-options"],
-    queryFn: async () => unwrap(await api.GET("/v1/admin/teams", { params: { query: { limit: 200 } } })),
-    enabled: kind === "team",
-  });
+  const teams = useQuery({ ...adminTeamOptionsQuery(), enabled: kind === "team" });
   const add = useMutation({
     mutationFn: async (submission: Submission) =>
       unwrap(
@@ -86,7 +82,11 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
         if (value && validDays && !scopeProblem(toolScope) && !scopeDraftProblem) add.mutate({
           gatewayId: gateway.id,
           gatewayName: gateway.name,
-          body: { ...(kind === "team" ? { subjectKind: kind, team } : kind === "user" ? { subjectKind: kind, userEmail: email.trim() } : { subjectKind: kind, group: group.trim() }), toolScope, ...(days ? { expiresInDays: Number(days) } : {}) },
+          body: {
+            ...(kind === "team" ? { subjectKind: kind, team } : kind === "user" ? { subjectKind: kind, userEmail: email.trim() } : { subjectKind: kind, group: group.trim() }),
+            toolScope,
+            ...(days ? { expiresInDays: Number(days) } : {}),
+          },
         });
       }}
       submitLabel="Grant access"
@@ -128,7 +128,11 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
           <Input disabled={add.isPending} spellCheck={false} autoComplete="off" maxLength={256} value={group} onChange={(e) => change(setGroup)(e.target.value)} />
         </Field>
       )}
-      <Field label="Grant lifetime (days)" description="Optional, 1–365 days; empty means permanent. Expiry ends access without waiting for cleanup." error={!validDays ? "Enter a whole number from 1 to 365, or leave empty." : undefined}>
+      <Field
+        label="Grant lifetime (days)"
+        description="Optional, 1–365 days; empty means permanent. Expiry ends access without waiting for cleanup."
+        error={!validDays ? "Enter a whole number from 1 to 365, or leave empty." : undefined}
+      >
         <Input disabled={add.isPending} type="number" min={1} max={365} step={1} value={days} onValueChange={setDays} />
       </Field>
       <ScopeEditor value={toolScope} onChange={setToolScope} onProblemChange={setScopeDraftProblem} disabled={add.isPending} />
