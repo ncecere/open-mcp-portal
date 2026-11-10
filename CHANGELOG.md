@@ -6,6 +6,14 @@ Notable changes to Open MCP Portal, one entry per release. Design notes for each
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, minor releases may include
 breaking changes; the entry says how to adapt.
 
+## Unreleased
+
+- **Faster gateway requests.** A `tools/call` makes about a third fewer database round trips (47 to 33 on a team gateway, 40 to 31 on a platform gateway) and a `tools/list` about 40% fewer (13 to 8, 10 to 7), with every access check still read live. Evaluating a gateway's selection no longer re-projects each curated tool on every read: for 200 tools with 40 curated, 57 ms and 10.7 MB of allocations became 3.5 ms and 1.3 MB.
+- **The web app is served compressed.** JavaScript, CSS and other text files are gzipped for browsers that accept it, so a cold load transfers about 290 kB instead of about 970 kB. Files without a content hash in their name revalidate with an `ETag` instead of downloading again on every page load.
+- **Audit log and call log pages.** The audit log picks its page before resolving names for it; a first page that could take seconds on a large log takes milliseconds. Migration `00065` adds three indexes: purging old notification events no longer scans the delivery queue once per event, the call log filtered by a failing outcome no longer reads every call, and the admin overview's failed-email check uses an index. The migration only adds indexes, built concurrently; the previous release runs unchanged against the new schema.
+- **Scan findings.** A server's scan-findings page reads its scans in two statements instead of two per capability.
+- **Code health (no behaviour change).** No hand-written Go source file is longer than 600 lines (the largest was 1,654) and no test file longer than 1,000. `make lint` now runs `staticcheck` and `scripts/check-go-quality.py`, which holds files to those limits and functions to a cyclomatic complexity of 30, with a shrink-only list of the functions that were over it. `TestMCPQueryBudget` pins the database round trips of a gateway request, and benchmarks cover selection evaluation, list rendering and an upstream call.
+
 ## [0.15.1] - 2026-11-06
 
 - **Security:** `golang.org/x/net` v0.62.0 (CVE-2026-78661, HIGH). The v0.15.0 tag's release image scan failed on this CVE, so v0.15.0 was never published. v0.15.1 is v0.15.0 plus this fix.
