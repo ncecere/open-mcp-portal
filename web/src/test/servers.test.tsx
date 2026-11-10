@@ -245,6 +245,8 @@ describe("MCP server › Capabilities", () => {
     expect(await axe(container)).toHaveNoViolations();
 
     const tool = screen.getByRole("listitem", { name: "tool: get_status" });
+    // Closed, the definition isn't rendered (its JSON text is only built once it's opened).
+    expect(within(tool).queryByText(/"inputSchema"/)).toBeNull();
     await u.click(within(tool).getByRole("button", { name: /Definition/ }));
     expect(await within(tool).findByText(/"inputSchema"/)).toBeInTheDocument();
 

@@ -87,9 +87,14 @@ export function CapabilityItem({ cap, badges, action, meta, muted }: Props) {
           </>
         }
       >
-        <CodeBlock code={definitionText(cap.definition)} language="json" wrap maxHeight="24rem" />
+        <Definition definition={cap.definition} />
       </Disclosure>
       {action && <div>{action}</div>}
     </li>
   );
+}
+
+/** The definition as JSON text. A component of its own, so the text is only built once the Disclosure is opened. */
+function Definition({ definition }: { definition: unknown }) {
+  return <CodeBlock code={definitionText(definition)} language="json" wrap maxHeight="24rem" />;
 }
