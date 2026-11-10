@@ -68,9 +68,8 @@ const (
 )
 
 var (
-	errStateInvalid  = errors.New("mcpgw: the requestState is not valid")
-	errStateExpired  = errors.New("mcpgw: the requestState has expired")
-	errStateMismatch = errors.New("mcpgw: the requestState is for another request")
+	errStateInvalid = errors.New("mcpgw: the requestState is not valid")
+	errStateExpired = errors.New("mcpgw: the requestState has expired")
 )
 
 // stateClaims is what a requestState carries.

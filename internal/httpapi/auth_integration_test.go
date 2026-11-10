@@ -3,7 +3,6 @@ package httpapi_test
 import (
 	"bytes"
 	"context"
-	"crypto/x509"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -12,7 +11,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
-	"sync"
 	"testing"
 	"testing/fstest"
 
@@ -30,22 +28,6 @@ type testApp struct {
 	URL    string
 	Pool   *pgxpool.Pool
 	Client *http.Client
-}
-
-var (
-	tlsRootsOnce sync.Once
-	tlsRoots     *x509.CertPool
-)
-
-// testTLSRoots is the CA pool that trusts httptest's TLS servers (they all
-// share one certificate, valid for 127.0.0.1, ::1 and example.com).
-func testTLSRoots() *x509.CertPool {
-	tlsRootsOnce.Do(func() {
-		srv := httptest.NewTLSServer(http.NotFoundHandler())
-		defer srv.Close()
-		tlsRoots = srv.Client().Transport.(*http.Transport).TLSClientConfig.RootCAs
-	})
-	return tlsRoots
 }
 
 // testWeb stands in for the built UI.

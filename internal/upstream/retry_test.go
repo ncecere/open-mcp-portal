@@ -28,7 +28,7 @@ func TestReadRetry503AndAdmissionBothEras(t *testing.T) {
 				var m struct{ Method string }
 				_ = json.Unmarshal(body, &m)
 				if m.Method == MethodToolsCall && calls.Add(1) == 1 {
-					http.Error(w, "busy", 503)
+					http.Error(w, "busy", http.StatusServiceUnavailable)
 					return
 				}
 				handler.ServeHTTP(w, r)
@@ -101,7 +101,10 @@ func TestReadRetryCancellationAndLocalAuthorityRefusal(t *testing.T) {
 	for _, cancelDuringWait := range []bool{false, true} {
 		t.Run(boolName(cancelDuringWait), func(t *testing.T) {
 			var calls atomic.Int32
-			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1); http.Error(w, "busy", 503) }))
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				http.Error(w, "busy", http.StatusServiceUnavailable)
+			}))
 			defer ts.Close()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

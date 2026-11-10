@@ -582,7 +582,7 @@ func TestAPIKeys(t *testing.T) {
 	e := newGwEnv(t, nil)
 	k := newKey(t, e.member, "Claude Code on my laptop")
 	if !strings.HasPrefix(k.Secret, "omp_") || len(k.Secret) != len("omp_")+43 || k.Key.Prefix != k.Secret[:len("omp_")+8] || k.Key.Status != "active" ||
-		k.Key.ExpiresAt == nil || k.Key.ExpiresAt.Sub(time.Now()) < 89*24*time.Hour {
+		k.Key.ExpiresAt == nil || time.Until(*k.Key.ExpiresAt) < 89*24*time.Hour {
 		t.Fatalf("key = %+v", k)
 	}
 	if n := e.scalar(`SELECT count(*)::text FROM api_keys WHERE position($1 in row_to_json(api_keys)::text) > 0`, k.Secret); n != "0" {
@@ -595,7 +595,7 @@ func TestAPIKeys(t *testing.T) {
 	var short apitypes.ApiKeyCreated
 	code, ec := e.member.call("POST", "/v1/me/api-keys", map[string]any{"name": "ci", "expiresInDays": 1}, &short, nil)
 	mustCode(t, "1-day key", code, ec, 201, "")
-	if d := short.Key.ExpiresAt.Sub(time.Now()); d > 25*time.Hour || d < 23*time.Hour {
+	if d := time.Until(*short.Key.ExpiresAt); d > 25*time.Hour || d < 23*time.Hour {
 		t.Fatalf("expiry = %v", d)
 	}
 	for i := 2; i < 20; i++ {

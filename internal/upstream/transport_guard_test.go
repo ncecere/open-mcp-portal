@@ -129,6 +129,7 @@ func TestNoReplayTransportRequest(t *testing.T) {
 						t.Fatal(err)
 					}
 					_ = res.Body.Close()
+					//lint:ignore SA1008 the request was given this noncanonical key on purpose
 					if (req.GetBody != nil) != replayBody || req.Header["idempotency-key"][0] != "original" {
 						t.Fatal("original request's replay metadata mutated")
 					}

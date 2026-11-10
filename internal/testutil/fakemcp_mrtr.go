@@ -84,7 +84,9 @@ func (f *FakeMCP) addMRTRTools(s *mcp.Server) {
 				Mixed bool `json:"mixed"`
 			}
 			_ = json.Unmarshal(req.Params.Arguments, &args)
+			//lint:ignore SA1019 sampling is deprecated, not removed: the fake still asks for it so the relay stays covered
 			in := mcp.InputRequestMap{"draft": &mcp.CreateMessageParams{
+				//lint:ignore SA1019 see above
 				Messages:  []*mcp.SamplingMessage{{Role: "user", Content: &mcp.TextContent{Text: "write a haiku"}}},
 				MaxTokens: 20}}
 			if args.Mixed {

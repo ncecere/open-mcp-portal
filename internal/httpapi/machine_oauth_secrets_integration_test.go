@@ -27,8 +27,6 @@ func TestMachineOAuthSecretDoesNotFollowEndpointClientOrOrigin(t *testing.T) {
 	evilMCP := testutil.NewFakeMCP(t)
 	e.mustPatch(e.editor, map[string]any{}) // a request that changes nothing writes nothing
 	cur := e.get(e.owner)
-	stored := e.scalar(`SELECT encode(client_secret_cipher, 'hex') || token_url || client_id FROM mcp_server_machine_oauth`)
-	n := e.tokenRequests()
 
 	refuse := func(what, reason string, body map[string]any) {
 		t.Helper()
@@ -51,9 +49,9 @@ func TestMachineOAuthSecretDoesNotFollowEndpointClientOrOrigin(t *testing.T) {
 		t.Errorf("back to the mode without a client = %d %s", code, raw)
 	}
 	e.mustPatch(e.editor, e.machine(nil))
-	n = e.tokenRequests()
+	n := e.tokenRequests()
 	cur = e.get(e.owner)
-	stored = e.scalar(`SELECT encode(client_secret_cipher, 'hex') || token_url || client_id FROM mcp_server_machine_oauth`)
+	stored := e.scalar(`SELECT encode(client_secret_cipher, 'hex') || token_url || client_id FROM mcp_server_machine_oauth`)
 	refuse("another token endpoint again", "token_url_changed", map[string]any{"machineOAuth": map[string]any{"tokenUrl": evilAS.URL + "/token"}})
 
 	if evilAS.TokenRequests() != 0 || evilMCP.Requests() != 0 || len(evilMCP.HTTPRequests()) != 0 || e.tokenRequests() != n {
@@ -224,7 +222,7 @@ func TestMachineOAuthMetricsAndSpans(t *testing.T) {
 			if !allowed[string(a.Key)] {
 				t.Errorf("the token span carries %s", a.Key)
 			}
-			texts = append(texts, a.Value.Emit())
+			texts = append(texts, a.Value.String())
 		}
 		for _, text := range texts {
 			for _, bad := range append(e.sentinels(), "127.0.0.1", "/token", e.as.ClientID) {

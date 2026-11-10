@@ -26,7 +26,7 @@ func TestServerEndpointsMCPActualAudienceAndFreshAdmission(t *testing.T) {
 							t.Error(err)
 						}
 					}
-					http.Error(w, "owned primary unavailable", 503)
+					http.Error(w, "owned primary unavailable", http.StatusServiceUnavailable)
 					return true
 				})
 				secondary, h := testutil.NewFakeMCPHandler()
@@ -94,7 +94,7 @@ func TestServerEndpointsMCPGovernedCallPrimaryOnly(t *testing.T) {
 				if m["method"] != "tools/call" {
 					return false
 				}
-				http.Error(w, "primary unavailable", 503)
+				http.Error(w, "primary unavailable", http.StatusServiceUnavailable)
 				return true
 			})
 			secondary, h := testutil.NewFakeMCPHandler()

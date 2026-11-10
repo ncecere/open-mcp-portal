@@ -154,19 +154,6 @@ func lockGroupReconcile(ctx context.Context, q *dbgen.Queries, group uuid.UUID) 
 	return err
 }
 
-// roleRank orders the roles a directory can grant.
-func roleRank(role string) int {
-	switch role {
-	case authz.RoleAdmin:
-		return 3
-	case authz.RoleEditor:
-		return 2
-	case authz.RoleMember:
-		return 1
-	}
-	return 0
-}
-
 // reconcile brings directory-created team memberships of users in line with
 // their mapped groups. Manual memberships are never changed. Lock order:
 // per-person reconcile locks (UUID order), then teams (UUID order), matching

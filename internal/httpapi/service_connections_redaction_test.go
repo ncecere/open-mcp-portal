@@ -81,12 +81,12 @@ func TestServiceConnectionTokensRedactedFromProgressSpansAndCaptures(t *testing.
 			for _, span := range sr.Ended() {
 				dump += span.Name() + span.Status().Description
 				for _, a := range span.Attributes() {
-					dump += a.Value.Emit()
+					dump += a.Value.String()
 				}
 				for _, event := range span.Events() {
 					dump += event.Name
 					for _, a := range event.Attributes {
-						dump += a.Value.Emit()
+						dump += a.Value.String()
 					}
 				}
 			}

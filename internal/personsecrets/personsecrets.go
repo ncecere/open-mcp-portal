@@ -147,13 +147,6 @@ type ServerRef struct {
 	Slug, Name, TeamSlug, TeamName string
 }
 
-func deref(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
-}
-
 func displayName(u dbgen.User) string {
 	if u.DisplayName != "" {
 		return u.DisplayName

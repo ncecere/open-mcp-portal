@@ -66,7 +66,10 @@ func failoverClient() *Client {
 func TestFailoverRead503DefinitionAndIndependentCredentialsBothEras(t *testing.T) {
 	for _, era := range []testutil.Protocol{testutil.ProtocolLegacy, testutil.ProtocolModern} {
 		t.Run(string(era), func(t *testing.T) {
-			primary := newFailoverWire(t, era, func(w http.ResponseWriter, _ *http.Request) bool { http.Error(w, "busy", 503); return true })
+			primary := newFailoverWire(t, era, func(w http.ResponseWriter, _ *http.Request) bool {
+				http.Error(w, "busy", http.StatusServiceUnavailable)
+				return true
+			})
 			secondary := newFailoverWire(t, era, nil)
 			primary.fake.RequireHeader("X-Key", "primary-private-value")
 			secondary.fake.RequireHeader("Authorization", "Bearer secondary-private-value")

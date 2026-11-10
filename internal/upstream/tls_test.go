@@ -239,7 +239,8 @@ func TestTLSConfigShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg = tlsConfig(id)
-	if cfg.RootCAs == nil || len(cfg.RootCAs.Subjects()) != 1 { //nolint:staticcheck // counting the pinned roots
+	//lint:ignore SA1019 counting the pinned roots
+	if cfg.RootCAs == nil || len(cfg.RootCAs.Subjects()) != 1 {
 		t.Fatalf("the CA bundle is the only trust: %+v", cfg.RootCAs)
 	}
 	if cfg.InsecureSkipVerify || cfg.VerifyPeerCertificate != nil || cfg.VerifyConnection != nil || cfg.MinVersion < 0x0303 || cfg.GetClientCertificate == nil {
