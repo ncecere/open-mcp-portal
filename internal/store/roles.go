@@ -67,6 +67,45 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
 		}
 		roots = []string{target}
 	}
+	roles, err := reachableRoles(ctx, db, roots)
+	if err != nil {
+		return out, err
+	}
+	if len(roles) == 0 {
+		return out, fmt.Errorf("DB_RUNTIME_ROLE does not exist")
+	}
+	for _, r := range roles {
+		if err := inspectReachableRole(ctx, db, r, roots, layout, privileges, &out); err != nil {
+			return out, err
+		}
+	}
+	if !privileges {
+		return out, nil
+	}
+	if err := inspectApprovalBoundary(ctx, db, layout, &out); err != nil {
+		return out, err
+	}
+	// Legitimate rights are checked for the actual serving identities only, not
+	// every reachable auxiliary role (NOINHERIT may lack them until SET ROLE).
+	for _, name := range roots {
+		if err := inspectServingRole(ctx, db, name, layout, &out); err != nil {
+			return out, err
+		}
+	}
+	return out, nil
+}
+
+// roleInfo is one role reachable from the inspected identities: admin is a
+// dangerous role attribute or predefined role, grant an ADMIN OPTION it holds.
+type roleInfo struct {
+	oid          uint32
+	name         string
+	admin, grant bool
+}
+
+// reachableRoles lists the roots and every role they are a member of,
+// directly or through other roles.
+func reachableRoles(ctx context.Context, db RoleDB, roots []string) ([]roleInfo, error) {
 	// Deliberately include NOINHERIT membership, not just currently inherited
 	// rights: SET ROLE can activate it. Conservative even with set_option=false.
 	rows, err := db.Query(ctx, `WITH RECURSIVE reachable AS (
@@ -80,137 +119,104 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
  EXISTS (SELECT 1 FROM pg_catalog.pg_auth_members m WHERE m.member = r.oid AND m.admin_option)
  FROM reachable x JOIN pg_catalog.pg_roles r ON r.oid = x.oid`, roots)
 	if err != nil {
-		return out, err
-	}
-	type roleInfo struct {
-		oid          uint32
-		name         string
-		admin, grant bool
+		return nil, err
 	}
 	var roles []roleInfo
 	for rows.Next() {
 		var r roleInfo
 		if err := rows.Scan(&r.oid, &r.name, &r.admin, &r.grant); err != nil {
 			rows.Close()
-			return out, err
+			return nil, err
 		}
 		roles = append(roles, r)
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
-		return out, err
+		return nil, err
 	}
-	if len(roles) == 0 {
-		return out, fmt.Errorf("DB_RUNTIME_ROLE does not exist")
+	return roles, nil
+}
+
+// inspectReachableRole records what makes one reachable role unsafe. The
+// privilege checks need the installed schema (privileges).
+func inspectReachableRole(ctx context.Context, db RoleDB, r roleInfo, roots []string, layout approvalLayout, privileges bool, out *RoleSafety) error {
+	var parameterSet bool
+	if err := db.QueryRow(ctx, `SELECT has_parameter_privilege($1::oid,'session_replication_role','SET')`, r.oid).Scan(&parameterSet); err != nil {
+		return err
 	}
-	for _, r := range roles {
-		var parameterSet bool
-		if err := db.QueryRow(ctx, `SELECT has_parameter_privilege($1::oid,'session_replication_role','SET')`, r.oid).Scan(&parameterSet); err != nil {
-			return out, err
-		}
-		if parameterSet {
-			out.Problems = append(out.Problems, "SET session_replication_role privilege: "+r.name)
-		}
-		if privileges {
-			required := false
-			for _, root := range roots {
-				if root == r.name {
-					required = true
-				}
-			}
-			if err := inspectAuditBoundary(ctx, db, r.name, required, &out); err != nil {
-				return out, err
+	if parameterSet {
+		out.Problems = append(out.Problems, "SET session_replication_role privilege: "+r.name)
+	}
+	if privileges {
+		required := false
+		for _, root := range roots {
+			if root == r.name {
+				required = true
 			}
 		}
-		if privileges {
-			if err := inspectAuditExtension(ctx, db, r.name, slices.Contains(roots, r.name), &out); err != nil {
-				return out, err
-			}
+		if err := inspectAuditBoundary(ctx, db, r.name, required, out); err != nil {
+			return err
 		}
-		if r.admin || r.grant {
-			out.Problems = append(out.Problems, "administrative role rights: "+r.name)
+	}
+	if privileges {
+		if err := inspectAuditExtension(ctx, db, r.name, slices.Contains(roots, r.name), out); err != nil {
+			return err
 		}
-		var owns bool
-		err := db.QueryRow(ctx, `SELECT
+	}
+	if r.admin || r.grant {
+		out.Problems = append(out.Problems, "administrative role rights: "+r.name)
+	}
+	var owns bool
+	err := db.QueryRow(ctx, `SELECT
  EXISTS (SELECT 1 FROM pg_catalog.pg_database WHERE datname = current_database() AND datdba = $1)
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_namespace WHERE nspowner = $1
  AND nspname NOT LIKE 'pg_temp_%' AND nspname NOT LIKE 'pg_toast_temp_%')
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname IN ('public','omp_private','omp_audit','omp_audit_ext') AND c.relowner = $1)
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname IN ('public','omp_private','omp_audit','omp_audit_ext') AND p.proowner = $1)`, r.oid).Scan(&owns)
-		if err != nil {
-			return out, err
-		}
-		if owns {
-			out.Problems = append(out.Problems, "owns application objects (or can SET ROLE to owner): "+r.name)
-		}
-		if !privileges {
-			continue
-		}
-		var create bool
-		err = db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_namespace
+	if err != nil {
+		return err
+	}
+	if owns {
+		out.Problems = append(out.Problems, "owns application objects (or can SET ROLE to owner): "+r.name)
+	}
+	if !privileges {
+		return nil
+	}
+	return inspectRolePrivileges(ctx, db, r, layout, out)
+}
+
+// inspectRolePrivileges records the privileges on the installed schema that a
+// runtime role must not hold.
+func inspectRolePrivileges(ctx context.Context, db RoleDB, r roleInfo, layout approvalLayout, out *RoleSafety) error {
+	var create bool
+	err := db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_namespace
  WHERE nspname NOT LIKE 'pg_temp_%' AND nspname NOT LIKE 'pg_toast_temp_%'
  AND has_schema_privilege($1::oid, oid, 'CREATE')) OR has_database_privilege($1::oid, current_database(), 'CREATE')`, r.oid).Scan(&create)
-		if err != nil {
-			return out, err
-		}
-		if create {
-			out.Problems = append(out.Problems, "CREATE privilege: "+r.name)
-		}
-		// has_any_column_privilege includes table-level and column-level UPDATE.
-		for _, table := range []string{"public.audit_log", "public.mcp_calls"} {
-			var write bool
-			err := db.QueryRow(ctx, `SELECT has_any_column_privilege($1::oid,$2,'UPDATE')
+	if err != nil {
+		return err
+	}
+	if create {
+		out.Problems = append(out.Problems, "CREATE privilege: "+r.name)
+	}
+	// has_any_column_privilege includes table-level and column-level UPDATE.
+	for _, table := range []string{"public.audit_log", "public.mcp_calls"} {
+		var write bool
+		err := db.QueryRow(ctx, `SELECT has_any_column_privilege($1::oid,$2,'UPDATE')
     OR has_table_privilege($1::oid,$2,'DELETE') OR has_table_privilege($1::oid,$2,'TRUNCATE')
     OR has_table_privilege($1::oid,$2,'TRIGGER')`, r.oid, table).Scan(&write)
-			if err != nil {
-				return out, err
-			}
-			if write {
-				out.Problems = append(out.Problems, "forbidden write privilege on "+table+": "+r.name)
-			}
+		if err != nil {
+			return err
 		}
-		// Base and journal are read-only; only owner-definer functions append,
-		// compact or fence. Runtime must not allocate/reset event sequence values.
-		contextTables := []string{layout.schema + ".approval_context"}
-		if layout.journal {
-			contextTables = append(contextTables, layout.schema+".approval_context_events")
+		if write {
+			out.Problems = append(out.Problems, "forbidden write privilege on "+table+": "+r.name)
 		}
-		for _, table := range contextTables {
-			var contextWrite bool
-			if err := db.QueryRow(ctx, `SELECT has_any_column_privilege($1::oid,$2,'UPDATE')
- OR has_any_column_privilege($1::oid,$2,'INSERT')
- OR has_table_privilege($1::oid,$2,'DELETE,TRUNCATE,TRIGGER')`, r.oid, table).Scan(&contextWrite); err != nil {
-				return out, err
-			}
-			if contextWrite {
-				out.Problems = append(out.Problems, "forbidden write privilege on "+table+": "+r.name)
-			}
-		}
-		// Only ciphertext-column UPDATE is legitimate for root rewrapping. An
-		// INSERT grant would let runtime bypass the singleton bootstrap helper.
-		if layout.binding {
-			var bindingWrite bool
-			if err := db.QueryRow(ctx, `SELECT has_any_column_privilege($1::oid,$2,'INSERT')
- OR has_table_privilege($1::oid,$2,'UPDATE,DELETE,TRUNCATE,TRIGGER')
- OR has_column_privilege($1::oid,$2,'id','UPDATE')`, r.oid, layout.schema+".approval_binding_keys").Scan(&bindingWrite); err != nil {
-				return out, err
-			}
-			if bindingWrite {
-				out.Problems = append(out.Problems, "forbidden write privilege on "+layout.schema+".approval_binding_keys: "+r.name)
-			}
-		}
-		if layout.journal {
-			var eventSequence bool
-			if err := db.QueryRow(ctx, `SELECT has_sequence_privilege($1::oid,$2,'USAGE,SELECT,UPDATE')`, r.oid, layout.schema+".approval_context_events_event_id_seq").Scan(&eventSequence); err != nil {
-				return out, err
-			}
-			if eventSequence {
-				out.Problems = append(out.Problems, "forbidden approval event sequence privilege: "+r.name)
-			}
-		}
-		var options bool
-		err = db.QueryRow(ctx, `SELECT
+	}
+	if err := inspectApprovalWrites(ctx, db, r, layout, out); err != nil {
+		return err
+	}
+	var options bool
+	err = db.QueryRow(ctx, `SELECT
  EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace,
  LATERAL aclexplode(c.relacl) a WHERE n.nspname IN ('public','omp_private','omp_audit','omp_audit_ext') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_attribute at JOIN pg_catalog.pg_class c ON c.oid = at.attrelid
@@ -222,39 +228,80 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
  LATERAL aclexplode(p.proacl) a WHERE n.nspname IN ('public','omp_private','omp_audit','omp_audit_ext') AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_database d, LATERAL aclexplode(d.datacl) a
  WHERE d.datname = current_database() AND a.is_grantable AND (a.grantee = 0 OR a.grantee = $1))`, r.oid).Scan(&options)
-		if err != nil {
-			return out, err
-		}
-		if options {
-			out.Problems = append(out.Problems, "grant options: "+r.name)
-		}
-		var destructive, gooseWrite bool
-		err = db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_class c
+	if err != nil {
+		return err
+	}
+	if options {
+		out.Problems = append(out.Problems, "grant options: "+r.name)
+	}
+	var destructive, gooseWrite bool
+	err = db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_class c
  JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public'
  AND c.relkind IN ('r','p') AND has_table_privilege($1::oid,c.oid,'TRUNCATE,TRIGGER')),
  has_any_column_privilege($1::oid,'public.goose_db_version','UPDATE') OR has_any_column_privilege($1::oid,'public.goose_db_version','INSERT')
  OR has_table_privilege($1::oid,'public.goose_db_version','DELETE,TRUNCATE,TRIGGER')`, r.oid).Scan(&destructive, &gooseWrite)
-		if err != nil {
-			return out, err
+	if err != nil {
+		return err
+	}
+	if destructive {
+		out.Problems = append(out.Problems, "TRUNCATE/TRIGGER privileges: "+r.name)
+	}
+	if gooseWrite {
+		out.Problems = append(out.Problems, "migration version table is writable: "+r.name)
+	}
+	return nil
+}
+
+// inspectApprovalWrites records forbidden write privileges on the protected
+// approval tables and their event sequence.
+func inspectApprovalWrites(ctx context.Context, db RoleDB, r roleInfo, layout approvalLayout, out *RoleSafety) error {
+	// Base and journal are read-only; only owner-definer functions append,
+	// compact or fence. Runtime must not allocate/reset event sequence values.
+	contextTables := []string{layout.schema + ".approval_context"}
+	if layout.journal {
+		contextTables = append(contextTables, layout.schema+".approval_context_events")
+	}
+	for _, table := range contextTables {
+		var contextWrite bool
+		if err := db.QueryRow(ctx, `SELECT has_any_column_privilege($1::oid,$2,'UPDATE')
+ OR has_any_column_privilege($1::oid,$2,'INSERT')
+ OR has_table_privilege($1::oid,$2,'DELETE,TRUNCATE,TRIGGER')`, r.oid, table).Scan(&contextWrite); err != nil {
+			return err
 		}
-		if destructive {
-			out.Problems = append(out.Problems, "TRUNCATE/TRIGGER privileges: "+r.name)
-		}
-		if gooseWrite {
-			out.Problems = append(out.Problems, "migration version table is writable: "+r.name)
+		if contextWrite {
+			out.Problems = append(out.Problems, "forbidden write privilege on "+table+": "+r.name)
 		}
 	}
-	if !privileges {
-		return out, nil
+	// Only ciphertext-column UPDATE is legitimate for root rewrapping. An
+	// INSERT grant would let runtime bypass the singleton bootstrap helper.
+	if layout.binding {
+		var bindingWrite bool
+		if err := db.QueryRow(ctx, `SELECT has_any_column_privilege($1::oid,$2,'INSERT')
+ OR has_table_privilege($1::oid,$2,'UPDATE,DELETE,TRUNCATE,TRIGGER')
+ OR has_column_privilege($1::oid,$2,'id','UPDATE')`, r.oid, layout.schema+".approval_binding_keys").Scan(&bindingWrite); err != nil {
+			return err
+		}
+		if bindingWrite {
+			out.Problems = append(out.Problems, "forbidden write privilege on "+layout.schema+".approval_binding_keys: "+r.name)
+		}
 	}
-	if err := inspectApprovalBoundary(ctx, db, layout, &out); err != nil {
-		return out, err
+	if layout.journal {
+		var eventSequence bool
+		if err := db.QueryRow(ctx, `SELECT has_sequence_privilege($1::oid,$2,'USAGE,SELECT,UPDATE')`, r.oid, layout.schema+".approval_context_events_event_id_seq").Scan(&eventSequence); err != nil {
+			return err
+		}
+		if eventSequence {
+			out.Problems = append(out.Problems, "forbidden approval event sequence privilege: "+r.name)
+		}
 	}
-	// Legitimate rights are checked for the actual serving identities only, not
-	// every reachable auxiliary role (NOINHERIT may lack them until SET ROLE).
-	for _, name := range roots {
-		var missing bool
-		err := db.QueryRow(ctx, `SELECT NOT has_schema_privilege($1, 'public', 'USAGE') OR EXISTS (
+	return nil
+}
+
+// inspectServingRole records the legitimate rights a serving identity lacks,
+// and protected functions it cannot safely execute.
+func inspectServingRole(ctx context.Context, db RoleDB, name string, layout approvalLayout, out *RoleSafety) error {
+	var missing bool
+	err := db.QueryRow(ctx, `SELECT NOT has_schema_privilege($1, 'public', 'USAGE') OR EXISTS (
  SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
  WHERE n.nspname = 'public' AND c.relkind IN ('r','p','v','m','f') AND
  (NOT has_table_privilege($1,c.oid,'SELECT') OR (c.relname NOT IN ('goose_db_version','approval_context','approval_context_events','approval_binding_keys') AND NOT has_table_privilege($1,c.oid,'INSERT'))
@@ -263,37 +310,36 @@ func InspectRoles(ctx context.Context, db RoleDB, target string, privileges bool
  OR EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
  WHERE n.nspname='public' AND c.relname <> 'approval_context_events_event_id_seq'
  AND CASE WHEN c.relkind='S' THEN NOT has_sequence_privilege($1,c.oid,'USAGE') ELSE false END)`, name).Scan(&missing)
-		if err != nil {
-			return out, err
-		}
-		if !missing {
-			err = db.QueryRow(ctx, `SELECT NOT has_schema_privilege($1,$2,'USAGE') OR EXISTS (
+	if err != nil {
+		return err
+	}
+	if !missing {
+		err = db.QueryRow(ctx, `SELECT NOT has_schema_privilege($1,$2,'USAGE') OR EXISTS (
  SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
  WHERE n.nspname=$2 AND c.relname IN ('approval_context','approval_context_events','approval_binding_keys')
  AND (NOT has_table_privilege($1,c.oid,'SELECT') OR (c.relname='approval_binding_keys' AND NOT has_column_privilege($1,c.oid,'binding_key_cipher','UPDATE'))))`, name, layout.schema).Scan(&missing)
-			if err != nil {
-				return out, err
-			}
+		if err != nil {
+			return err
 		}
-		if missing {
-			out.Problems = append(out.Problems, "missing operational table/schema/sequence privileges: "+name)
-		}
-		for _, fn := range layout.functions() {
-			var exec, consistent, publicExec bool
-			err := db.QueryRow(ctx, `SELECT has_function_privilege($1,$2,'EXECUTE'),
+	}
+	if missing {
+		out.Problems = append(out.Problems, "missing operational table/schema/sequence privileges: "+name)
+	}
+	for _, fn := range layout.functions() {
+		var exec, consistent, publicExec bool
+		err := db.QueryRow(ctx, `SELECT has_function_privilege($1,$2,'EXECUTE'),
     (SELECT proowner FROM pg_catalog.pg_proc WHERE oid=$2::regprocedure) = ALL(
       SELECT c.relowner FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE (n.nspname='public' AND c.relname IN ('audit_log','mcp_calls')) OR (n.nspname=$3 AND c.relname IN ('approval_context','approval_context_events','approval_binding_keys'))),
     EXISTS (SELECT 1 FROM pg_catalog.pg_proc p, LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
       WHERE p.oid=$2::regprocedure AND a.grantee=0 AND a.privilege_type='EXECUTE')`, name, fn, layout.schema).Scan(&exec, &consistent, &publicExec)
-			if err != nil {
-				return out, err
-			}
-			if !exec || !consistent || publicExec {
-				out.Problems = append(out.Problems, "unsafe or unavailable protected function: "+fn)
-			}
+		if err != nil {
+			return err
+		}
+		if !exec || !consistent || publicExec {
+			out.Problems = append(out.Problems, "unsafe or unavailable protected function: "+fn)
 		}
 	}
-	return out, nil
+	return nil
 }
 
 // ReconcileRuntimeGrants replaces direct privileges; inherited/PUBLIC hazards
