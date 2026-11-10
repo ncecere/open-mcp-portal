@@ -160,15 +160,9 @@ type machinePlan struct {
 // is sent anywhere; the refusal is before anything is stored). cur is the
 // server as it is, newURL its URL after the change.
 func (s *Service) planMachine(ctx context.Context, q *dbgen.Queries, cur dbgen.McpServer, newURL string, in *MachineOAuthInput) (*machinePlan, error) {
-	var stored *dbgen.McpServerMachineOauth
-	if AuthModeOf(cur) == AuthMachineOAuth {
-		row, err := q.GetMachineOAuth(ctx, cur.ID)
-		switch {
-		case err == nil:
-			stored = &row
-		case !errors.Is(store.NotFound(err), store.ErrNotFound):
-			return nil, err
-		}
+	stored, err := storedMachine(ctx, q, cur)
+	if err != nil {
+		return nil, err
 	}
 	if in == nil {
 		in = &MachineOAuthInput{}
@@ -180,75 +174,21 @@ func (s *Service) planMachine(ctx context.Context, q *dbgen.Queries, cur dbgen.M
 	if stored != nil {
 		p.before = machineViewOf(*stored)
 	}
-	tokenURL, clientID, method, scopes := "", "", MachineAuthBasic, []string{}
-	var audience, resource string
-	if stored != nil {
-		tokenURL, clientID, method, scopes = stored.TokenUrl, stored.ClientID, stored.TokenAuthMethod, nonNil(stored.Scopes)
-		audience, resource = deref(stored.Audience), deref(stored.Resource)
+	f, err := s.machineSettingsAfter(ctx, stored, in)
+	if err != nil {
+		return nil, err
 	}
-	if in.TokenURL != nil {
-		raw := strings.TrimSpace(*in.TokenURL)
-		if raw == "" {
-			return nil, machineInvalid("tokenUrl", "invalid_token_url", "Enter the authorization server's token endpoint")
-		}
-		u, err := s.client.NormalizeURL(ctx, raw)
-		if err != nil {
-			if e, ok := apperr.As(err); ok {
-				d, _ := e.Details.(map[string]any)
-				e.Details = withField(d, "machineOAuth.tokenUrl")
-			}
-			return nil, err
-		}
-		tokenURL = u
-	}
-	if in.ClientID != nil {
-		clientID = strings.TrimSpace(*in.ClientID)
-		if n := len(clientID); n < 1 || n > 500 || strings.ContainsAny(clientID, "\r\n\x00") {
-			return nil, machineInvalid("clientId", "invalid_client_id", "The client ID must be 1-500 characters on one line")
-		}
-	}
-	if in.TokenAuthMethod != nil {
-		method = *in.TokenAuthMethod
-		if method != MachineAuthBasic && method != MachineAuthPost {
-			return nil, machineInvalid("tokenAuthMethod", "invalid_token_auth_method", "tokenAuthMethod must be client_secret_basic or client_secret_post")
-		}
-	}
-	if in.Scopes != nil {
-		var err error
-		if scopes, err = NormalizeScopes(*in.Scopes); err != nil {
-			return nil, err
-		}
-	}
-	if in.Audience != nil {
-		audience = strings.TrimSpace(*in.Audience)
-		if len(audience) > 500 || strings.ContainsAny(audience, "\r\n\x00") {
-			return nil, machineInvalid("audience", "invalid_audience", "The audience must be at most 500 characters on one line")
-		}
-	}
-	if in.Resource != nil {
-		resource = strings.TrimSpace(*in.Resource)
-		if err := checkMachineResource(resource); err != nil {
-			return nil, err
-		}
-	}
-	p.tokenURLChanged = stored != nil && stored.TokenUrl != tokenURL
-	p.clientIDChanged = stored != nil && stored.ClientID != clientID
+	p.tokenURLChanged = stored != nil && stored.TokenUrl != f.tokenURL
+	p.clientIDChanged = stored != nil && stored.ClientID != f.clientID
 	// F-1: the secret belongs to the token endpoint and client it was entered
 	// for and to the origin of the server the token is sent to.
 	if in.ClientSecret == nil {
-		switch {
-		case stored == nil:
-			return nil, errMachineSecretRequired("new")
-		case p.tokenURLChanged:
-			return nil, errMachineSecretRequired("token_url_changed")
-		case p.clientIDChanged:
-			return nil, errMachineSecretRequired("client_id_changed")
-		case !sameOrigin(cur.URL, newURL):
-			return nil, errMachineSecretRequired("origin_changed")
+		if err := machineSecretReusable(stored, p, cur.URL, newURL); err != nil {
+			return nil, err
 		}
 	}
-	row := dbgen.UpsertMachineOAuthParams{ServerID: cur.ID, TokenUrl: tokenURL, ClientID: clientID, TokenAuthMethod: method, Scopes: scopes,
-		Audience: optString(audience), Resource: optString(resource)}
+	row := dbgen.UpsertMachineOAuthParams{ServerID: cur.ID, TokenUrl: f.tokenURL, ClientID: f.clientID, TokenAuthMethod: f.method, Scopes: f.scopes,
+		Audience: optString(f.audience), Resource: optString(f.resource)}
 	if in.ClientSecret != nil {
 		sec := *in.ClientSecret
 		if sec == "" || len(sec) > 2000 || strings.ContainsAny(sec, "\r\n\x00") {
@@ -264,18 +204,123 @@ func (s *Service) planMachine(ctx context.Context, q *dbgen.Queries, cur dbgen.M
 		row.ClientSecretCipher, row.ClientSecretHint = stored.ClientSecretCipher, stored.ClientSecretHint
 	}
 	p.row = row
-	p.view = &MachineOAuthView{TokenURL: tokenURL, ClientID: clientID, TokenAuthMethod: method, SecretHint: row.ClientSecretHint,
-		Scopes: scopes, Audience: audience, Resource: resource}
+	p.view = &MachineOAuthView{TokenURL: f.tokenURL, ClientID: f.clientID, TokenAuthMethod: f.method, SecretHint: row.ClientSecretHint,
+		Scopes: f.scopes, Audience: f.audience, Resource: f.resource}
 	switch {
 	case stored == nil:
 		p.changed, p.review = true, true
 	default:
-		p.changed = p.secretChanged || p.tokenURLChanged || p.clientIDChanged || stored.TokenAuthMethod != method ||
-			!slices.Equal(nonNil(stored.Scopes), scopes) || deref(stored.Audience) != audience || deref(stored.Resource) != resource
-		p.review = p.tokenURLChanged || p.clientIDChanged || widensScopes(nonNil(stored.Scopes), scopes) ||
-			deref(stored.Audience) != audience || deref(stored.Resource) != resource
+		p.changed = p.secretChanged || p.tokenURLChanged || p.clientIDChanged || stored.TokenAuthMethod != f.method ||
+			!slices.Equal(nonNil(stored.Scopes), f.scopes) || deref(stored.Audience) != f.audience || deref(stored.Resource) != f.resource
+		p.review = p.tokenURLChanged || p.clientIDChanged || widensScopes(nonNil(stored.Scopes), f.scopes) ||
+			deref(stored.Audience) != f.audience || deref(stored.Resource) != f.resource
 	}
 	return p, nil
+}
+
+// storedMachine is the machine client stored for a server in machine_oauth
+// mode (nil: another mode, or none stored).
+func storedMachine(ctx context.Context, q *dbgen.Queries, cur dbgen.McpServer) (*dbgen.McpServerMachineOauth, error) {
+	if AuthModeOf(cur) != AuthMachineOAuth {
+		return nil, nil
+	}
+	row, err := q.GetMachineOAuth(ctx, cur.ID)
+	switch {
+	case err == nil:
+		return &row, nil
+	case !errors.Is(store.NotFound(err), store.ErrNotFound):
+		return nil, err
+	}
+	return nil, nil
+}
+
+// machineSettings are a machine client's settings, the secret aside.
+type machineSettings struct {
+	tokenURL, clientID, method string
+	scopes                     []string
+	audience, resource         string
+}
+
+// machineSettingsAfter is the stored settings (nil: the defaults) with the
+// request's applied, each one validated.
+func (s *Service) machineSettingsAfter(ctx context.Context, stored *dbgen.McpServerMachineOauth, in *MachineOAuthInput) (machineSettings, error) {
+	f := machineSettings{method: MachineAuthBasic, scopes: []string{}}
+	if stored != nil {
+		f.tokenURL, f.clientID, f.method, f.scopes = stored.TokenUrl, stored.ClientID, stored.TokenAuthMethod, nonNil(stored.Scopes)
+		f.audience, f.resource = deref(stored.Audience), deref(stored.Resource)
+	}
+	if in.TokenURL != nil {
+		u, err := s.machineTokenURL(ctx, *in.TokenURL)
+		if err != nil {
+			return f, err
+		}
+		f.tokenURL = u
+	}
+	if in.ClientID != nil {
+		f.clientID = strings.TrimSpace(*in.ClientID)
+		if n := len(f.clientID); n < 1 || n > 500 || strings.ContainsAny(f.clientID, "\r\n\x00") {
+			return f, machineInvalid("clientId", "invalid_client_id", "The client ID must be 1-500 characters on one line")
+		}
+	}
+	if in.TokenAuthMethod != nil {
+		f.method = *in.TokenAuthMethod
+		if f.method != MachineAuthBasic && f.method != MachineAuthPost {
+			return f, machineInvalid("tokenAuthMethod", "invalid_token_auth_method", "tokenAuthMethod must be client_secret_basic or client_secret_post")
+		}
+	}
+	if in.Scopes != nil {
+		var err error
+		if f.scopes, err = NormalizeScopes(*in.Scopes); err != nil {
+			return f, err
+		}
+	}
+	if in.Audience != nil {
+		f.audience = strings.TrimSpace(*in.Audience)
+		if len(f.audience) > 500 || strings.ContainsAny(f.audience, "\r\n\x00") {
+			return f, machineInvalid("audience", "invalid_audience", "The audience must be at most 500 characters on one line")
+		}
+	}
+	if in.Resource != nil {
+		f.resource = strings.TrimSpace(*in.Resource)
+		if err := checkMachineResource(f.resource); err != nil {
+			return f, err
+		}
+	}
+	return f, nil
+}
+
+// machineTokenURL validates and normalizes a token endpoint entered for a
+// machine client.
+func (s *Service) machineTokenURL(ctx context.Context, in string) (string, error) {
+	raw := strings.TrimSpace(in)
+	if raw == "" {
+		return "", machineInvalid("tokenUrl", "invalid_token_url", "Enter the authorization server's token endpoint")
+	}
+	u, err := s.client.NormalizeURL(ctx, raw)
+	if err != nil {
+		if e, ok := apperr.As(err); ok {
+			d, _ := e.Details.(map[string]any)
+			e.Details = withField(d, "machineOAuth.tokenUrl")
+		}
+		return "", err
+	}
+	return u, nil
+}
+
+// machineSecretReusable applies F-1 to a request without a secret: the
+// stored one stays only for the same token endpoint, client and server origin.
+func machineSecretReusable(stored *dbgen.McpServerMachineOauth, p *machinePlan, curURL, newURL string) error {
+	switch {
+	case stored == nil:
+		return errMachineSecretRequired("new")
+	case p.tokenURLChanged:
+		return errMachineSecretRequired("token_url_changed")
+	case p.clientIDChanged:
+		return errMachineSecretRequired("client_id_changed")
+	case !sameOrigin(curURL, newURL):
+		return errMachineSecretRequired("origin_changed")
+	}
+	return nil
 }
 
 func withField(d map[string]any, field string) map[string]any {
