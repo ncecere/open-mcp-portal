@@ -71,40 +71,12 @@ func (s *Service) Callback(ctx context.Context, in CallbackInput) (string, error
 	} else if err != nil {
 		return "", err
 	}
-	if !s.now().Before(st.ExpiresAt) {
-		return done(p.Slug, ResultExpired, nil), nil
+	if result, refused := s.callbackRefusal(ctx, in, st, p); refused {
+		return done(p.Slug, result, nil), nil
 	}
-	if in.SessionID == "" || auth.Digest(in.SessionID) != st.SessionDigest || in.User.ID != st.UserID || in.User.Status != auth.StatusActive {
-		return done(p.Slug, ResultWrongPerson, nil), nil
-	}
-	if p.Kind == KindMCPServer {
-		// Mix-up (RFC 9207): the response must come from the server's own
-		// issuer; and the server's resource must not have changed meanwhile.
-		switch {
-		case deref(st.Resource) != deref(p.Resource):
-			return done(p.Slug, ResultError, nil), nil
-		case in.Iss != "" && in.Iss != deref(p.Issuer):
-			return done(p.Slug, ResultError, nil), nil
-		case in.Iss == "" && p.IssParamSupported && in.Error == "":
-			return done(p.Slug, ResultError, nil), nil
-		}
-		if s.linkUsable(ctx, p) != nil {
-			return done(p.Slug, ResultError, nil), nil
-		}
-	}
-	if in.Error != "" {
-		return done(p.Slug, ResultDenied, nil), nil
-	}
-	if !p.Enabled || in.Code == "" || len(in.Code) > 4096 {
+	verifier, ok := s.codeVerifier(st)
+	if !ok {
 		return done(p.Slug, ResultError, nil), nil
-	}
-	verifier := ""
-	if st.CodeVerifierCipher != nil {
-		b, err := s.box.Open(st.CodeVerifierCipher, stateAAD(st.StateDigest))
-		if err != nil {
-			return done(p.Slug, ResultError, nil), nil
-		}
-		verifier = string(b)
 	}
 	tok, ee := s.exchange(ctx, p, in.Code, verifier)
 	if ee != nil {
@@ -136,21 +108,8 @@ func (s *Service) Callback(ctx context.Context, in CallbackInput) (string, error
 			}
 			return err
 		}
-		// The setup sign-in counts only for an editor (or above) of the
-		// server's team, checked again now.
-		sv, err := q.GetMCPServer(ctx, st.SetupServerID.UUID)
-		if err != nil {
-			return err
-		}
-		role, err := teams.MemberRole(ctx, q, sv.TeamID, in.User.ID)
-		if err != nil || authz.CheckServerEdit(role) != nil {
-			return err
-		}
-		if _, err := registry.SetSetupConnection(ctx, q, actor, sv.ID, displayName(in.User)); err != nil {
-			return err
-		}
-		setup = true
-		return nil
+		setup, err = s.setupFromCallback(ctx, q, actor, in.User, st)
+		return err
 	})
 	if errors.Is(err, errPersonalConsentEnded) {
 		return done(p.Slug, ResultExpired, nil), nil
@@ -164,6 +123,80 @@ func (s *Service) Callback(ctx context.Context, in CallbackInput) (string, error
 			s.Log.WarnContext(ctx, "reading capabilities after the setup sign-in failed", "server", st.SetupServerID.UUID, "err", err)
 		}
 	}
+	return callbackDestination(p, st, granted, grantSkipped, notAllowed), nil
+}
+
+// callbackRefusal checks the redirect against its state and provider before
+// the code is exchanged, in this order: the state's expiry, the browser
+// session and person, a server's own provider (mix-up, link), the provider's
+// own error, and the provider and code being usable.
+func (s *Service) callbackRefusal(ctx context.Context, in CallbackInput, st dbgen.ProviderAuthState, p dbgen.AuthProvider) (result string, refused bool) {
+	if !s.now().Before(st.ExpiresAt) {
+		return ResultExpired, true
+	}
+	if in.SessionID == "" || auth.Digest(in.SessionID) != st.SessionDigest || in.User.ID != st.UserID || in.User.Status != auth.StatusActive {
+		return ResultWrongPerson, true
+	}
+	if p.Kind == KindMCPServer {
+		// Mix-up (RFC 9207): the response must come from the server's own
+		// issuer; and the server's resource must not have changed meanwhile.
+		switch {
+		case deref(st.Resource) != deref(p.Resource):
+			return ResultError, true
+		case in.Iss != "" && in.Iss != deref(p.Issuer):
+			return ResultError, true
+		case in.Iss == "" && p.IssParamSupported && in.Error == "":
+			return ResultError, true
+		}
+		if s.linkUsable(ctx, p) != nil {
+			return ResultError, true
+		}
+	}
+	if in.Error != "" {
+		return ResultDenied, true
+	}
+	if !p.Enabled || in.Code == "" || len(in.Code) > 4096 {
+		return ResultError, true
+	}
+	return "", false
+}
+
+// codeVerifier opens the state's PKCE code verifier ("": the state has none;
+// ok is false when it cannot be opened).
+func (s *Service) codeVerifier(st dbgen.ProviderAuthState) (verifier string, ok bool) {
+	if st.CodeVerifierCipher == nil {
+		return "", true
+	}
+	b, err := s.box.Open(st.CodeVerifierCipher, stateAAD(st.StateDigest))
+	if err != nil {
+		return "", false
+	}
+	return string(b), true
+}
+
+// setupFromCallback makes the new connection the setup connection of the
+// server the state names, and reports whether it did.
+func (s *Service) setupFromCallback(ctx context.Context, q *dbgen.Queries, actor authz.Actor, u dbgen.User, st dbgen.ProviderAuthState) (bool, error) {
+	// The setup sign-in counts only for an editor (or above) of the
+	// server's team, checked again now.
+	sv, err := q.GetMCPServer(ctx, st.SetupServerID.UUID)
+	if err != nil {
+		return false, err
+	}
+	role, err := teams.MemberRole(ctx, q, sv.TeamID, u.ID)
+	if err != nil || authz.CheckServerEdit(role) != nil {
+		return false, err
+	}
+	if _, err := registry.SetSetupConnection(ctx, q, actor, sv.ID, displayName(u)); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// callbackDestination is where a stored connection sends the browser: the
+// state's safe return path when everything asked for was granted and allowed,
+// else the result page.
+func callbackDestination(p dbgen.AuthProvider, st dbgen.ProviderAuthState, granted []string, grantSkipped, notAllowed bool) string {
 	var missing []string
 	for _, m := range st.RequiredScopes {
 		if !contains(granted, m) {
@@ -172,19 +205,19 @@ func (s *Service) Callback(ctx context.Context, in CallbackInput) (string, error
 	}
 	switch {
 	case len(missing) > 0:
-		return done(p.Slug, ResultMissingScopes, missing), nil
+		return done(p.Slug, ResultMissingScopes, missing)
 	case notAllowed:
 		// Connected, but the provider's access list excludes the link's
 		// server: nothing was allowed, and asking again will not help.
-		return done(p.Slug, ResultNotAllowed, nil), nil
+		return done(p.Slug, ResultNotAllowed, nil)
 	case grantSkipped:
 		// Connected, but the link's server moved or went meanwhile: nothing
 		// was allowed; the next call asks again.
-		return done(p.Slug, ResultExpired, nil), nil
+		return done(p.Slug, ResultExpired, nil)
 	case st.ReturnTo != nil && SafeReturnPath(*st.ReturnTo):
-		return *st.ReturnTo, nil
+		return *st.ReturnTo
 	}
-	return done(p.Slug, ResultConnected, nil), nil
+	return done(p.Slug, ResultConnected, nil)
 }
 
 // grantFromRequest allows, after a connect that used the link up, the server
