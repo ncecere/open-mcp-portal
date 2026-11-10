@@ -7,7 +7,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, ApiError, type Schemas, unwrap } from "../../api/client";
-import { adminGatewaysKey } from "../../api/queries";
+import { adminGatewaysKey, adminTeamOptionsQuery } from "../../api/queries";
 import { ScopeEditor, scopeProblem, type ToolScope } from "../tool-scope";
 import { FormDialog } from "../form-dialog";
 import { ErrorAlert } from "@/components/ui/alert/alert";
@@ -46,11 +46,7 @@ export function AddGrantDialog({ gateway, onClose }: { gateway: Gateway; onClose
   const [toolScope, setToolScope] = useState<ToolScope>(null);
   const [scopeDraftProblem, setScopeDraftProblem] = useState<string>();
   const [submitted, setSubmitted] = useState(false);
-  const teams = useQuery({
-    queryKey: ["admin", "teams", "grant-options"],
-    queryFn: async () => unwrap(await api.GET("/v1/admin/teams", { params: { query: { limit: 200 } } })),
-    enabled: kind === "team",
-  });
+  const teams = useQuery({ ...adminTeamOptionsQuery(), enabled: kind === "team" });
   const add = useMutation({
     mutationFn: async (submission: Submission) =>
       unwrap(

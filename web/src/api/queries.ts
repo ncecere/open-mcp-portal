@@ -81,6 +81,18 @@ export const adminTeamQuery = (team: string) =>
     queryFn: async () => unwrap(await api.GET("/v1/admin/teams/{team}", { params: { path: { team } } })),
   });
 
+/**
+ * Every team (the first 200, any status) for Admin's team filters and pickers: one request under one key, shaped
+ * per use with `select`. Fresh for a minute, so moving between the lists doesn't ask again; creating a team
+ * invalidates ["admin", "teams"], and renaming or archiving one invalidates ["admin"].
+ */
+export const adminTeamOptionsQuery = () =>
+  queryOptions({
+    queryKey: ["admin", "teams", "options"],
+    queryFn: async () => unwrap(await api.GET("/v1/admin/teams", { params: { query: { limit: 200 } } })),
+    staleTime: 60_000,
+  });
+
 /* ---------------- gateways (the record pages and their breadcrumbs) ---------------- */
 
 /** The query key prefix of a team's gateways (lists, records, their capabilities and calls). */

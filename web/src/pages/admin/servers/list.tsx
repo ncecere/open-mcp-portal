@@ -10,7 +10,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Server } from "lucide-react";
 import { api, type Schemas, unwrap } from "@/api/client";
-import { adminAuthProvidersKey, adminServersKey, pendingReviewsQuery } from "@/api/queries";
+import { adminAuthProvidersKey, adminServersKey, adminTeamOptionsQuery, pendingReviewsQuery } from "@/api/queries";
 import { type McpServer, publishStateLabels } from "@/components/servers/labels";
 import { serverColumns } from "@/components/servers/server-columns";
 import { ListPage, useListFilters } from "@/components/templates/list-page";
@@ -33,11 +33,7 @@ const authModeOptions: { value: AuthMode; label: string }[] = [
 ];
 
 function useTeamOptions() {
-  return useQuery({
-    queryKey: ["admin", "teams", "server-filter"],
-    queryFn: async () => unwrap(await api.GET("/v1/admin/teams", { params: { query: { limit: 200 } } })),
-    select: (p) => p.items.map((t) => ({ value: t.team.slug, label: t.team.name })),
-  });
+  return useQuery({ ...adminTeamOptionsQuery(), select: (p) => p.items.map((t) => ({ value: t.team.slug, label: t.team.name })) });
 }
 
 /** Every auth provider, enabled or not, as filter options. */
