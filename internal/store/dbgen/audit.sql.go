@@ -101,7 +101,24 @@ SELECT a.id, a.occurred_at, a.actor_kind, a.actor_user_id, a.team_id, a.action,
            ORDER BY h.id DESC
            LIMIT 1
        ) END, '')::text AS recorded_label
-FROM audit_log a
+FROM (
+    -- The page is chosen before anything is resolved for it: the joins and
+    -- label lookups below add no rows, and running them for every
+    -- candidate row made a page cost a pass over the whole log.
+    SELECT p.id, p.occurred_at, p.actor_kind, p.actor_user_id, p.team_id, p.action, p.target_type, p.target_id, p.before_state, p.after_state, p.metadata, p.request_id, p.client_ip, p.actor_token_id, p.actor_token_name, p.actor_token_kind, p.txid, p.row_uid FROM audit_log p
+    WHERE ($1::uuid IS NULL OR p.team_id = $1::uuid)
+      AND ($2::bigint IS NULL OR p.id < $2::bigint)
+      AND ($3::text IS NULL OR p.action = $3::text)
+      AND ($4::text IS NULL OR p.action LIKE $4::text || '%' ESCAPE '\')
+      AND NOT EXISTS (SELECT 1 FROM unnest($5::text[]) AS x(prefix) WHERE p.action LIKE x.prefix || '%' ESCAPE '\')
+      AND ($6::uuid IS NULL OR p.actor_user_id = $6::uuid)
+      AND ($7::text IS NULL OR p.actor_kind = $7::text)
+      AND ($8::text IS NULL OR p.target_type = $8::text)
+      AND ($9::timestamptz IS NULL OR p.occurred_at >= $9::timestamptz)
+      AND ($10::timestamptz IS NULL OR p.occurred_at < $10::timestamptz)
+    ORDER BY p.id DESC
+    LIMIT $11
+) a
 CROSS JOIN LATERAL (
     SELECT CASE WHEN a.target_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
                 THEN a.target_id::uuid END AS target_uuid
@@ -161,18 +178,7 @@ CROSS JOIN LATERAL (
                               WHERE mc.id = (CASE WHEN a.target_id ~ '^[0-9]{1,18}$' THEN a.target_id::bigint END))
     END)::text AS label
 ) live
-WHERE ($1::uuid IS NULL OR a.team_id = $1::uuid)
-  AND ($2::bigint IS NULL OR a.id < $2::bigint)
-  AND ($3::text IS NULL OR a.action = $3::text)
-  AND ($4::text IS NULL OR a.action LIKE $4::text || '%' ESCAPE '\')
-  AND NOT EXISTS (SELECT 1 FROM unnest($5::text[]) AS x(prefix) WHERE a.action LIKE x.prefix || '%' ESCAPE '\')
-  AND ($6::uuid IS NULL OR a.actor_user_id = $6::uuid)
-  AND ($7::text IS NULL OR a.actor_kind = $7::text)
-  AND ($8::text IS NULL OR a.target_type = $8::text)
-  AND ($9::timestamptz IS NULL OR a.occurred_at >= $9::timestamptz)
-  AND ($10::timestamptz IS NULL OR a.occurred_at < $10::timestamptz)
 ORDER BY a.id DESC
-LIMIT $11
 `
 
 type ListAuditParams struct {
