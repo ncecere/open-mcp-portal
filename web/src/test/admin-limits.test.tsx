@@ -5,7 +5,8 @@ import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { parseRate, rateProblem, rateText } from "../lib/limits";
 import { limitSettings } from "./fixtures-operations";
-import { type Call, type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Call, type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const routes = (role: "platform_admin" | "platform_auditor" = "platform_admin", extra: Record<string, Handler> = {}): Record<string, Handler> => ({
   ...shellRoutes(role, null),

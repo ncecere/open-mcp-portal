@@ -5,7 +5,8 @@ import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { team } from "./fixtures";
 import { automationToken, platformToken, tokenSecret } from "./fixtures-v02";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const teamPath = `/v1/teams/${team.slug}/automation-tokens`;
 // Noon, n calendar days from today: "now + n * 24h" reads as n-1 days when the test runs just after midnight

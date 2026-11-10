@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { oauthClient, oauthGrant, registeredClient, team, user } from "./fixtures";
-import { type Handler, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const grants = [
   oauthGrant(),

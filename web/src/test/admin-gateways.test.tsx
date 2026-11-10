@@ -3,7 +3,8 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import { gateway, gatewayCapabilities, gatewayCapability, gatewayId, gatewayOptions, optionsPage, grant, mcpCall, mcpServer, myGateway, page, platformGateway, team, teamSummary, user } from "./fixtures";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 type Staff = "platform_admin" | "platform_auditor";
 const one = `/v1/admin/gateways/${gatewayId}`;

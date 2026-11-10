@@ -9,7 +9,8 @@ import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import { colorModeScript, COLOR_MODE_STORAGE_KEY } from "@/components/ui/color-mode/color-mode";
-import { mockApi, renderApp, shellRoutes } from "./harness";
+import { mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 /** A matchMedia whose prefers-color-scheme is `dark`, with a way to change it. */
 function systemScheme(dark: boolean) {

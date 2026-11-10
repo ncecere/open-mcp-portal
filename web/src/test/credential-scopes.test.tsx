@@ -4,7 +4,8 @@ import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { callErrorLabel } from "../components/gateways/labels";
 import { apiKey, gatewayId, grant, myGateway, oauthGrant, platformGateway, serviceAccount, serviceAccountId, serviceAccountKey, team, teamSummary, page } from "./fixtures";
-import { type Handler, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const saBase = `/v1/teams/${team.slug}/service-accounts`;
 const saOne = `${saBase}/${serviceAccountId}`;

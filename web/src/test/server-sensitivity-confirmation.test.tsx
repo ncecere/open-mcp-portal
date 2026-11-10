@@ -11,7 +11,8 @@ import type { Schemas } from "../api/client";
 import { moreNouns, wordsFor } from "../components/attention/wording";
 import { capabilities, catalogServer, healthCheck, mcpServer, members, page, serverId, team, teamPublishing } from "./fixtures";
 import { attentionItem, overview } from "./fixtures-v02";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 type Gov = NonNullable<Schemas["McpServer"]["governance"]>;
 const gov = (extra: Partial<Gov> = {}): Gov => ({

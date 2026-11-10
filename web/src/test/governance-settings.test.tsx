@@ -6,7 +6,8 @@ import type { Schemas } from "../api/client";
 import { unavailableHelp, unavailableLabels } from "../components/gateways/labels";
 import { allEvents, eventDescriptions, eventLabels, eventRecipients } from "../components/notifications/events";
 import { gateway, gatewayCapabilities, gatewayId, gatewayOptions, mcpCall, myGateway, optionsPage, page, team } from "./fixtures";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/gateways`;
 const record = `/teams/${team.slug}/gateways/${gatewayId}?tab=settings`;

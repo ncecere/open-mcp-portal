@@ -6,7 +6,8 @@ import { GatewayRequestSettings } from "../components/gateways/request-settings"
 import { accessRequestKey } from "../api/access-requests";
 import { deferred } from "./fixtures-approvals";
 import { meFor, team, user } from "./fixtures";
-import { mockApi, renderApp, renderBare, Reply, shellRoutes } from "./harness";
+import { mockApi, renderBare, Reply, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const gatewayId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";

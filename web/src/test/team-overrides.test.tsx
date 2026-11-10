@@ -6,7 +6,8 @@ import type { Schemas } from "../api/client";
 import { effectiveLimit, overrideChanges, overridesFormOf } from "../pages/admin/people/overrides-form";
 import { page, team, teamSummary } from "./fixtures";
 import { teamLimits, teamRetention } from "./fixtures-operations";
-import { type Call, type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Call, type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const admin = `/v1/admin/teams/${team.slug}`;
 

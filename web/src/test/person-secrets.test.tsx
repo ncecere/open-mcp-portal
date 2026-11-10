@@ -14,7 +14,8 @@ import { secretLinkProblem } from "../pages/connect/secret";
 import { keyProblem } from "../components/secrets/key-form";
 import { secretFormOf, secretInput, secretProblems, keysDeleted } from "../components/servers/person-secret";
 import type { McpServer } from "../components/servers/labels";
-import { Reply, mockApi, renderApp, renderBare, shellRoutes } from "./harness";
+import { Reply, mockApi, renderBare, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 import { ServerSecrets } from "../components/secrets/server-secrets";
 import { ApiError } from "../api/client";
 

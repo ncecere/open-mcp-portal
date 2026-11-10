@@ -5,7 +5,8 @@ import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { clientIdProblem } from "../pages/admin/oauth/clients";
 import { trustedClients } from "./fixtures";
-import { type Call, type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Call, type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 type Clients = Schemas["TrustedClients"];
 const path = "/v1/admin/settings/oauth-clients";

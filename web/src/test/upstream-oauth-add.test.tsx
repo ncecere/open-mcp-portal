@@ -11,7 +11,8 @@ import { redirectTo } from "../components/providers/labels";
 import { capabilities, healthCheck, page, serverId, team, teamPublishing } from "./fixtures";
 import { detectDcr, detectResult, githubUrl, oauthServer, setupConnection } from "./fixtures-oauth";
 import { providerId, providerRef } from "./fixtures-providers";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/mcp-servers`;
 const authorizeUrl = "https://github.com/login/oauth/authorize?client_id=Iv1.c0ffee&state=s1";

@@ -4,7 +4,8 @@ import { useState } from "react";
 import { axe } from "vitest-axe";
 import { ScopeEditor, type ToolScope } from "../components/tool-scope";
 import { apiKey, grant, myGateway, platformGateway, serviceAccount, serviceAccountId, serviceAccountKey, team } from "./fixtures";
-import { mockApi, renderApp, shellRoutes } from "./harness";
+import { mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 function Editor() {
   const [scope, setScope] = useState<ToolScope>({});

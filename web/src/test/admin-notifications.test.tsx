@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { destination, notificationSettings } from "./fixtures-v02";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const platformDestination = (extra: Partial<Schemas["NotificationDestination"]> = {}) =>
   destination({ id: "plat-1", scope: "platform", team: null, name: "Platform pager", events: ["publish.requested"], ...extra });

@@ -6,7 +6,8 @@ import type { Schemas } from "../api/client";
 import { ceilingText, raises, retirementText } from "../components/servers/governance";
 import { wordsFor } from "../components/attention/wording";
 import { catalogServer, capabilities, healthCheck, mcpServer, members, page, serverId, team, teamPublishing } from "./fixtures";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 type Gov = NonNullable<Schemas["McpServer"]["governance"]>;
 const gov = (extra: Partial<Gov> = {}): Gov => ({

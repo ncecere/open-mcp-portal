@@ -11,7 +11,8 @@ import { redirectTo } from "../components/providers/labels";
 import { missingScopes, resultText, safeMissingScopes } from "../pages/connect/done";
 import { authConfig } from "./fixtures";
 import { connectRequest, connectServer, providerId, providerSummaries, requestId } from "./fixtures-providers";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const path = `/connect/github?request=${requestId}`;
 const authorizeUrl = "https://github.com/login/oauth/authorize?client_id=Iv1.abc123&scope=read%3Aorg+repo&state=s1";

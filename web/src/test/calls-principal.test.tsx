@@ -6,7 +6,8 @@ import { auditChange, changedRows } from "../components/audit/changes";
 import { actionLabel, areaOf, areaOptions, targetTypeLabel } from "../components/audit/labels";
 import { principalDetail, principalName } from "../components/gateways/calls-table";
 import { gateway, gatewayCapabilities, gatewayId, mcpCall, myGateway, page, serviceAccount, serviceAccountId, team, user } from "./fixtures";
-import { type Handler, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const viaApp = mcpCall({
   id: 2,

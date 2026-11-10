@@ -7,7 +7,8 @@ import { eventLabel } from "../components/notifications/events";
 import { identitySentLabel, outcomeLabels } from "../components/gateways/labels";
 import { approval, approvalId, deferred } from "./fixtures-approvals";
 import { meFor } from "./fixtures";
-import { mockApi, renderApp, Reply, shellRoutes, type Handler } from "./harness";
+import { mockApi, Reply, shellRoutes, type Handler } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/approvals/${approvalId}`;
 const detail = `/approvals/${approvalId}`;

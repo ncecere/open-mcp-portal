@@ -11,7 +11,8 @@ import type { Schemas } from "../api/client";
 import { type MachineConfig, type MachineForm, blankMachine, machineChanges, machineFormOf, machineInput, machineProblems, machineReview, secretWhy } from "../components/servers/machine-auth";
 import { capabilities, healthCheck, mcpServer, page, serverId, team, teamPublishing } from "./fixtures";
 import { detectResult } from "./fixtures-oauth";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/mcp-servers`;
 const record = `/teams/${team.slug}/servers/${serverId}`;

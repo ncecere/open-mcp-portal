@@ -13,7 +13,8 @@ import { redirectTo } from "../components/providers/labels";
 import { catalogServer, gateway, gatewayCapabilities, gatewayCapability, gatewayId, myGateway, myTeam, page, serverId, team, user } from "./fixtures";
 import { serverConnection, serverProviderId, serverRequires } from "./fixtures-oauth";
 import { connection, connectRequest, providerRef, providerSummaries, requestId } from "./fixtures-providers";
-import { mockApi, renderApp, shellRoutes } from "./harness";
+import { mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const serverRef = providerRef({ id: serverProviderId, slug: "mcp-0a1b2c3d4e5f", name: "GitHub MCP", preset: null, kind: "mcp_server", server: { id: serverId, slug: "github", name: "GitHub MCP", teamSlug: team.slug } });
 

@@ -7,7 +7,8 @@ import { CallsChart, outcomeChartTone } from "../components/usage/charts";
 import { bucketFor, groupByProblem, nextHour, resolveRange } from "../components/usage/range";
 import { gatewayId, team, teamSummary } from "./fixtures";
 import { metrics, usageReport } from "./fixtures-operations";
-import { type Call, type Handler, mockApi, renderApp, renderBare, shellRoutes } from "./harness";
+import { type Call, type Handler, mockApi, renderBare, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const DAY = 86_400_000;
 const teamUsage = `/v1/teams/${team.slug}/usage`;

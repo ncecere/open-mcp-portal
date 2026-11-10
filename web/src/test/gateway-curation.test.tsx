@@ -5,7 +5,8 @@ import type { Schemas } from "../api/client";
 import { gatewayCapabilitiesQuery } from "../components/gateways/scope";
 import { policyOf, previewOf } from "../components/gateways/curation-fields";
 import { gateway, gatewayCapabilities, gatewayCapability, gatewayId, gatewayOptions, optionsPage, team } from "./fixtures";
-import { type Handler, mockApi, renderApp, Reply, shellRoutes } from "./harness";
+import { type Handler, mockApi, Reply, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/gateways/${gatewayId}`;
 const tab = `/teams/${team.slug}/gateways/${gatewayId}?tab=capabilities`;

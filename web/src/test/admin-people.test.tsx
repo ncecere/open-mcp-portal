@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { auditEntry, invite, member, myTeam, page, team, teamPublishing, teamSummary, user } from "./fixtures";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const other = user({ id: "77777777-7777-4777-8777-777777777777", email: "pat@example.com", displayName: "Pat Admin", platformRole: "platform_admin", teamCount: 2 });
 const detail: Schemas["UserDetail"] = { user: other, teams: [myTeam("editor")] };

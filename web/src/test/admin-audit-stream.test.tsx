@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import type { Status, Sink } from "../pages/admin/audit-stream/api";
 import { activeAdminGroup, adminNav } from "../components/layout/nav";
-import { mockApi, renderApp, shellRoutes, Reply, type Handler } from "./harness";
+import { mockApi, shellRoutes, Reply, type Handler } from "./harness";
+import { renderApp } from "./render-app";
 
 const sink: Sink = { id: "s1", name: "Evidence", kind: "webhook", profile: "full", required: true, enabled: true, batch_max_records: 100, revision: 3, url_hint: "receiver.example", cursor_seq: 10, state: "range_expired", lag: 15, last_error_class: "timeout", consecutive_failures: 2, held_oversized_seq: 11, last_ok_at: null };
 const status = (): Status => ({ sealer_enabled: true, tip: { stream_id: "stream-id", epoch: 1, last_seq: 25, status: "running", checkpoints_enabled: true, last_checkpoint_seq: 20, last_checkpoint_at: new Date().toISOString() }, sink_settings: { enabled: true, min_reader_version: "0.15.0" }, sinks: [sink], consumers: [{ name: "Archive", profile: "full", required: false, acked_seq: 5, lag: 20 }], checkpoint_keys: [{ kid: "key-id", state: "active" }] });

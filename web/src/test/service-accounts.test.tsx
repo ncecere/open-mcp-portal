@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { gatewayId, myGateway, serviceAccount, serviceAccountId, serviceAccountKey, team } from "./fixtures";
-import { type Call, type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Call, type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 type Role = Schemas["TeamRole"];
 const base = `/v1/teams/${team.slug}/service-accounts`;

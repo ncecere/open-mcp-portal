@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { capabilities, capability, healthCheck, mcpServer, page, serverId, team, teamPublishing, teamSummary } from "./fixtures";
-import { type Handler, mockApi, Reply, renderApp, shellRoutes } from "./harness";
+import { type Handler, mockApi, Reply, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const pending = mcpServer({ publishState: "pending", publishRequestedAt: "2026-10-15T10:00:00Z", publishRequestNote: "For on-call engineers." });
 

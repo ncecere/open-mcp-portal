@@ -8,7 +8,8 @@ import { axe } from "vitest-axe";
 import { ApiError } from "../api/client";
 import { SessionUnavailable } from "../components/layout/session-unavailable";
 import { appRetryDelay, clearRateLimit, noteRateLimit, rateLimitedUntil } from "../lib/retry";
-import { mockApi, renderApp, renderBare, shellRoutes } from "./harness";
+import { mockApi, renderBare, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 import { scaled } from "../../test-scale";
 
 afterEach(() => {

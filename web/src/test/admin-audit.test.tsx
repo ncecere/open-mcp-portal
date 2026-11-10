@@ -6,7 +6,8 @@ import { auditChange, changeSummary, plainKey, valueText } from "../components/a
 import { actionLabel, actorName, areaOptions, personFilter } from "../components/audit/labels";
 import { toCSV } from "../pages/admin/audit/common";
 import { auditEntry, page, team, user } from "./fixtures";
-import { mockApi, renderApp, shellRoutes } from "./harness";
+import { mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const signIn = auditEntry({
   id: 102,

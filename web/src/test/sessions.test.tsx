@@ -5,7 +5,8 @@ import type { Schemas } from "@/api/client";
 import * as client from "@/api/client";
 import { browserLabel } from "@/components/sessions/browser-sessions";
 import { user } from "./fixtures";
-import { mockApi, renderApp, Reply, shellRoutes } from "./harness";
+import { mockApi, Reply, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const sessions: Schemas["BrowserSession"][] = [
   { id: "11111111-1111-4111-8111-111111111111", createdAt: "2026-01-01T10:00:00Z", lastSeenAt: "2026-01-01T11:00:00Z", expiresAt: "2099-01-01T22:00:00Z", userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X) Chrome/120.0 Safari/537.36", clientIp: "192.0.2.10", current: true },

@@ -5,7 +5,8 @@ import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { redirectTo } from "../components/providers/labels";
 import { connection, connectionId, connectServer, providerRef } from "./fixtures-providers";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const allowablePath = `/v1/me/connections/${connectionId}/allowable-servers`;
 const allowPath = `/v1/me/connections/${connectionId}/allow-server`;

@@ -5,7 +5,8 @@ import { CapabilityFindings, ScanFindings } from "../components/servers/scan-fin
 import { CapabilitiesTab } from "../components/servers/capabilities-tab";
 import { adminAbilities, readOnly } from "../components/servers/scope";
 import { PublishDialog, ReviewDialog } from "../components/servers/publish-dialogs";
-import { mockApi, renderBare, renderApp, shellRoutes, Reply } from "./harness";
+import { mockApi, renderBare, shellRoutes, Reply } from "./harness";
+import { renderApp } from "./render-app";
 import { mcpServer, capability } from "./fixtures";
 import type { Schemas } from "../api/client";
 

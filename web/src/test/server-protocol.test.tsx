@@ -1,7 +1,8 @@
 /* A server's Overview tab: the MCP protocol version last negotiated (modern, legacy, or not yet). */
 import { screen, within } from "@testing-library/react";
 import { capabilities, healthCheck, mcpServer, page, serverId, team, teamPublishing } from "./fixtures";
-import { type Handler, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 import type { Schemas } from "../api/client";
 
 const base = `/v1/teams/${team.slug}/mcp-servers`;

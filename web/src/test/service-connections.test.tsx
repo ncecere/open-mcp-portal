@@ -5,7 +5,8 @@ import type { Schemas } from "../api/client";
 import { redirectTo } from "../components/providers/labels";
 import { serverId, serviceAccount, serviceAccountId, team } from "./fixtures";
 import { providerId, providerSummary } from "./fixtures-providers";
-import { mockApi, renderApp, Reply, shellRoutes, type Handler } from "./harness";
+import { mockApi, Reply, shellRoutes, type Handler } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/service-connections`;
 const record = `/teams/${team.slug}/service-accounts/${serviceAccountId}?tab=connections`;

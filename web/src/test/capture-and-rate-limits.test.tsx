@@ -19,7 +19,8 @@ import {
   teamPublishing,
 } from "./fixtures";
 import { teamLimits, teamRetention } from "./fixtures-operations";
-import { type Call, type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Call, type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 type Role = Schemas["TeamRole"];
 const teamApi = `/v1/teams/${team.slug}`;

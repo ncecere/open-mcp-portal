@@ -2,7 +2,8 @@
 import { screen, within } from "@testing-library/react";
 import { axe } from "vitest-axe";
 import { meFor, myTeam, team } from "./fixtures";
-import { mockApi, renderApp, shellRoutes } from "./harness";
+import { mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 describe("home", () => {
   it("lists your teams with your role and quick links", async () => {

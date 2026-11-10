@@ -6,7 +6,8 @@ import type { Schemas } from "../api/client";
 import { rulesKey } from "../api/approvals";
 import { approvalRule, capabilityId, deferred, requesterId, ruleId } from "./fixtures-approvals";
 import { gateway, gatewayId, mcpServer, serverId, team } from "./fixtures";
-import { mockApi, renderApp, Reply, shellRoutes, type Handler } from "./harness";
+import { mockApi, Reply, shellRoutes, type Handler } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/approval-rules`;
 const path = `/teams/${team.slug}/approval-rules`;

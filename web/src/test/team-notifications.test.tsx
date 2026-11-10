@@ -5,7 +5,8 @@ import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { team } from "./fixtures";
 import { delivery, destination } from "./fixtures-v02";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/notification-destinations`;
 const secret = "ompwhs_" + "k".repeat(43);
