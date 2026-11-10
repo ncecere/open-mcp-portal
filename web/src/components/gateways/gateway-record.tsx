@@ -11,6 +11,7 @@ import { Activity, ExternalLink, LayoutDashboard, ListTree, Power, Settings2, Sh
 import { type ReactNode, useState } from "react";
 import { gatewayTabs } from "../../lib/tabs";
 import { ConfirmMutationDialog } from "../confirm-dialog";
+import { lazyTab, TabLoading } from "../tab-loading";
 import type { ActionItem } from "../templates/action-menu";
 import { DetailPage } from "../templates/detail-page";
 import { Alert } from "@/components/ui/alert/alert";
@@ -27,8 +28,10 @@ import { GatewayCapabilitiesTab } from "./capabilities-tab";
 import { capabilityCount, type Gateway, grantCountLabel, ownerKindLabels } from "./labels";
 import { GatewayOverviewTab } from "./overview-tab";
 import { type GatewayAbilities, type GatewayScope, storeGateway, updateGateway } from "./scope";
-import { GatewaySettingsTab } from "./settings-tab";
 import { GatewayRequestSettings } from "./request-settings";
+
+// Settings loads when first opened (tab-loading.tsx).
+const GatewaySettingsTab = lazyTab(() => import("./settings-tab"), "GatewaySettingsTab");
 
 type Props = {
   gateway: Gateway;
@@ -80,7 +83,7 @@ export function GatewayRecord({ gateway, scope, abilities, notices, links = [] }
         { value: "access", label: "Access", icon: <Users aria-hidden />, count: gateway.grantCount, hidden: !(platform && scope.kind === "admin"), content: <GatewayAccessTab gateway={gateway} abilities={abilities} /> },
         { value: "requests", label: "Requests", icon: <Shield aria-hidden />, hidden: !(platform && scope.kind === "admin"), content: <GatewayRequestSettings gatewayId={gateway.id} readOnly={!abilities.canManageGrants} /> },
         { value: "activity", label: "Activity", icon: <Activity aria-hidden />, content: <GatewayActivityTab {...props} /> },
-        { value: "settings", label: "Settings", icon: <Settings2 aria-hidden />, content: <GatewaySettingsTab {...props} /> },
+        { value: "settings", label: "Settings", icon: <Settings2 aria-hidden />, content: <TabLoading><GatewaySettingsTab {...props} /></TabLoading> },
       ]}
     />
   );
