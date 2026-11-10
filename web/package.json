@@ -10,6 +10,7 @@
     "test": "node --test scripts/prepare-openapi.node-check.mjs && vitest run",
     "check:styling": "node scripts/check-styling.mjs",
     "check:size": "node scripts/check-size.mjs",
+    "report:bundle": "node scripts/bundle-report.mjs",
     "ui:check": "bitop diff --check",
     "typecheck": "tsc --noEmit"
   },
