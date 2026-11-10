@@ -26,7 +26,7 @@ func applyCuration(it *Selected, row dbgen.GatewayCapability) {
 	if p.NameOverride != nil {
 		it.ExposedName = *p.NameOverride
 	}
-	projected, normalized, projectErr := curation.Project(it.Capability.Definition, p)
+	projected, normalized, projectErr := project(it.Capability.Definition, row, p)
 	it.CurationStale = it.Capability.Kind != upstream.KindTool || *row.BaseFingerprint != it.Capability.Fingerprint || err != nil || projectErr != nil
 	if !it.CurationStale {
 		it.EffectiveDefinition = projected
