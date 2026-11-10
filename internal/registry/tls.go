@@ -298,65 +298,9 @@ func (s *Service) planTLS(serverID uuid.UUID, stored *dbgen.McpServerTl, in *TLS
 		next = tlsState{}
 	}
 	// What the request does to the client certificate: none, replace, or remove.
-	clientTouched := false
-	if in != nil {
-		if in.Clear {
-			if in.CAPEM != nil || in.ClientCertPEM != nil || in.ClientKeyPEM != nil {
-				return plan, tlsConflict("clear_with_other_fields", "clear can't be combined with other tls fields.")
-			}
-			next, clientTouched = tlsState{}, true
-		} else {
-			if in.CAPEM != nil {
-				if *in.CAPEM == "" {
-					next.caPEM, next.caSHA = "", ""
-				} else {
-					b, err := upstream.ParseCABundle(*in.CAPEM, now)
-					if err != nil {
-						return plan, asTLSError(err)
-					}
-					next.caPEM, next.caSHA = b.PEM, b.SHA256
-				}
-			}
-			cert, key := deref(in.ClientCertPEM), deref(in.ClientKeyPEM)
-			switch {
-			case key != "" && cert == "":
-				return plan, invalidTLS(&upstream.TLSInputError{Field: upstream.TLSFieldCert, Reason: "key_without_certificate",
-					Message: "Send the client certificate with its private key."})
-			case cert != "":
-				if key == "" {
-					// A renewal: the certificate must belong to the key stored for
-					// this origin.
-					if originMoved || cur.keyCipher == nil {
-						return plan, errTLSKeyRequiredOrMissing(cur.keyCipher != nil, originMoved)
-					}
-					plain, err := s.box.Open(cur.keyCipher, TLSKeyAAD(serverID))
-					if err != nil {
-						return plan, errTLSKeyUndecryptable
-					}
-					key = string(plain)
-				}
-				pair, err := upstream.ParseClientPair(cert, key, now)
-				if err != nil {
-					return plan, asTLSError(err)
-				}
-				// The same certificate again keeps the sealed key it has (it can only be
-				// the same key); anything else seals the key now.
-				sealed := cur.keyCipher
-				if originMoved || cur.certSHA != pair.Leaf.SHA256 || sealed == nil {
-					if sealed, err = s.box.Seal([]byte(key), TLSKeyAAD(serverID)); err != nil {
-						return plan, err
-					}
-				}
-				na := pair.Leaf.NotAfter
-				next.certPEM, next.certSHA, next.notAfter, next.keyCipher = pair.PEM, pair.Leaf.SHA256, &na, sealed
-				clientTouched = true
-			case in.ClientCertPEM != nil:
-				// An empty certificate (and no key) removes the client certificate
-				// and its key.
-				next.certPEM, next.certSHA, next.notAfter, next.keyCipher = "", "", nil, nil
-				clientTouched = true
-			}
-		}
+	next, clientTouched, err := s.applyTLSInput(serverID, cur, next, in, originMoved, now)
+	if err != nil {
+		return plan, err
 	}
 	if originMoved && cur.keyCipher != nil && !clientTouched {
 		return plan, errTLSKeyRequired
@@ -366,6 +310,78 @@ func (s *Service) planTLS(serverID uuid.UUID, stored *dbgen.McpServerTl, in *TLS
 	plan.clientChanged = cur.certSHA != next.certSHA || (cur.keyCipher == nil) != (next.keyCipher == nil)
 	plan.write = plan.caChanged || plan.clientChanged
 	return plan, nil
+}
+
+// applyTLSInput applies a request's tls object (nil: nothing) to next, the
+// settings that would otherwise stay; cur are the stored ones. It reports
+// whether the request replaces or removes the client certificate.
+func (s *Service) applyTLSInput(serverID uuid.UUID, cur, next tlsState, in *TLSInput, originMoved bool, now time.Time) (tlsState, bool, error) {
+	if in == nil {
+		return next, false, nil
+	}
+	if in.Clear {
+		if in.CAPEM != nil || in.ClientCertPEM != nil || in.ClientKeyPEM != nil {
+			return next, false, tlsConflict("clear_with_other_fields", "clear can't be combined with other tls fields.")
+		}
+		return tlsState{}, true, nil
+	}
+	if in.CAPEM != nil {
+		if *in.CAPEM == "" {
+			next.caPEM, next.caSHA = "", ""
+		} else {
+			b, err := upstream.ParseCABundle(*in.CAPEM, now)
+			if err != nil {
+				return next, false, asTLSError(err)
+			}
+			next.caPEM, next.caSHA = b.PEM, b.SHA256
+		}
+	}
+	return s.applyTLSClient(serverID, cur, next, in, originMoved, now)
+}
+
+// applyTLSClient applies the request's client certificate and key to next:
+// a new pair, a renewal against the stored key, or the removal of both.
+func (s *Service) applyTLSClient(serverID uuid.UUID, cur, next tlsState, in *TLSInput, originMoved bool, now time.Time) (tlsState, bool, error) {
+	cert, key := deref(in.ClientCertPEM), deref(in.ClientKeyPEM)
+	switch {
+	case key != "" && cert == "":
+		return next, false, invalidTLS(&upstream.TLSInputError{Field: upstream.TLSFieldCert, Reason: "key_without_certificate",
+			Message: "Send the client certificate with its private key."})
+	case cert != "":
+		if key == "" {
+			// A renewal: the certificate must belong to the key stored for
+			// this origin.
+			if originMoved || cur.keyCipher == nil {
+				return next, false, errTLSKeyRequiredOrMissing(cur.keyCipher != nil, originMoved)
+			}
+			plain, err := s.box.Open(cur.keyCipher, TLSKeyAAD(serverID))
+			if err != nil {
+				return next, false, errTLSKeyUndecryptable
+			}
+			key = string(plain)
+		}
+		pair, err := upstream.ParseClientPair(cert, key, now)
+		if err != nil {
+			return next, false, asTLSError(err)
+		}
+		// The same certificate again keeps the sealed key it has (it can only be
+		// the same key); anything else seals the key now.
+		sealed := cur.keyCipher
+		if originMoved || cur.certSHA != pair.Leaf.SHA256 || sealed == nil {
+			if sealed, err = s.box.Seal([]byte(key), TLSKeyAAD(serverID)); err != nil {
+				return next, false, err
+			}
+		}
+		na := pair.Leaf.NotAfter
+		next.certPEM, next.certSHA, next.notAfter, next.keyCipher = pair.PEM, pair.Leaf.SHA256, &na, sealed
+		return next, true, nil
+	case in.ClientCertPEM != nil:
+		// An empty certificate (and no key) removes the client certificate
+		// and its key.
+		next.certPEM, next.certSHA, next.notAfter, next.keyCipher = "", "", nil, nil
+		return next, true, nil
+	}
+	return next, false, nil
 }
 
 func errTLSKeyRequiredOrMissing(haveKey, originMoved bool) error {
