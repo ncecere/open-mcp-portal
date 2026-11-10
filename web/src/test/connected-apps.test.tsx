@@ -34,7 +34,14 @@ describe("Account › Connected apps", () => {
 
   it("says when each app's sign-in expires, and that it already has", async () => {
     const old = oauthGrant({ id: "g3", client: registeredClient(), expiresAt: "2020-01-01T00:00:00Z" });
-    mockApi({ ...shellRoutes("none", "member"), "GET /v1/me/oauth-grants": () => [oauthGrant({ expiresAt: "2099-04-08T10:00:00Z" }), oauthGrant({ id: "g2", client: oauthClient({ id: "https://cursor.com/oauth/client.json", name: "Cursor", host: "cursor.com" }), expiresAt: null }), old] });
+    mockApi({
+      ...shellRoutes("none", "member"),
+      "GET /v1/me/oauth-grants": () => [
+        oauthGrant({ expiresAt: "2099-04-08T10:00:00Z" }),
+        oauthGrant({ id: "g2", client: oauthClient({ id: "https://cursor.com/oauth/client.json", name: "Cursor", host: "cursor.com" }), expiresAt: null }),
+        old,
+      ],
+    });
     renderApp("/settings/connected-apps");
     const table = await screen.findByRole("table", { name: "Your connected apps" });
     expect(within(table).getByRole("columnheader", { name: /Sign-in expires/ })).toBeInTheDocument();

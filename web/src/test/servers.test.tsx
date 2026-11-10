@@ -133,7 +133,14 @@ describe("MCP server record", () => {
     const u = userEvent.setup();
     const calls = mockApi(
       routes("editor", mcpServer(), {
-        [`POST ${base}/${serverId}/test`]: (): Schemas["McpTestResult"] => ({ ok: true, latencyMs: 42, serverName: "status", serverVersion: "1.2.0", protocolVersion: "2025-06-18", counts: { tools: 2, resources: 1, resourceTemplates: 0, prompts: 1 } }),
+        [`POST ${base}/${serverId}/test`]: (): Schemas["McpTestResult"] => ({
+          ok: true,
+          latencyMs: 42,
+          serverName: "status",
+          serverVersion: "1.2.0",
+          protocolVersion: "2025-06-18",
+          counts: { tools: 2, resources: 1, resourceTemplates: 0, prompts: 1 },
+        }),
         [`POST ${base}/${serverId}/refresh`]: (): Schemas["McpRefreshResult"] => ({ listed: 4, added: 1, changed: 1, gone: 0, capabilities }),
       }),
     );
@@ -298,7 +305,14 @@ describe("MCP server › Capabilities", () => {
 describe("MCP server › Health and Settings", () => {
   it("lists checks with stable historical endpoint identity and why a check failed", async () => {
     const endpointId = "10000000-0000-0000-0000-000000000001";
-    mockApi(routes("member", mcpServer(), { [`GET ${base}/${serverId}/health-checks`]: () => [healthCheck(), healthCheck({ checkedAt: "2026-10-16T06:55:00Z", endpointId, endpointPosition: 1, ok: false, errorClass: "auth", httpStatus: 401, message: "token expired", trigger: "manual" })] }));
+    mockApi(
+      routes("member", mcpServer(), {
+        [`GET ${base}/${serverId}/health-checks`]: () => [
+          healthCheck(),
+          healthCheck({ checkedAt: "2026-10-16T06:55:00Z", endpointId, endpointPosition: 1, ok: false, errorClass: "auth", httpStatus: 401, message: "token expired", trigger: "manual" }),
+        ],
+      }),
+    );
     const { container } = renderApp(`${record}?tab=health`);
     const table = await screen.findByRole("table", { name: "Recent checks" });
     // On narrow screens an overflowing table becomes a region named from

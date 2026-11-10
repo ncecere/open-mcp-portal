@@ -87,11 +87,21 @@ export function MachineFields({ value, onChange, detected, server, url, secret, 
           ))}
         </NativeSelect>
       </Field>
-      <Field label="Scopes" labelHint="Optional" description="What the portal's token may do. Ask for as little as the tools need; adding a scope later sends a published server back to review. Press Enter after each." error={errors.machineScopes}>
+      <Field
+        label="Scopes"
+        labelHint="Optional"
+        description="What the portal's token may do. Ask for as little as the tools need; adding a scope later sends a published server back to review. Press Enter after each."
+        error={errors.machineScopes}
+      >
         <TagInput value={value.scopes} onValueChange={(scopes) => set({ scopes })} normalize={normalizeScope} maxTags={50} maxTagLength={200} noun={{ one: "scope", other: "scopes" }} disabled={disabled} />
       </Field>
       <Disclosure title="Advanced" summary={value.resource || value.audience ? "Audience or resource set" : "No audience or resource"}>
-        <Field label="Resource" labelHint="Optional" description="Sent as the resource parameter (RFC 8707) so the token is for this server only. Some authorization servers ignore it, and then the token works elsewhere too." error={errors.machineResource}>
+        <Field
+          label="Resource"
+          labelHint="Optional"
+          description="Sent as the resource parameter (RFC 8707) so the token is for this server only. Some authorization servers ignore it, and then the token works elsewhere too."
+          error={errors.machineResource}
+        >
           <Input autoComplete="off" spellCheck={false} maxLength={500} disabled={disabled} value={value.resource} onChange={(e) => set({ resource: e.target.value })} />
         </Field>
         <Field label="Audience" labelHint="Optional" description="Sent as the audience parameter, which some authorization servers (Auth0, for example) want instead of a resource.">

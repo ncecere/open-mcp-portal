@@ -10,8 +10,26 @@ import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/service-connections`;
 const record = `/teams/${team.slug}/service-accounts/${serviceAccountId}?tab=connections`;
-const shared: Schemas["ServiceConnection"] = { id: "25252525-2525-4525-8525-252525252525", teamId: team.id, providerId, providerName: "GitHub", name: "Release account", accountLabel: "release-bot", status: "active", scopes: ["repo"], revision: 3, accounts: [], servers: [] };
-const destination: Schemas["AllowableServer"] = { server: { id: serverId, slug: "status", name: "Status", teamSlug: team.slug, teamName: team.name }, origin: "https://status.example.com", scopes: ["repo"], covered: true, allowed: false };
+const shared: Schemas["ServiceConnection"] = {
+  id: "25252525-2525-4525-8525-252525252525",
+  teamId: team.id,
+  providerId,
+  providerName: "GitHub",
+  name: "Release account",
+  accountLabel: "release-bot",
+  status: "active",
+  scopes: ["repo"],
+  revision: 3,
+  accounts: [],
+  servers: [],
+};
+const destination: Schemas["AllowableServer"] = {
+  server: { id: serverId, slug: "status", name: "Status", teamSlug: team.slug, teamName: team.name },
+  origin: "https://status.example.com",
+  scopes: ["repo"],
+  covered: true,
+  allowed: false,
+};
 const routes = (role: Schemas["TeamRole"] = "owner", extra: Record<string, Handler> = {}): Record<string, Handler> => ({
   ...shellRoutes("none", role),
   [`GET /v1/teams/${team.slug}/service-accounts/${serviceAccountId}`]: () => serviceAccount(),

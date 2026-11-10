@@ -11,7 +11,18 @@ import { TargetPicker } from "./target-picker";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const lines = (text: string) => text.split("\n").map((s) => s.trim()).filter(Boolean);
-const defaults = (team?: string): RuleInput => ({ name: "", targetKind: team ? "server" : "gateway", targetId: "", capabilityId: null, classes: ["destructive"], enabled: true, pendingMinutes: 1440, validMinutes: 15, allowServiceAccountAdmins: false, approvers: [] });
+const defaults = (team?: string): RuleInput => ({
+  name: "",
+  targetKind: team ? "server" : "gateway",
+  targetId: "",
+  capabilityId: null,
+  classes: ["destructive"],
+  enabled: true,
+  pendingMinutes: 1440,
+  validMinutes: 15,
+  allowServiceAccountAdmins: false,
+  approvers: [],
+});
 
 export function RuleEditor({ team, rule, onClose }: { team?: string; rule?: ApprovalRule; onClose: () => void }) {
   return <Editor key={`${team}:${rule?.id ?? "new"}:${rule?.revision ?? 0}`} team={team} rule={rule} onClose={onClose} />;
@@ -64,15 +75,20 @@ function Editor({ team, rule, onClose }: { team?: string; rule?: ApprovalRule; o
     sending.current = true;
     save.mutate(submitted);
   };
-  return <FormPage label={rule ? "Edit approval rule" : "Create approval rule"} title={rule ? `Edit ${rule.name}` : "Create approval rule"} description="Rules require approval; they never grant tool access. Server rules outrank gateway rules. Within each tier, capability-specific rules outrank class rules. Equal-priority overlaps are rejected." onClose={onClose} onSubmit={submit} submitLabel={rule ? "Save rule" : "Create rule"} busy={busy} submitDisabled={conflict}>
+  return <FormPage label={rule ? "Edit approval rule" : "Create approval rule"} title={rule ? `Edit ${rule.name}` : "Create approval rule"}
+    description="Rules require approval; they never grant tool access. Server rules outrank gateway rules. Within each tier, capability-specific rules outrank class rules. Equal-priority overlaps are rejected."
+    onClose={onClose} onSubmit={submit} submitLabel={rule ? "Save rule" : "Create rule"} busy={busy} submitDisabled={conflict}>
     {validation && <Alert tone="danger" title="Check this rule">{validation}</Alert>}
     <ErrorAlert error={save.error} title="Couldn't save rule" />
     {conflict && <Alert tone="warning">This revision changed. Close this editor, reload the rules and reopen it to review the latest revision. Your edits will not be resubmitted automatically.</Alert>}
-    {save.error instanceof ApiError && save.error.status === 409 && <Alert tone="warning">The portal rejected this rule, including any ambiguous or overlapping policy. Review the error and existing rules before saving again.</Alert>}
+    {save.error instanceof ApiError && save.error.status === 409 && <Alert tone="warning">
+      The portal rejected this rule, including any ambiguous or overlapping policy. Review the error and existing rules before saving again.
+    </Alert>}
     <FormSection title="Rule and immutable target">
       <Field label="Rule name"><Input required maxLength={200} value={input.name} disabled={busy} onValueChange={(v) => set("name", v)} /></Field>
       {rule ? <p>Target: {rule.targetKind} · {rule.targetId}. This target cannot be changed.</p> : <>
-        <Field label="Target kind"><NativeSelect value={input.targetKind} disabled={busy || !team} onChange={(e) => setInput((old) => ({ ...old, targetKind: e.target.value as RuleInput["targetKind"], targetId: "", capabilityId: null }))}>
+        <Field label="Target kind"><NativeSelect value={input.targetKind} disabled={busy || !team}
+          onChange={(e) => setInput((old) => ({ ...old, targetKind: e.target.value as RuleInput["targetKind"], targetId: "", capabilityId: null }))}>
           {team && <option value="server">Server</option>}<option value="gateway">Gateway</option>
         </NativeSelect></Field>
         <TargetPicker key={input.targetKind} team={team} kind={input.targetKind} value={input.targetId} onChange={(v) => set("targetId", v)} disabled={busy} />
@@ -80,20 +96,41 @@ function Editor({ team, rule, onClose }: { team?: string; rule?: ApprovalRule; o
       <Checkbox label="Enabled" checked={input.enabled} disabled={busy} onCheckedChange={(v) => set("enabled", v)} />
     </FormSection>
     <FormSection title="Exactly one tool selector">
-      <Field label="Match by"><NativeSelect value={selector} disabled={busy} onChange={(e) => setSelector(e.target.value)}><option value="classes">Tool classes</option><option value="capability">Specific tool capability</option></NativeSelect></Field>
-      {selector === "capability" ? <Field label="Tool capability ID" description="Use a tool UUID belonging to the server, or selected through this gateway. The portal validates it; resource and prompt IDs are not eligible."><Input required value={input.capabilityId ?? ""} disabled={busy} onValueChange={(v) => set("capabilityId", v.trim())} /></Field> : <CheckboxGroup legend="Tool classes" value={input.classes} disabled={busy} onValueChange={(v) => set("classes", v as RuleInput["classes"])}>
+      <Field label="Match by"><NativeSelect value={selector} disabled={busy} onChange={(e) => setSelector(e.target.value)}>
+        <option value="classes">Tool classes</option><option value="capability">Specific tool capability</option>
+      </NativeSelect></Field>
+      {selector === "capability" ? <Field label="Tool capability ID" description="Use a tool UUID belonging to the server, or selected through this gateway. The portal validates it; resource and prompt IDs are not eligible.">
+        <Input required value={input.capabilityId ?? ""} disabled={busy} onValueChange={(v) => set("capabilityId", v.trim())} />
+      </Field> : <CheckboxGroup legend="Tool classes" value={input.classes} disabled={busy} onValueChange={(v) => set("classes", v as RuleInput["classes"])}>
         <Checkbox label="Read" value="read" /><Checkbox label="Write" value="write" /><Checkbox label="Destructive" value="destructive" />
       </CheckboxGroup>}
       <p>Unclassified tools match destructive rules for approval only. Their actual class and tool scopes do not change.</p>
     </FormSection>
     <FormSection title="Deadlines and reviewers">
-      <Field label="Pending lifetime (minutes)" description="5–1440 minutes; default 1440 (24 hours)."><Input type="number" min={5} max={1440} step={1} value={input.pendingMinutes} disabled={busy} onValueChange={(v) => set("pendingMinutes", Number(v))} /></Field>
-      <Field label="Approved validity (minutes)" description="1–60 minutes; default 15. Never extends the pending request's absolute expiry."><Input type="number" min={1} max={60} step={1} value={input.validMinutes} disabled={busy} onValueChange={(v) => set("validMinutes", Number(v))} /></Field>
-      <Field label="Approver user IDs" description="Optional active user UUIDs, one per line. Current eligibility and access are checked again at review and use."><Textarea value={users} disabled={busy} onChange={(e) => setUsers(e.target.value)} /></Field>
+      <Field label="Pending lifetime (minutes)" description="5–1440 minutes; default 1440 (24 hours).">
+        <Input type="number" min={5} max={1440} step={1} value={input.pendingMinutes} disabled={busy} onValueChange={(v) => set("pendingMinutes", Number(v))} />
+      </Field>
+      <Field label="Approved validity (minutes)" description="1–60 minutes; default 15. Never extends the pending request's absolute expiry.">
+        <Input type="number" min={1} max={60} step={1} value={input.validMinutes} disabled={busy} onValueChange={(v) => set("validMinutes", Number(v))} />
+      </Field>
+      <Field label="Approver user IDs" description="Optional active user UUIDs, one per line. Current eligibility and access are checked again at review and use.">
+        <Textarea value={users} disabled={busy} onChange={(e) => setUsers(e.target.value)} />
+      </Field>
       <Field label="Approver SSO groups" description="Optional exact group names, one per line; case matters. No comma splitting."><Textarea value={groups} disabled={busy} onChange={(e) => setGroups(e.target.value)} /></Field>
-      <p>Leave both approver fields empty to use the server team's active owners/admins. A non-requester platform-admin fallback applies only when there are no eligible primary reviewers. Gateway ownership is not review authority; no eligible reviewer means the call is refused.</p>
-      <Checkbox label="Allow requesting service account's owners/admins to review" description="Off by default. This is an explicit separation-of-duties exception, not permission for human self-approval." checked={input.allowServiceAccountAdmins} disabled={busy} onCheckedChange={(v) => set("allowServiceAccountAdmins", v)} />
-      <Alert tone="warning">{input.allowServiceAccountAdmins ? "Exception enabled: otherwise eligible owners/admins of the requesting service account may review its calls. Human requesters can never approve themselves." : "Separation of duties: requesting service account owners/admins are excluded from review, including fallback, unless you explicitly enable the exception above."}</Alert>
+      <p>
+        Leave both approver fields empty to use the server team's active owners/admins. A non-requester platform-admin fallback applies only when there are
+        no eligible primary reviewers. Gateway ownership is not review authority; no eligible reviewer means the call is refused.
+      </p>
+      <Checkbox
+        label="Allow requesting service account's owners/admins to review"
+        description="Off by default. This is an explicit separation-of-duties exception, not permission for human self-approval."
+        checked={input.allowServiceAccountAdmins}
+        disabled={busy}
+        onCheckedChange={(v) => set("allowServiceAccountAdmins", v)}
+      />
+      <Alert tone="warning">{input.allowServiceAccountAdmins
+        ? "Exception enabled: otherwise eligible owners/admins of the requesting service account may review its calls. Human requesters can never approve themselves."
+        : "Separation of duties: requesting service account owners/admins are excluded from review, including fallback, unless you explicitly enable the exception above."}</Alert>
     </FormSection>
   </FormPage>;
 }

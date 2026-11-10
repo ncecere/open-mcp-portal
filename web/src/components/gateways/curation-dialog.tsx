@@ -41,7 +41,17 @@ export function CurationDialog({ gateway, scope, current, capability, onClose }:
   const [stale, setStale] = useState(false);
   const [validation, setValidation] = useState<string | null>(null);
   const save = useMutation({
-    mutationFn: (curation: Policy | null) => setCapabilities(scope, gateway, seen.current.items.map((c) => ({ capabilityId: c.capabilityId, ...(c.minRole ? { minRole: c.minRole } : {}), ...(c.capabilityId === cap.capabilityId ? { curation, expectedFingerprint: cap.fingerprint } : {}) })), seen.current.revision),
+    mutationFn: (curation: Policy | null) =>
+      setCapabilities(
+        scope,
+        gateway,
+        seen.current.items.map((c) => ({
+          capabilityId: c.capabilityId,
+          ...(c.minRole ? { minRole: c.minRole } : {}),
+          ...(c.capabilityId === cap.capabilityId ? { curation, expectedFingerprint: cap.fingerprint } : {}),
+        })),
+        seen.current.revision,
+      ),
     onSuccess: (saved) => {
       qc.setQueryData(gatewayCapabilitiesQuery(scope, gateway.id).queryKey, saved);
       void qc.invalidateQueries({ queryKey: gatewayQuery(scope, gateway.id).queryKey });
@@ -59,7 +69,9 @@ export function CurationDialog({ gateway, scope, current, capability, onClose }:
   let previewError = "";
   try { policy = policyOf(name, description, choices, properties); if (!overrideDescription) policy.descriptionOverride = null; } catch (err) { previewError = (err as Error).message; }
   const disabled = save.isPending || stale || !cap.fingerprint;
-  return <FormDialog title={`Curate ${cap.exposedName}`} description="Only this gateway changes. Rewritten tool text is untrusted and can hide risk; constraints are not a substitute for upstream authorization." size="lg" onClose={onClose}
+  return <FormDialog title={`Curate ${cap.exposedName}`}
+    description="Only this gateway changes. Rewritten tool text is untrusted and can hide risk; constraints are not a substitute for upstream authorization."
+    size="lg" onClose={onClose}
     submitLabel={cap.stale ? "Review and resave policy" : "Save policy"} busy={save.isPending} submitDisabled={disabled || !policy}
     onSubmit={() => { if (disabled) return; if (!policy) { setValidation(previewError); return; } save.mutate(policy); }}>
     <div className={g.stack}>

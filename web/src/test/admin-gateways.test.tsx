@@ -15,7 +15,11 @@ const routes = (role: Staff = "platform_admin", g = platformGateway(), extra: Re
   "GET /v1/admin/gateways": () => page([g, gateway({ id: "g2", name: "Support tools", slug: "support-tools" })]),
   [`GET ${one}`]: () => g,
   [`GET ${one}/capabilities`]: () => gatewayCapabilities([gatewayCapability({ minRole: null })]),
-  [`GET ${one}/grants`]: () => [grant(), grant({ id: "g-user", subjectKind: "user", team: undefined, user: { id: user().id, email: user().email, displayName: user().displayName, status: "active" } }), grant({ id: "g-group", subjectKind: "group", team: undefined, group: "engineering" })],
+  [`GET ${one}/grants`]: () => [
+    grant(),
+    grant({ id: "g-user", subjectKind: "user", team: undefined, user: { id: user().id, email: user().email, displayName: user().displayName, status: "active" } }),
+    grant({ id: "g-group", subjectKind: "group", team: undefined, group: "engineering" }),
+  ],
   "GET /v1/admin/gateway-options": (_b, call) => optionsPage(gatewayOptions.filter((o) => o.source === "catalog"), call.search),
   "GET /v1/admin/teams": () => page([teamSummary()]),
   "GET /v1/admin/users": () => page([user()]),

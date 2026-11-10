@@ -203,7 +203,13 @@ export function CapabilityPicker({ gateway, scope, current, onDone }: Props) {
           </div>
           {current.items.some((c) => c.kind === "tool" && c.capabilityId in sel) && <section className={g.tight} aria-label="Selected tool policies">
             <p className={g.note}>Save selection changes before editing a tool policy.</p>
-            {current.items.filter((c) => c.kind === "tool" && c.capabilityId in sel).map((c) => <Button key={c.capabilityId} size="sm" variant="secondary" disabled={dirty || save.isPending || !!theirs} onClick={() => setCurating(c)}>Curate {c.exposedName}</Button>)}
+            {current.items
+              .filter((c) => c.kind === "tool" && c.capabilityId in sel)
+              .map((c) => (
+                <Button key={c.capabilityId} size="sm" variant="secondary" disabled={dirty || save.isPending || !!theirs} onClick={() => setCurating(c)}>
+                  Curate {c.exposedName}
+                </Button>
+              ))}
           </section>}
           {notOffered.length > 0 && (
             <section className={g.group} aria-labelledby="not-offered">

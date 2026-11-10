@@ -111,7 +111,17 @@ export function SettingsTab({ account, abilities }: Props) {
         />
       </SettingsSection>
       <SettingsSection title="Account tool ceiling" description="Applies immediately to every key together with its own ceiling. Everything on a key inherits this live limit.">
-        {canEdit ? <ScopeEditor key={scopeEditorKey} value={form.toolScope} onChange={(toolScope) => setForm((f) => ({ ...f, toolScope: scopeFormValue(toolScope) }))} onProblemChange={setScopeDraftProblem} disabled={save.isPending} /> : <ScopeBadges scope={account.toolScope} />}
+        {canEdit ? (
+          <ScopeEditor
+            key={scopeEditorKey}
+            value={form.toolScope}
+            onChange={(toolScope) => setForm((f) => ({ ...f, toolScope: scopeFormValue(toolScope) }))}
+            onProblemChange={setScopeDraftProblem}
+            disabled={save.isPending}
+          />
+        ) : (
+          <ScopeBadges scope={account.toolScope} />
+        )}
       </SettingsSection>
       {canEdit && <DeleteAccount account={account} />}
       <ConfirmMutationDialog

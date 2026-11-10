@@ -10,7 +10,8 @@ import styles from "./tool-scope.module.css";
 export type ToolScope = Schemas["ToolScope"] | null;
 const classes = ["read", "write", "destructive"] as const;
 const labels = { read: "Read", write: "Write", destructive: "Destructive" };
-export const scopeInheritance = "Everything means no restriction at this layer, not extra access. Owner, gateway, account and key limits still apply together; a tool must pass every applicable layer. Prompts and resources are unaffected.";
+export const scopeInheritance =
+  "Everything means no restriction at this layer, not extra access. Owner, gateway, account and key limits still apply together; a tool must pass every applicable layer. Prompts and resources are unaffected.";
 /** A stable form value, including when an API response omits empty arrays. */
 export function scopeFormValue(scope: ToolScope | undefined): ToolScope {
   return scope == null ? null : { classes: classes.filter((c) => scope.classes?.includes(c)), tools: [...new Set(scope.tools ?? [])].sort() };
@@ -65,7 +66,15 @@ export function ScopeEditor({ value, onChange, disabled = false, ceiling = null,
         setCustom(true);
         onChange({ ...value, classes: classes.filter((candidate) => candidate === c ? checked : value?.classes?.includes(candidate)) });
       }} />)}
-      {allowNames && <ScopeNames names={value?.tools ?? []} onChange={(tools) => { setCustom(true); onChange({ ...value, tools }); }} onProblemChange={(problem) => { if (problem) setCustom(true); onProblemChange?.(problem); }} disabled={disabled} error={scopeProblem(value)} />}
+      {allowNames && (
+        <ScopeNames
+          names={value?.tools ?? []}
+          onChange={(tools) => { setCustom(true); onChange({ ...value, tools }); }}
+          onProblemChange={(problem) => { if (problem) setCustom(true); onProblemChange?.(problem); }}
+          disabled={disabled}
+          error={scopeProblem(value)}
+        />
+      )}
     </>}
     <ScopeBadges scope={value} />
     {value !== null && !value.classes?.length && !value.tools?.length && <p>No tools. Prompts and resources are unaffected.</p>}

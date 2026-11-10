@@ -19,7 +19,10 @@ import s from "../shared.module.css";
 export function AccessRequestsPage() {
   const [view, setView] = useState("discover");
   return <Stack gap={6} className={s.page}>
-    <PageHeader title="Gateway access requests" description="Discover gateways that explicitly accept requests, follow your requests, or review requests for gateways you steward. Access never bypasses tool scopes, credentials or sensitive-call approvals." />
+    <PageHeader
+      title="Gateway access requests"
+      description="Discover gateways that explicitly accept requests, follow your requests, or review requests for gateways you steward. Access never bypasses tool scopes, credentials or sensitive-call approvals."
+    />
     <Tabs value={view} onValueChange={(v) => setView(String(v))}>
       <TabsList aria-label="Gateway access queues"><Tab value="discover">Request access</Tab><Tab value="requested">My requests</Tab><Tab value="review">Review requests</Tab></TabsList>
       <TabsPanel value={view}>{view === "discover" ? <Discover /> : <Queue key={view} view={view === "review" ? "review" : "requested"} />}</TabsPanel>
@@ -54,7 +57,9 @@ export function RequestDialog({ gateway, onClose }: { gateway: RequestableGatewa
     onSuccess: () => { void qc.invalidateQueries({ queryKey: accessRequestsKey }); onClose(); },
   });
   const busy = mutation.isPending;
-  return <FormDialog title={`Request access to ${gateway.name}`} description="Your reason is private to you and current reviewers. At most 10 requests can be pending; after a denial, wait 24 hours before requesting the same access again." onClose={onClose} busy={busy} closeDisabled={busy} submitLabel="Submit access request" onSubmit={() => {
+  return <FormDialog title={`Request access to ${gateway.name}`}
+    description="Your reason is private to you and current reviewers. At most 10 requests can be pending; after a denial, wait 24 hours before requesting the same access again."
+    onClose={onClose} busy={busy} closeDisabled={busy} submitLabel="Submit access request" onSubmit={() => {
     setSubmitted(true);
     if (!busy && reason.trim()) mutation.mutate({ gatewayId: gateway.id, reason: reason.trim(), ...(team ? { teamId: team } : {}) });
   }}>
@@ -62,7 +67,9 @@ export function RequestDialog({ gateway, onClose }: { gateway: RequestableGatewa
       <option value="">Myself</option>{teams.map((t) => <option key={t.id} value={t.id}>{t.name} (whole team)</option>)}
     </NativeSelect></Field>
     {team && <Alert tone="warning">A team grant covers all current and future members and the team's service accounts, not just you.</Alert>}
-    <Field label="Reason" description="Required, up to 1000 characters. Do not enter passwords, API keys or other secrets." error={submitted && !reason.trim() ? "Enter why you need access." : undefined}><Textarea required maxLength={1000} value={reason} disabled={busy} onChange={(e) => setReason(e.target.value)} /></Field>
+    <Field label="Reason" description="Required, up to 1000 characters. Do not enter passwords, API keys or other secrets." error={submitted && !reason.trim() ? "Enter why you need access." : undefined}>
+      <Textarea required maxLength={1000} value={reason} disabled={busy} onChange={(e) => setReason(e.target.value)} />
+    </Field>
     <ErrorAlert error={mutation.error} title="Couldn't request access" />
     {mutation.isSuccess && <p role="status">Request submitted. Follow it under My requests.</p>}
   </FormDialog>;

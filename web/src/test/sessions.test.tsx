@@ -9,8 +9,24 @@ import { mockApi, Reply, shellRoutes } from "./harness";
 import { renderApp } from "./render-app";
 
 const sessions: Schemas["BrowserSession"][] = [
-  { id: "11111111-1111-4111-8111-111111111111", createdAt: "2026-01-01T10:00:00Z", lastSeenAt: "2026-01-01T11:00:00Z", expiresAt: "2099-01-01T22:00:00Z", userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X) Chrome/120.0 Safari/537.36", clientIp: "192.0.2.10", current: true },
-  { id: "22222222-2222-4222-8222-222222222222", createdAt: "2026-01-01T10:00:00Z", lastSeenAt: "2026-01-01T10:30:00Z", expiresAt: "2099-01-01T22:00:00Z", userAgent: "Mozilla/5.0 (Windows NT 10.0) Firefox/120.0", clientIp: "198.51.100.8", current: false },
+  {
+    id: "11111111-1111-4111-8111-111111111111",
+    createdAt: "2026-01-01T10:00:00Z",
+    lastSeenAt: "2026-01-01T11:00:00Z",
+    expiresAt: "2099-01-01T22:00:00Z",
+    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X) Chrome/120.0 Safari/537.36",
+    clientIp: "192.0.2.10",
+    current: true,
+  },
+  {
+    id: "22222222-2222-4222-8222-222222222222",
+    createdAt: "2026-01-01T10:00:00Z",
+    lastSeenAt: "2026-01-01T10:30:00Z",
+    expiresAt: "2099-01-01T22:00:00Z",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0) Firefox/120.0",
+    clientIp: "198.51.100.8",
+    current: false,
+  },
 ];
 
 describe("Account › Sessions", () => {

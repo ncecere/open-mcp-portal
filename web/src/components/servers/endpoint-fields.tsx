@@ -19,10 +19,19 @@ export function EndpointFields({ value, onChange, server, primaryUrl, mode, bloc
   return (
     <SettingsSection title="Additional endpoints" description="Only this team's owners and admins configure extra replicas. The primary URL above stays canonical. Endpoint changes need catalog review when published.">
       <Alert tone="info" title="A fallback is not another approval">
-        Governed and NoReplay calls always use the primary, even if it cannot be reached. Ordinary calls share one original deadline and at most three forwarding iterations, not a retry budget per replica. Only matching trusted capability definitions may be used.
+        Governed and NoReplay calls always use the primary, even if it cannot be reached. Ordinary calls share one original deadline and at most three
+        forwarding iterations, not a retry budget per replica. Only matching trusted capability definitions may be used.
       </Alert>
-      <p className={m.muted}>At most two ordered extras. Each static endpoint needs its own explicitly entered credential; primary values are never inherited. A changed origin requires every value again. Disabling retains the encrypted credential and still requires a supported mode.</p>
-      {blocked && <Alert tone={value.length > 0 ? "danger" : "info"} title="This configuration cannot use extra endpoints">Only None or Static credential without a user-authorization requirement or TLS settings is supported. Remove all extras before choosing OAuth, per-person/provider credentials, the portal's OAuth client or TLS. Save removal of existing TLS before adding replicas.</Alert>}
+      <p className={m.muted}>
+        At most two ordered extras. Each static endpoint needs its own explicitly entered credential; primary values are never inherited.
+        A changed origin requires every value again. Disabling retains the encrypted credential and still requires a supported mode.
+      </p>
+      {blocked && (
+        <Alert tone={value.length > 0 ? "danger" : "info"} title="This configuration cannot use extra endpoints">
+          Only None or Static credential without a user-authorization requirement or TLS settings is supported. Remove all extras before choosing OAuth,
+          per-person/provider credentials, the portal's OAuth client or TLS. Save removal of existing TLS before adding replicas.
+        </Alert>
+      )}
       {value.length === 0 && <p className={m.muted}>No additional endpoints. Calls use the primary URL.</p>}
       {value.map((e, i) => (
         <fieldset key={e.key} className={m.part} aria-label={`Additional endpoint ${i + 1}`}>

@@ -33,8 +33,12 @@ export function CreateConnection({ team }: { team: string }) {
   return <Card title="Connect a shared account" description="The account you choose at the provider will be shared with the service accounts you explicitly assign afterwards, not your personal connection.">
     <form className={s.stack} onSubmit={(e) => { e.preventDefault(); start.mutate(); }}>
       <Field label="Connection name"><Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} /></Field>
-      <Select label="Auth provider or OAuth server" items={(providers.data ?? []).map((p) => ({ value: p.id, label: `${p.name}${p.kind === "mcp_server" ? " (server sign-in)" : ""}` }))} value={providerId} onValueChange={(v) => setProviderId(v ?? "")} required />
-      <Field label="Scopes" description="Space-separated; leave empty for provider defaults. Review these at the provider. Add server grants before reconnecting to request their required scopes."><Input value={scopes} onChange={(e) => setScopes(e.target.value)} /></Field>
+      <Select label="Auth provider or OAuth server"
+        items={(providers.data ?? []).map((p) => ({ value: p.id, label: `${p.name}${p.kind === "mcp_server" ? " (server sign-in)" : ""}` }))}
+        value={providerId} onValueChange={(v) => setProviderId(v ?? "")} required />
+      <Field label="Scopes" description="Space-separated; leave empty for provider defaults. Review these at the provider. Add server grants before reconnecting to request their required scopes.">
+        <Input value={scopes} onChange={(e) => setScopes(e.target.value)} />
+      </Field>
       <ErrorAlert error={providers.error ?? start.error} title="Couldn't start connecting" />
       <Button type="submit" loading={start.isPending} disabled={!providerId || !name.trim() || start.isSuccess}>Connect shared account</Button>
     </form>

@@ -38,10 +38,16 @@ function ScanningForm({ saved }: { saved: Schemas["ScanningSettings"] }) {
     onSuccess: (data) => { qc.setQueryData(settingsKey, data); void qc.invalidateQueries({ queryKey: ["definition-findings"] }); toast.success("Scanning settings saved"); },
     onError: (error) => { if (error instanceof ApiError && (error.status === 409 || error.status === 412)) void qc.invalidateQueries({ queryKey: settingsKey }); } });
   const conflict = save.error instanceof ApiError && save.error.status === 409;
-  return <SettingsPage dirty={form.definitionMode !== saved.definitionMode} canEdit={canEdit} revision={revision} saving={save.isPending} error={conflict ? undefined : save.error} onSave={() => save.mutate()} onDiscard={() => setForm({ definitionMode: saved.definitionMode })}>
+  return <SettingsPage dirty={form.definitionMode !== saved.definitionMode} canEdit={canEdit} revision={revision} saving={save.isPending}
+    error={conflict ? undefined : save.error} onSave={() => save.mutate()} onDiscard={() => setForm({ definitionMode: saved.definitionMode })}>
     <SettingsSection title="Scanning mode" description="Off disables scanning. Shadow records findings for human review without changing definitions or calls.">
       {conflict && <Alert tone="warning">Scanning settings changed elsewhere. Your changes weren't saved. Review the latest settings before saving again.</Alert>}
-      <Field label="Definition scanning mode"><NativeSelect disabled={!canEdit} value={form.definitionMode} onChange={(e) => setForm({ definitionMode: e.target.value as "off" | "shadow" })}><option value="off">Off</option><option value="shadow">Shadow</option></NativeSelect></Field>
+      <Field label="Definition scanning mode">
+        <NativeSelect disabled={!canEdit} value={form.definitionMode} onChange={(e) => setForm({ definitionMode: e.target.value as "off" | "shadow" })}>
+          <option value="off">Off</option>
+          <option value="shadow">Shadow</option>
+        </NativeSelect>
+      </Field>
     </SettingsSection>
   </SettingsPage>;
 }

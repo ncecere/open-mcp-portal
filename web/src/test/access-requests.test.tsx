@@ -92,7 +92,11 @@ describe("Gateway access requests", () => {
   it("hides cached private text on failed refresh and requires reload after a refused action", async () => {
     const u = userEvent.setup();
     let forbidden = false;
-    mockApi({ ...defaults(), [`GET ${base}`]: () => forbidden ? Reply.error(404, "access_request_not_found", "Private request unavailable") : receipt(), [`POST ${base}/decision`]: () => Reply.error(409, "request_decided", "Already decided") });
+    mockApi({
+      ...defaults(),
+      [`GET ${base}`]: () => forbidden ? Reply.error(404, "access_request_not_found", "Private request unavailable") : receipt(),
+      [`POST ${base}/decision`]: () => Reply.error(409, "request_decided", "Already decided"),
+    });
     const { qc } = renderApp(`/access-requests/${id}`);
     await u.click(await screen.findByRole("button", { name: "Approve gateway access" }));
     await screen.findByText(/Reload and review the request again/);

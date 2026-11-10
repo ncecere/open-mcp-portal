@@ -56,7 +56,12 @@ export function GovernanceCard({ server, scope, abilities }: Props) {
   // Sending the label the card shows, with the revision it shows, is the confirmation (nothing else is sent).
   const confirm = useMutation({
     mutationFn: async () =>
-      unwrap(await api.PATCH("/v1/teams/{team}/mcp-servers/{serverId}", { params: { path: { team: server.teamSlug, serverId: server.id }, header: ifMatch(server.revision) }, body: { governance: { sensitivity: g!.sensitivity } } })),
+      unwrap(
+        await api.PATCH("/v1/teams/{team}/mcp-servers/{serverId}", {
+          params: { path: { team: server.teamSlug, serverId: server.id }, header: ifMatch(server.revision) },
+          body: { governance: { sensitivity: g!.sensitivity } },
+        }),
+      ),
     onSuccess: (updated) => {
       storeServer(qc, updated);
       toast.success("Sensitivity confirmed", `${sensitivityLabels[updated.governance?.sensitivity ?? g!.sensitivity]} is now the label your team chose.`);

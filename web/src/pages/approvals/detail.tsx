@@ -79,7 +79,10 @@ function Review({ id }: { id: string }) {
     <PageHeader title={receipt.exposedName} description={`Approval ${receipt.id}`} />
     {receipt.stale && <Alert tone="warning" title="This review is stale">Policy, access or the call binding changed. This approval cannot authorize a call. Reload and review again.</Alert>}
     {expired && <Alert tone="warning" title="The displayed deadline has passed">Reload to check the current status. No decision can extend this deadline.</Alert>}
-    {receipt.status === "used" && <Alert tone="warning" title="Authorization spent — execution is not confirmed">An upstream result may be unknown, including after a lost response. Retrying may duplicate effects. Check the destination before explicitly requesting another attempt.</Alert>}
+    {receipt.status === "used" && <Alert tone="warning" title="Authorization spent — execution is not confirmed">
+      An upstream result may be unknown, including after a lost response. Retrying may duplicate effects.
+      Check the destination before explicitly requesting another attempt.
+    </Alert>}
     <Card title="Call receipt"><DescriptionList items={[
       { label: "Status", value: receipt.status === "used" ? "Authorization spent (used)" : receipt.status },
       { label: "Requester", value: `${receipt.requesterKind === "user" ? "User" : "Service account"}: ${receipt.requesterId}` },
@@ -107,11 +110,17 @@ function Review({ id }: { id: string }) {
       </Stack>
     </Card>}
     <Card title="Actions"><Stack gap={4}>
-      <p>Only currently eligible reviewers may decide. Human self-approval is never allowed. Service-account owner/admin eligibility, separation of duties and fallback are checked by the portal, not inferred from your platform role.</p>
+      <p>
+        Only currently eligible reviewers may decide. Human self-approval is never allowed. Service-account owner/admin eligibility,
+        separation of duties and fallback are checked by the portal, not inferred from your platform role.
+      </p>
       {conflict || reviewAgain ? <Alert tone="warning" title={conflict ? "Changed since review" : "Reload before another action"}>Reload the receipt and review it again. Nothing will be resubmitted automatically.</Alert> : null}
       <ErrorAlert error={mutation.error} title="Couldn't update approval" />
       <div className={a.actions}>
-        {receipt.canDecide && <><Button disabled={busy || reviewAgain || query.isFetching || expired || receipt.stale} onClick={() => act("approve")}>Approve exact call</Button><Button variant="danger" disabled={busy || reviewAgain || query.isFetching || expired || receipt.stale} onClick={() => act("deny")}>Deny</Button></>}
+        {receipt.canDecide && <>
+          <Button disabled={busy || reviewAgain || query.isFetching || expired || receipt.stale} onClick={() => act("approve")}>Approve exact call</Button>
+          <Button variant="danger" disabled={busy || reviewAgain || query.isFetching || expired || receipt.stale} onClick={() => act("deny")}>Deny</Button>
+        </>}
         {receipt.canCancel && <Button variant="secondary" disabled={busy || reviewAgain || query.isFetching} onClick={() => act("cancel")}>Cancel request</Button>}
         {receipt.canRenew && <Button variant="secondary" disabled={busy || reviewAgain || query.isFetching} onClick={() => act("renew")}>Request new attempt</Button>}
         <Button variant="secondary" disabled={busy || query.isFetching} onClick={() => void reload()}>Reload receipt</Button>

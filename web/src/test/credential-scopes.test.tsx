@@ -175,7 +175,11 @@ describe("Credential scope payloads and views", () => {
   it("shows connected app scopes, including old unrestricted fixtures, and labels scoped refusals", async () => {
     mockApi({
       ...shellRoutes(),
-      "GET /v1/me/oauth-grants": () => [oauthGrant({ toolScope: { classes: ["read"] } }), oauthGrant({ id: "empty", client: { ...oauthGrant().client, name: "No tools app" }, toolScope: {} }), oauthGrant({ id: "legacy", client: { ...oauthGrant().client, name: "Legacy app" } })],
+      "GET /v1/me/oauth-grants": () => [
+        oauthGrant({ toolScope: { classes: ["read"] } }),
+        oauthGrant({ id: "empty", client: { ...oauthGrant().client, name: "No tools app" }, toolScope: {} }),
+        oauthGrant({ id: "legacy", client: { ...oauthGrant().client, name: "Legacy app" } }),
+      ],
     });
     const { container } = renderApp("/settings/connected-apps");
     const table = await screen.findByRole("table", { name: "Your connected apps" });

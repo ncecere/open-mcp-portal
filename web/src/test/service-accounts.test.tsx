@@ -16,7 +16,17 @@ const platformGatewayId = "78787878-7878-4787-8787-787878787878";
 /** What the account can use: its team's gateway (one capability with its role) and a platform gateway granted to the team. */
 const accountGateways = [
   myGateway({ capabilityCount: 1 }),
-  myGateway({ id: platformGatewayId, slug: "company-search", name: "Company search", ownerKind: "platform", teamSlug: undefined, teamName: undefined, access: ["team_grant"], capabilityCount: 3, url: "https://mcp.example.com/mcp/company-search" }),
+  myGateway({
+    id: platformGatewayId,
+    slug: "company-search",
+    name: "Company search",
+    ownerKind: "platform",
+    teamSlug: undefined,
+    teamName: undefined,
+    access: ["team_grant"],
+    capabilityCount: 3,
+    url: "https://mcp.example.com/mcp/company-search",
+  }),
 ];
 
 const routes = (role: Role | null = "owner", sa = serviceAccount(), keys = [serviceAccountKey()], extra: Record<string, Handler> = {}, platformRole: Schemas["PlatformRole"] = "none"): Record<string, Handler> => ({
@@ -138,7 +148,9 @@ describe("Service account › Overview", () => {
     expect(own).toHaveTextContent("1 capability");
     expect(own).toHaveTextContent("2 more need credentials");
     expect(within(access).getByText("Company search").closest("tr")).not.toHaveTextContent(/person's account/);
-    expect(screen.getByText(/2 capabilities on these gateways need credentials not available to this service account/)).toHaveTextContent("Service accounts need an active team service connection assigned to them and explicitly allowed for this server and its scopes.");
+    expect(screen.getByText(/2 capabilities on these gateways need credentials not available to this service account/)).toHaveTextContent(
+      "Service accounts need an active team service connection assigned to them and explicitly allowed for this server and its scopes.",
+    );
     expect(await axe(container)).toHaveNoViolations();
   });
 

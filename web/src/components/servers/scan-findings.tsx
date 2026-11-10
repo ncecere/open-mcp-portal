@@ -58,7 +58,11 @@ export function ScanFindings({ scope, serverId, canRescan = false, capabilityId 
     {findings.isPending && <p role="status">Loading findings…</p>}
     <ErrorAlert error={findings.error} describe={describeScanError} onRetry={() => void findings.refetch()} />
     {findings.data?.length === 0 && <p>No capability definitions to scan.</p>}
-    {findings.data?.filter((c) => !capabilityId || c.capabilityId === capabilityId).map((c) => <section key={c.capabilityId} className={m.capability} aria-label={`Findings for ${caps.data?.find((cap) => cap.id === c.capabilityId)?.name ?? c.capabilityId}`}>
+    {findings.data?.filter((c) => !capabilityId || c.capabilityId === capabilityId).map((c) => <section
+      key={c.capabilityId}
+      className={m.capability}
+      aria-label={`Findings for ${caps.data?.find((cap) => cap.id === c.capabilityId)?.name ?? c.capabilityId}`}
+    >
       <h3>{caps.data?.find((cap) => cap.id === c.capabilityId)?.name ?? c.capabilityId}</h3>
       <CapabilityFindings scan={c.scan} />
     </section>)}

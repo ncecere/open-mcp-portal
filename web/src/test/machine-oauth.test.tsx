@@ -130,7 +130,14 @@ describe("Add MCP server: the portal's own OAuth client", () => {
     await u.click(screen.getByRole("button", { name: "Add server" }));
     await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
       authMode: "machine_oauth",
-      machineOAuth: { tokenUrl: "https://login.example.com/oauth/token", clientId: "portal-client", clientSecret: "very-secret-0001", tokenAuthMethod: "client_secret_basic", scopes: ["orders.read"], resource: "https://orders.example.com/mcp" },
+      machineOAuth: {
+        tokenUrl: "https://login.example.com/oauth/token",
+        clientId: "portal-client",
+        clientSecret: "very-secret-0001",
+        tokenAuthMethod: "client_secret_basic",
+        scopes: ["orders.read"],
+        resource: "https://orders.example.com/mcp",
+      },
     }));
     expect(JSON.stringify(calls.find((c) => c.method === "POST")?.body)).not.toContain("oauth\":");
   });

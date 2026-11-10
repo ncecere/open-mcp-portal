@@ -169,7 +169,12 @@ describe("Admin → Teams", () => {
 
   it("invites a dev persona's name@localhost as owner", async () => {
     const u = userEvent.setup();
-    const calls = mockApi(routes("platform_admin", { "GET /v1/admin/users": () => page([]), [`POST /v1/admin/teams/${team.slug}/owners`]: (): Schemas["MemberAddResult"] => ({ status: "invited", invite: invite({ email: "alex@localhost", role: "owner" }) }) }));
+    const calls = mockApi(
+      routes("platform_admin", {
+        "GET /v1/admin/users": () => page([]),
+        [`POST /v1/admin/teams/${team.slug}/owners`]: (): Schemas["MemberAddResult"] => ({ status: "invited", invite: invite({ email: "alex@localhost", role: "owner" }) }),
+      }),
+    );
     renderApp(`/admin/teams/${team.slug}?tab=members`);
     await u.click(await screen.findByRole("button", { name: "Assign owner" }));
     const dialog = await screen.findByRole("dialog", { name: "Assign an owner" });

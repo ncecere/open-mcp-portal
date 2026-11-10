@@ -26,7 +26,9 @@ async function rowMenu(u: ReturnType<typeof userEvent.setup>, name: string, item
 
 describe("Team settings › Notifications", () => {
   it("lists the destinations for owners and admins with health and host only, and no URL or secret anywhere", async () => {
-    mockApi(routes({ [`GET ${base}`]: () => [destination(), destination({ id: "d2", name: "Chat", format: "slack", urlDisplay: "https://hooks.slack.com/...", hasSecret: false, secretHint: "", health: { state: "failing", consecutiveFailures: 3, lastErrorClass: "connect", lastFailureAt: "2026-10-17T11:00:00Z", lastSuccessAt: null } })] }));
+    const failing = { state: "failing", consecutiveFailures: 3, lastErrorClass: "connect", lastFailureAt: "2026-10-17T11:00:00Z", lastSuccessAt: null } as const;
+    const slack = destination({ id: "d2", name: "Chat", format: "slack", urlDisplay: "https://hooks.slack.com/...", hasSecret: false, secretHint: "", health: failing });
+    mockApi(routes({ [`GET ${base}`]: () => [destination(), slack] }));
     const { container } = open();
     const table = await screen.findByRole("table", { name: "Webhook destinations" });
     const row = (await within(table).findByText("On-call webhook")).closest("tr")!;
@@ -92,7 +94,16 @@ describe("Team settings › Notifications", () => {
     await u.type(within(dialog).getByRole("textbox", { name: /URL/ }), "https://hooks.example.com/abc?token=1");
     await u.click(within(dialog).getByRole("checkbox", { name: /A server recovered/ }));
     await u.click(within(dialog).getByRole("button", { name: "Add destination" }));
-    await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toEqual({ name: "Pager", format: "json", url: "https://hooks.example.com/abc?token=1", events: ["server.unhealthy"], teamEvents: false, enabled: true }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === "POST")?.body).toEqual({
+        name: "Pager",
+        format: "json",
+        url: "https://hooks.example.com/abc?token=1",
+        events: ["server.unhealthy"],
+        teamEvents: false,
+        enabled: true,
+      }),
+    );
 
     const shown = await screen.findByRole("dialog", { name: "Pager was added" });
     expect(within(shown).getByText("Copy this signing secret now.")).toBeInTheDocument();
@@ -107,7 +118,8 @@ describe("Team settings › Notifications", () => {
 
   it("adds a Slack destination without a secret", async () => {
     const u = userEvent.setup();
-    const calls = mockApi(routes({ [`POST ${base}`]: () => new Reply(201, { data: { destination: destination({ name: "Chat", format: "slack", hasSecret: false }), secret: null } satisfies Schemas["NotificationDestinationCreated"] }) }));
+    const created = { destination: destination({ name: "Chat", format: "slack", hasSecret: false }), secret: null } satisfies Schemas["NotificationDestinationCreated"];
+    const calls = mockApi(routes({ [`POST ${base}`]: () => new Reply(201, { data: created }) }));
     open();
     await u.click(await screen.findByRole("button", { name: "Add destination" }));
     const dialog = await screen.findByRole("dialog", { name: "Add a webhook destination" });
@@ -192,7 +204,8 @@ describe("Team settings › Notifications", () => {
     const next = "ompwhs_" + "n".repeat(43);
     const calls = mockApi(
       routes({
-        [`POST ${base}/${destination().id}/rotate-secret`]: () => ({ destination: destination({ previousSecretExpiresAt: new Date(Date.now() + 86_400_000).toISOString() }), secret: next }) satisfies Schemas["NotificationDestinationSecret"],
+        [`POST ${base}/${destination().id}/rotate-secret`]: () =>
+          ({ destination: destination({ previousSecretExpiresAt: new Date(Date.now() + 86_400_000).toISOString() }), secret: next }) satisfies Schemas["NotificationDestinationSecret"],
       }),
     );
     open();

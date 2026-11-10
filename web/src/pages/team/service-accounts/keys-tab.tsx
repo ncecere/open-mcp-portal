@@ -57,7 +57,10 @@ const columns: DataTableColumn<ServiceAccountKey>[] = [
   { id: "status", header: "Status", accessor: (k) => keyStatusLabels[k.status], sortable: true, cell: (k) => <StatusBadge tone={keyStatusTone[k.status]}>{keyStatusLabels[k.status]}</StatusBadge> },
   { id: "toolScope", header: "Tool scope", cell: (k) => <ScopeBadges scope={k.toolScope} /> },
   { id: "gateways", header: "Gateways", accessor: (k) => keyScopeText(k), cell: (k) => <span className={k.gateways.length === 0 ? s.muted : undefined}>{keyScopeText(k)}</span> },
-  { ...timeColumn<ServiceAccountKey>("lastUsedAt", "Last used", (k) => k.lastUsedAt), cell: (k) => (k.lastUsedAt ? <span className={s.nowrap}><RelativeTime value={k.lastUsedAt} /></span> : <span className={s.muted}>Never</span>) },
+  {
+    ...timeColumn<ServiceAccountKey>("lastUsedAt", "Last used", (k) => k.lastUsedAt),
+    cell: (k) => (k.lastUsedAt ? <span className={s.nowrap}><RelativeTime value={k.lastUsedAt} /></span> : <span className={s.muted}>Never</span>),
+  },
   { id: "expiresAt", header: "Expires", accessor: (k) => new Date(k.expiresAt), sortable: true, cell: (k) => <Expiry k={k} /> },
   { ...timeColumn<ServiceAccountKey>("createdAt", "Created", (k) => k.createdAt), cell: (k) => <CellText primary={<RelativeTime value={k.createdAt} />} secondary={k.createdByName ?? undefined} />, defaultHiddenNarrow: true },
 ];

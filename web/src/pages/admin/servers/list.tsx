@@ -75,7 +75,18 @@ export function AdminServersPage() {
     queryFn: async ({ pageParam }) =>
       unwrap(
         await api.GET("/v1/admin/mcp-servers", {
-          params: { query: { q: q || undefined, publishState: publishState || undefined, changes: changes || undefined, team: team || undefined, provider: provider || undefined, authMode: authMode || undefined, cursor: pageParam, limit: 50 } },
+          params: {
+            query: {
+              q: q || undefined,
+              publishState: publishState || undefined,
+              changes: changes || undefined,
+              team: team || undefined,
+              provider: provider || undefined,
+              authMode: authMode || undefined,
+              cursor: pageParam,
+              limit: 50,
+            },
+          },
         }),
       ),
     initialPageParam: undefined as string | undefined,

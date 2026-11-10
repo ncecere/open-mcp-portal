@@ -23,7 +23,10 @@ const gatewayRows = (): Schemas["UsageReport"] =>
   });
 
 /** Answers by grouping, as the server would. */
-const answer = (_b: unknown, call: Call) => (call.search.get("groupBy") === "gateway" || call.search.get("groupBy") === "team" ? gatewayRows() : usageReport({ groupBy: (call.search.get("groupBy") ?? "day") as Schemas["UsageGroupBy"] }));
+const answer = (_b: unknown, call: Call) =>
+  call.search.get("groupBy") === "gateway" || call.search.get("groupBy") === "team"
+    ? gatewayRows()
+    : usageReport({ groupBy: (call.search.get("groupBy") ?? "day") as Schemas["UsageGroupBy"] });
 
 const requests = (calls: Call[], url = teamUsage) => calls.filter((c) => c.url === url);
 

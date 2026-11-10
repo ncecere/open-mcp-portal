@@ -68,7 +68,8 @@ function requirementErrors(r: RequirementForm, err: unknown, shown: boolean) {
 /** The saved message: what a new URL did (read again; back to review), or a wider requirement (back to review). */
 function savedMessage(before: McpServer, after: McpServer, urlChanged: boolean, caChanged = false, endpointsChanged = false) {
   if (before.publishState === "published" && after.publishState === "pending") {
-    toast.success("Server settings saved", `${after.name} left the catalog until a platform admin reviews ${urlChanged ? "its new URL" : caChanged ? "its new CA" : endpointsChanged ? "its additional destinations" : "what it now receives"}.`);
+    const what = urlChanged ? "its new URL" : caChanged ? "its new CA" : endpointsChanged ? "its additional destinations" : "what it now receives";
+    toast.success("Server settings saved", `${after.name} left the catalog until a platform admin reviews ${what}.`);
   } else if (urlChanged && after.lastRefreshError) {
     toast.warning("Server settings saved", "Its capabilities couldn't be read from the new URL. See the Overview tab.");
   } else {
@@ -111,7 +112,8 @@ export function useServerSettingsForm({ server, scope, abilities }: Options) {
             enabled: form.enabled,
             ...protectionBody(form.protection, saved.protection),
             ...authBody,
-            ...(endpointBody === undefined ? {} : { endpoints: endpointBody }),            ...(requirement === undefined ? {} : { requirement }),
+            ...(endpointBody === undefined ? {} : { endpoints: endpointBody }),
+            ...(requirement === undefined ? {} : { requirement }),
             ...(tlsBody(tlsForm) ? { tls: tlsBody(tlsForm) } : {}),
             ...(form.capturePayloads !== saved.capturePayloads ? { capturePayloads: form.capturePayloads } : {}),
           },

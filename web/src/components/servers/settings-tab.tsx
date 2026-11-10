@@ -140,9 +140,22 @@ export function ServerSettingsTab({ server, scope, abilities }: Props) {
         <TimeoutField {...fields} />
         <EnabledSwitch {...fields} />
       </SettingsSection>
-      <EndpointFields value={form.endpoints} onChange={(endpoints) => set({ endpoints })} server={server} primaryUrl={form.url} mode={form.upstream.mode} blocked={endpointBlocked} disabled={!canEdit || !abilities.canManage} submitted={submitted} dev={dev} />
+      <EndpointFields
+        value={form.endpoints}
+        onChange={(endpoints) => set({ endpoints })}
+        server={server}
+        primaryUrl={form.url}
+        mode={form.upstream.mode}
+        blocked={endpointBlocked}
+        disabled={!canEdit || !abilities.canManage}
+        submitted={submitted}
+        dev={dev}
+      />
       <ServerProtectionFields value={form.protection} onChange={(protection) => set({ protection })} disabled={!canEdit || !abilities.canManage} submitted={submitted} error={save.error} />
-      <SettingsSection title="Authentication" description="How the portal proves itself to the server: nothing, a static credential of headers, a token, Basic or a query key (stored encrypted), each person's own key, the portal's own OAuth client, or each person's own OAuth sign-in.">
+      <SettingsSection
+        title="Authentication"
+        description="How the portal proves itself to the server: nothing, a static credential of headers, a token, Basic or a query key (stored encrypted), each person's own key, the portal's own OAuth client, or each person's own OAuth sign-in."
+      >
         <AuthModeFields
           team={server.teamSlug}
           url={form.url}

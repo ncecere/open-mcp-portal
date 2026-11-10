@@ -46,7 +46,11 @@ function Rules({ team, canWrite }: { team?: string; canWrite: boolean }) {
   });
   const writable = (r: ApprovalRule) => canWrite && (team !== undefined || (r.teamId === null && r.targetKind === "gateway"));
   return <Stack gap={6} className={s.page}>
-    <PageHeader title="Approval rules" description={team ? "Require human review for this team's exact tool calls." : "Portal-wide rule metadata. Platform rule writes are limited to platform-owned gateways; team rules must be managed with team owner/admin membership."} actions={canWrite ? <Button onClick={() => setEditing("new")}>Create approval rule</Button> : undefined} />
+    <PageHeader title="Approval rules"
+      description={team
+        ? "Require human review for this team's exact tool calls."
+        : "Portal-wide rule metadata. Platform rule writes are limited to platform-owned gateways; team rules must be managed with team owner/admin membership."}
+      actions={canWrite ? <Button onClick={() => setEditing("new")}>Create approval rule</Button> : undefined} />
     {!canWrite && <Alert tone="info">Read-only. Team rule writes require active owner/admin membership; platform oversight alone never grants team write access.</Alert>}
     <p>Server rules win over gateway rules. In each tier, a specific capability wins over a class selector. Overlapping rules at equal priority are rejected. Rules never grant tool access.</p>
     <div className={a.actions}><Button variant="secondary" disabled={query.isFetching || remove.isPending} onClick={() => { pager.reset(); void query.refetch(); }}>Reload rules</Button></div>
@@ -61,14 +65,20 @@ function Rules({ team, canWrite }: { team?: string; canWrite: boolean }) {
         <p className={a.digest}>{r.enabled ? "Enabled" : "Disabled"} · {r.targetKind}: {r.targetId} · revision {r.revision}</p>
         <p>{r.capabilityId ? `Tool capability: ${r.capabilityId}` : `Classes: ${r.classes.join(", ")}`}</p>
         <p>Pending: {r.pendingMinutes} minutes · Approved: {r.validMinutes} minutes</p>
-        <p>{r.approvers.length ? r.approvers.map((x) => x.kind === "user" ? `User ${x.userId}` : `SSO group ${x.groupName}`).join(" · ") : "Reviewers: server team's active owners/admins (eligibility and fallback checked by the portal)"}</p>
+        <p>{r.approvers.length
+          ? r.approvers.map((x) => x.kind === "user" ? `User ${x.userId}` : `SSO group ${x.groupName}`).join(" · ")
+          : "Reviewers: server team's active owners/admins (eligibility and fallback checked by the portal)"}</p>
         <p>Service-account owner/admin exception: {r.allowServiceAccountAdmins ? "enabled" : "off"}</p>
         {!team && r.teamId && <p className={s.note}>Team-owned rule · team {r.teamId}. Open the team's Approval rules page to manage it with owner/admin membership.</p>}
       </Stack>
     </Card>)}
     <PagerBar pager={pager} pageSize={25} shown={query.data?.items.length ?? 0} nextCursor={query.data?.nextCursor} label="Approval rule pages" />
     {editing && canWrite && <RuleEditor team={team} rule={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} />}
-    <ConfirmMutationDialog target={deleting} mutation={remove} onClose={() => setDeleting(null)} title="Delete approval rule?" description={deletedConflict ? "This revision changed. Close this dialog, reload the rules and review again before deleting." : `Delete ${deleting?.name ?? "this rule"}? Policy changes invalidate existing approvals. This does not undo an already authorized dispatch.`} confirmLabel={deletedConflict ? "Reload rules" : "Delete rule"} tone={deletedConflict ? "primary" : "danger"} onConfirm={(r) => {
+    <ConfirmMutationDialog target={deleting} mutation={remove} onClose={() => setDeleting(null)} title="Delete approval rule?"
+      description={deletedConflict
+        ? "This revision changed. Close this dialog, reload the rules and review again before deleting."
+        : `Delete ${deleting?.name ?? "this rule"}? Policy changes invalidate existing approvals. This does not undo an already authorized dispatch.`}
+      confirmLabel={deletedConflict ? "Reload rules" : "Delete rule"} tone={deletedConflict ? "primary" : "danger"} onConfirm={(r) => {
       if (remove.isPending) return;
       if (deletedConflict) { setDeleting(null); remove.reset(); void query.refetch(); return; }
       remove.mutate({ team, id: r.id, revision: r.revision });

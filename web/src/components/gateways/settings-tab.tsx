@@ -155,7 +155,9 @@ export function GatewaySettingsTab({ gateway, scope, abilities }: Props) {
         mutation={save}
         onConfirm={() => save.mutate()}
         title={`Record what's sent through ${gateway.name}?`}
-        description={`${captureWhat} ${gateway.ownerKind === "team" ? `Readable by ${gateway.teamName ?? "the team"}'s owners and admins and by platform admins and auditors; every view is audited.` : captureWho} ${kept ?? keptFallback} Everyone who uses the gateway is told it records.${
+        description={`${captureWhat} ${
+          gateway.ownerKind === "team" ? `Readable by ${gateway.teamName ?? "the team"}'s owners and admins and by platform admins and auditors; every view is audited.` : captureWho
+        } ${kept ?? keptFallback} Everyone who uses the gateway is told it records.${
           gateway.enabled && !form.enabled ? " The gateway is also turned off." : ""
         }`}
         confirmLabel="Record call contents"
@@ -179,7 +181,11 @@ export function GatewaySettingsTab({ gateway, scope, abilities }: Props) {
 /** The saved toast's detail: what the switch, the limit or recording now do. */
 function savedNote(before: Gateway, after: Gateway) {
   if (after.enabled !== before.enabled) return after.enabled ? "The gateway is on." : "The gateway is off: its endpoint answers “not found”.";
-  if (after.capturePayloads !== before.capturePayloads) return after.capturePayloads ? "It records call contents from the next call." : "It no longer records call contents. Recordings already made are kept for their retention period.";
+  if (after.capturePayloads !== before.capturePayloads) {
+    return after.capturePayloads
+      ? "It records call contents from the next call."
+      : "It no longer records call contents. Recordings already made are kept for their retention period.";
+  }
   if (after.rateLimitPerMinute !== before.rateLimitPerMinute && after.effectiveRateLimitPerMinute !== undefined) return `Rate limit now: ${rateText(after.effectiveRateLimitPerMinute)}.`;
   return undefined;
 }

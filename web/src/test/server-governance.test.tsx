@@ -74,7 +74,8 @@ describe("Governance card", () => {
   });
 
   it("shows a deprecation banner on every tab, with the sunset date and the replacement", async () => {
-    mockApi(routes("member", () => mcpServer({ governance: gov({ lifecycle: "deprecated", sunsetAt: "2027-01-15T12:00:00Z", replacement: { id: "x", slug: "next", name: "Status next", teamSlug: team.slug, teamName: team.name } }) })));
+    const replacement = { id: "x", slug: "next", name: "Status next", teamSlug: team.slug, teamName: team.name };
+    mockApi(routes("member", () => mcpServer({ governance: gov({ lifecycle: "deprecated", sunsetAt: "2027-01-15T12:00:00Z", replacement }) })));
     renderApp(`${record}?tab=health`);
     const banner = await screen.findByText("Service status is deprecated");
     expect(banner.closest("[role=status]")).toHaveTextContent(/stops being served on/);
@@ -164,7 +165,19 @@ describe("Server transfers", () => {
     const u = userEvent.setup();
     const calls = mockApi(
       routes("admin", () => mcpServer({ governance: gov() }), {
-        [`POST ${base}/transfer`]: () => ({ id: "t1", serverId, serverSlug: "service-status", serverName: "Service status", fromTeamSlug: team.slug, fromTeamName: team.name, toTeamSlug: "data", toTeamName: "Data", state: "pending", requestedAt: "2026-10-30T10:00:00Z", revision: 1 }),
+        [`POST ${base}/transfer`]: () => ({
+          id: "t1",
+          serverId,
+          serverSlug: "service-status",
+          serverName: "Service status",
+          fromTeamSlug: team.slug,
+          fromTeamName: team.name,
+          toTeamSlug: "data",
+          toTeamName: "Data",
+          state: "pending",
+          requestedAt: "2026-10-30T10:00:00Z",
+          revision: 1,
+        }),
       }),
     );
     renderApp(record);
@@ -193,7 +206,21 @@ describe("Server transfers", () => {
     await waitFor(() => expect(calls.find((c) => c.method === "DELETE")?.headers.get("If-Match")).toBe('"3"'));
   });
 
-  const incoming = { id: "t9", serverId: "s9", serverSlug: "billing", serverName: "Billing", fromTeamSlug: "fin", fromTeamName: "Finance", toTeamSlug: team.slug, toTeamName: team.name, state: "pending", requestedByName: "Fia", note: "please take it", requestedAt: "2026-10-29T10:00:00Z", revision: 1 };
+  const incoming = {
+    id: "t9",
+    serverId: "s9",
+    serverSlug: "billing",
+    serverName: "Billing",
+    fromTeamSlug: "fin",
+    fromTeamName: "Finance",
+    toTeamSlug: team.slug,
+    toTeamName: team.name,
+    state: "pending",
+    requestedByName: "Fia",
+    note: "please take it",
+    requestedAt: "2026-10-29T10:00:00Z",
+    revision: 1,
+  };
 
   it("shows the receiving team's owner what is offered and accepts with the transfer's revision", async () => {
     const u = userEvent.setup();
@@ -231,7 +258,14 @@ describe("Server transfers", () => {
 
 describe("Catalog", () => {
   it("shows the sensitivity and a deprecation banner with the replacement, never the owner or contact", async () => {
-    const server = catalogServer({ governance: { sensitivity: "confidential", lifecycle: "deprecated", sunsetAt: "2027-02-01T00:00:00Z", replacement: { id: "r", slug: "next", name: "Status next", teamSlug: "ops", teamName: "Ops" } } });
+    const server = catalogServer({
+      governance: {
+        sensitivity: "confidential",
+        lifecycle: "deprecated",
+        sunsetAt: "2027-02-01T00:00:00Z",
+        replacement: { id: "r", slug: "next", name: "Status next", teamSlug: "ops", teamName: "Ops" },
+      },
+    });
     mockApi({ ...shellRoutes("none", null), [`GET /v1/catalog/servers/${serverId}`]: () => ({ server, capabilities: [] }) });
     const { container } = renderApp(`/catalog/${serverId}`);
     expect(await screen.findByText("Service status is deprecated")).toBeInTheDocument();
@@ -254,7 +288,14 @@ describe("Words", () => {
   });
 
   it("words the three new attention kinds", () => {
-    const item = (kind: Schemas["AttentionKind"], extra: Partial<Schemas["AttentionItem"]> = {}): Schemas["AttentionItem"] => ({ kind, severity: "warning", summary: "s", subject: { id: "1", name: "Billing" }, team: { id: "t", slug: "fin", name: "Finance" }, ...extra });
+    const item = (kind: Schemas["AttentionKind"], extra: Partial<Schemas["AttentionItem"]> = {}): Schemas["AttentionItem"] => ({
+      kind,
+      severity: "warning",
+      summary: "s",
+      subject: { id: "1", name: "Billing" },
+      team: { id: "t", slug: "fin", name: "Finance" },
+      ...extra,
+    });
     expect(wordsFor(item("review_due")).title).toBe("The review of Billing of Finance is overdue");
     expect(wordsFor(item("server_ownerless")).title).toBe("Billing of Finance has nobody accountable for it");
     expect(wordsFor(item("server_transfer_pending", { count: 2 })).title).toBe("2 server transfers waiting for your team's owners to accept");

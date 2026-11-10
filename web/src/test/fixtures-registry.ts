@@ -68,7 +68,14 @@ export const capability = (extra: Partial<Schemas["McpCapability"]> = {}): Schem
 export const capabilities: Schemas["McpCapability"][] = [
   capability(),
   capability({ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "restart", title: "", description: "Restarts a service.", definition: { name: "restart", annotations: { destructiveHint: true } }, suggestedClass: "destructive" }),
-  capability({ id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", kind: "resource", name: "status://all", title: "All services", description: "Every service's status.", definition: { uri: "status://all", mimeType: "application/json" } }),
+  capability({
+    id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    kind: "resource",
+    name: "status://all",
+    title: "All services",
+    description: "Every service's status.",
+    definition: { uri: "status://all", mimeType: "application/json" },
+  }),
   capability({ id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", kind: "prompt", name: "incident_summary", title: "Incident summary", description: "Summarise an incident.", definition: { name: "incident_summary" } }),
 ];
 

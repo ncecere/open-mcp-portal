@@ -29,10 +29,19 @@ function Queue({ view }: { view: "actionable" | "requested" }) {
   if (query.error) return <ErrorAlert error={query.error} title="Couldn't load approvals" />;
   const page = query.data;
   return <Stack gap={4}>
-    <p className={s.note}>{view === "actionable" ? "Requests you can act on now. Eligibility is checked again when you decide." : "Requests made by you or service accounts you control."} Open a request to review its receipt; previews are never shown in this queue.</p>
+    <p className={s.note}>
+      {view === "actionable"
+        ? "Requests you can act on now. Eligibility is checked again when you decide."
+        : "Requests made by you or service accounts you control."}{" "}
+      Open a request to review its receipt; previews are never shown in this queue.
+    </p>
     {page?.items.length === 0 && <p>No {view} approvals.</p>}
     {page?.items.map((r) => <Card key={r.id} title={<Link to="/approvals/$approvalId" params={{ approvalId: r.id }}>{r.exposedName}</Link>}>
-      <div className={a.summary}><span>{r.status === "used" ? "Authorization spent" : r.status}{r.stale ? " · Stale" : ""}</span><span>{r.toolClass ?? "Unclassified"}</span><span>Expires {new Date(r.expiresAt).toLocaleString()}</span></div>
+      <div className={a.summary}>
+        <span>{r.status === "used" ? "Authorization spent" : r.status}{r.stale ? " · Stale" : ""}</span>
+        <span>{r.toolClass ?? "Unclassified"}</span>
+        <span>Expires {new Date(r.expiresAt).toLocaleString()}</span>
+      </div>
       <p className={s.secondary}>{r.requesterKind === "user" ? "User" : "Service account"}: {r.requesterId}</p>
     </Card>)}
     <PagerBar pager={pager} pageSize={25} shown={page?.items.length ?? 0} nextCursor={page?.nextCursor} label="Approval pages" />
