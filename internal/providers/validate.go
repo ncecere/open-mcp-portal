@@ -73,8 +73,24 @@ func checkLogo(raw string) error {
 	return nil
 }
 
-// validate checks a provider's settings and normalizes them.
+// validate checks a provider's settings and normalizes them: the client, then
+// the URLs, then scopes and how they are sent, then extra parameters.
 func (s *Service) validate(ctx context.Context, f *fields) error {
+	if err := validateClient(f); err != nil {
+		return err
+	}
+	if err := s.normalizeURLs(ctx, f); err != nil {
+		return err
+	}
+	if err := validateScopeSettings(f); err != nil {
+		return err
+	}
+	return validateParams(f)
+}
+
+// validateClient checks the name, client ID, preset, token endpoint
+// authentication method and client secret.
+func validateClient(f *fields) error {
 	f.name = strings.TrimSpace(f.name)
 	if n := len([]rune(f.name)); n < 1 || n > 100 {
 		return apperr.Invalid("invalid_name", "Name must be 1-100 characters")
@@ -106,6 +122,11 @@ func (s *Service) validate(ctx context.Context, f *fields) error {
 	if f.method != AuthNone && !hasSecret {
 		return unprocessable("client_secret_required", "Enter the client secret (or use tokenAuthMethod none with PKCE)", nil)
 	}
+	return nil
+}
+
+// normalizeURLs normalizes the provider's endpoint URLs and checks the logo.
+func (s *Service) normalizeURLs(ctx context.Context, f *fields) error {
 	for _, u := range []struct {
 		field string
 		raw   *string
@@ -124,6 +145,12 @@ func (s *Service) validate(ctx context.Context, f *fields) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// validateScopeSettings normalizes the scopes and checks the scope parameter,
+// separator and token response format.
+func validateScopeSettings(f *fields) error {
 	scopes, err := registry.NormalizeScopes(f.scopes)
 	if err != nil {
 		return err
@@ -138,6 +165,11 @@ func (s *Service) validate(ctx context.Context, f *fields) error {
 	if f.format != FormatStandard && f.format != FormatSlackAuthedUser {
 		return apperr.Invalid("invalid_token_response_format", "tokenResponseFormat must be standard or slack_authed_user")
 	}
+	return nil
+}
+
+// validateParams checks the extra authorization parameters.
+func validateParams(f *fields) error {
 	if len(f.params) > maxExtraParams {
 		return unprocessable("invalid_param", "At most 10 extra authorization parameters", map[string]any{"reason": "too_many"})
 	}
