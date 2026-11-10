@@ -158,7 +158,9 @@ export function ConfirmBody({ request: r, titleId, email, start, allow, leaving 
         )}
       </section>
       <Alert tone="info">
-        The portal keeps the token and sends it only to {server ? p : serverName ? `servers you allow, starting with ${serverName}, and only while it stays at its current address` : `the server behind ${r.capability.exposedName}`}. Your AI client and its model never see it. Disconnect any time
+        The portal keeps the token and sends it only to{" "}
+        {server ? p : serverName ? `servers you allow, starting with ${serverName}, and only while it stays at its current address` : `the server behind ${r.capability.exposedName}`}.
+        Your AI client and its model never see it. Disconnect any time
         from <TextLink render={<Link to="/settings/connections" target="_blank" rel="noreferrer" />}>
           Account › My connections<VisuallyHidden> (opens in a new tab)</VisuallyHidden>
         </TextLink>

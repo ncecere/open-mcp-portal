@@ -13,7 +13,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { api, ifMatch, unwrap } from "@/api/client";
-import { adminAuthProviderAccessQuery, adminAuthProviderQuery, adminAuthProvidersKey } from "@/api/queries";
+import { adminAuthProviderAccessQuery, adminAuthProviderQuery, adminAuthProvidersKey, adminTeamOptionsQuery } from "@/api/queries";
 import { type AccessMode, type AuthProvider, type AuthProviderAccess } from "@/components/providers/labels";
 import { useRevisionForm } from "@/components/templates/revision-form";
 import { SettingsPage, SettingsSection } from "@/components/templates/settings-page";
@@ -48,11 +48,8 @@ export function ProviderAccessTab({ provider }: { provider: AuthProvider }) {
 }
 
 function useTeamOptions(): ComboboxOption[] {
-  const teams = useQuery({
-    queryKey: ["admin", "teams", "access-options"],
-    queryFn: async () => unwrap(await api.GET("/v1/admin/teams", { params: { query: { limit: 200 } } })),
-  });
-  return (teams.data?.items ?? []).map((t) => ({ value: t.team.id, label: t.team.name, hint: t.team.slug }));
+  const teams = useQuery({ ...adminTeamOptionsQuery(), select: (p): ComboboxOption[] => p.items.map((t) => ({ value: t.team.id, label: t.team.name, hint: t.team.slug })) });
+  return teams.data ?? [];
 }
 
 function useServerOptions(text: string): ComboboxOption[] {

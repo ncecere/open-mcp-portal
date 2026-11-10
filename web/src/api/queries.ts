@@ -51,11 +51,17 @@ export const adminServerQuery = (serverId: string) =>
     queryFn: async () => unwrap(await api.GET("/v1/admin/mcp-servers/{serverId}", { params: { path: { serverId } } })),
   });
 
-/** Servers waiting for review, counted up to a page ("200+" past it). Admin's MCP servers page and its sidebar item. */
+/**
+ * Servers waiting for review, counted up to a page ("200+" past it). Admin's MCP servers page and its sidebar item.
+ * Fresh for a minute, so moving between Admin pages doesn't ask again each time; every change to a server made here
+ * invalidates it (invalidateServer, servers/scope.ts). Not the overview's review_pending total: that one leaves out
+ * archived teams' servers, which this list (and the "Waiting for review" filter it links to) includes.
+ */
 export const pendingReviewsQuery = () =>
   queryOptions({
     queryKey: [...adminServersKey, "pending-count"],
     queryFn: async () => unwrap(await api.GET("/v1/admin/mcp-servers", { params: { query: { publishState: "pending", limit: 200 } } })),
+    staleTime: 60_000,
     select: (p) => ({ count: p.items.length, more: Boolean(p.nextCursor) }),
   });
 
@@ -73,6 +79,18 @@ export const adminTeamQuery = (team: string) =>
   queryOptions({
     queryKey: ["admin", "team", team],
     queryFn: async () => unwrap(await api.GET("/v1/admin/teams/{team}", { params: { path: { team } } })),
+  });
+
+/**
+ * Every team (the first 200, any status) for Admin's team filters and pickers: one request under one key, shaped
+ * per use with `select`. Fresh for a minute, so moving between the lists doesn't ask again; creating a team
+ * invalidates ["admin", "teams"], and renaming or archiving one invalidates ["admin"].
+ */
+export const adminTeamOptionsQuery = () =>
+  queryOptions({
+    queryKey: ["admin", "teams", "options"],
+    queryFn: async () => unwrap(await api.GET("/v1/admin/teams", { params: { query: { limit: 200 } } })),
+    staleTime: 60_000,
   });
 
 /* ---------------- gateways (the record pages and their breadcrumbs) ---------------- */

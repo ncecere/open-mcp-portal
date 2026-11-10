@@ -7,7 +7,8 @@ import userEvent from "@testing-library/user-event";
 import type { Schemas } from "../api/client";
 import { identitySentLabel } from "../components/gateways/labels";
 import { capabilities, mcpCall, mcpServer, page, serverId, team, teamPublishing, healthCheck } from "./fixtures";
-import { type Call, type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Call, type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/mcp-servers`;
 const created: Schemas["McpServerCreated"] = {

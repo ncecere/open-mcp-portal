@@ -10,7 +10,8 @@ import type { Schemas } from "../api/client";
 import { serverChangeWidens, widens } from "../components/servers/requirement";
 import { capabilities, capability, healthCheck, mcpServer, page, serverId, team, teamPublishing } from "./fixtures";
 import { googleId, providerId, providerSummaries, requires, serverRequirement } from "./fixtures-providers";
-import { type Call, type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Call, type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 type McpServer = Schemas["McpServer"];
 const base = `/v1/teams/${team.slug}/mcp-servers`;

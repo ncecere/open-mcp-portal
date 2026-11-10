@@ -5,7 +5,8 @@ import type { Schemas } from "../api/client";
 import { teamServerQuery } from "../api/queries";
 import { lowersClass } from "../components/servers/classification";
 import { capabilities, capability, healthCheck, mcpServer, serverId, team, teamPublishing } from "./fixtures";
-import { type Handler, mockApi, renderApp, Reply, shellRoutes } from "./harness";
+import { type Handler, mockApi, Reply, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/mcp-servers/${serverId}`;
 const record = `/teams/${team.slug}/servers/${serverId}?tab=capabilities`;

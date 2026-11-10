@@ -2,7 +2,8 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { axe } from "vitest-axe";
 import { gatewayCapability, gatewayId, myGateway, team } from "./fixtures";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const platform = myGateway({
   id: "g-platform",

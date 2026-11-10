@@ -13,7 +13,8 @@ import { authModeLabels, authChange, upstreamFormOf, type AuthMode } from "../co
 import { settingsAuthBody } from "../components/servers/settings-auth";
 import { newPart } from "../components/servers/credentials";
 import { capabilities, healthCheck, mcpServer, page, serverId, team, teamPublishing } from "./fixtures";
-import { type Handler, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 type McpServer = Schemas["McpServer"];
 const base = `/v1/teams/${team.slug}/mcp-servers`;

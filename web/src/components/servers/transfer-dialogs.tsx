@@ -38,7 +38,12 @@ export function RequestTransferDialog({ server, onClose }: { server: McpServer; 
   const [note, setNote] = useState("");
   const send = useMutation({
     mutationFn: async () =>
-      unwrap(await api.POST("/v1/teams/{team}/mcp-servers/{serverId}/transfer", { params: { path: { team: server.teamSlug, serverId: server.id } }, body: { toTeam: toTeam.trim(), ...(note.trim() ? { note: note.trim() } : {}) } })),
+      unwrap(
+        await api.POST("/v1/teams/{team}/mcp-servers/{serverId}/transfer", {
+          params: { path: { team: server.teamSlug, serverId: server.id } },
+          body: { toTeam: toTeam.trim(), ...(note.trim() ? { note: note.trim() } : {}) },
+        }),
+      ),
     onSuccess: (t) => {
       invalidateServer(qc, server);
       void qc.invalidateQueries({ queryKey: transfersKey });

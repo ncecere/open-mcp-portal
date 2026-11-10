@@ -11,7 +11,8 @@ import type { Schemas } from "../api/client";
 import { type MachineConfig, type MachineForm, blankMachine, machineChanges, machineFormOf, machineInput, machineProblems, machineReview, secretWhy } from "../components/servers/machine-auth";
 import { capabilities, healthCheck, mcpServer, page, serverId, team, teamPublishing } from "./fixtures";
 import { detectResult } from "./fixtures-oauth";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/mcp-servers`;
 const record = `/teams/${team.slug}/servers/${serverId}`;
@@ -129,7 +130,14 @@ describe("Add MCP server: the portal's own OAuth client", () => {
     await u.click(screen.getByRole("button", { name: "Add server" }));
     await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
       authMode: "machine_oauth",
-      machineOAuth: { tokenUrl: "https://login.example.com/oauth/token", clientId: "portal-client", clientSecret: "very-secret-0001", tokenAuthMethod: "client_secret_basic", scopes: ["orders.read"], resource: "https://orders.example.com/mcp" },
+      machineOAuth: {
+        tokenUrl: "https://login.example.com/oauth/token",
+        clientId: "portal-client",
+        clientSecret: "very-secret-0001",
+        tokenAuthMethod: "client_secret_basic",
+        scopes: ["orders.read"],
+        resource: "https://orders.example.com/mcp",
+      },
     }));
     expect(JSON.stringify(calls.find((c) => c.method === "POST")?.body)).not.toContain("oauth\":");
   });

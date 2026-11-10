@@ -4,7 +4,7 @@
  */
 import { History, KeyRound, Pencil, Send, Trash2 } from "lucide-react";
 import { ActionMenu, type ActionItem } from "../../templates/action-menu";
-import { RelativeTime } from "../../templates/list-page";
+import { RelativeTime } from "../../templates/relative-time";
 import { Badge, StatusBadge } from "@/components/ui/badge/badge";
 import { CellText } from "@/components/ui/data-table/data-table";
 import { Switch } from "@/components/ui/switch/switch";

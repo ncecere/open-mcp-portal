@@ -7,7 +7,8 @@ import { eventLabel } from "../components/notifications/events";
 import { identitySentLabel, outcomeLabels } from "../components/gateways/labels";
 import { approval, approvalId, deferred } from "./fixtures-approvals";
 import { meFor } from "./fixtures";
-import { mockApi, renderApp, Reply, shellRoutes, type Handler } from "./harness";
+import { mockApi, Reply, shellRoutes, type Handler } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/approvals/${approvalId}`;
 const detail = `/approvals/${approvalId}`;
@@ -171,7 +172,13 @@ describe("Approval receipt", () => {
     const u = userEvent.setup();
     const response = deferred<ReturnType<typeof approval>>();
     const other = "34343434-3434-4434-8434-343434343434";
-    mockApi(routes({ [`GET ${base}`]: () => approval({ status: "denied", canDecide: false, canRenew: true }), [`POST ${base}/renew`]: () => response.promise, [`GET /v1/approvals/${other}`]: () => approval({ id: other, exposedName: "other_tool" }) }));
+    mockApi(
+      routes({
+        [`GET ${base}`]: () => approval({ status: "denied", canDecide: false, canRenew: true }),
+        [`POST ${base}/renew`]: () => response.promise,
+        [`GET /v1/approvals/${other}`]: () => approval({ id: other, exposedName: "other_tool" }),
+      }),
+    );
     const { router } = renderApp(detail);
     await u.click(await screen.findByRole("button", { name: "Request new attempt" }));
     await act(async () => { await router.navigate({ to: "/approvals/$approvalId", params: { approvalId: other } }); });

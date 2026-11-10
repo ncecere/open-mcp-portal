@@ -7,7 +7,7 @@ import { Trash2 } from "lucide-react";
 import { formatDate, toDate } from "../../lib/bitop-format";
 import { expiryText } from "../../lib/expiry";
 import { ActionMenu } from "../templates/action-menu";
-import { RelativeTime } from "../templates/list-page";
+import { RelativeTime } from "../templates/relative-time";
 import { Badge, StatusBadge } from "@/components/ui/badge/badge";
 import { CellText } from "@/components/ui/data-table/data-table";
 import { Table, Td, Tr } from "@/components/ui/table/table";

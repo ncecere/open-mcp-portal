@@ -6,10 +6,12 @@
  * on, bitop-format's rounding applies. A follow-up for bitop-ui's
  * formatRelativeTime itself.
  */
-import { startOfDay } from "@/components/ui/calendar/calendar";
 import { type DateInput, formatRelativeTime, toDate } from "@/lib/bitop-format";
 
 const DAY = 86_400_000;
+
+/** Local midnight of the date. Its own copy: importing the calendar component for it put the calendar in the entry chunk. */
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
 /** Whole calendar days from `date` to `now` (positive in the past), by local midnight. */
 export function calendarDays(date: Date, now: Date): number {

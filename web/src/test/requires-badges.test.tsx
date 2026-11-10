@@ -13,7 +13,8 @@ import { redirectTo } from "../components/providers/labels";
 import { neededAccounts } from "../components/providers/needed-accounts";
 import { catalogServer, gateway, gatewayCapabilities, gatewayCapability, gatewayId, gatewayOption, mcpCall, myGateway, optionsPage, page, serverId, team } from "./fixtures";
 import { googleId, providerId, providerSummaries, requires } from "./fixtures-providers";
-import { type Handler, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 afterEach(() => vi.restoreAllMocks());
 

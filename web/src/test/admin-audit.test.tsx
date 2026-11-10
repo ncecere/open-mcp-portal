@@ -3,10 +3,12 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import { auditChange, changeSummary, plainKey, valueText } from "../components/audit/changes";
-import { actionLabel, actorName, areaOptions, personFilter } from "../components/audit/labels";
+import { actionLabel, areaOptions } from "../components/audit/labels";
+import { actorName, personFilter } from "../components/audit/actors";
 import { toCSV } from "../pages/admin/audit/common";
 import { auditEntry, page, team, user } from "./fixtures";
-import { mockApi, renderApp, shellRoutes } from "./harness";
+import { mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const signIn = auditEntry({
   id: 102,

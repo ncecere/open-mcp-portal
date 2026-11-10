@@ -69,7 +69,12 @@ export function ProviderOverviewTab({ provider: p }: { provider: AuthProvider })
                 </TextLink>
               ),
             },
-            { label: "Token scopes per call", value: p.narrowOnRefresh ? "Narrowed: a call gets a token for only the scopes it needs (connections with a refresh token)" : "Not narrowed: servers get the stored token, with every scope granted" },
+            {
+              label: "Token scopes per call",
+              value: p.narrowOnRefresh
+                ? "Narrowed: a call gets a token for only the scopes it needs (connections with a refresh token)"
+                : "Not narrowed: servers get the stored token, with every scope granted",
+            },
             { label: "Connections", value: `${plural(p.connectionCount, "person", "people")} connected an account` },
             { label: "Added", value: <>{<Time value={p.createdAt} />}{p.createdByName ? ` by ${p.createdByName}` : ""}</> },
             { label: "Last changed", value: <Time value={p.updatedAt} /> },

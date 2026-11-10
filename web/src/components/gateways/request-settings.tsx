@@ -54,7 +54,10 @@ function Editor({ gatewayId, settings, readOnly }: { gatewayId: string; settings
     <Card title="Access requests"><Stack gap={4}>
       <Alert tone="warning">Opting in exposes this gateway's name and description to every active signed-in person. Its capabilities, upstreams and MCP endpoint remain protected by normal access checks.</Alert>
       <Checkbox label="Allow people to discover this gateway and request access" checked={enabled} disabled={readOnly || busy || conflict} onCheckedChange={setEnabled} />
-      <Field label="Gateway steward user IDs" description="Optional active user UUIDs, one per line, up to 50. Platform admins can always decide. Stewards can decide this gateway's requests only; no direct grants, edits, MCP access or platform role. A requester can never decide their own request.">
+      <Field
+        label="Gateway steward user IDs"
+        description="Optional active user UUIDs, one per line, up to 50. Platform admins can always decide. Stewards can decide this gateway's requests only; no direct grants, edits, MCP access or platform role. A requester can never decide their own request."
+      >
         <Textarea value={stewards} disabled={readOnly || busy || conflict} onChange={(e) => setStewards(e.target.value)} />
       </Field>
       {validation && <Alert tone="danger">{validation}</Alert>}
@@ -63,6 +66,9 @@ function Editor({ gatewayId, settings, readOnly }: { gatewayId: string; settings
       {!readOnly && <Button disabled={busy || conflict} onClick={submit}>Save request settings</Button>}
       <Button variant="secondary" render={<Link to="/access-requests" />}>Open access request queues</Button>
     </Stack></Card>
-    <p>Gateway access is separate from approval for a sensitive tool call. Expiring grants end at their deadline without waiting for cleanup. Drain older serving and background-worker replicas before enabling access requests or expiring grants.</p>
+    <p>
+      Gateway access is separate from approval for a sensitive tool call. Expiring grants end at their deadline without waiting for cleanup.
+      Drain older serving and background-worker replicas before enabling access requests or expiring grants.
+    </p>
   </Stack>;
 }

@@ -10,7 +10,8 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import { mcpServer, page, serverId, team } from "./fixtures";
 import { authProvider, connection, preset, providerAccess, providerId, providerSummaries, serverRequirement } from "./fixtures-providers";
-import { type Call, type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Call, type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = "/v1/admin/auth-providers";
 const record = `/admin/auth-providers/${providerId}`;

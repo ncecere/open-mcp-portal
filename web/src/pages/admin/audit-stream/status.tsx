@@ -22,11 +22,19 @@ export function StreamStatus({ data }: { data: Status }) {
   const age = t.last_checkpoint_seq != null && t.last_checkpoint_at ? Math.max(0, Math.floor((Date.now() - Date.parse(t.last_checkpoint_at)) / 60_000)) : null;
   return <Card title="Stream status"><Stack gap={4}>
     {!data.sealer_enabled && <Alert tone="warning" title="The audit sealer is off">
-      This replica runs with AUDIT_STREAM_ENABLED=false, so it seals and delivers nothing. The operator sets AUDIT_STREAM_ENABLED=true on every replica and restarts the portal after completing rollout checks. Other replicas may be configured differently.
+      This replica runs with AUDIT_STREAM_ENABLED=false, so it seals and delivers nothing. The operator sets AUDIT_STREAM_ENABLED=true on every replica
+      and restarts the portal after completing rollout checks. Other replicas may be configured differently.
     </Alert>}
     {t.status !== "running" && <Alert tone="warning" title="Stream is not running">State: {t.status}. Ask the operator to investigate before resuming delivery.</Alert>}
-    {!t.checkpoints_enabled && <Alert tone="warning" title="Checkpoints are disabled">After every replica supports checkpoints, the operator runs open-mcp-portal audit-stream enable-checkpoints --min-reader-version-ack with the migration role. This is a minimum reader version transition; disabling future checkpoints cannot remove existing ones.</Alert>}
-    {!data.sink_settings.enabled && <Alert tone="warning" title="Sinks are disabled">Configuration and tests are available, but delivery is inert. After every replica supports sinks, the operator runs open-mcp-portal audit-stream enable-sinks --min-reader-version-ack with the migration role. Before rollback, run audit-stream disable-sinks, stop senders and drain pending sink notifications using the current release.</Alert>}
+    {!t.checkpoints_enabled && <Alert tone="warning" title="Checkpoints are disabled">
+      After every replica supports checkpoints, the operator runs open-mcp-portal audit-stream enable-checkpoints --min-reader-version-ack with the migration role.
+      This is a minimum reader version transition; disabling future checkpoints cannot remove existing ones.
+    </Alert>}
+    {!data.sink_settings.enabled && <Alert tone="warning" title="Sinks are disabled">
+      Configuration and tests are available, but delivery is inert. After every replica supports sinks, the operator runs open-mcp-portal audit-stream
+      enable-sinks --min-reader-version-ack with the migration role. Before rollback, run audit-stream disable-sinks, stop senders and drain pending sink
+      notifications using the current release.
+    </Alert>}
     <ErrorAlert error={keys.error} onRetry={() => void keys.refetch()} />
     <ErrorAlert error={tip.error} onRetry={() => void tip.refetch()} />
     <DescriptionList items={[

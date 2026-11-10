@@ -15,7 +15,8 @@ import { api, unwrap } from "../../../api/client";
 import { serviceAccountsKey } from "../../../api/queries";
 import { ScopeBadges, scopeInheritance } from "../../../components/tool-scope";
 import { ConfirmMutationDialog } from "../../../components/confirm-dialog";
-import { ListPage, RelativeTime, timeColumn } from "../../../components/templates/list-page";
+import { ListPage, timeColumn } from "../../../components/templates/list-page";
+import { RelativeTime } from "../../../components/templates/relative-time";
 import { formatDate, toDate } from "../../../lib/bitop-format";
 import { expiryText } from "../../../lib/expiry";
 import { Alert } from "@/components/ui/alert/alert";
@@ -56,7 +57,10 @@ const columns: DataTableColumn<ServiceAccountKey>[] = [
   { id: "status", header: "Status", accessor: (k) => keyStatusLabels[k.status], sortable: true, cell: (k) => <StatusBadge tone={keyStatusTone[k.status]}>{keyStatusLabels[k.status]}</StatusBadge> },
   { id: "toolScope", header: "Tool scope", cell: (k) => <ScopeBadges scope={k.toolScope} /> },
   { id: "gateways", header: "Gateways", accessor: (k) => keyScopeText(k), cell: (k) => <span className={k.gateways.length === 0 ? s.muted : undefined}>{keyScopeText(k)}</span> },
-  { ...timeColumn<ServiceAccountKey>("lastUsedAt", "Last used", (k) => k.lastUsedAt), cell: (k) => (k.lastUsedAt ? <span className={s.nowrap}><RelativeTime value={k.lastUsedAt} /></span> : <span className={s.muted}>Never</span>) },
+  {
+    ...timeColumn<ServiceAccountKey>("lastUsedAt", "Last used", (k) => k.lastUsedAt),
+    cell: (k) => (k.lastUsedAt ? <span className={s.nowrap}><RelativeTime value={k.lastUsedAt} /></span> : <span className={s.muted}>Never</span>),
+  },
   { id: "expiresAt", header: "Expires", accessor: (k) => new Date(k.expiresAt), sortable: true, cell: (k) => <Expiry k={k} /> },
   { ...timeColumn<ServiceAccountKey>("createdAt", "Created", (k) => k.createdAt), cell: (k) => <CellText primary={<RelativeTime value={k.createdAt} />} secondary={k.createdByName ?? undefined} />, defaultHiddenNarrow: true },
 ];

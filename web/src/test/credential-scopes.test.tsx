@@ -4,7 +4,8 @@ import { axe } from "vitest-axe";
 import type { Schemas } from "../api/client";
 import { callErrorLabel } from "../components/gateways/labels";
 import { apiKey, gatewayId, grant, myGateway, oauthGrant, platformGateway, serviceAccount, serviceAccountId, serviceAccountKey, team, teamSummary, page } from "./fixtures";
-import { type Handler, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const saBase = `/v1/teams/${team.slug}/service-accounts`;
 const saOne = `${saBase}/${serviceAccountId}`;
@@ -174,7 +175,11 @@ describe("Credential scope payloads and views", () => {
   it("shows connected app scopes, including old unrestricted fixtures, and labels scoped refusals", async () => {
     mockApi({
       ...shellRoutes(),
-      "GET /v1/me/oauth-grants": () => [oauthGrant({ toolScope: { classes: ["read"] } }), oauthGrant({ id: "empty", client: { ...oauthGrant().client, name: "No tools app" }, toolScope: {} }), oauthGrant({ id: "legacy", client: { ...oauthGrant().client, name: "Legacy app" } })],
+      "GET /v1/me/oauth-grants": () => [
+        oauthGrant({ toolScope: { classes: ["read"] } }),
+        oauthGrant({ id: "empty", client: { ...oauthGrant().client, name: "No tools app" }, toolScope: {} }),
+        oauthGrant({ id: "legacy", client: { ...oauthGrant().client, name: "Legacy app" } }),
+      ],
     });
     const { container } = renderApp("/settings/connected-apps");
     const table = await screen.findByRole("table", { name: "Your connected apps" });

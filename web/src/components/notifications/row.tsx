@@ -6,7 +6,7 @@
 import { Check } from "lucide-react";
 import { cloneElement, type ReactElement } from "react";
 import type { Schemas } from "../../api/client";
-import { RelativeTime } from "../templates/list-page";
+import { RelativeTime } from "../templates/relative-time";
 import { Button } from "@/components/ui/button/button";
 import { VisuallyHidden } from "@/components/ui/visually-hidden/visually-hidden";
 import { linkElement, type LinkViewer } from "../link-target";

@@ -28,7 +28,13 @@ export function browserLabel(ua: string): string {
 }
 
 const columns: DataTableColumn<BrowserSession>[] = [
-  { id: "browser", header: "Browser", rowHeader: true, accessor: (x) => browserLabel(x.userAgent), cell: (x) => <CellText primary={<>{browserLabel(x.userAgent)} {x.current && <Badge tone="info">This session</Badge>}</>} secondary={x.clientIp || "Address unavailable"} /> },
+  {
+    id: "browser",
+    header: "Browser",
+    rowHeader: true,
+    accessor: (x) => browserLabel(x.userAgent),
+    cell: (x) => <CellText primary={<>{browserLabel(x.userAgent)} {x.current && <Badge tone="info">This session</Badge>}</>} secondary={x.clientIp || "Address unavailable"} />,
+  },
   timeColumn("createdAt", "Signed in", (x: BrowserSession) => x.createdAt),
   timeColumn("lastSeenAt", "Last active", (x: BrowserSession) => x.lastSeenAt),
   timeColumn("expiresAt", "Expires", (x: BrowserSession) => x.expiresAt),
@@ -77,9 +83,16 @@ export function BrowserSessions({ owner }: { owner: Owner }) {
       rowActions={owner.self ? (x) => [{ label: "Sign out…", icon: <LogOut aria-hidden />, danger: true, onSelect: () => setTarget({ kind: "one", session: x }) }] : undefined}
       empty={{ icon: <Monitor />, title: "No active browser sessions." }}
     />
-    <ConfirmMutationDialog target={target} onClose={() => setTarget(null)} mutation={revoke} onConfirm={(t) => revoke.mutate({ target: t, keepCurrent, endsCurrent: t.kind === "one" ? t.session.current : owner.self ? !keepCurrent : Boolean(sessions.data?.some((x) => x.current)) })}
+    <ConfirmMutationDialog target={target} onClose={() => setTarget(null)} mutation={revoke}
+      onConfirm={(t) => revoke.mutate({
+        target: t,
+        keepCurrent,
+        endsCurrent: t.kind === "one" ? t.session.current : owner.self ? !keepCurrent : Boolean(sessions.data?.some((x) => x.current)),
+      })}
       title={target?.kind === "one" ? "Sign out this session?" : `${allLabel}?`}
-      description={target?.kind === "one" ? "Its next request is refused. Any unfinished connect flow in that session is cancelled." : "Ends browser sign-ins and cancels their unfinished connect flows. Connected apps, API keys and provider connections are not disconnected."}
+      description={target?.kind === "one"
+        ? "Its next request is refused. Any unfinished connect flow in that session is cancelled."
+        : "Ends browser sign-ins and cancels their unfinished connect flows. Connected apps, API keys and provider connections are not disconnected."}
       confirmLabel={target?.kind === "one" ? "Sign out" : allLabel}
     >
       {owner.self && target?.kind === "all" && <Checkbox checked={keepCurrent} disabled={revoke.isPending} onCheckedChange={(v) => setKeepCurrent(v === true)} label="Keep this session signed in" />}

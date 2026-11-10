@@ -13,14 +13,13 @@
  *     actions={<><Button variant="danger">Delete</Button><Button>Re-fetch</Button></>}
  *     loading={doc.isLoading} error={doc.error} />
  */
-import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
-import { type MouseEvent, useCallback, type ReactNode } from "react";
+import { useNavigate, useRouter } from "@tanstack/react-router";
+import { useCallback, type ReactNode } from "react";
 import { Alert, ErrorAlert } from "@/components/ui/alert/alert";
 import { isNotFound } from "../not-found";
 import { Card } from "@/components/ui/card/card";
 import { type DescriptionEntry, DescriptionList } from "@/components/ui/description-list/description-list";
 import { SkeletonText } from "@/components/ui/skeleton/skeleton";
-import { TextLink } from "@/components/ui/text-link/text-link";
 import { useSearchParams } from "@/lib/url-search";
 import { useCloseGuard } from "./close-guard";
 import { TakeoverPage } from "./takeover";
@@ -66,29 +65,6 @@ export function useRecordParam(param = RECORD_PARAM) {
 
 // Records opened by open() in this page session (their history entry is ours to pop).
 const openedHere = new Set<string>();
-
-/**
- * A record's name in a list as a real link to its record page (it can be
- * opened in a new tab or copied), which a plain click opens in place like
- * `open(id)`. Use it in the row header instead of `onRowClick` (P-22).
- */
-export function RecordLink({ id, param = RECORD_PARAM, className, children }: { id: string; param?: string; className?: string; children: ReactNode }) {
-  const record = useRecordParam(param);
-  const pathname = useRouterState({ select: (st) => st.location.pathname });
-  const [params] = useSearchParams();
-  const next = new URLSearchParams(params);
-  next.set(param, id);
-  const onClick = (e: MouseEvent) => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-    e.preventDefault();
-    record.open(id);
-  };
-  return (
-    <TextLink href={`${pathname}?${next.toString()}`} className={className} onClick={onClick}>
-      {children}
-    </TextLink>
-  );
-}
 
 /** A titled card on a record page; `hidden` leaves it out (e.g. an action the viewer can't run). */
 export type RecordSection = { title: ReactNode; content: ReactNode; id?: string; hidden?: boolean };

@@ -20,13 +20,11 @@ import { EmptyState } from "@/components/ui/empty-state/empty-state";
 import { type Facet, type FilterValues, filterValuesFromSearchParams, filterValuesToSearchParams } from "@/components/ui/filter-bar/filter-bar";
 import { Stack } from "@/components/ui/layout/layout";
 import { PageHeader } from "@/components/ui/page-header/page-header";
-import { Time } from "@/components/ui/time/time";
-import { formatDate, toDate } from "@/lib/bitop-format";
 import { NARROW_QUERY, useMediaQuery } from "@/lib/bitop-utils";
-import { needsCalendarDay, relativeDay } from "@/lib/relative-day";
 import { useSearchParams } from "@/lib/url-search";
 import s from "../../pages/shared.module.css";
 import { ActionMenu, type ActionItem } from "./action-menu";
+import { RelativeTime } from "./relative-time";
 
 /** The search-text URL parameter. */
 export const SEARCH_PARAM = "q";
@@ -45,19 +43,6 @@ export function useListFilters<T>(facets: Facet<T>[] = []) {
       return out;
     });
   return { values, setValues, query, setQuery };
-}
-
-/** A relative date cell ("3 hours ago"), with the full date as a tooltip. */
-export function RelativeTime({ value }: { value: string | Date | null | undefined }) {
-  // Days count by the calendar ("yesterday" is the day before today, v0.4.2 US-07).
-  const date = needsCalendarDay(value) ? toDate(value) : undefined;
-  if (date)
-    return (
-      <time dateTime={date.toISOString()} title={formatDate(date, { style: "long" })}>
-        {relativeDay(date)}
-      </time>
-    );
-  return <Time value={value} format="relative" fallback="—" />;
 }
 
 /** A sortable column showing a relative date. */

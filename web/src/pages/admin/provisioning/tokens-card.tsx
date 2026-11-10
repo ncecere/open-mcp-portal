@@ -9,7 +9,7 @@ import { friendly } from "../../../lib/error-wording";
 import { ConfirmMutationDialog } from "../../../components/confirm-dialog";
 import { V02ErrorAlert } from "../../../components/errors";
 import { ActionMenu } from "../../../components/templates/action-menu";
-import { RelativeTime } from "../../../components/templates/list-page";
+import { RelativeTime } from "../../../components/templates/relative-time";
 import { Alert, ErrorAlert } from "@/components/ui/alert/alert";
 import { StatusBadge } from "@/components/ui/badge/badge";
 import { Button } from "@/components/ui/button/button";

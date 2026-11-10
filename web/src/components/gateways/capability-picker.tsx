@@ -8,7 +8,8 @@
  * If-Match on the gateway's revision. When the gateway changes elsewhere
  * (or a save comes back 412), the person's selection stays and they choose:
  * overwrite theirs, or discard and load theirs. A refused selection (422)
- * marks the capabilities it's about.
+ * marks the capabilities it's about. The selection and that reconciliation
+ * are in picker-selection.ts (usePickerSelection).
  */
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ListTree } from "lucide-react";
@@ -37,14 +38,11 @@ import { AvailabilityBadge } from "./badges";
 import { capabilityCount, type Gateway, type GatewayKind, gatewayKinds, gatewayKindLabels, type GatewayOption, maxCapabilities } from "./labels";
 import { selectionProblem } from "./picker-errors";
 import { filterOptions, OptionGroups, optionOf, type PickerSelection } from "./picker-options";
+import { type SelectionVersion, usePickerSelection } from "./picker-selection";
 import { gatewayCapabilitiesQuery, gatewayOptionsQuery, type GatewayScope, gatewayQuery, invalidateGateway, setCapabilities } from "./scope";
 import g from "./gateways.module.css";
 
 type Current = Schemas["GatewayCapabilities"];
-type Version = { revision: number; sel: PickerSelection };
-
-const selOf = (c: Current): PickerSelection => Object.fromEntries(c.items.map((i) => [i.capabilityId, i.minRole && i.minRole !== "member" ? i.minRole : ""]));
-const same = (a: PickerSelection, b: PickerSelection) => JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
 
 type Props = { gateway: Gateway; scope: GatewayScope; current: Current; onDone: () => void };
 
@@ -73,10 +71,8 @@ function useServerChoices(scope: GatewayScope, seen: Iterable<GatewayOption>): S
 export function CapabilityPicker({ gateway, scope, current, onDone }: Props) {
   const qc = useQueryClient();
   const roles = gateway.ownerKind === "team";
-  const [base, setBase] = useState<Version>(() => ({ revision: current.revision, sel: selOf(current) }));
-  const [sel, setSel] = useState<PickerSelection>(base.sel);
-  const [theirs, setTheirs] = useState<Version | null>(null);
-  const [lost, setLost] = useState(false);
+  const selection = usePickerSelection(current);
+  const { base, sel, theirs, dirty } = selection;
   const [text, setText] = useState("");
   const q = useDebounced(text.trim());
   const [kind, setKind] = useState<GatewayKind | "">("");
@@ -84,7 +80,6 @@ export function CapabilityPicker({ gateway, scope, current, onDone }: Props) {
   const [onlySelected, setOnlySelected] = useState(false);
   const [curating, setCurating] = useState<GatewayCapability | null>(null);
   const options = useInfiniteQuery({ ...gatewayOptionsQuery(scope, { q, kind, server }), placeholderData: keepPreviousData });
-  const dirty = !same(sel, base.sel);
 
   // Every option seen (on any page, search or filter) and the selection as loaded: the names of selected
   // capabilities that aren't on a loaded page, and what "Selected only" shows.
@@ -93,20 +88,6 @@ export function CapabilityPicker({ gateway, scope, current, onDone }: Props) {
   const loaded = options.data?.pages.flatMap((p) => p.items) ?? [];
   for (const o of loaded) known.set(o.capabilityId, o);
   const servers = useServerChoices(scope, known.values());
-
-  // A new version loaded (saved elsewhere, or after a 412): reconciled while rendering, like useRevisionForm.
-  const [seen, setSeen] = useState(current.revision);
-  if (seen !== current.revision) {
-    setSeen(current.revision);
-    const next = { revision: current.revision, sel: selOf(current) };
-    if (lost || (dirty && !same(next.sel, base.sel))) setTheirs(next);
-    else if (dirty) setBase({ ...base, revision: next.revision });
-    else {
-      setBase(next);
-      setSel(next.sel);
-    }
-    setLost(false);
-  }
 
   const save = useMutation({
     mutationFn: async (revision: number) =>
@@ -120,15 +101,14 @@ export function CapabilityPicker({ gateway, scope, current, onDone }: Props) {
       qc.setQueryData(gatewayCapabilitiesQuery(scope, gateway.id).queryKey, saved);
       void qc.invalidateQueries({ queryKey: gatewayQuery(scope, gateway.id).queryKey });
       invalidateGateway(qc, gateway);
-      setBase({ revision: saved.revision, sel });
-      setSeen(saved.revision);
+      selection.saved(saved.revision);
       toast.success("Capabilities saved", `${gateway.name} offers ${capabilityCount(saved.items.length)}.`);
       onDone();
     },
     // A 412: the next version to load is someone else's (main.tsx reloads every query; this one for certain).
     onError: (err) => {
       if (!isRevisionConflict(err)) return;
-      setLost(true);
+      selection.conflicted();
       void qc.invalidateQueries({ queryKey: gatewayCapabilitiesQuery(scope, gateway.id).queryKey });
     },
   });
@@ -150,7 +130,7 @@ export function CapabilityPicker({ gateway, scope, current, onDone }: Props) {
   const filtered = Boolean(q || kind || server);
   const tooMany = count > maxCapabilities;
 
-  const set = (next: PickerSelection) => setSel(next);
+  const set = selection.setSel;
   const toggle = (id: string, on: boolean) => {
     if (on) set({ ...sel, [id]: "" });
     else set(Object.fromEntries(Object.entries(sel).filter(([k]) => k !== id)));
@@ -223,7 +203,13 @@ export function CapabilityPicker({ gateway, scope, current, onDone }: Props) {
           </div>
           {current.items.some((c) => c.kind === "tool" && c.capabilityId in sel) && <section className={g.tight} aria-label="Selected tool policies">
             <p className={g.note}>Save selection changes before editing a tool policy.</p>
-            {current.items.filter((c) => c.kind === "tool" && c.capabilityId in sel).map((c) => <Button key={c.capabilityId} size="sm" variant="secondary" disabled={dirty || save.isPending || !!theirs} onClick={() => setCurating(c)}>Curate {c.exposedName}</Button>)}
+            {current.items
+              .filter((c) => c.kind === "tool" && c.capabilityId in sel)
+              .map((c) => (
+                <Button key={c.capabilityId} size="sm" variant="secondary" disabled={dirty || save.isPending || !!theirs} onClick={() => setCurating(c)}>
+                  Curate {c.exposedName}
+                </Button>
+              ))}
           </section>}
           {notOffered.length > 0 && (
             <section className={g.group} aria-labelledby="not-offered">
@@ -287,9 +273,7 @@ export function CapabilityPicker({ gateway, scope, current, onDone }: Props) {
               variant="ghost"
               disabled={save.isPending}
               onClick={() => {
-                setBase(theirs);
-                setSel(theirs.sel);
-                setTheirs(null);
+                selection.takeTheirs(theirs);
                 save.reset();
               }}
             >
@@ -299,8 +283,7 @@ export function CapabilityPicker({ gateway, scope, current, onDone }: Props) {
               loading={save.isPending}
               disabled={tooMany}
               onClick={() => {
-                setBase(theirs);
-                setTheirs(null);
+                selection.keepMine(theirs);
                 save.mutate(theirs.revision);
               }}
             >
@@ -309,7 +292,7 @@ export function CapabilityPicker({ gateway, scope, current, onDone }: Props) {
           </>
         ) : (
           <>
-            <Button variant="ghost" disabled={save.isPending} onClick={() => setSel(base.sel)}>
+            <Button variant="ghost" disabled={save.isPending} onClick={selection.discard}>
               Discard
             </Button>
             <Button loading={save.isPending} disabled={tooMany} onClick={() => save.mutate(base.revision)}>
@@ -325,7 +308,7 @@ export function CapabilityPicker({ gateway, scope, current, onDone }: Props) {
 }
 
 /** The selection changed elsewhere: the person's is still here; how theirs differs. */
-function ConflictAlert({ theirs, mine }: { theirs: Version; mine: PickerSelection }) {
+function ConflictAlert({ theirs, mine }: { theirs: SelectionVersion; mine: PickerSelection }) {
   const added = Object.keys(theirs.sel).filter((id) => !(id in mine)).length;
   const removed = Object.keys(mine).filter((id) => !(id in theirs.sel)).length;
   return (

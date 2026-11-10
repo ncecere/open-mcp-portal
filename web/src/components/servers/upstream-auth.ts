@@ -17,7 +17,6 @@ import { blankMachine, machineFormOf, type MachineErrors, type MachineForm, mach
 
 export type AuthMode = Schemas["McpServerAuthMode"];
 export type DetectResult = Schemas["DetectAuthResult"];
-export type DetectProblem = Schemas["DetectAuthProblem"];
 export type Registration = Schemas["McpServerOAuthRegistration"];
 export type OAuthConfig = Schemas["McpServerOAuth"];
 export type SetupConnection = Schemas["McpServerOAuthSetupConnection"];

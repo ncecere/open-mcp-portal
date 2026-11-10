@@ -10,7 +10,8 @@ import { wordsFor } from "../components/attention/wording";
 import { changesCa, emptyTlsForm, expiryText, tlsBody, tlsProblems, tlsRefusal } from "../components/servers/tls";
 import { ApiError } from "../api/client";
 import { capabilities, healthCheck, mcpServer, serverId, team, teamPublishing, page } from "./fixtures";
-import { type Handler, Reply, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, Reply, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 type McpServer = Schemas["McpServer"];
 const base = `/v1/teams/${team.slug}/mcp-servers`;
@@ -69,7 +70,15 @@ describe("The TLS card", () => {
 
   it("warns on Overview when the client certificate is about to expire, and when it has", async () => {
     const soon = withTls(
-      { health: { status: "healthy", checkedAt: "2026-10-16T07:55:00Z", statusSince: "2026-10-15T08:00:00Z", latencyMs: 42, warnings: [{ code: "tls_certificate_expiring", message: "The client certificate expires on 2026-10-25 (in 5 days). Upload a renewed certificate before then." }] } },
+      {
+        health: {
+          status: "healthy",
+          checkedAt: "2026-10-16T07:55:00Z",
+          statusSince: "2026-10-15T08:00:00Z",
+          latencyMs: 42,
+          warnings: [{ code: "tls_certificate_expiring", message: "The client certificate expires on 2026-10-25 (in 5 days). Upload a renewed certificate before then." }],
+        },
+      },
       { status: "expiring", daysLeft: 5 },
     );
     mockApi(routes("editor", () => soon));
@@ -269,7 +278,8 @@ describe("TLS form helpers", () => {
 
 describe("The call error class", () => {
   it("has a plain label", async () => {
-    mockApi(routes("editor", () => mcpServer({ health: { status: "failing", checkedAt: "2026-10-16T07:55:00Z", statusSince: "2026-10-15T08:00:00Z", errorClass: "tls", message: "The server's certificate is signed by an authority the portal doesn't trust." } })));
+    const health = { status: "failing", checkedAt: "2026-10-16T07:55:00Z", statusSince: "2026-10-15T08:00:00Z", errorClass: "tls", message: "The server's certificate is signed by an authority the portal doesn't trust." } as const;
+    mockApi(routes("editor", () => mcpServer({ health })));
     renderApp(record);
     const row = await screen.findByText(/TLS problem: certificate or client certificate/);
     expect(within(row.closest("dd") ?? document.body).getByText(/signed by an authority the portal doesn't trust/)).toBeInTheDocument();

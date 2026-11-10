@@ -41,15 +41,6 @@ export function nameProblem(name: string): string | undefined {
   return namePattern.test(name) ? undefined : "Use 1 to 64 lower-case letters, digits and dashes, starting and ending with a letter or digit.";
 }
 
-/** "CI Release Bot" → "ci-release-bot". */
-export const suggestName = (text: string) =>
-  text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64)
-    .replace(/-+$/, "");
-
 /** At most two active keys, so a key can be rotated without downtime. */
 export const maxActiveKeys = 2;
 

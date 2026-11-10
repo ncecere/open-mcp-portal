@@ -10,7 +10,8 @@ import { Bot, Plus } from "lucide-react";
 import { serviceAccountsQuery } from "../../../api/queries";
 import { EnabledBadge } from "../../../components/servers/badges";
 import { useFormParam } from "../../../components/templates/form-page";
-import { ListPage, RelativeTime, timeColumn } from "../../../components/templates/list-page";
+import { ListPage, timeColumn } from "../../../components/templates/list-page";
+import { RelativeTime } from "../../../components/templates/relative-time";
 import { terms } from "../../../lib/terms";
 import { Badge } from "@/components/ui/badge/badge";
 import { Button } from "@/components/ui/button/button";
@@ -87,7 +88,11 @@ export function ServiceAccountsPage() {
   );
   return (
     <Stack gap={6} className={s.page}>
-      <PageHeader title={terms.serviceAccounts} description={`Identities ${team.name} owns for CI, scripts and headless agents. Their keys reach the team's gateways and the platform gateways granted to the team.`} actions={section === "accounts" ? create : undefined} />
+      <PageHeader
+        title={terms.serviceAccounts}
+        description={`Identities ${team.name} owns for CI, scripts and headless agents. Their keys reach the team's gateways and the platform gateways granted to the team.`}
+        actions={section === "accounts" ? create : undefined}
+      />
       <ArchivedNotice>Its service accounts can be viewed but not changed, and their keys don&apos;t work while the team is archived.</ArchivedNotice>
       <ReadOnlyNotice what="the team's service accounts" managers change="create and manage them and their keys" />
       <Tabs value={section} onValueChange={(value) => setParams((old) => { const next = new URLSearchParams(old); if (value === "connections") next.set("tab", "connections"); else next.delete("tab"); return next; })}>

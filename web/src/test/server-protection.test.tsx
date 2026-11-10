@@ -4,7 +4,8 @@ import { axe } from "vitest-axe";
 import { protectionBody, protectionProblems } from "../components/servers/protection-fields";
 import { capabilities, healthCheck, mcpServer, serverId, team, teamPublishing } from "./fixtures";
 import { teamRetention } from "./fixtures-operations";
-import { type Handler, mockApi, renderApp, shellRoutes } from "./harness";
+import { type Handler, mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const base = `/v1/teams/${team.slug}/mcp-servers/${serverId}`;
 const record = `/teams/${team.slug}/servers/${serverId}?tab=settings`;

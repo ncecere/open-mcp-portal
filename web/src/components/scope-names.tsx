@@ -34,7 +34,11 @@ export function ScopeNames({ names, onChange, onProblemChange, disabled, error }
     update("");
   }
   return <Stack gap={2}>
-    <Field label="Exact tool names" description="Add one literal name at a time. Commas, spaces and case are preserved, not separators. Up to 500 names, each 1–1100 UTF-8 bytes; no control characters or wildcards. Renamed and future tools are allowed; no server prefix is required. Class OR exact exposed name." error={error ?? problem(draft, rejected)}>
+    <Field
+      label="Exact tool names"
+      description="Add one literal name at a time. Commas, spaces and case are preserved, not separators. Up to 500 names, each 1–1100 UTF-8 bytes; no control characters or wildcards. Renamed and future tools are allowed; no server prefix is required. Class OR exact exposed name."
+      error={error ?? problem(draft, rejected)}
+    >
       <Input value={draft} disabled={disabled} autoComplete="off" spellCheck={false}
         onChange={(e) => update(e.target.value)}
         onKeyDown={(e) => {

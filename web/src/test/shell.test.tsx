@@ -3,7 +3,8 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import { authConfig, meFor, page, team, teamSummary, user } from "./fixtures";
-import { mockApi, renderApp, shellRoutes } from "./harness";
+import { mockApi, shellRoutes } from "./harness";
+import { renderApp } from "./render-app";
 
 const adminRoutes = {
   "GET /v1/admin/users": () => page([user()]),
